@@ -51,8 +51,7 @@ Every member with source needs a `test` script: the gate runs
 
 Beyond oxlint's `correctness`, `suspicious` and `pedantic` categories and the `effecttsgo` preset:
 
-- **Leaf imports only.** `effect/Effect`, not `effect`; `effect/unstable/schema/Schema`, not
-  `effect/unstable/schema`.
+- **Leaf imports only.** `effect/Effect`, not `effect`; `effect/rpc/Rpc`, not `effect/rpc`.
 - **`begone-slop/no-tag-access`** — never read `_tag`; use `Match.tag`/`Match.tags`/
   `Match.tagsExhaustive` or a library guard, so a new variant fails to compile instead of falling
   through.

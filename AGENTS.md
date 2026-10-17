@@ -141,13 +141,17 @@ tests import it through that specifier too; the package resolves itself through 
 
 ## Rules
 
-Leaf imports only: `effect/Effect`, `effect/unstable/cli/Command`.
+Leaf imports only: `effect/Effect`, `effect/cli/Command`.
 
 :::warning
-Every barrel is banned — the `effect` root AND each subpath index (`effect/unstable/schema`,
+Every barrel is banned — the `effect` root AND each subpath index (`effect/rpc`,
 `effect/testing`, …). The subpath ones are what keep getting written. Enforced by a regex in
 `no-restricted-imports`: a barrel is the bare root, `effect/testing`, or a single lowercase segment
-under `unstable/`, since every leaf module is PascalCase. Type-only imports are exempt.
+under `effect/`, since every leaf module is PascalCase. Type-only imports are exempt.
+
+Since `effect@4.0.5` the former `effect/unstable/*` modules sit directly under `effect/`
+(`effect/rpc/Rpc`, `effect/cli/Command`) and `effect/unstable/*` is no longer exported (measured).
+The `effect-best-practices` references still spell the old paths; drop the `unstable/` segment.
 :::
 
 :::warning

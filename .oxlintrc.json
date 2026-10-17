@@ -25,15 +25,15 @@
 
   "rules": {
     // Leaf imports only. A barrel is the bare root, `effect/testing`, or a single
-    // lowercase segment under `unstable/` — every leaf module is PascalCase.
+    // lowercase segment under `effect/` — every leaf module is PascalCase.
     "no-restricted-imports": [
       "error",
       {
         "patterns": [
           {
-            "regex": "^effect$|^effect/testing$|^effect/unstable/[a-z0-9-]+$",
+            "regex": "^effect$|^effect/[a-z0-9-]+$",
             "allowTypeImports": true,
-            "message": "Import the leaf module, not the barrel: `effect/Effect`, `effect/unstable/schema/Schema`."
+            "message": "Import the leaf module, not the barrel: `effect/Effect`, `effect/rpc/Rpc`."
           }
         ]
       }

@@ -84,7 +84,7 @@ An Effect client for Herdr's socket API. Private like everything else, but kept 
 
 ```
 src/
-  main.ts                 runMain; CLI root (effect/unstable/cli)
+  main.ts                 runMain; CLI root (effect/cli)
   Cli.ts                  commands: run, status, install-service, uninstall-service
   AgentConfig.ts          Config: hub url, exe.dev token (redacted), claude roots, policy
   MachineStateSync.ts     herdr snapshot + events → SubscriptionRef<MachineState>
