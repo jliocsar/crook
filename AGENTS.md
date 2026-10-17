@@ -105,17 +105,17 @@ A member that extends the shared base must depend on it, or the extends does not
 
 ```jsonc
 // packages/<member>/package.json
-{ "devDependencies": { "@boilerplate/tsconfig": "workspace:*" } }
+{ "devDependencies": { "@crook/tsconfig": "workspace:*" } }
 ```
 
 ```jsonc
 // packages/<member>/tsconfig.json
-{ "extends": "@boilerplate/tsconfig/base.json", "include": ["src/**/*.ts"] }
+{ "extends": "@crook/tsconfig/base.json", "include": ["src/**/*.ts"] }
 ```
 
 Bun links a workspace member into `packages/<member>/node_modules` only where something declares it,
 and nothing hoists it to the root — so without that dependency the compiler reports
-`File '@boilerplate/tsconfig/base.json' not found` (measured). The second hop needs nothing: the
+`File '@crook/tsconfig/base.json' not found` (measured). The second hop needs nothing: the
 base reaches `@jliocsar/begone-slop/tsconfig` through the root install. TypeScript's `extends`
 resolves a package specifier through the `exports` map, which is why that subpath carries no `.json`
 — oxlint's `extends` is the one that cannot.
@@ -126,6 +126,18 @@ Every member with source needs a `test` script. The gate runs
 `bun run --filter '*' --if-present test`, so a member without one is **skipped silently**, not
 reported.
 :::
+
+:::warning
+A member is created together with its first source and its first test, never empty: `tsc` fails an
+`include` that matches nothing (TS18003) and `vitest run` exits 1 when it finds no test files (both
+measured). A placeholder file or `--passWithNoTests` would make the gate pass on a package that
+checks nothing, so the package waits for the work that gives it code.
+:::
+
+A member exports leaf modules, never an index: `"exports": { "./*": "./src/*.ts" }`, so a consumer
+writes `@crook/domain/Ids`, the same leaf-only rule the `effect` imports follow. The member's own
+tests import it through that specifier too; the package resolves itself through its `exports`
+(measured).
 
 ## Rules
 
