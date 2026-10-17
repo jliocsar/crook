@@ -154,7 +154,7 @@ Transcripts are append-only files, so they travel as `TranscriptChunk { offset, 
 
 - Services: `Context.Service<X>()("crook/X", { make })` + a hand-written `static layer`; deps resolved with `yield*` inside `make`.
 - Every method is `Effect.fn("X.method")` (automatic spans).
-- One `Schema.TaggedErrorClass` per failure reason, with a full-sentence `message`. Library errors (`HerdrSocketClosed`, `TranscriptNotFound`, …) are mapped to wire errors in `@crook/protocol` at the RPC boundary, never leaked raw.
+- One `Schema.TaggedError` per failure reason, with a full-sentence `message`. Library errors (`HerdrSocketClosed`, `TranscriptNotFound`, …) are mapped to wire errors in `@crook/protocol` at the RPC boundary, never leaked raw.
 - Branded ids everywhere; `Option` for absence; no `_tag` reads.
 - `Config` for every knob, `Config.redacted` for the exe.dev token.
 - Each service exports a test layer next to its live one; apps compose layers once in `main.ts`.

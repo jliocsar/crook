@@ -55,7 +55,7 @@ Beyond oxlint's `correctness`, `suspicious` and `pedantic` categories and the `e
 - **`begone-slop/no-tag-access`** — never read `_tag`; use `Match.tag`/`Match.tags`/
   `Match.tagsExhaustive` or a library guard, so a new variant fails to compile instead of falling
   through.
-- **`begone-slop/no-shadowed-error-field`** — no `name`/`stack` field on a `TaggedErrorClass`, which
+- **`begone-slop/no-shadowed-error-field`** — no `name`/`stack` field on a `Schema.TaggedError`, which
   would overwrite what identifies the error as an error.
 - **`begone-slop/no-comments`** — a name needing a sentence beside it is the wrong name; durable
   knowledge belongs in `AGENTS.md`. `SAFETY:` comments and tooling directives are exempt.

@@ -193,7 +193,7 @@ Error schema fields must not shadow `Error`'s own. Fields are assigned onto the 
 or `stack` field replaces what identifies the error as an error — `Cause.pretty`, `String(error)`,
 the stack header, OTLP `exception.type`/`exception.stacktrace` all read it (measured). Name for what
 it holds (`userName`), not where it sits. `message`/`cause` stay legal.
-Enforced: `begone-slop/no-shadowed-error-field`.
+Enforced: `begone-slop/no-shadowed-error-field`, but only on the pre-4.0.5 class names (see below).
 :::
 
 :::warning
@@ -217,7 +217,7 @@ This is why `statement-order` leaves a type alias containing `typeof` unranked: 
 sort above constants, which would force every schema type away from its schema.
 :::
 
-- Errors are `Schema.TaggedErrorClass` with a `message` getter: full sentence, names the fix where
+- Errors are `Schema.TaggedError` with an `override get message(): string`: full sentence, names the fix where
   possible. One reporter prints `error.message`; an error without one exits silently.
 - Module-level primitive constants are `SCREAMING_SNAKE_CASE` — they are the knobs and magic values,
   and the casing separates them from computed bindings. **Not enforced**: oxlint has no
@@ -265,7 +265,10 @@ The ones with behaviour worth knowing before you trip on them:
   argument — the rule reads `options[0]` only — which oxlint validates against the rule's JSON
   `meta.schema` before the rule runs.
 - `no-tag-access` — no `x._tag`, `switch (x._tag)`, `const { _tag } = x`. Defining a tag is fine.
-- `no-shadowed-error-field` — no `name`/`stack` field on `TaggedErrorClass`/`ErrorClass`.
+- `no-shadowed-error-field` — no `name`/`stack` field on `TaggedErrorClass`/`ErrorClass`. It does
+  not know `effect@4.0.5`'s names yet: in 4.0.5 the classes are `Schema.TaggedError` and
+  `Schema.Error` (`TaggedErrorClass` is gone), and the rule stays silent on a `name` or `stack`
+  field there (measured). The fix belongs in `begone-slop`; until it ships, this one is on review.
 - `no-comments` and `require-safety-comment-for-type-assertion` are one doctrine in two rules: prose
   is banned everywhere except where an assertion demands it.
 

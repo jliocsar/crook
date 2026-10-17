@@ -28,6 +28,17 @@
         "@crook/tsconfig": "workspace:*",
       },
     },
+    "packages/protocol": {
+      "name": "@crook/protocol",
+      "version": "0.0.1",
+      "dependencies": {
+        "@crook/domain": "workspace:*",
+        "effect": "4.0.5",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
     "packages/tsconfig": {
       "name": "@crook/tsconfig",
       "version": "0.0.1",
@@ -35,6 +46,8 @@
   },
   "packages": {
     "@crook/domain": ["@crook/domain@workspace:packages/domain"],
+
+    "@crook/protocol": ["@crook/protocol@workspace:packages/protocol"],
 
     "@crook/tsconfig": ["@crook/tsconfig@workspace:packages/tsconfig"],
 
