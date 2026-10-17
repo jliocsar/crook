@@ -164,7 +164,7 @@ A small daemon, run as a **systemd user service** (`crook-agent.service`), insta
 
 Responsibilities
 
-- Herdr side: one subscription connection (`events.subscribe`, all relevant event types) + one request connection. Bootstrap with `session.snapshot`; follow the docs' recovery contract on `events_lost` and on socket reconnect (Herdr server restarts/updates).
+- Herdr side: one subscription connection (`events.subscribe`, lifecycle types plus one `pane.agent_status_changed` entry per agent pane) + a fresh connection per request (Herdr closes after each answer, measured). Bootstrap with `session.snapshot`; follow the docs' recovery contract on `events_lost` and on socket reconnect (Herdr server restarts/updates).
 - Hub side: one outbound WSS to the hub, auto-reconnect with backoff, sends `hello` with machine id, versions, capabilities.
 - Normalize Herdr records into protocol types (§6). Compose global ids: `<machine_id>/<pane_id>`.
 - Transcripts: for each Claude agent with `agent_session`, locate `<claude_root>/projects/*/<session_id>.jsonl`, tail it (fs watch + offset), parse into messages, stream deltas to subscribed phones only (subscription is per-pane, opened when the chat screen is open).

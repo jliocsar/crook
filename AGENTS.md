@@ -152,6 +152,17 @@ under `effect/`, since every leaf module is PascalCase. Type-only imports are ex
 Since `effect@4.0.5` the former `effect/unstable/*` modules sit directly under `effect/`
 (`effect/rpc/Rpc`, `effect/cli/Command`) and `effect/unstable/*` is no longer exported (measured).
 The `effect-best-practices` references still spell the old paths; drop the `unstable/` segment.
+The same release made the `Config` constructors PascalCase (`Config.String`, `Config.Int`;
+`Config.string` is gone), and a `Config` is itself an `Effect` (both measured).
+
+`@effect/platform-bun` has a barrel root too; import its leaves (`@effect/platform-bun/BunSocket`).
+**Not enforced**: the regex only knows `effect`.
+:::
+
+:::tip
+`@effect/vitest`'s `layer(L)(name, (it) => …)` hands out an `it` without `.live`. A test that needs
+the real clock or real IO (sockets, temp dirs) passes `layer(L, { excludeTestServices: true })` and
+keeps writing `it.effect`.
 :::
 
 :::warning

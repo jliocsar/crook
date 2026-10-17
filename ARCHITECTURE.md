@@ -66,11 +66,13 @@ Why "agent is always the client": Effect RPC servers listen; the agent can't (la
 
 An Effect client for Herdr's socket API. Private like everything else, but kept free of crook concepts anyway: it's the cleanest seam for testing the agent.
 
-- `HerdrClient` service: `request(method, params)` with schemas per method, `subscribe(subscriptions)` → `Stream<HerdrEvent>`, `snapshot()`.
-- Schemas mirror Herdr's own records (generated or hand-written from `herdr api schema --json`); mapping to `@crook/domain` happens in the agent, not here.
-- Transport: NDJSON over a Unix socket. One long-lived connection for the event subscription, one for requests (Herdr closes a subscription connection on `events_lost`).
-- Layers: `HerdrClient.layer` (socket path from `Config`, default `~/.config/herdr/herdr.sock`), `HerdrClient.layerTest` (scripted responses + event queue).
-- Open: whether `@effect/platform-bun` exposes a Unix-socket client `Socket`; otherwise wrap `Bun.connect({ unix })` with `Socket.make` / `Socket.fromTransformStream`.
+- `HerdrClient` service: `request(method, params)` typed by a `HerdrMethod` value (params + result schema), `snapshot`, and `subscribe(subscriptions)`. `subscribe` is scoped and resolves only once Herdr acks with `subscription_started`, yielding a `Stream<HerdrEvent>`; that ordering is the recovery contract, so the caller can `subscribe` then `snapshot` and miss nothing.
+- Methods are added by the ticket that first calls them; today only `ping` and `session.snapshot`.
+- Schemas are hand-written from `herdr api schema --json` and decode only the fields crook reads: excess keys are ignored, so `layouts`, `tokens`, `state_labels` and `scroll` are left out. Optional or nullable fields decode to `Option`. Field names stay snake_case, as on the wire; mapping to `@crook/domain` happens in the agent, not here.
+- Transport: NDJSON over a Unix socket via `@effect/platform-bun`'s `BunSocket.makeNet({ path })`. **One connection per request**: Herdr answers one request line and closes the connection, a second request on it gets nothing (measured, herdr 0.9.1). A subscription connection stays open; `events_lost` arrives as an error response carrying the subscribe request's id, then Herdr closes it.
+- Event wire shape (measured): a lifecycle event is `{"event":"pane_closed","data":{"type":"pane_closed",…}}` — snake_case, even though it is subscribed as `pane.closed`. The pane-scoped `pane.agent_status_changed` keeps the dotted name and carries no `data.type`.
+- **Status changes need a pane-scoped subscription** (measured): `pane.agent_status_changed` requires a `pane_id`, and a lifecycle-only subscriber sees a `pane_updated` on the first detection of an agent but nothing for later working → blocked → idle moves. The agent subscribes per agent pane and resubscribes when the pane set changes (subscriptions are fixed per connection). An unknown `pane_id` rejects the whole subscribe with `pane_not_found`.
+- Layers: `HerdrClient.layer` (socket path from `HERDR_SOCKET_PATH`, else `$HOME/.config/herdr/herdr.sock`), `HerdrClient.layerAt(path)`, `HerdrClient.layerTest({ responses, events })`. Scripted responses are encoded lines run through the live decoder; events come from a `Queue` whose failure becomes the stream's.
 
 ### 2.4 `@crook/claude`
 
