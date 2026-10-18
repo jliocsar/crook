@@ -109,6 +109,15 @@ MachineStateSync (built in JC-88, verified against a live herdr 0.9.1):
 - `ClaudeSessions` resolves a pane to its Claude session per S4: `agent_session` of kind `id` first, then the pid file (`pane.process_info` → the `claude` foreground process → its `CLAUDE_CONFIG_DIR` or `$HOME/.claude` from `/proc/<pid>/environ` → `sessions/<pid>.json`, kept only when its `procStart` matches `/proc/<pid>/stat` field 22). A missing file or closed pane is `None`. An unreadable or reshaped file, or a rejected or malformed `pane.process_info`, is logged as a warning and that one pane goes without a session; only transport failures abort the whole read. Herdr failures log at warning, except `HerdrUnreachable`, which repeats every interval while herdr is down and logs at debug. On the laptop 9 of 11 live agents resolve only through the pid file.
 - The machine id comes from `CROOK_MACHINE_ID`.
 
+HubLink (built in JC-89):
+
+- One session per connection: build the RPC client, hold `Attach` open, and publish `MachineStateSync.changes` through a sliding buffer of one. `changes` replays the current value, so every new connection republishes the current state first, and a slow hub only ever gets the newest version.
+- The session ends when `Attach` ends (`HubAttachEnded`), a call fails with `RpcClientError` (drop, refused or timed-out connect, ping timeout), the hub rejects a publish (`MachineIdMismatch`), or a call dies (`HubCallDefected`: the hub couldn't decode the payload, or its handler crashed). Defects are turned into that tagged error at the boundary, because `retry` and `forever` let a defect through and it would stop HubLink for good without a log line. Every end logs at warning and reconnects.
+- A drop fails every in-flight call, because the socket protocol broadcasts the error before it consults its own retry, so `Attach` fails and the session ends. The protocol's retry is switched off (`retryPolicy: Schedule.recurs(0)`) so nothing redials inside a closing session; HubLink's schedule is the only one: exponential from `HUB_RECONNECT_BASE`, capped at `HUB_PING_INTERVAL`.
+- A connection is healthy once the hub has accepted a publish and the link stayed up for a whole ping interval after it. When a healthy connection drops, HubLink reconnects at once and the backoff starts over. The clock starts at the first accepted publish, not at connect: a hub that takes the TCP connection but never finishes the upgrade fails each attempt after the socket's 10 s open timeout, and timing from connect would call that healthy and never back off (measured).
+- `HUB_RECONNECT_BASE` is 77 ms, the slowest of 9 warm HTTPS requests from the laptop to an exe.dev VM's proxy (52–77 ms; the cold first one took 626 ms). `HUB_PING_INTERVAL` is effect's RpcClient default of 5 s, written out because the cap and the healthy period reuse it. S1 measured no proxy idle timeout within 900 s, so the ping exists to detect a dead hub, not to keep the proxy open.
+- Config: `CROOK_HUB_URL` (the `ws`/`wss` URL of the hub's `/rpc/agent`) and `CROOK_HUB_TOKEN` (`Config.Redacted`), sent as `X-Exedev-Authorization: Bearer <token>`.
+
 ### 2.6 `@crook/hub`
 
 ```

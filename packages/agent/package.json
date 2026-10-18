@@ -8,11 +8,12 @@
   },
   "scripts": {
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "bun --bun vitest run"
   },
   "dependencies": {
     "@crook/domain": "workspace:*",
     "@crook/herdr": "workspace:*",
+    "@crook/protocol": "workspace:*",
     "@effect/platform-bun": "4.0.5",
     "effect": "4.0.5"
   },

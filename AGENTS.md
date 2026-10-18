@@ -177,6 +177,19 @@ keeps writing `it.effect`.
 :::
 
 :::warning
+`Effect.provide(layer)` builds the layer for that one effect and closes it when the effect
+returns. A client built that way, such as an `RpcClient` over a socket protocol, loses its
+connection the moment its constructor returns and never dials (measured). Build the layer into
+the scope that should own it, with `Layer.build`, and provide the resulting context.
+:::
+
+:::tip
+A member that runs on Bun and touches Bun-only APIs in tests (`BunHttpServer` reads the global
+`Bun`) sets its `test` script to `bun --bun vitest run`. Plain `vitest run` runs on Node, where that
+global does not exist (measured).
+:::
+
+:::warning
 Never read `_tag`. The `_` prefix means private. Use `Match.tag`/`Match.tags`/`Match.tagsExhaustive`,
 a library guard (`Cause.isTimeoutError`, `Exit.isFailure`, `Result.isFailure`), or `instanceof` where
 the module instance is shared. Prefer exhaustive so a new variant fails to compile.

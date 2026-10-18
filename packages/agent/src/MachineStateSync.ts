@@ -129,10 +129,7 @@ const make = Effect.gen(function* () {
     Effect.forkScoped,
   )
 
-  return MachineStateSync.of({
-    current: SubscriptionRef.get(state),
-    changes: SubscriptionRef.changes(state),
-  })
+  return MachineStateSync.fromRef(state)
 })
 
 export class MachineStateSync extends Context.Service<
@@ -143,4 +140,13 @@ export class MachineStateSync extends Context.Service<
   }
 >()('@crook/agent/MachineStateSync') {
   static readonly layer = Layer.effect(this, make)
+
+  static readonly fromRef = (state: SubscriptionRef.SubscriptionRef<MachineState>) =>
+    MachineStateSync.of({
+      current: SubscriptionRef.get(state),
+      changes: SubscriptionRef.changes(state),
+    })
+
+  static readonly layerTest = (state: SubscriptionRef.SubscriptionRef<MachineState>) =>
+    Layer.succeed(this, this.fromRef(state))
 }
