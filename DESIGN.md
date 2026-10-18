@@ -14,10 +14,10 @@ Sources:
   <https://github.com/Tinkerers-Labs/mischief-ui>, read at commit `92c335b`.
   - Token values come from its `app/globals.css`.
   - Component classes come from `registry/default/<name>/<name>.tsx`.
-  - Motion and voice come from its `DESIGN.md`. That file also describes its website's own type
-    scale and radii, which don't apply to installed components.
-- Tailwind CSS 4.3.3's `theme.css`, for anything Mischief leaves at Tailwind's defaults: font
-  weights, and the text size and line-height pairs.
+  - Motion, voice and the heading weights come from its `DESIGN.md`.
+  - That file also describes its website's own type sizes and radii. Those aren't used here.
+- Tailwind CSS 4.3.3's `theme.css`, for anything Mischief leaves at Tailwind's defaults: the
+  text size and line-height pairs.
 - Paper file **crook**: <https://app.paper.design/file/01M57T3SYXHGVFX2BABZWNGMXW>.
   - The Foundations page holds the color, type and shape artboards.
   - The Components page holds one artboard per component.
@@ -32,6 +32,32 @@ In code, the variables are shadcn's: `--background`, `--primary` and so on. Misc
 
 Paper names the same tokens with Tailwind's theme keys (`--color-primary`). It holds the light
 values.
+
+### Light and dark follow the system
+
+crook ships both themes and picks one from the system's setting. There's no in-app toggle, and
+Mischief's Theme Toggle isn't used.
+
+Mischief's site switches with a `.dark` class. crook switches with the media query instead:
+
+```css
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+:root {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* the Dark column below */
+  }
+}
+```
+
+The page carries two `theme-color` metas, one per `media="(prefers-color-scheme: …)"`, with the
+`background` value of each theme. That way the iOS status bar matches whichever theme is showing.
+
+Every screen is designed and checked in both themes.
 
 ### Color
 
@@ -92,22 +118,27 @@ Notes on the mapping:
 | Schibsted Grotesk   | `--font-sans`    | Everything you read, and controls        |
 | Geist Mono          | `--font-mono`    | Code, commands, ids, durations           |
 
-**Weights are Tailwind's defaults.** Mischief's `globals.css` doesn't override them, so installed
-components render `font-semibold` as 600 and `font-bold` as 700. Mischief's website scale (650,
-620, 480 and 450) belongs to its website. crook's display headings snap onto the named weights.
-H3's 620 becomes 600. The 650 of H1 and Title sits halfway between 600 and 700, and we chose 700.
+**Weights are Mischief's: semibold 620, bold 650.** These are the heading weights from Mischief's
+website type scale. Mischief's `globals.css` leaves Tailwind's defaults (600 and 700) in place.
+crook overrides `--font-weight-semibold` and `--font-weight-bold` in its own theme, so every
+installed component renders `font-semibold` at 620 and `font-bold` at 650. `font-medium` stays at
+500 and body text at 400. Mischief's website body weights (450 and 480) aren't adopted.
+
+Bricolage Grotesque and Schibsted Grotesk are variable fonts, so 620 and 650 render as written.
+Paper reports a `wght` axis of 200 to 800 for Bricolage and 400 to 900 for Schibsted. For Geist
+Mono, Paper lists only static weights, so mono text set in Paper may snap to the nearest one.
 
 **Sizes and line heights are Tailwind's `text-*` pairs, because the components are set in them.**
 Mischief's website ratios (1.6, 1.5, 1.2) aren't used. H1 is the exception, explained below.
 
 | Role       | Family  | Size / line height | Weight | Tracking   | Source                                                 |
 | ---------- | ------- | ------------------ | ------ | ---------- | ------------------------------------------------------ |
-| H1         | display | 40 / 40 px         | 700    | `-0.04em`  | Floor of Mischief's H1 clamp; 0.98 rounded to whole px |
-| Title      | display | 24 / 32 px         | 700    | `-0.025em` | `text-2xl`; tracking borrowed from Mischief's H2       |
-| H3         | display | 20 / 28 px         | 600    | `-0.015em` | `text-xl`; Mischief H3 tracking                        |
+| H1         | display | 40 / 40 px         | 650    | `-0.04em`  | Floor of Mischief's H1 clamp; 0.98 rounded to whole px |
+| Title      | display | 24 / 32 px         | 650    | `-0.025em` | `text-2xl`; tracking borrowed from Mischief's H2       |
+| H3         | display | 20 / 28 px         | 620    | `-0.015em` | `text-xl`; Mischief H3 tracking                        |
 | Body       | sans    | 16 / 24 px         | 400    | `-0.005em` | `text-base`; Mischief body tracking                    |
 | Small      | sans    | 14 / 20 px         | 400    | `0`        | `text-sm`                                              |
-| Label      | sans    | 12 / 16 px, caps   | 700    | `0.08em`   | `text-xs`; Mischief label tracking                     |
+| Label      | sans    | 12 / 16 px, caps   | 650    | `0.08em`   | `text-xs`; Mischief label tracking                     |
 | Mono       | mono    | 14 / 20 px         | 400    | `0`        | `text-sm`                                              |
 | Mono small | mono    | 12 / 16 px         | 400    | `0`        | `text-xs`                                              |
 
@@ -254,8 +285,11 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 
 - **Tokens:** Paper's tokens are CSS variables with the `--color-*` names. Designs reference them
   as `var(--color-primary)`, so a token change reaches every design.
-- **No theme modes yet.** Paper holds the light values. To preview dark, swap the color tokens to
-  the Dark column above, then swap them back.
+- **No theme modes yet.** Paper holds the light values. Every screen ships in both themes, so check
+  each one in dark too: swap the color tokens to the Dark column above, screenshot, then swap them
+  back.
+- **Paper's weight tokens are out of date.** They still say 600 and 700. Updating them to 620 and
+  650 was blocked by the MCP cap. Change them in the Theme tab by hand, or once the cap resets.
 - **No components or instances yet.** The Components page is a sheet of copies.
   - Reuse a part with `<x-paper-clone node-id="…">`, which makes an unlinked copy.
   - Editing the sheet doesn't update earlier clones.
@@ -272,8 +306,6 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 
 ## Open
 
-- Dark only, light only, or following the system. Mischief's own site follows the system on a first
-  visit, and remembers a manual choice.
 - Navigation: a push stack (herd → chat) or a tab bar.
 - What each herd row shows, and how "Needs you" looks.
 - The machine badge's tone for each state: online, offline, reconnecting.
