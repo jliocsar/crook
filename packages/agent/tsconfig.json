@@ -1,0 +1,4 @@
+{
+  "extends": "@crook/tsconfig/base.json",
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

@@ -1,3 +1,4 @@
+import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 
 export const AgentStatus = Schema.Literals(['idle', 'working', 'blocked', 'done', 'unknown'])
@@ -60,7 +61,7 @@ export class AgentInfo extends Schema.Class<AgentInfo>('AgentInfo')({
   focused: Schema.Boolean,
   revision: Schema.Int,
   agent_status: AgentStatus,
-  state_change_seq: Schema.OptionFromOptional(Schema.Int),
+  state_change_seq: Schema.Int.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
   completion_seq: Schema.OptionFromOptionalNullOr(Schema.Int),
   name: Schema.OptionFromOptionalNullOr(Schema.String),
   agent: Schema.OptionFromOptionalNullOr(Schema.String),
@@ -68,8 +69,19 @@ export class AgentInfo extends Schema.Class<AgentInfo>('AgentInfo')({
   agent_session: Schema.OptionFromOptionalNullOr(AgentSessionInfo),
   title: Schema.OptionFromOptionalNullOr(Schema.String),
   terminal_title: Schema.OptionFromOptionalNullOr(Schema.String),
+  terminal_title_stripped: Schema.OptionFromOptionalNullOr(Schema.String),
   cwd: Schema.OptionFromOptionalNullOr(Schema.String),
   foreground_cwd: Schema.OptionFromOptionalNullOr(Schema.String),
+}) {}
+
+export class PaneProcess extends Schema.Class<PaneProcess>('PaneProcess')({
+  pid: Schema.Int,
+  name: Schema.String,
+}) {}
+
+export class PaneProcessInfo extends Schema.Class<PaneProcessInfo>('PaneProcessInfo')({
+  pane_id: Schema.String,
+  foreground_processes: Schema.Array(PaneProcess),
 }) {}
 
 export class SessionSnapshot extends Schema.Class<SessionSnapshot>('SessionSnapshot')({

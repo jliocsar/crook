@@ -67,7 +67,9 @@ Why "agent is always the client": Effect RPC servers listen; the agent can't (la
 An Effect client for Herdr's socket API. Private like everything else, but kept free of crook concepts anyway: it's the cleanest seam for testing the agent.
 
 - `HerdrClient` service: `request(method, params)` typed by a `HerdrMethod` value (params + result schema), `snapshot`, and `subscribe(subscriptions)`. `subscribe` is scoped and resolves only once Herdr acks with `subscription_started`, yielding a `Stream<HerdrEvent>`; that ordering is the recovery contract, so the caller can `subscribe` then `snapshot` and miss nothing.
-- Methods are added by the ticket that first calls them; today only `ping` and `session.snapshot`.
+- Methods are added by the ticket that first calls them; today `ping`, `session.snapshot` and `pane.process_info`.
+- Error codes crook acts on get their own tagged error: `events_lost` → `HerdrEventsLost`, `pane_not_found` → `HerdrPaneNotFound` (from any request or the subscribe itself). Every other code stays `HerdrRequestRejected`.
+- `state_change_seq` decodes to herdr's schema default of 0 when absent, so it is a plain `Int`.
 - Schemas are hand-written from `herdr api schema --json` and decode only the fields crook reads: excess keys are ignored, so `layouts`, `tokens`, `state_labels` and `scroll` are left out. Optional or nullable fields decode to `Option`. Field names stay snake_case, as on the wire; mapping to `@crook/domain` happens in the agent, not here.
 - Transport: NDJSON over a Unix socket via `@effect/platform-bun`'s `BunSocket.makeNet({ path })`. **One connection per request**: Herdr answers one request line and closes the connection, a second request on it gets nothing (measured, herdr 0.9.1). A subscription connection stays open; `events_lost` arrives as an error response carrying the subscribe request's id, then Herdr closes it.
 - Event wire shape (measured): a lifecycle event is `{"event":"pane_closed","data":{"type":"pane_closed",…}}` — snake_case, even though it is subscribed as `pane.closed`. The pane-scoped `pane.agent_status_changed` keeps the dotted name and carries no `data.type`.
@@ -97,6 +99,15 @@ src/
 plugin/
   herdr-plugin.toml       startup hook ensures the service; actions: connect, status, restart
 ```
+
+MachineStateSync (built in JC-88, verified against a live herdr 0.9.1):
+
+- The layer reads herdr once before it hands out the service, so the `SubscriptionRef` always holds a real `MachineState`; version 0 is that first read. A herdr that is down holds the layer up until it answers.
+- One loop, forked into the layer's scope: subscribe (lifecycle kinds that change `MachineState` plus one `pane.agent_status_changed` per agent pane), re-read once `subscription_started` arrives, then re-read on every event. A sliding buffer of one sits in front of the re-read, so a burst of events arriving during a read costs one more read, not one per event.
+- A re-read that changes nothing keeps the version; a change bumps it by one. `statusChangedAt` is stamped by the agent at the read that first sees a status, since herdr carries no timestamp.
+- When a re-read shows a different set of agent panes, the subscription is closed and opened again with the new set. `events_lost` resubscribes at once; `pane_not_found` (a pane closed between the read and the subscribe) re-reads first so the next subscribe names live panes only; every other herdr failure waits `HERDR_RECONNECT_INTERVAL` (100 ms, from a measured 101–114 ms cold start of a herdr server) and retries forever. A local socket connect is cheap, so the herdr leg uses a fixed interval rather than §3.5's exponential schedule.
+- `ClaudeSessions` resolves a pane to its Claude session per S4: `agent_session` of kind `id` first, then the pid file (`pane.process_info` → the `claude` foreground process → its `CLAUDE_CONFIG_DIR` or `$HOME/.claude` from `/proc/<pid>/environ` → `sessions/<pid>.json`, kept only when its `procStart` matches `/proc/<pid>/stat` field 22). A missing file or closed pane is `None`. An unreadable or reshaped file, or a rejected or malformed `pane.process_info`, is logged as a warning and that one pane goes without a session; only transport failures abort the whole read. Herdr failures log at warning, except `HerdrUnreachable`, which repeats every interval while herdr is down and logs at debug. On the laptop 9 of 11 live agents resolve only through the pid file.
+- The machine id comes from `CROOK_MACHINE_ID`.
 
 ### 2.6 `@crook/hub`
 

@@ -1,0 +1,22 @@
+{
+  "name": "@crook/agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@crook/domain": "workspace:*",
+    "@crook/herdr": "workspace:*",
+    "@effect/platform-bun": "4.0.5",
+    "effect": "4.0.5"
+  },
+  "devDependencies": {
+    "@crook/tsconfig": "workspace:*"
+  }
+}

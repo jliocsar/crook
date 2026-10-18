@@ -17,6 +17,7 @@ import {
   HerdrClient,
   HerdrConnectionClosed,
   HerdrEventsLost,
+  HerdrPaneNotFound,
   HerdrRequestRejected,
   HerdrResponseInvalid,
   type HerdrSubscriptionError,
@@ -24,7 +25,7 @@ import {
   scriptedRejection,
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
-import { Ping, SessionSnapshotMethod } from '@crook/herdr/Methods'
+import { PaneProcessInfoMethod, Ping, SessionSnapshotMethod } from '@crook/herdr/Methods'
 import { SessionSnapshot } from '@crook/herdr/Records'
 
 interface ConnectionScript {
@@ -89,6 +90,16 @@ const SNAPSHOT_LINE = JSON.stringify({
           },
           cwd: '/home/jliocsar/Projects/crook',
           state_labels: {},
+        },
+        {
+          pane_id: 'w1:p2',
+          terminal_id: 'term_2',
+          workspace_id: 'w1',
+          tab_id: 'w1:t1',
+          focused: false,
+          revision: 1,
+          agent_status: 'unknown',
+          agent: 'claude',
         },
       ],
     },
@@ -180,11 +191,12 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
     Effect.gen(function* () {
       const { client } = yield* fakeHerdr([replyOnce(SNAPSHOT_LINE)])
       const snapshot = yield* client.snapshot
-      const agent = snapshot.agents[0]
+      const [agent, withoutSeq] = snapshot.agents
 
       expect(snapshot).toBeInstanceOf(SessionSnapshot)
       expect(snapshot.focused_pane_id).toEqual(Option.none())
-      expect(agent?.state_change_seq).toEqual(Option.some(14162))
+      expect(agent?.state_change_seq).toBe(14162)
+      expect(withoutSeq?.state_change_seq).toBe(0)
       expect(agent?.title).toEqual(Option.none())
       expect(Option.map(agent?.agent_session ?? Option.none(), (session) => session.value)).toEqual(
         Option.some('session-1'),
@@ -196,13 +208,29 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
     Effect.gen(function* () {
       const { client } = yield* fakeHerdr([
         replyOnce(
-          '{"id":"ping","error":{"code":"pane_not_found","message":"pane nope not found"}}',
+          '{"id":"ping","error":{"code":"invalid_request","message":"invalid request: unknown variant"}}',
         ),
       ])
       const error = yield* client.request(Ping, {}).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(HerdrRequestRejected)
-      expect(error.message).toContain('pane_not_found')
+      expect(error.message).toContain('invalid_request')
+    }),
+  )
+
+  it.effect('fails with HerdrPaneNotFound when herdr does not know the pane', () =>
+    Effect.gen(function* () {
+      const { client } = yield* fakeHerdr([
+        replyOnce(
+          '{"id":"pane.process_info","error":{"code":"pane_not_found","message":"pane not found"}}',
+        ),
+      ])
+      const error = yield* client
+        .request(PaneProcessInfoMethod, { pane_id: 'w9:p9' })
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(HerdrPaneNotFound)
+      expect(error).toMatchObject({ method: 'pane.process_info' })
     }),
   )
 
@@ -291,7 +319,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
         .subscribe([{ type: 'pane.agent_status_changed', pane_id: 'nope' }])
         .pipe(Effect.flip)
 
-      expect(error).toBeInstanceOf(HerdrRequestRejected)
+      expect(error).toBeInstanceOf(HerdrPaneNotFound)
     }),
   )
 })

@@ -1,6 +1,6 @@
 import * as Schema from 'effect/Schema'
 
-import { SessionSnapshot } from '@crook/herdr/Records'
+import { PaneProcessInfo, SessionSnapshot } from '@crook/herdr/Records'
 
 export interface HerdrMethod<Params, Result> {
   readonly name: string
@@ -21,6 +21,14 @@ export const Ping = makeMethod('ping', {
     type: Schema.Literal('pong'),
     version: Schema.String,
     protocol: Schema.Int,
+  }),
+})
+
+export const PaneProcessInfoMethod = makeMethod('pane.process_info', {
+  params: Schema.Struct({ pane_id: Schema.String }),
+  result: Schema.Struct({
+    type: Schema.Literal('pane_process_info'),
+    process_info: PaneProcessInfo,
   }),
 })
 

@@ -160,6 +160,17 @@ The same release made the `Config` constructors PascalCase (`Config.String`, `Co
 :::
 
 :::tip
+Arrays have no `.pipe`. Chaining `effect/Array` calls, which `begone-slop/no-nested-effect-array-methods`
+asks for, goes through `pipe(xs, Arr.map(…), Arr.prependAll(…))` from `effect/Function`. Several layers
+feeding one go in a single `Layer.provide(target, [a, b, c])`, which is what
+`begone-slop/no-cascading-layer-provide` wants.
+
+A data-last combinator stored in a variable before it meets its input — `const retry = Effect.retry({ … })`
+— infers `unknown` for the error, and `effecttsgo/any-unknown-in-error-context` reports every effect it
+touches. Apply it inline (measured).
+:::
+
+:::tip
 `@effect/vitest`'s `layer(L)(name, (it) => …)` hands out an `it` without `.live`. A test that needs
 the real clock or real IO (sockets, temp dirs) passes `layer(L, { excludeTestServices: true })` and
 keeps writing `it.effect`.

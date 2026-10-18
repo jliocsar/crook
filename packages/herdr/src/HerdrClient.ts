@@ -22,6 +22,7 @@ export type HerdrRequestError =
   | HerdrConnectionClosed
   | HerdrRequestInvalid
   | HerdrRequestRejected
+  | HerdrPaneNotFound
   | HerdrResponseInvalid
 
 export type HerdrSubscriptionError = HerdrRequestError | HerdrEventsLost
@@ -33,6 +34,7 @@ export interface ScriptedResponse {
 
 const SUBSCRIBE_METHOD = 'events.subscribe'
 const EVENTS_LOST_CODE = 'events_lost'
+const PANE_NOT_FOUND_CODE = 'pane_not_found'
 
 export class HerdrUnreachable extends Schema.TaggedError<HerdrUnreachable>()('HerdrUnreachable', {
   socketPath: Schema.String,
@@ -67,6 +69,15 @@ export class HerdrRequestRejected extends Schema.TaggedError<HerdrRequestRejecte
 ) {
   override get message(): string {
     return `Herdr rejected ${this.method} with ${this.code}: ${this.detail}.`
+  }
+}
+
+export class HerdrPaneNotFound extends Schema.TaggedError<HerdrPaneNotFound>()(
+  'HerdrPaneNotFound',
+  { method: Schema.String, detail: Schema.String },
+) {
+  override get message(): string {
+    return `Herdr reported pane_not_found for ${this.method}: ${this.detail}. The pane most likely closed in the meantime: re-read state with session.snapshot.`
   }
 }
 
@@ -132,6 +143,15 @@ const encodeRequest = Effect.fn('HerdrClient.encodeRequest')(function* <Params>(
   }).pipe(Effect.mapError(toInvalid))
 })
 
+const rejection = (method: string, response: HerdrErrorResponse) =>
+  response.error.code === PANE_NOT_FOUND_CODE
+    ? new HerdrPaneNotFound({ method, detail: response.error.message })
+    : new HerdrRequestRejected({
+        method,
+        code: response.error.code,
+        detail: response.error.message,
+      })
+
 const decodeResponse = Effect.fn('HerdrClient.decodeResponse')(function* <Result>(
   method: HerdrMethod<unknown, Result>,
   line: string,
@@ -141,11 +161,7 @@ const decodeResponse = Effect.fn('HerdrClient.decodeResponse')(function* <Result
   const response = yield* Schema.decodeEffect(ResponseLine)(line).pipe(Effect.mapError(toInvalid))
 
   if (Schema.is(HerdrErrorResponse)(response)) {
-    return yield* new HerdrRequestRejected({
-      method: method.name,
-      code: response.error.code,
-      detail: response.error.message,
-    })
+    return yield* rejection(method.name, response)
   }
 
   return yield* Schema.decodeUnknownEffect(method.result)(response.result).pipe(
@@ -178,11 +194,7 @@ const exchange = (socketPath: string, method: string, outgoing: Stream.Stream<st
 const subscriptionFailure = (response: HerdrErrorResponse): HerdrSubscriptionError =>
   response.error.code === EVENTS_LOST_CODE
     ? new HerdrEventsLost()
-    : new HerdrRequestRejected({
-        method: SUBSCRIBE_METHOD,
-        code: response.error.code,
-        detail: response.error.message,
-      })
+    : rejection(SUBSCRIBE_METHOD, response)
 
 const makeLive = (socketPath: string) => {
   const request = Effect.fn('HerdrClient.request')(function* <Params, Result>(

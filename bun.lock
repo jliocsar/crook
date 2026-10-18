@@ -18,6 +18,19 @@
         "vitest": "^5.0.5",
       },
     },
+    "packages/agent": {
+      "name": "@crook/agent",
+      "version": "0.0.1",
+      "dependencies": {
+        "@crook/domain": "workspace:*",
+        "@crook/herdr": "workspace:*",
+        "@effect/platform-bun": "4.0.5",
+        "effect": "4.0.5",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
     "packages/domain": {
       "name": "@crook/domain",
       "version": "0.0.1",
@@ -56,6 +69,8 @@
     },
   },
   "packages": {
+    "@crook/agent": ["@crook/agent@workspace:packages/agent"],
+
     "@crook/domain": ["@crook/domain@workspace:packages/domain"],
 
     "@crook/herdr": ["@crook/herdr@workspace:packages/herdr"],
