@@ -53,6 +53,19 @@
         "@crook/tsconfig": "workspace:*",
       },
     },
+    "packages/hub": {
+      "name": "@crook/hub",
+      "version": "0.0.1",
+      "dependencies": {
+        "@crook/domain": "workspace:*",
+        "@crook/protocol": "workspace:*",
+        "@effect/platform-bun": "4.0.5",
+        "effect": "4.0.5",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
     "packages/protocol": {
       "name": "@crook/protocol",
       "version": "0.0.1",
@@ -75,6 +88,8 @@
     "@crook/domain": ["@crook/domain@workspace:packages/domain"],
 
     "@crook/herdr": ["@crook/herdr@workspace:packages/herdr"],
+
+    "@crook/hub": ["@crook/hub@workspace:packages/hub"],
 
     "@crook/protocol": ["@crook/protocol@workspace:packages/protocol"],
 

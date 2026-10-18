@@ -26,7 +26,7 @@ import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { MachineId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
-import { AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 interface HubScript {
@@ -87,10 +87,7 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
 const backoffTimeline = (failedAttempts: number, attachLifetime: Duration.Duration) =>
   pipe(
     Arr.makeBy(failedAttempts, (attempt) =>
-      Duration.min(
-        Duration.times(HubLink.HUB_RECONNECT_BASE, 2 ** attempt),
-        HubLink.HUB_PING_INTERVAL,
-      ),
+      Duration.min(Duration.times(HubLink.HUB_RECONNECT_BASE, 2 ** attempt), AGENT_PING_INTERVAL),
     ),
     Arr.scan(0, (at, delay) => at + Duration.toMillis(Duration.sum(attachLifetime, delay))),
   )
@@ -135,14 +132,14 @@ it.effect('doubles the delay after each failed connection, up to the ping interv
 it.effect('reconnects at once after a connection the hub accepted for a ping interval', () =>
   Effect.gen(function* () {
     const { received, attempts } = yield* startLink({
-      attachLifetime: Option.some(HubLink.HUB_PING_INTERVAL),
+      attachLifetime: Option.some(AGENT_PING_INTERVAL),
     })
     const healthyEnds = [1, 2, 3].map((connection) =>
-      Duration.toMillis(Duration.times(HubLink.HUB_PING_INTERVAL, connection)),
+      Duration.toMillis(Duration.times(AGENT_PING_INTERVAL, connection)),
     )
 
     yield* Queue.take(received)
-    yield* TestClock.adjust(Duration.times(HubLink.HUB_PING_INTERVAL, 3))
+    yield* TestClock.adjust(Duration.times(AGENT_PING_INTERVAL, 3))
 
     expect(yield* attempts).toEqual([0, ...healthyEnds])
   }),

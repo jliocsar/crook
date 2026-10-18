@@ -190,6 +190,13 @@ global does not exist (measured).
 :::
 
 :::warning
+An RPC handler's `headers` over a WebSocket are the upgrade request's headers with each call's own
+headers merged over them, and the call wins (measured). A client can overwrite any upgrade header
+per call, a proxy-injected one included. Identity a proxy vouches for is read once at the upgrade
+and bound to that connection, one RPC server per connection, never read back from handler headers.
+:::
+
+:::warning
 Never read `_tag`. The `_` prefix means private. Use `Match.tag`/`Match.tags`/`Match.tagsExhaustive`,
 a library guard (`Cause.isTimeoutError`, `Exit.isFailure`, `Result.isFailure`), or `instanceof` where
 the module instance is shared. Prefer exhaustive so a new variant fails to compile.

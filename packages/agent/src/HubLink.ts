@@ -15,7 +15,7 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { AgentLink } from '@crook/protocol/AgentLink'
+import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 export type AgentLinkClient = RpcClient.FromGroup<typeof AgentLink, RpcClientError>
@@ -25,7 +25,6 @@ export type HubConnect = Effect.Effect<AgentLinkClient, never, Scope.Scope>
 const HUB_AUTHORIZATION_HEADER = 'X-Exedev-Authorization'
 
 export const HUB_RECONNECT_BASE = Duration.millis(77)
-export const HUB_PING_INTERVAL = Duration.seconds(5)
 
 export const CrookHubUrl = Config.URL('CROOK_HUB_URL')
 export const CrookHubToken = Config.Redacted('CROOK_HUB_TOKEN')
@@ -47,7 +46,7 @@ export class HubCallDefected extends Schema.TaggedError<HubCallDefected>()('HubC
 export const connectTo = (url: URL, token: Redacted.Redacted) =>
   Layer.build(
     RpcClient.layerProtocolSocket({
-      pingInterval: HUB_PING_INTERVAL,
+      pingInterval: AGENT_PING_INTERVAL,
       retryPolicy: Schedule.recurs(0),
     }).pipe(
       Layer.provide([
@@ -87,7 +86,7 @@ const make = (connect: HubConnect) =>
         Ref.get(acceptedAt),
         Clock.currentTimeMillis,
         (accepted, now) =>
-          Option.exists(accepted, (first) => now - first >= Duration.toMillis(HUB_PING_INTERVAL)),
+          Option.exists(accepted, (first) => now - first >= Duration.toMillis(AGENT_PING_INTERVAL)),
       )
 
       yield* Effect.all([holdAttach(client), publishChanges(client, markAccepted)], {
@@ -106,7 +105,7 @@ const make = (connect: HubConnect) =>
       Effect.retry(
         Schedule.min([
           Schedule.exponential(HUB_RECONNECT_BASE),
-          Schedule.spaced(HUB_PING_INTERVAL),
+          Schedule.spaced(AGENT_PING_INTERVAL),
         ]),
       ),
       Effect.forever,

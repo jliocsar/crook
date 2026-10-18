@@ -1,9 +1,12 @@
+import * as Duration from 'effect/Duration'
 import * as Rpc from 'effect/rpc/Rpc'
 import * as RpcGroup from 'effect/rpc/RpcGroup'
 import * as Schema from 'effect/Schema'
 
 import { MachineId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
+
+export const AGENT_PING_INTERVAL = Duration.seconds(5)
 
 export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
   'MachineIdMismatch',

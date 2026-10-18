@@ -1,0 +1,23 @@
+{
+  "name": "@crook/hub",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "bun --bun vitest run",
+    "start": "bun src/main.ts"
+  },
+  "dependencies": {
+    "@crook/domain": "workspace:*",
+    "@crook/protocol": "workspace:*",
+    "@effect/platform-bun": "4.0.5",
+    "effect": "4.0.5"
+  },
+  "devDependencies": {
+    "@crook/tsconfig": "workspace:*"
+  }
+}
