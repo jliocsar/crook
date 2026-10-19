@@ -436,16 +436,95 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
 1. Ledger, Preview and Index. Preview showed a mock lock-screen notification under each switch.
    Index was three summary rows that each pushed a page. **Ledger picked.**
 
+## Connection states: decided, variant "Banner"
+
+### Prototype
+
+- The connection UI is in `src/connection/`:
+  - `data.ts`: the simulated link, its scenarios and `useConnection`;
+  - `context.tsx`: the slots a variant fills, and `Gate`;
+  - `parts.tsx`: the copy, the icon and the skeleton;
+  - `Banner.tsx`: the variant itself.
+- The Shell takes a `connection` variant. The picker's `?v=1` is Banner, and its scenario menu (or
+  the S key) plays each state.
+- Island (`?v=2`) and Caption (`?v=3`) are dead ends now.
+
+### Layout
+
+- **The banner** is a 32px full-width strip at the top of every header, under the status bar. It
+  shows on tab screens, chats and pushed screens alike. It has an icon and one line of copy, and
+  for the failure states the time since the last update on the right, in mono.
+  - Hub unreachable: "Can't reach the hub · retrying", tinted with the destructive colour.
+  - No network: "You're offline", inverted (foreground background).
+  - Syncing and connecting: "Syncing" or "Connecting to the hub", with a spinner, on muted.
+  - Back from a failure: "Back online" on accent for a moment, then the strip collapses.
+- **Stale content** dims to 60%: the herd list, the Machines list, a machine's agent cards and
+  the chat transcript. Headers and the back button stay at full strength.
+- **First load** with no cache shows skeleton rows shaped like machine sections, on Agents and on
+  Machines, and hides the needs-you badge.
+- **An expired session** shows the logged-out screen with "Your session expired" and "Your agents
+  kept running. Log in again to see them."
+
+### Behaviour
+
+- **The cached herd stays readable.** Hub actions are disabled until the hub is back: send, stop,
+  answering an ask, new agent, rename, pin, close, forget, and the notification prefs. Back,
+  tabs, scrolling and opening chats all keep working.
+- **No queue.** A message can't be sent while disconnected, and nothing fires after a reconnect.
+- **The resync on return is silent when it's quick.** "Syncing" and the dim only show after 1s,
+  Nielsen's limit for a delay that keeps the user's flow of thought. After a failure, "Syncing"
+  shows at once, so "Back online" never appears before the data is fresh.
+- **Pull to resync is off** while the hub is unreachable, since crook is already retrying.
+- **Machines keep their last-known status** while the hub is down. The hub, not the phone, decides
+  that a machine is offline.
+- **Offline and hub unreachable read differently,** because their fixes differ: one is the
+  phone's network, the other is crook's side.
+- **Screen readers** hear each state once, from a single status region.
+
+### Decided against
+
+- **A floating capsule by the tab bar (Island)**: one more floating thing, and it covered the end
+  of the list.
+- **A quiet line under the title (Caption)**: too easy to miss when actions are disabled.
+- **A "Retry now" button**: crook already retries on its own.
+
+### Unmeasured knobs
+
+- "Back online" stays for 1.5s.
+- The strip is 32px tall.
+- These were picked in the prototype, not measured.
+
+### Data this needs
+
+- **The last-synced time** stored with the IndexedDB snapshot (SPEC §5.3).
+- **`navigator.onLine`** and its events, to tell offline from hub unreachable.
+- **The PWA's reconnect schedule**: not designed yet. The client must still ping within the hub's
+  10s silence timeout (ARCHITECTURE §2.6).
+- **Not known yet:** how an expired exe.dev session shows up to the PWA, whether as a rejected
+  WebSocket upgrade or a login redirect on fetch. The prototype fakes it.
+
+### Known issues
+
+- If the hub drops while you're typing, the disabled composer loses focus and the keyboard
+  closes. The draft survives.
+
+### History
+
+1. Banner, Island and Caption. Island was a capsule above the tab bar that expanded on tap, and
+   docked above the composer in chats. Caption was a muted line under the title. **Banner
+   picked.**
+
 ## Next
 
-- **The rest of JC-117**: connection states, empty and edge states, chat leftovers, what shows
-  outside the app, and wide layouts.
+- **The rest of JC-117**: empty and edge states, chat leftovers, what shows outside the app,
+  and wide layouts.
 - **When web starts,** the settled pieces go into `DESIGN.md`:
   - the herd layout;
   - the chat layout;
   - navigation and Machines;
   - the New agent screen;
   - Settings;
+  - the connection banner, the dimmed stale state and the first-load skeleton;
   - the Status Pill machine badge.
 - **The SPEC changes** go in at the same time:
   - drop the terminal view and the Ask's "show screen";
