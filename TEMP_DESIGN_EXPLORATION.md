@@ -175,9 +175,8 @@ and nothing else.
     - While blocked, the placeholder reads "Or tell Claude what to do instead". Sending then
       declines the Ask with your message.
     - Enter adds a line on a touch keyboard and sends on a hardware one.
-  - **The key strip** sits under the composer: Esc, Ctrl C, ↑, ↓, Tab, Enter.
-    - Each key is 44px, and tapping one keeps the keyboard up.
-    - It hides while the Ask is open.
+  - **No key strip.** The prototype had one (Esc, Ctrl C, arrows, Tab, Enter); the user cut it.
+    Stop on the composer is the only key the chat sends.
 
 ### Behaviour
 
@@ -241,17 +240,102 @@ These were bugs or `DESIGN.md` misses in the components as shipped:
    and the terminal swipeable pages, with the Ask as a sheet. **Thread picked**, without its
    terminal toggle.
 
+## Navigation and Machines: decided, variant "Roster"
+
+### Prototype
+
+- The shell is `src/app/Shell.tsx`, Settings is `src/app/Settings.tsx`, and Machines is
+  `src/machines/Roster.tsx` on top of the shared `src/machines/parts.tsx`. The picker's `?v=1`
+  is Roster.
+
+### Navigation
+
+- **Three tabs:** Agents, Machines, Settings. Agents (the herd) is home; there's no separate
+  dashboard, because the herd already puts what needs you first.
+- **The tab bar shows on the three root lists only.** Pushed screens (a chat, a machine) cover it,
+  so the chat's dock stays clear.
+  - Icons are 20px over a 12px label, in a 56px row plus the bottom safe area.
+  - The active tab is `primary`.
+  - Agents carries a small `primary` count of the agents that need you. The count is hidden from
+    screen readers, which hear ", N need you" instead.
+- **Root lists have a sticky header:** the title in display 24/32, with one action on the right.
+  Agents has `+` (New agent); Machines has `+` (Add a machine); Settings has none. The herd's old
+  "hub connected" line and its count-by-state subtitle are gone.
+- **Pushed screens** slide in from the right with an edge swipe back. Their header's back button
+  names where it goes ("Back to laptop" when a chat was opened from that machine). The new
+  screen's title takes focus, and Back returns focus to whatever opened it.
+
+### Machines list (Roster)
+
+- One card per machine: the name in display 20/28, the connection Status Pill, then "N agents ·
+  N need you", then the crook agent and Herdr versions in mono.
+- **"update agent"**, a warn Status Pill, shows when the machine's crook agent is older than the
+  hub.
+- **Offline machines** read "Swipe to forget, or wait for it to reconnect", and swiping the card
+  shows Forget (D15).
+- With no machines, an Empty State offers "Add a machine".
+
+### Machine detail
+
+- The header shows the name, the Status Pill and the update pill.
+- **Agents · N**: the machine's agents as herd cards. Tap opens the chat; long-press opens the
+  agent's actions sheet. Offline shows "–" and says its agents are unknown until it reconnects.
+- **About**: Online for / Reconnecting for / Last seen, then crook agent (warn when behind the
+  hub, "0.0.9, hub has 0.1.0"), Herdr and Machine id.
+- **Hold to forget** shows only while the machine is offline, with "It comes back on its own if
+  its agent connects again" beneath.
+
+### Add a machine
+
+A sheet with three numbered steps, each with a Code Block: `herdr plugin install
+jliocsar/crook`, the hub URL for the plugin's "Connect to hub" action, and an exe.dev token
+minted with `{ "machine": "<name>" }` as its context (SPEC §5.2). It ends with "It shows up under
+Machines as soon as it connects".
+
+### New agent
+
+`+` on Agents opens a sheet: pick the machine (offline ones disabled, each with its Status Pill),
+then the workspace. It starts Claude in a new tab there and pushes its chat. New agent still gets
+its own pass.
+
+### Settings (first cut)
+
+- **Notifications**: Approvals, Questions, Finished, Live Activity, each a switch that is
+  `primary` when on.
+- **Hub**: Status, Address, Version.
+
+### Lists
+
+- **Info lists and settings rows are flat:** full-bleed rows with no dividers between them. The
+  only rule is the one under the section label. DESIGN.md already bans grouped iOS Settings lists.
+- **A status dot centres on the text's x-height,** not its line box. In the prototype that's
+  `vertical-align: middle` on an inline dot, both in Status Pill and beside the agent's status.
+
+### Data this needs
+
+- **The machine registry** (SPEC §5.1): last seen and forgotten, as stored today.
+- **From the hello** (SPEC §5.2): the crook agent's version and the Herdr version.
+- **Online for** needs the time of the last connection change. The herd view carries only
+  `lastSeenAt` today, so the hub has to add it.
+- **No ping and no OS.** Both were cut, because nothing stores them.
+
+### History
+
+1. Roster, Fleet and Health. Fleet was two-column tiles with a big agent count and a dot per
+   agent. Health was a 24h uptime bar per machine, which needed persisted connection events and
+   ping. **Roster picked.**
+2. Tweaks after the pick: a smaller tab bar icon and badge, no dividers in lists, no key strip in
+   the chat, and dots centred on the x-height.
+
 ## Next
 
-- **Navigation and Machines.** A tab bar on the top-level lists, hidden on pushed screens like
-  the chat. The candidates for tabs are Agents (the herd, as home), Machines and Settings. See the
-  handoff for the open questions.
-- **Then:** New agent, then Settings (SPEC §5.3).
+- **New agent**, then **Settings** (SPEC §5.3).
 - **When web starts,** the settled pieces go into `DESIGN.md`:
   - the herd layout;
   - the chat layout;
-  - navigation;
+  - navigation and Machines;
   - the Status Pill machine badge.
 - **The SPEC changes** go in at the same time:
   - drop the terminal view and the Ask's "show screen";
+  - §5.3 gains the tab bar and the Machines screen, and Forget moves from Settings to Machines;
   - add Motion to §8.1.
