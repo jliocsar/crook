@@ -296,11 +296,9 @@ Machines as soon as it connects".
 
 `+` on Agents pushes the New agent screen. See "New agent: decided" below.
 
-### Settings (first cut)
+### Settings
 
-- **Notifications**: Approvals, Questions, Finished, Live Activity, each a switch that is
-  `primary` when on.
-- **Hub**: Status, Address, Version.
+See "Settings: decided" below.
 
 ### Lists
 
@@ -386,18 +384,73 @@ Machines as soon as it connects".
 2. Tweaks after the pick: compact picker rows. Chips went to 32px and back to 44px. The summary
    moved from the bottom of the body to its centre.
 
+## Settings: decided, variant "Ledger"
+
+### Prototype
+
+- The screen is `src/settings/Ledger.tsx`, and the shared sections are in `src/settings/parts.tsx`.
+  The Shell takes a `settings` variant. The picker's `?v=1` is Ledger.
+- Preview (`?v=2`) and Index (`?v=3`) are dead ends now.
+
+### Layout
+
+One flat page on the Settings tab, three sections, each a Section Label over a rule:
+
+- **Notifications**: Approvals, Questions, Finished and Live Activity, each a row with a label, a
+  one-line detail and a switch that is `primary` when on. Below the rows:
+  - "Saved on the hub, so every device you log in on shares them."
+  - a full-width secondary "Send a test" button, which swaps to "Sending" and "Sent to your
+    phone";
+  - "Notifications name the agent and the machine, never what Claude wrote. Hark delivers them,
+    so they open nothing in crook."
+- **Account**: "Logged in as" with the exe.dev email, a full-width destructive "Log out", and
+  "Lost this phone? End its session on exe.dev from another device."
+- **Hub**: Status, Address, Version.
+
+### Behaviour
+
+- **Prefs live on the hub.** The hub decides whether to call Hark, so the phone can't own the
+  choice. One user, so no per-device prefs.
+- **Log out** asks in a sheet ("Log out of crook?", "Your agents keep running."), then shows a
+  logged-out screen with "Log in with exe.dev". Logging out closes every pushed screen and sheet.
+- **Lost phone** is handled on exe.dev from another device, not in crook: the in-app log out
+  needs the phone.
+
+### Decided against
+
+- **Quiet hours and pause**: iOS Focus already does that for Hark.
+- **Per-machine and per-agent overrides**: not for now. If they come, they live on the agent or
+  machine screen, not here.
+- **A confirm before approving from the lock screen**: Hark's actions are deliberate enough.
+- **Theme**: follows the system, per DESIGN.md.
+
+### Data this needs
+
+- **Per-event prefs** stored on the hub and read before every Hark call (M5).
+- **A test notification** endpoint on the hub that sends a labels-only Hark notification.
+- **The account email**, from the `X-ExeDev-Email` header the hub already checks (SPEC §7).
+- **Not known yet:** how the PWA logs out of exe.dev. The prototype fakes it.
+
+### History
+
+1. Ledger, Preview and Index. Preview showed a mock lock-screen notification under each switch.
+   Index was three summary rows that each pushed a page. **Ledger picked.**
+
 ## Next
 
-- **Settings** (SPEC §5.3).
+- **The rest of JC-117**: connection states, empty and edge states, chat leftovers, what shows
+  outside the app, and wide layouts.
 - **When web starts,** the settled pieces go into `DESIGN.md`:
   - the herd layout;
   - the chat layout;
   - navigation and Machines;
   - the New agent screen;
+  - Settings;
   - the Status Pill machine badge.
 - **The SPEC changes** go in at the same time:
   - drop the terminal view and the Ask's "show screen";
   - §5.3 gains the tab bar and the Machines screen, and Forget moves from Settings to Machines;
   - §5.3's New agent order becomes task first, with machine, folder and branch as defaults you
     can change;
+  - §5.3's Settings gains Account and the test notification, and its prefs are stored on the hub;
   - add Motion to §8.1.
