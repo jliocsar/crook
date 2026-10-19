@@ -294,9 +294,7 @@ Machines as soon as it connects".
 
 ### New agent
 
-`+` on Agents opens a sheet: pick the machine (offline ones disabled, each with its Status Pill),
-then the workspace. It starts Claude in a new tab there and pushes its chat. New agent still gets
-its own pass.
+`+` on Agents pushes the New agent screen. See "New agent: decided" below.
 
 ### Settings (first cut)
 
@@ -327,15 +325,79 @@ its own pass.
 2. Tweaks after the pick: a smaller tab bar icon and badge, no dividers in lists, no key strip in
    the chat, and dots centred on the x-height.
 
+## New agent: decided, variant "Brief"
+
+### Prototype
+
+- The screen is `src/newagent/Brief.tsx`, and the shared pickers are in `src/newagent/parts.tsx`.
+  The Shell takes a `newAgent` variant. The picker's `?v=2` is Brief.
+- Steps (`?v=1`) and Places (`?v=3`) are dead ends now.
+
+### Layout
+
+- **A pushed screen shaped like the chat.** The header reads "New agent" with "Back to agents". The
+  dock holds the composer, and the screen above it is empty apart from a summary.
+- **The summary** is an Empty State at the bottom of the body: "Claude starts in crook", then the
+  path in mono, the machine and the branch ("in a new worktree on fix-x" when there is one).
+- **The dock**, top to bottom:
+  - a scrolling row of compact chips: machine, folder, branch;
+  - the composer, "What should Claude work on?", whose send is "Start Claude";
+  - a ghost "Start without a task".
+- **Chips** are 32px pills in 12px text, each with an icon and a chevron. Each one's tap area
+  reaches 44px through a pseudo-element.
+  - **Conflict:** DESIGN.md says the visible control is 44px, not an invisible larger hit area.
+    Either DESIGN.md makes an exception for chips, or the chips grow back to 44px. Open. A new-worktree branch chip turns `primary` and reads
+    "new: <branch>". The branch chip shows only when the folder is a git checkout.
+- **Each chip opens a sheet** listing compact rows (44px; title, then a mono detail when there is
+  one). Selected rows get `muted` and a `primary` check, and there are no cards and no dividers.
+  - Machine: offline machines are disabled and keep their Status Pill.
+  - Folder: the machine's folders, most recently used first, plus a field to type a path.
+  - Branch: "Work in the checkout" or "New worktree" with a branch name field.
+
+### Behaviour
+
+- **Defaults to the most recent place**: the folder of the agent that changed last, on an online
+  machine. Picking a machine moves to its most recent folder.
+- **The task comes first.** The worktree branch is suggested from the task's first line, as a
+  lowercase slug, and you can edit it.
+- **Starting** creates the workspace if no open one has that folder, or a linked worktree
+  workspace, then a tab running Claude. The first message goes in as the user's first chat
+  message, and the chat replaces this screen, so Back goes to Agents.
+- **Empty cases:** with no online machine it says "Every machine is offline". With a machine but
+  no folders, the folder chip reads "Pick a folder".
+- Mobile Enter inserts a newline, as in the chat composer.
+
+### Data this needs
+
+- **Recent folders per machine**, each with its current branch. Claude's own project list on the
+  machine is one plausible source, and herdr's workspace cwds are another.
+- **Create commands** (M6): herdr's `workspace.create`, `worktree.create` (which returns the new
+  workspace, tab and root pane), `tab.create` and `agent.start`, then `agent.prompt` for the first
+  message.
+- **Not known yet:**
+  - herdr's default worktree path. The prototype stands in `<folder>-<branch>`.
+  - the herdr agent name that `agent.start` requires. Brief hides it, so crook has to mint one.
+- Kind isn't shown: v1 is Claude only (D8).
+
+### History
+
+1. Steps, Brief and Places. Steps was a sheet with one decision per step, in SPEC §5.3's order.
+   Places was a sheet of recent folders where one tap starts Claude, with an inline worktree
+   field. **Brief picked.**
+2. Tweaks after the pick: compact chips and compact picker rows.
+
 ## Next
 
-- **New agent**, then **Settings** (SPEC §5.3).
+- **Settings** (SPEC §5.3).
 - **When web starts,** the settled pieces go into `DESIGN.md`:
   - the herd layout;
   - the chat layout;
   - navigation and Machines;
+  - the New agent screen;
   - the Status Pill machine badge.
 - **The SPEC changes** go in at the same time:
   - drop the terminal view and the Ask's "show screen";
   - §5.3 gains the tab bar and the Machines screen, and Forget moves from Settings to Machines;
+  - §5.3's New agent order becomes task first, with machine, folder and branch as defaults you
+    can change;
   - add Motion to §8.1.
