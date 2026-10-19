@@ -337,17 +337,16 @@ Machines as soon as it connects".
 
 - **A pushed screen shaped like the chat.** The header reads "New agent" with "Back to agents". The
   dock holds the composer, and the screen above it is empty apart from a summary.
-- **The summary** is an Empty State at the bottom of the body: "Claude starts in crook", then the
+- **The summary** is an Empty State centred in the body: "Claude starts in crook", then the
   path in mono, the machine and the branch ("in a new worktree on fix-x" when there is one).
 - **The dock**, top to bottom:
   - a scrolling row of compact chips: machine, folder, branch;
   - the composer, "What should Claude work on?", whose send is "Start Claude";
   - a ghost "Start without a task".
-- **Chips** are 32px pills in 12px text, each with an icon and a chevron. Each one's tap area
-  reaches 44px through a pseudo-element.
-  - **Conflict:** DESIGN.md says the visible control is 44px, not an invisible larger hit area.
-    Either DESIGN.md makes an exception for chips, or the chips grow back to 44px. Open. A new-worktree branch chip turns `primary` and reads
-    "new: <branch>". The branch chip shows only when the folder is a git checkout.
+- **Chips** are 44px pills in 14px text, each with an icon and a chevron. A new-worktree branch
+  chip turns `primary` and reads "new: <branch>". The branch chip shows only when the folder is a
+  git checkout. Smaller chips were tried and reverted: DESIGN.md wants the visible control at
+  44px, and changing that waits for a proper DESIGN.md pass.
 - **Each chip opens a sheet** listing compact rows (44px; title, then a mono detail when there is
   one). Selected rows get `muted` and a `primary` check, and there are no cards and no dividers.
   - Machine: offline machines are disabled and keep their Status Pill.
@@ -384,7 +383,8 @@ Machines as soon as it connects".
 1. Steps, Brief and Places. Steps was a sheet with one decision per step, in SPEC §5.3's order.
    Places was a sheet of recent folders where one tap starts Claude, with an inline worktree
    field. **Brief picked.**
-2. Tweaks after the pick: compact chips and compact picker rows.
+2. Tweaks after the pick: compact picker rows. Chips went to 32px and back to 44px. The summary
+   moved from the bottom of the body to its centre.
 
 ## Next
 
