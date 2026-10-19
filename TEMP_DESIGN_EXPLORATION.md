@@ -514,10 +514,89 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
    docked above the composer in chats. Caption was a muted line under the title. **Banner
    picked.**
 
+## Empty and edge states: decided, variant "Card"
+
+### Prototype
+
+- The edge UI is in `src/edge/`:
+  - `data.ts`: the harness store (herd states and events);
+  - `parts.tsx`: the copy, the herd notices, the toast and the slot type;
+  - `Card.tsx`: the variant itself.
+- The herd model gained `gone` (panes that ended, with a snapshot of the agent) and `paneFate`.
+- The picker's `?v=3` is Card. Its second menu sets a herd state, or fires an event that opens
+  the chat by itself and replays when you switch variants.
+- Strip (`?v=1`) and Marker (`?v=2`) are dead ends now.
+
+### Layout
+
+- **No agents, machines online:** one empty state at the top of the herd, "Nothing running",
+  with a New agent button. The machine headers stay below it.
+- **No machines:** the Agents tab shows the Machines tab's "No machines yet / Add a machine" and
+  opens the same sheet.
+- **Every machine offline:** one muted "All machines are offline" line at the top, and each
+  machine keeps its "Last seen" line. The + stays tappable, and New agent explains that no
+  machine is online. The red banner stays reserved for the hub.
+- **A machine with no agents** next to busy ones: a muted "No agents" line under its header.
+- **The pane closes, or Claude exits, while its chat is open:** the dock becomes a card with an
+  icon, "This pane closed" or "Claude exited", when it happened, and two buttons:
+  - "Start Claude here again" (a new pane in the same workspace) or "Start Claude in this pane"
+    (the pane is still there, at its shell prompt);
+  - Back.
+  - The header status reads "closed" or "exited" with a hollow dot.
+- **The machine drops while its chat is open:** the dock becomes a card, "laptop is offline",
+  with a spinner, "Waiting for it. Last heard from Xm ago.", and Back. The transcript dims and
+  the header status reads "laptop offline".
+- **The pane closes while its long-press sheet is open:** the sheet closes and a "Pane closed"
+  toast shows above the tab bar.
+
+### Behaviour
+
+- **Never pops on its own.** The transcript stays readable until you leave.
+- **A machine that comes back** with the pane still there resumes silently: the card goes and
+  the composer returns. If the pane is gone, it turns into the closed card.
+- **A draft survives** the offline card: the composer stays mounted underneath it.
+- **Focus stays in the dock:** when the card replaces a focused composer, focus moves to its
+  first button, and back to the composer after a restart.
+- **Screen readers** hear "This pane closed", "Claude exited" or "laptop is offline" once.
+- **The restart replaces the chat in place,** without a push animation. It needs the machine
+  online and the hub reachable.
+- **The needs-you badge** ignores agents on offline machines, since they're hidden.
+- **No toast** when you closed the pane yourself from that sheet.
+
+### Decided against
+
+- **A strip under the header plus a slim dock line (Strip)**: two places for two events.
+- **A divider written into the transcript (Marker)**: quietest, but easy to miss when you're
+  scrolled up.
+- **Popping back to the herd** when the pane closes: it yanks you out mid-read.
+
+### Unmeasured knobs
+
+- The toast stays for 3s. It was picked in the prototype, not measured.
+
+### Data this needs
+
+- **Telling "closed" from "exited":** herdr still lists an exited pane, just without an agent.
+  The hub has to keep that difference in `HerdView`.
+- **The transcript after the pane is gone** comes from what the phone already holds. Nothing
+  re-fetches it.
+- **"Start Claude in this pane"** maps to `herdr agent start --pane`. "Start Claude here again"
+  needs a new pane in the same workspace, the same call New agent makes (JC-111).
+
+### Known issues
+
+- If the pane's workspace is gone too, the restart button does nothing. It should open New
+  agent instead.
+- The draft carries over into the restarted chat. That's probably what you want, but it's
+  unconfirmed.
+
+### History
+
+1. Strip, Marker and Card, after 7 calls agreed up front. **Card picked.**
+
 ## Next
 
-- **The rest of JC-117**: empty and edge states, chat leftovers, what shows outside the app,
-  and wide layouts.
+- **The rest of JC-117**: chat leftovers, what shows outside the app, and wide layouts.
 - **When web starts,** the settled pieces go into `DESIGN.md`:
   - the herd layout;
   - the chat layout;
@@ -525,6 +604,7 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
   - the New agent screen;
   - Settings;
   - the connection banner, the dimmed stale state and the first-load skeleton;
+  - the empty states, the ended and offline chat cards, and the toast;
   - the Status Pill machine badge.
 - **The SPEC changes** go in at the same time:
   - drop the terminal view and the Ask's "show screen";
