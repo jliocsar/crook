@@ -26,6 +26,10 @@ The landing screen is the herd: every agent on every machine.
 
 ### Layout
 
+**Moved to `DESIGN.md` (The herd)** by JC-93, except pins. The header became the root list's
+sticky header, per `DESIGN.md`'s Navigation, so the hub status and the one-line summary are not
+built.
+
 - **No separate "Needs you" section.** Each machine's list is sorted by priority, so what needs you
   sits at the top of its machine:
   1. pinned agents;
@@ -53,6 +57,9 @@ The landing screen is the herd: every agent on every machine.
   - An agent that needs you gets foreground-colored text; the others get muted text.
 
 ### Interactions
+
+Tap and pull **moved to `DESIGN.md` (The herd)** by JC-93. Swipe, long-press and the order
+freeze wait for JC-112.
 
 - **Tap** opens the agent's chat (below). It slides in from the right, and a swipe from the left
   edge goes back.
@@ -454,6 +461,8 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
 
 ## Connection states: decided, variant "Banner"
 
+**Moved to `DESIGN.md` (Connection states)** by JC-93. The rest stays as history.
+
 ### Prototype
 
 - The connection UI is in `src/connection/`:
@@ -531,6 +540,9 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
    picked.**
 
 ## Empty and edge states: decided, variant "Card"
+
+The herd's empty states and the needs-you badge **moved to `DESIGN.md` (Empty states)** by JC-93.
+The chat's closed, exited and offline cards wait for the chat, and the toast for JC-112.
 
 ### Prototype
 

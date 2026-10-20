@@ -214,8 +214,14 @@ src/
   install/                install screen, shown outside a Home Screen app
   motion/                 springs, Mischief's motion tokens read from CSS, reduced-motion-aware transform strings
   csp/                    the Content-Security-Policy the hub sends
-  rpc/                    RpcClient over WebSocket (browser socket layer), runtime
-  atoms/                  herd, connection, transcript (family by pane), commands
+  rpc/                    the hub link: RpcClient over the browser WebSocket, page signals, the session check
+  atoms/                  the hub runtime and the atoms over it: link state, connection, herd, needs-you, seen
+  cache/                  the last herd snapshot in IndexedDB
+  connection/             what the link state means on screen: banner, logged-out screen, the gate
+  herd/                   the Agents tab: layout model, machine sections, cards, empty states, pull to resync
+  chat/                   the agent chat (JC-93 builds its header only)
+  newagent/               New agent (JC-93 builds its header only)
+  time/                   elapsed-time formatting and a ticking clock
   components/ui/          Mischief UI, copied in with the shadcn CLI (we own this code)
   components/             app components built from ui/ (StatusDot, press and long-press, swipe rows, AskCard, …)
   router/                 the router, with its not-found (home) and error fallbacks
@@ -228,7 +234,7 @@ src/
 - **A push hands over its opener.** The caller passes `openedFrom(element)` as the navigation's history state, with the element that was tapped (`Pressable` and `SwipeRow` give it to `onTap`). The pushed screen reads it once, when it mounts, and returns focus there when it unmounts, falling back to whatever had focus, then to the active tab. Document focus alone can't name the opener on an iPhone, where a tap doesn't focus a button. Openers are held by weak reference and never dropped, so a screen rebuilt by Back or Forward still finds its own, and a removed element can still be collected. One element always gets the same key, and every key carries the page load's `performance.timeOrigin`, because history state outlives a reload and a counter does not. So a second tap on a row whose push is still loading asks for the location the router is already on, and the router's `navigate` drops it: pushes go through `navigate` (`Link`, `useNavigate`), never `router.history.push`, which always pushes.
 - **Every pushed entry gets its own screen.** The router remounts a route whenever its params change (`defaultRemountDeps`), so a chat opened from a chat slides in, takes focus and keeps its own opener. A screen slides in only when it arrives by a push (a higher history index than the resolved location's), so one rebuilt by Back or swapped in by a replace appears in place. Two entries with the same path share one screen: when Back lands on the earlier one, the screen comes back into use rather than staying inert. Back on a screen while a navigation is still pending skips the slide and leaves at once, which cancels a push that has not landed yet.
 - **The service worker never calls `skipWaiting`.** A new shell takes over once every crook window has closed, so a running page never loads chunks from a build it didn't come from.
-- **The service worker answers every same-origin navigation with the cached shell.** So log in and log out can't be a same-origin navigation to a proxy path: once the shell is cached, that navigation never reaches the exe.dev proxy. They go cross-origin to exe.dev, or to a path added to the worker's `NavigationRoute` denylist once the proxy's paths are known. This binds the tickets that build login and logout, and the hub serving the build (JC-115).
+- **The service worker answers every same-origin navigation with the cached shell.** So log in and log out can't be a same-origin navigation to a proxy path: once the shell is cached, that navigation never reaches the exe.dev proxy. They go cross-origin to exe.dev, or to a path on the worker's `NavigationRoute` denylist. The proxy's paths are known now: exe.dev's docs put login at `/__exe.dev/login?redirect={path}` and logout at a POST to `/__exe.dev/logout`, so the whole `/__exe.dev/` prefix is denylisted, and "Log in with exe.dev" is a plain navigation there with the current path as `redirect`.
 - Tests run on vitest with happy-dom for components and node for pure modules.
 
 ## 3. Patterns
@@ -281,6 +287,14 @@ Transcripts are append-only files, so they travel as `TranscriptChunk { offset, 
 - The connection lifecycle is an Effect retry schedule surfaced as a `connection` atom, not a hand-built machine.
 - No XState. Multi-step flows (Ask → answer → confirm, command sent → acked → observed) are atoms holding a tagged state value, driven by `Atom.fn` effects.
 - UI-local state stays in React.
+- **Who owns what (JC-93).** Server state lives in atoms over one `Atom.runtime` built from the `HubLink` layer; components take values and callbacks and never read an atom; a screen reads the atoms and composes components. What only the screen cares about, such as a collapsed section, is React state. Tests swap the runtime's layer for a fake link with `Atom.initialValue`, so the real route tree renders without a socket.
+- **One hub link per page.** `HubLink` holds a `SubscriptionRef` of `{ status, herd }`, where `herd` is the last `HerdSnapshot` (the view and when it arrived) and `status` is Dialing, Live, Unreachable, Offline or Expired. Every derived atom reads that one value, so the banner, the dim, the disabled actions and the badge can't disagree.
+- **The cache paints first.** The last snapshot is saved to IndexedDB on every emission and loaded before the first dial, so a cold start shows the herd at once. A cache that fails to decode, such as one from an older build, is logged and ignored.
+- **The socket follows the page.** The link runs only while the page is visible and the browser says it is online: hiding the page closes the socket, and showing it dials a fresh one, which is the resync on `visibilitychange`. Offline is read from `navigator.onLine` and its events, and needs no dial to detect.
+- **Reconnects** back off exponentially from the agent's 77ms base, capped at the ping interval (5s). A connection that stayed live for a ping interval counts as healthy, and its drop redials at once. The socket pings every 5s, inside the hub's 10s silence timeout.
+- **A failed dial asks whether the session expired.** It fetches `/health` with `redirect: 'manual'`: the exe.dev proxy redirects an unauthenticated request to its login, and a manual redirect comes back as an opaque response with status 0 (the Fetch standard). Status 0 shows the logged-out screen and stops dialing until the page is shown again; anything else is "hub unreachable". How the proxy answers an expired session hasn't been measured against the real proxy yet.
+- **Resync is a fresh socket**, not a second subscription: pull to resync redials and resolves once the link is live with a newer snapshot, or has failed.
+- **Hub calls fail fast when not live.** `MarkSeen` (and every action after it) fails with `HubNotConnected` instead of waiting, which is the "no send queue" rule in code.
 
 ## 4. Message flows
 
@@ -321,6 +335,7 @@ Herdr status leaves blocked ──▶ PublishState ──▶ phone "done"
 - Agent runs as a systemd user unit (`crook-agent.service`), installed by `crook-agent install-service` or the plugin's "connect" action.
 - Hub runs as a systemd unit on its own exe.dev VM.
 - Releases from CI with actions pinned by SHA and signed artifacts.
+- Locally, the web app talks to a real hub through Vite's dev server: with `CROOK_DEV_HUB_URL`, `CROOK_OWNER_EMAIL` and `CROOK_HUB_ORIGIN` set, `bun run dev` proxies `/rpc/client` and `/health` to that hub and adds the `X-ExeDev-Email` and `Origin` the exe.dev proxy would send. It is dev tooling in the Vite config only; nothing in the app knows about it. The hub needs no local mode for it.
 
 ## 6. Testing
 

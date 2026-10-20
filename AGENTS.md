@@ -400,6 +400,28 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   `effecttsgo/strict-effect-provide` there, as the rule's own message allows at an entry point.
   The long-running members' `Layer.launch` form does not carry over: it never returns, and the
   script hung until killed (measured).
+- The router percent-encodes a path param, so a herdr pane id like `w1:p3` sits in the URL as
+  `w1%3Ap3`, and the route's params hand it back decoded (measured).
+- Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
+  with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
+  renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
+- `Option.liftPredicate(value, …)` on a string literal infers `string`, not the literal (measured).
+  Bind the literal to a typed constant first.
+
+:::tip
+Checking the web app against real data, measured:
+
+- A named herdr session runs headless with `herdr --session <name> server`. From inside a herdr
+  pane, unset `HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID` and `HERDR_ENV`, and point
+  `HERDR_SOCKET_PATH` at the named session's socket, or every command lands in the user's own
+  session. Never use the default one.
+- `herdr pane report-agent` puts an agent with a chosen status in any shell pane, and
+  `release-agent` takes it out, so a herd in every state needs no running Claude.
+- The agent takes an agent's title from the pane's terminal title before herdr's own `title`. An
+  OSC 0 escape sets it, and a shell prompt resets it, so hold the pane in a long `sleep` after it.
+- A browser tab shows the install screen. An init script that makes `navigator.standalone` true
+  gets past it.
+:::
 
 :::warning
 `shadcn add` writes a `utils` module even when `components.json` aliases `utils` to the `cn`

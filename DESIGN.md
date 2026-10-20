@@ -261,6 +261,75 @@ Unmeasured knobs, picked rather than measured; settle them on the phone:
 - a swipe row's drag gives 0.15 of the distance past fully open and 0.05 past closed;
 - long-press is 500ms, with 8px of movement allowed.
 
+## The herd
+
+The Agents tab: every agent on every machine, one section per machine.
+
+- **The header** is the root list's sticky header: `crook` and `+` (New agent). `+` is disabled
+  while the hub can't act, and stays tappable when every machine is offline.
+- **No separate "Needs you" section.** Each machine's agents are in `AgentPriority` order
+  (ARCHITECTURE §2.6), so what needs you sits at the top of its machine.
+- **A machine section** is a heading button that collapses it: the label (display, 20/28, 620),
+  the machine badge, "N need you" on the right when there are any, and a chevron. Collapsing is
+  UI state and isn't kept across launches.
+  - An offline machine shows one sentence instead of its agents: "Last seen 2h ago. Its agents
+    come back when it reconnects."
+  - A reconnecting machine's agents dim to 60%.
+- **The machine badge** is a plain Status Pill: online is `ok`, reconnecting is `warn` with a
+  spinner, and offline is `idle`, reading "offline · 2h ago".
+- **Each agent is its own card** (`bg-card`, border, `rounded-xl`, 8px apart), 72px tall
+  (measured against the real herd):
+  - line 1: the title (16/24; 620 when it needs you, 500 otherwise) and the time since its
+    status changed, in mono 12px on the right;
+  - line 2: the status dot and word, a `·`, then `workspace · tab` and the branch in mono 12px.
+    The pending ask takes this slot on a blocked agent once the hub carries it (JC-105).
+  - The time and status word are foreground when the agent needs you, muted otherwise.
+  - A title herdr doesn't know falls back to the pane id.
+- **Tap** opens the agent's chat, and opening it marks a finished agent seen.
+- **Pull down** resyncs: it arms at 48px, rests at 40px while syncing and stops at 96px. It is
+  off while the hub can't act, since crook is already retrying.
+- **Live updates** re-sort each list; a card moves to its new place on the reorder spring.
+- **The needs-you badge** on the Agents tab counts the same agents as the sections, and ignores
+  offline machines, whose agents are hidden. It is hidden on first load.
+
+## Connection states
+
+- **The banner** is a 32px strip at the top of every header, tab screens and pushed screens alike,
+  with an icon and one line. The failure states add the time since the last update, in mono, on
+  the right ("Updated just now" under a minute).
+  - Hub unreachable: "Can't reach the hub · retrying", on the destructive tint.
+  - No network: "You're offline", inverted.
+  - "Syncing" and "Connecting to the hub", with a spinner, on muted.
+  - "Back online" on accent for 1.5s after a failure, then the strip collapses.
+- **Stale content dims to 60%.** Headers and the back button stay at full strength.
+- **Hub actions are disabled** while the hub can't act, and nothing is queued: an action never
+  fires after a reconnect. Back, tabs, scrolling and opening chats keep working.
+- **A quick resync is silent.** "Syncing" and the dim show only after 1s, Nielsen's limit for a
+  delay that keeps the user's flow of thought. A cold start that paints the cached herd stays quiet
+  for that second too. After a failure, "Syncing" shows at once, so "Back online" never appears
+  before the data is fresh.
+- **Machines keep their last-known status** while the hub is down. The hub, not the phone,
+  decides that a machine is offline.
+- **Offline and hub unreachable read differently,** because their fixes differ.
+- **Screen readers** hear each state once, from a single status region.
+- **First load** with no cached herd shows skeleton sections (three cards, then two) at the
+  card's real height.
+- **Logged out, or the session expired:** a full screen with "Log in with exe.dev". The expired
+  one says "Your session expired" and "Your agents kept running. Log in again to see them."
+
+## Empty states
+
+- **No agents, machines online:** "Nothing running" at the top of the herd, with a New agent
+  button. The machine headers stay below it.
+- **No machines:** "No machines yet". The Add a machine button waits for its sheet.
+- **Every machine offline:** a muted "All machines are offline" line at the top, and each machine
+  keeps its "Last seen" line. The red banner stays reserved for the hub.
+- **A machine with no agents** next to busy ones: a muted "No agents" line under its header.
+
+Unmeasured knobs, picked in the prototype; settle them on the phone: the 1.5s "Back online", the
+32px strip, the pull distances and its 0.5 resistance, the skeleton's three and two cards, and the
+11px and 14px spinners.
+
 ## Outside the app
 
 - **The icon** is the lowercase wordmark "crook" in Bricolage Grotesque at 650, dark ink
@@ -429,6 +498,8 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 
 ## Open
 
-- The machine badge's tone for each state: online, offline, reconnecting.
-- The screens decided in `TEMP_DESIGN_EXPLORATION.md` (herd, chat, Machines, New agent,
-  Settings, connection and empty states) move here with the ticket that builds each one.
+- The screens decided in `TEMP_DESIGN_EXPLORATION.md` (chat, Machines, New agent, Settings) move
+  here with the ticket that builds each one.
+- The herd's swipe actions, long-press sheet, pins, the order freeze while a card is open, and the
+  "Pane closed" toast arrive with JC-112.
+- The machine sections follow the hub's machine order; no order has been decided.
