@@ -47,8 +47,8 @@ const statusChangedAt =
       }),
     )
 
-export const cwdOf = (info: AgentInfo): string =>
-  Option.orElse(info.foreground_cwd, () => info.cwd).pipe(Option.getOrElse(() => ''))
+export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
+  Option.orElse(info.foreground_cwd, () => info.cwd)
 
 const toAgentRow =
   (since: (info: AgentInfo) => DateTime.Utc) =>
@@ -61,7 +61,7 @@ const toAgentRow =
       title: Option.firstSomeOf([info.terminal_title_stripped, info.title, info.name]).pipe(
         Option.getOrElse(() => ''),
       ),
-      cwd: cwdOf(info),
+      cwd: Option.getOrElse(workingDirectoryOf(info), () => ''),
       branch,
       claudeSession,
       stateChangeSeq: info.state_change_seq,

@@ -14,13 +14,17 @@ import type { SqlError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import type { AgentRow } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { Machine, type MachineConnection } from '@crook/domain/Machine'
-import type { MachineState } from '@crook/domain/MachineState'
-import { AGENT_PING_INTERVAL, type Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { type MachineState, agentsIn } from '@crook/domain/MachineState'
+import {
+  AGENT_PING_INTERVAL,
+  AGENT_SOCKET_OPEN_TIMEOUT,
+  type Hello,
+  MachineIdMismatch,
+} from '@crook/protocol/AgentLink'
 import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
 
 import packageJson from '../package.json' with { type: 'json' }
@@ -42,23 +46,17 @@ interface MachineEntry {
   readonly seen: HashMap.HashMap<PaneId, number>
 }
 
-export const RECONNECT_GRACE = Duration.times(AGENT_PING_INTERVAL, 2)
+export const RECONNECT_GRACE = Duration.sum(AGENT_SOCKET_OPEN_TIMEOUT, AGENT_PING_INTERVAL)
 
 export const hubVersion = CrookVersion.make(packageJson.version)
 
-const isSameRecord = Schema.toEquivalence(MachineRecord)
+const readableVersion = Schema.decodeUnknownOption(CrookVersion)
 
 const byMachineId = Order.mapInput(Order.String, (entry: MachineEntry) => entry.id)
 
-const agentsOf = (entry: MachineEntry) =>
-  Option.match(entry.state, {
-    onNone: (): readonly AgentRow[] => [],
-    onSome: (state) => state.agents,
-  })
-
 const seenPanes = (entry: MachineEntry) =>
   pipe(
-    agentsOf(entry),
+    agentsIn(entry.state),
     Arr.filter((row) => Option.contains(HashMap.get(entry.seen, row.pane), row.stateChangeSeq)),
     Arr.map((row) => row.pane),
   )
@@ -144,7 +142,7 @@ const attached =
     connectionChangedAt: entry.connection === 'online' ? entry.connectionChangedAt : now,
     lastSeenAt: now,
     forgotten: false,
-    agentVersion: Option.some(hello.agentVersion),
+    agentVersion: readableVersion(hello.agentVersion),
   })
 
 const detached = (entry: MachineEntry, now: DateTime.Utc): MachineEntry =>
@@ -171,11 +169,9 @@ const published = (state: MachineState) => {
 }
 
 const stillDroppedSince = (droppedAt: DateTime.Utc) => (entry: MachineEntry) =>
-  entry.attachments === 0 &&
-  entry.connection === 'reconnecting' &&
-  DateTime.Equivalence(entry.connectionChangedAt, droppedAt)
+  entry.connection === 'reconnecting' && DateTime.Equivalence(entry.connectionChangedAt, droppedAt)
 
-const forgottenPanes = (previous: MachineEntry, next: MachineEntry) =>
+const droppedSeenPanes = (previous: MachineEntry, next: MachineEntry) =>
   pipe(
     HashMap.keys(previous.seen),
     Arr.fromIterable,
@@ -209,17 +205,12 @@ const make = Effect.gen(function* () {
       now: DateTime.Utc,
     ) => Effect.Effect<Option.Option<MachineEntry>, Failure>,
   ) =>
-    SubscriptionRef.updateSomeEffect(entries, (current) =>
+    SubscriptionRef.updateSomeAndGetEffect(entries, (current) =>
       DateTime.now.pipe(
         Effect.flatMap((now) => decide(HashMap.get(current, id), now)),
         Effect.map(Option.map((next) => HashMap.set(current, id, next))),
       ),
     )
-
-  const saveIfChanged = (previous: Option.Option<MachineEntry>, next: MachineEntry) =>
-    Option.exists(previous, (entry) => isSameRecord(toRecord(entry), toRecord(next)))
-      ? Effect.void
-      : registry.save(toRecord(next))
 
   const changeFromLink = (
     id: MachineId,
@@ -233,11 +224,13 @@ const make = Effect.gen(function* () {
       const previous = Option.getOrElse(entry, () => firstSighting(id, now))
       const next = update(previous, now)
 
-      return saveIfChanged(entry, next).pipe(
-        Effect.andThen(afterwards(previous, next)),
-        Effect.catchTag('SqlError', logStorageFailure(`machine ${id}`)),
-        Effect.as(Option.some(next)),
-      )
+      return registry
+        .save(toRecord(next))
+        .pipe(
+          Effect.andThen(afterwards(previous, next)),
+          Effect.catchTag('SqlError', logStorageFailure(`machine ${id}`)),
+          Effect.as(Option.some(next)),
+        )
     })
 
   const visible = (id: MachineId, entry: Option.Option<MachineEntry>) =>
@@ -270,8 +263,7 @@ const make = Effect.gen(function* () {
       () => Effect.never,
       () =>
         changeFromLink(id, detached).pipe(
-          Effect.andThen(SubscriptionRef.get(entries)),
-          Effect.map((current) => HashMap.get(current, id)),
+          Effect.map(HashMap.get(id)),
           Effect.flatMap(
             Option.match({
               onNone: () => Effect.void,
@@ -288,15 +280,15 @@ const make = Effect.gen(function* () {
     }
 
     return yield* changeFromLink(id, published(state), (previous, next) =>
-      Arr.match(forgottenPanes(previous, next), {
+      Arr.match(droppedSeenPanes(previous, next), {
         onEmpty: () => Effect.void,
-        onNonEmpty: (panes) => seenTracker.forgetPanes(id, panes),
+        onNonEmpty: (panes) => seenTracker.dropPanes(id, panes),
       }),
     )
   })
 
   const forget = Effect.fn('Herd.forget')(function* (id: MachineId) {
-    return yield* change(id, (entry) =>
+    yield* change(id, (entry) =>
       Effect.gen(function* () {
         const found = yield* visible(id, entry)
 
@@ -314,10 +306,13 @@ const make = Effect.gen(function* () {
   })
 
   const markSeen = Effect.fn('Herd.markSeen')(function* (id: MachineId, pane: PaneId) {
-    return yield* change(id, (entry) =>
+    yield* change(id, (entry) =>
       Effect.gen(function* () {
         const found = yield* visible(id, entry)
-        const row = yield* Arr.findFirst(agentsOf(found), (agent) => agent.pane === pane).pipe(
+        const row = yield* Arr.findFirst(
+          agentsIn(found.state),
+          (agent) => agent.pane === pane,
+        ).pipe(
           Effect.fromOption,
           Effect.mapError(() => new PaneNotInHerd({ machine: id, pane })),
         )
@@ -362,7 +357,9 @@ export class Herd extends Context.Service<
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {
-  static readonly layer = Layer.effect(this, make).pipe(
+  static readonly layerNeedingStorage = Layer.effect(this, make)
+
+  static readonly layer = this.layerNeedingStorage.pipe(
     Layer.provide([MachineRegistry.layer, SeenTracker.layer]),
   )
 }

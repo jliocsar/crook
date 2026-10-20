@@ -176,6 +176,14 @@ The house tsconfig accepts it without `resolveJsonModule`, and Bun runs it (both
 relative path inside one member is fine; the package-specifier rule is about reaching another one.
 :::
 
+:::warning
+The agent and the hub release under one version and bump together. The phone compares an agent's
+version with the hub's to offer "update agent", so a hub-only bump would flag every machine though
+no newer agent exists. Versions stay plain `major.minor.patch`: the hub reads its own strictly, so
+its tests fail on anything else, and an agent version it cannot read shows as no version rather
+than keeping the machine offline.
+:::
+
 :::caution
 `tsc` clean is not lint clean. oxlint's type-aware pass typed an `Effect.all` over a record of
 effects, each wrapped in its own `catchTags`, as `any` in the error channel while `tsc` typed it

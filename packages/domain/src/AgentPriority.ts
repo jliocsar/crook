@@ -4,12 +4,12 @@ import { pipe } from 'effect/Function'
 import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import { sumAll } from 'effect/Number'
-import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
+import { agentsIn } from '@crook/domain/MachineState'
 
 interface RankedAgent {
   readonly row: AgentRow
@@ -74,14 +74,11 @@ export const needsYou = (machine: HerdMachine) => {
   return (row: AgentRow): boolean => NEEDS_YOU_TIERS.includes(tierOf(row))
 }
 
-const agentsOf = (machine: HerdMachine) =>
-  Option.match(machine.state, { onNone: () => [], onSome: (state) => state.agents })
-
 export const orderAgents = (machine: HerdMachine): AgentRow[] => {
   const tierOf = priorityTier(machine)
 
   return pipe(
-    agentsOf(machine),
+    agentsIn(machine.state),
     Arr.map((row): RankedAgent => ({ row, tier: tierOf(row) })),
     Arr.sort(byPriority),
     Arr.map((ranked) => ranked.row),
@@ -91,7 +88,7 @@ export const orderAgents = (machine: HerdMachine): AgentRow[] => {
 export const needsYouCount = (machine: HerdMachine): number =>
   machine.machine.connection === 'offline'
     ? 0
-    : Arr.filter(agentsOf(machine), needsYou(machine)).length
+    : Arr.filter(agentsIn(machine.state), needsYou(machine)).length
 
 export const herdNeedsYouCount = (view: HerdView): number =>
   sumAll(Arr.map(view.machines, needsYouCount))

@@ -1,13 +1,14 @@
-import type * as NonEmptyArray from 'effect/Array'
+import type * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as SqlClient from 'effect/sql/SqlClient'
 import type { SqlError } from 'effect/sql/SqlError'
+import * as SqlSchema from 'effect/sql/SqlSchema'
 
 import { MachineId, PaneId } from '@crook/domain/Ids'
-import { type StoredRowInvalid, decodeRows } from '@crook/hub/Database'
+import { type StoredRowInvalid, encodedRecord, rowsOf } from '@crook/hub/Database'
 
 export class SeenRecord extends Schema.Class<SeenRecord>('SeenRecord')({
   machine: MachineId,
@@ -18,32 +19,33 @@ export class SeenRecord extends Schema.Class<SeenRecord>('SeenRecord')({
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
 
-  const all = sql`SELECT * FROM seen`.pipe(
-    Effect.flatMap(decodeRows('seen', SeenRecord)),
-    Effect.withSpan('SeenTracker.all'),
-  )
-
-  const mark = Effect.fn('SeenTracker.mark')(function* (record: SeenRecord) {
-    const row = {
-      machine: record.machine,
-      pane: record.pane,
-      stateChangeSeq: record.stateChangeSeq,
-    }
-
-    yield* sql`
-      INSERT INTO seen ${sql.insert(row)}
-      ON CONFLICT (machine, pane) DO UPDATE SET state_change_seq = excluded.state_change_seq
-    `
+  const findAll = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: SeenRecord,
+    execute: () => sql`SELECT * FROM seen`,
   })
 
-  const forgetPanes = Effect.fn('SeenTracker.forgetPanes')(function* (
+  const upsert = SqlSchema.void({
+    Request: SeenRecord,
+    execute: (row) => sql`
+      INSERT INTO seen ${sql.insert(row)}
+      ON CONFLICT (machine, pane) DO UPDATE SET state_change_seq = excluded.state_change_seq
+    `,
+  })
+
+  const all = findAll(undefined).pipe(rowsOf('seen'), Effect.withSpan('SeenTracker.all'))
+
+  const mark = (record: SeenRecord) =>
+    upsert(record).pipe(encodedRecord, Effect.withSpan('SeenTracker.mark'))
+
+  const dropPanes = Effect.fn('SeenTracker.dropPanes')(function* (
     machine: MachineId,
-    panes: NonEmptyArray.NonEmptyReadonlyArray<PaneId>,
+    panes: Arr.NonEmptyReadonlyArray<PaneId>,
   ) {
     yield* sql`DELETE FROM seen WHERE machine = ${machine} AND ${sql.in('pane', panes)}`
   })
 
-  return SeenTracker.of({ all, mark, forgetPanes })
+  return SeenTracker.of({ all, mark, dropPanes })
 })
 
 export class SeenTracker extends Context.Service<
@@ -51,9 +53,9 @@ export class SeenTracker extends Context.Service<
   {
     readonly all: Effect.Effect<readonly SeenRecord[], SqlError | StoredRowInvalid>
     readonly mark: (record: SeenRecord) => Effect.Effect<void, SqlError>
-    readonly forgetPanes: (
+    readonly dropPanes: (
       machine: MachineId,
-      panes: NonEmptyArray.NonEmptyReadonlyArray<PaneId>,
+      panes: Arr.NonEmptyReadonlyArray<PaneId>,
     ) => Effect.Effect<void, SqlError>
   }
 >()('@crook/hub/SeenTracker') {

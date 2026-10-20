@@ -1,15 +1,14 @@
 import * as Context from 'effect/Context'
-import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as SqlClient from 'effect/sql/SqlClient'
 import type { SqlError } from 'effect/sql/SqlError'
+import * as SqlSchema from 'effect/sql/SqlSchema'
 
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { MachineId } from '@crook/domain/Ids'
-import { type StoredRowInvalid, decodeRows } from '@crook/hub/Database'
+import { type StoredRowInvalid, encodedRecord, rowsOf } from '@crook/hub/Database'
 
 export class MachineRecord extends Schema.Class<MachineRecord>('MachineRecord')({
   id: MachineId,
@@ -23,22 +22,15 @@ export class MachineRecord extends Schema.Class<MachineRecord>('MachineRecord')(
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
 
-  const all = sql`SELECT * FROM machines`.pipe(
-    Effect.flatMap(decodeRows('machines', MachineRecord)),
-    Effect.withSpan('MachineRegistry.all'),
-  )
+  const findAll = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: MachineRecord,
+    execute: () => sql`SELECT * FROM machines`,
+  })
 
-  const save = Effect.fn('MachineRegistry.save')(function* (record: MachineRecord) {
-    const row = {
-      id: record.id,
-      label: record.label,
-      lastSeenAt: DateTime.formatIso(record.lastSeenAt),
-      forgotten: record.forgotten,
-      agentVersion: Option.getOrNull(record.agentVersion),
-      herdrVersion: Option.getOrNull(record.herdrVersion),
-    }
-
-    yield* sql`
+  const upsert = SqlSchema.void({
+    Request: MachineRecord,
+    execute: (row) => sql`
       INSERT INTO machines ${sql.insert(row)}
       ON CONFLICT (id) DO UPDATE SET
         label = excluded.label,
@@ -46,8 +38,13 @@ const make = Effect.gen(function* () {
         forgotten = excluded.forgotten,
         agent_version = excluded.agent_version,
         herdr_version = excluded.herdr_version
-    `
+    `,
   })
+
+  const all = findAll(undefined).pipe(rowsOf('machines'), Effect.withSpan('MachineRegistry.all'))
+
+  const save = (record: MachineRecord) =>
+    upsert(record).pipe(encodedRecord, Effect.withSpan('MachineRegistry.save'))
 
   return MachineRegistry.of({ all, save })
 })

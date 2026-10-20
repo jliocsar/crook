@@ -89,6 +89,20 @@ layer(Layer.provideMerge(GitBranches.layer, services), { excludeTestServices: tr
       }),
     )
 
+    live.effect('finds a checkout made in a folder after an earlier read found none', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const folder = yield* fileSystem.makeTempDirectoryScoped()
+        const before = yield* branchOf(folder)
+
+        yield* fileSystem.makeDirectory(`${folder}/.git`)
+        yield* fileSystem.writeFileString(`${folder}/.git/HEAD`, branchHead(BRANCH))
+
+        expect(before).toEqual(Option.none())
+        expect(yield* branchOf(folder)).toEqual(Option.some(BRANCH))
+      }),
+    )
+
     live.effect('fails with GitHeadUnreadable when HEAD exists but cannot be read', () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem

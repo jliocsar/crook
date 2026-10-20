@@ -5,6 +5,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as SqlClient from 'effect/sql/SqlClient'
+import type { SqlError } from 'effect/sql/SqlError'
 import * as Str from 'effect/String'
 
 export const CrookHubDatabasePath = Config.String('CROOK_HUB_DATABASE_PATH')
@@ -18,12 +19,21 @@ export class StoredRowInvalid extends Schema.TaggedError<StoredRowInvalid>()('St
   }
 }
 
-export const decodeRows =
-  <Row extends Schema.Top>(table: string, row: Row) =>
-  (rows: readonly unknown[]) =>
-    Schema.decodeEffect(Schema.Array(row))(rows).pipe(
-      Effect.mapError((error) => new StoredRowInvalid({ table, issue: error.message })),
+export const rowsOf =
+  (table: string) =>
+  <Success, Requirements>(
+    read: Effect.Effect<Success, SqlError | Schema.SchemaError, Requirements>,
+  ): Effect.Effect<Success, SqlError | StoredRowInvalid, Requirements> =>
+    read.pipe(
+      Effect.catchTag('SchemaError', (error) =>
+        Effect.fail(new StoredRowInvalid({ table, issue: error.message })),
+      ),
     )
+
+export const encodedRecord = <Success, Requirements>(
+  write: Effect.Effect<Success, SqlError | Schema.SchemaError, Requirements>,
+): Effect.Effect<Success, SqlError, Requirements> =>
+  write.pipe(Effect.catchTag('SchemaError', (error) => Effect.die(error)))
 
 const createMachines = Effect.flatMap(
   SqlClient.SqlClient,

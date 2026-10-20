@@ -21,7 +21,6 @@ import type * as Rpc from 'effect/rpc/Rpc'
 
 import type { HerdView } from '@crook/domain/HerdView'
 import { AgentRow } from '@crook/domain/AgentRow'
-import { CrookVersion } from '@crook/domain/CrookVersion'
 import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
@@ -46,7 +45,7 @@ const STRANGER = 'someone@example.com'
 const IN_MEMORY = ':memory:'
 const PANE = PaneId.make('w1:p1')
 
-const hello = new Hello({ agentVersion: CrookVersion.make('0.0.9'), label: Option.none() })
+const hello = new Hello({ agentVersion: '0.0.9', label: Option.none() })
 
 const agentAt = (pane: PaneId) =>
   new AgentRow({

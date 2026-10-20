@@ -1,3 +1,4 @@
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
@@ -18,3 +19,6 @@ export class MachineState extends Schema.Class<MachineState>('MachineState')({
   tabs: Schema.Array(Tab),
   agents: Schema.Array(AgentRow),
 }) {}
+
+export const agentsIn = (state: Option.Option<MachineState>): readonly AgentRow[] =>
+  Option.match(state, { onNone: () => [], onSome: (found) => found.agents })

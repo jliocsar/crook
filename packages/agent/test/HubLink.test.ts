@@ -24,7 +24,6 @@ import * as TestClock from 'effect/testing/TestClock'
 
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { CrookVersion } from '@crook/domain/CrookVersion'
 import { MachineId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { AGENT_PING_INTERVAL, AgentLink, Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
@@ -276,7 +275,7 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
       })
       expect(yield* Queue.take(hellos)).toEqual(
         new Hello({
-          agentVersion: CrookVersion.make(packageJson.version),
+          agentVersion: packageJson.version,
           label: Option.some('Laptop'),
         }),
       )

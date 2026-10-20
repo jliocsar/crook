@@ -3,11 +3,11 @@ import * as Rpc from 'effect/rpc/Rpc'
 import * as RpcGroup from 'effect/rpc/RpcGroup'
 import * as Schema from 'effect/Schema'
 
-import { CrookVersion } from '@crook/domain/CrookVersion'
 import { MachineId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
 
 export const AGENT_PING_INTERVAL = Duration.seconds(5)
+export const AGENT_SOCKET_OPEN_TIMEOUT = Duration.seconds(10)
 
 export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
   'MachineIdMismatch',
@@ -22,7 +22,7 @@ export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
 }
 
 export class Hello extends Schema.Class<Hello>('Hello')({
-  agentVersion: CrookVersion,
+  agentVersion: Schema.String,
   label: Schema.OptionFromNullOr(Schema.NonEmptyString),
 }) {}
 

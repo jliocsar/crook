@@ -15,8 +15,12 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { CrookVersion } from '@crook/domain/CrookVersion'
-import { AGENT_PING_INTERVAL, AgentLink, Hello } from '@crook/protocol/AgentLink'
+import {
+  AGENT_PING_INTERVAL,
+  AGENT_SOCKET_OPEN_TIMEOUT,
+  AgentLink,
+  Hello,
+} from '@crook/protocol/AgentLink'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 import packageJson from '../package.json' with { type: 'json' }
@@ -33,7 +37,7 @@ export const CrookHubUrl = Config.URL('CROOK_HUB_URL')
 export const CrookHubToken = Config.Redacted('CROOK_HUB_TOKEN')
 export const CrookMachineLabel = Config.option(Config.NonEmptyString('CROOK_MACHINE_LABEL'))
 
-export const agentVersion = CrookVersion.make(packageJson.version)
+export const agentVersion = packageJson.version
 
 export class HubAttachEnded extends Schema.TaggedError<HubAttachEnded>()('HubAttachEnded', {}) {
   override get message(): string {
@@ -57,6 +61,7 @@ export const connectTo = (url: URL, token: Redacted.Redacted) =>
     }).pipe(
       Layer.provide([
         BunSocket.layerWebSocket(url.href, {
+          openTimeout: AGENT_SOCKET_OPEN_TIMEOUT,
           headers: { [HUB_AUTHORIZATION_HEADER]: `Bearer ${Redacted.value(token)}` },
         }),
         protocolSerialization,

@@ -1,14 +1,16 @@
 import * as Arr from 'effect/Array'
+import * as Cache from 'effect/Cache'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
-import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
-import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
+import * as Str from 'effect/String'
 
 import { flatMapSome, orElseSome } from '@crook/agent/OptionEffect'
 
@@ -26,15 +28,19 @@ export class GitHeadUnreadable extends Schema.TaggedError<GitHeadUnreadable>()(
   }
 }
 
-const nonEmpty = (text: string) => text.length > 0
-
 const afterPrefix = (prefix: string) => (text: string) =>
   Option.liftPredicate(text.trim(), (line) => line.startsWith(prefix)).pipe(
     Option.map((line) => line.slice(prefix.length)),
-    Option.filter(nonEmpty),
+    Option.filter(Str.isNonEmpty),
   )
 
 const branchOfHead = afterPrefix(BRANCH_REF_PREFIX)
+
+const keepOnlyFound = (exit: Exit.Exit<Option.Option<string>, GitHeadUnreadable>) =>
+  Exit.match(exit, {
+    onSuccess: (found) => (Option.isSome(found) ? Duration.infinity : Duration.zero),
+    onFailure: () => Duration.zero,
+  })
 
 const ancestorsOf = (path: Path.Path, directory: string) =>
   Arr.unfold(Option.some(directory), (current) =>
@@ -48,7 +54,6 @@ const ancestorsOf = (path: Path.Path, directory: string) =>
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const gitDirectories = yield* Ref.make(HashMap.empty<string, Option.Option<string>>())
 
   const ifPresent = <Success>(target: string, read: Effect.Effect<Success, PlatformError>) =>
     read.pipe(
@@ -87,26 +92,17 @@ const make = Effect.gen(function* () {
         gitDirectoryIn(directory).pipe(orElseSome(() => firstGitDirectory(above))),
     })
 
-  const gitDirectoryOf = (cwd: string) =>
-    Ref.get(gitDirectories).pipe(
-      Effect.map(HashMap.get(cwd)),
-      Effect.flatMap(
-        Option.match({
-          onSome: (cached) => Effect.succeed(cached),
-          onNone: () =>
-            firstGitDirectory(ancestorsOf(path, cwd)).pipe(
-              Effect.tap((found) => Ref.update(gitDirectories, HashMap.set(cwd, found))),
-            ),
-        }),
-      ),
-    )
+  const gitDirectories = yield* Cache.makeWith(
+    (cwd: string) => firstGitDirectory(ancestorsOf(path, cwd)),
+    { capacity: Number.POSITIVE_INFINITY, timeToLive: keepOnlyFound },
+  )
 
   const branchOf = Effect.fn('GitBranches.branchOf')(function* (cwd: string) {
     if (!path.isAbsolute(cwd)) {
       return Option.none()
     }
 
-    return yield* gitDirectoryOf(cwd).pipe(
+    return yield* Cache.get(gitDirectories, cwd).pipe(
       flatMapSome((directory: string) => {
         const head = path.join(directory, HEAD_FILE)
 

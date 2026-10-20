@@ -6,16 +6,17 @@ import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import { SqlError, UnknownError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { AgentRow } from '@crook/domain/AgentRow'
-import { CrookVersion } from '@crook/domain/CrookVersion'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import * as Database from '@crook/hub/Database'
 import { Herd, RECONNECT_GRACE, hubVersion } from '@crook/hub/Herd'
+import { MachineRegistry } from '@crook/hub/MachineRegistry'
 import { SeenTracker } from '@crook/hub/SeenTracker'
 import { Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
@@ -29,8 +30,9 @@ const PANE = PaneId.make('w1:p1')
 const OTHER_PANE = PaneId.make('w1:p2')
 const DETACH_AFTER = Duration.minutes(3)
 const BEFORE_GRACE_ENDS = Duration.seconds(1)
+const DISK_FULL = 'database or disk is full'
 
-const hello = new Hello({ agentVersion: CrookVersion.make('0.0.9'), label: Option.none() })
+const hello = new Hello({ agentVersion: '0.0.9', label: Option.none() })
 
 const agentAt = (pane: PaneId, stateChangeSeq: number) =>
   new AgentRow({
@@ -93,6 +95,35 @@ const withFreshHerd = <Success, Failure, Requirements>(
     ),
   )
 
+const storageRefused = new SqlError({
+  reason: new UnknownError({ cause: DISK_FULL, message: DISK_FULL }),
+})
+
+const refusingStorage = Layer.mergeAll(
+  Layer.succeed(
+    MachineRegistry,
+    MachineRegistry.of({ all: Effect.succeed([]), save: () => Effect.fail(storageRefused) }),
+  ),
+  Layer.succeed(
+    SeenTracker,
+    SeenTracker.of({
+      all: Effect.succeed([]),
+      mark: () => Effect.fail(storageRefused),
+      dropPanes: () => Effect.fail(storageRefused),
+    }),
+  ),
+)
+
+const withRefusingStorage = <Success, Failure, Requirements>(
+  test: Effect.Effect<Success, Failure, Requirements>,
+) =>
+  Effect.scoped(
+    Effect.flatMap(
+      Layer.build(Layer.provide(Herd.layerNeedingStorage, refusingStorage)),
+      (context) => Effect.provide(test, context),
+    ),
+  )
+
 const restartingHerd = Effect.fn('restartingHerd')(function* () {
   const database = yield* Layer.build(Database.layerAt(IN_MEMORY))
   const run = <Success, Failure, Requirements>(
@@ -123,10 +154,7 @@ it.effect('shows an attached machine online since it attached, with the hello ve
     const herd = yield* Herd
 
     yield* TestClock.adjust(DETACH_AFTER)
-    yield* attach(
-      LAPTOP,
-      new Hello({ agentVersion: CrookVersion.make('0.1.0'), label: Option.some('Laptop') }),
-    )
+    yield* attach(LAPTOP, new Hello({ agentVersion: '0.1.0', label: Option.some('Laptop') }))
     yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1))
     const laptop = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
 
@@ -384,4 +412,48 @@ it.effect('keeps seen across a hub restart and drops it once the pane is gone', 
     expect(seenOf(afterRestart, LAPTOP)).toEqual(Option.some([PANE, OTHER_PANE]))
     expect(stored.map((record) => record.pane)).toEqual([PANE])
   }),
+)
+
+it.effect('shows an agent version it cannot read as none, with the machine online anyway', () =>
+  Effect.gen(function* () {
+    yield* attach(LAPTOP, new Hello({ agentVersion: '0.2.0-rc.1', label: Option.none() }))
+    const laptop = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+
+    expect(laptop.machine.connection).toBe('online')
+    expect(laptop.machine.agentVersion).toEqual(Option.none())
+  }).pipe(withFreshHerd),
+)
+
+it.effect('follows the agent link from memory when the database refuses its writes', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* attach(LAPTOP)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+    const laptop = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+
+    expect(laptop.machine.connection).toBe('online')
+    expect(laptop.state).toEqual(Option.some(stateOf(LAPTOP, 1, [agentAt(PANE, 7)])))
+  }).pipe(withRefusingStorage),
+)
+
+it.effect('refuses forget and mark seen with nothing changed when the database refuses', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+    const attachment = yield* attach(LAPTOP)
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+    const notSeen = yield* herd.markSeen(LAPTOP, PANE).pipe(Effect.flip)
+    const seen = seenOf(yield* currentView, LAPTOP)
+
+    yield* Fiber.interrupt(attachment)
+    yield* TestClock.adjust(RECONNECT_GRACE)
+    const notForgotten = yield* herd.forget(LAPTOP).pipe(Effect.flip)
+    const connection = connectionOf(yield* currentView, LAPTOP)
+
+    expect(notSeen).toBe(storageRefused)
+    expect(seen).toEqual(Option.some([]))
+    expect(notForgotten).toBe(storageRefused)
+    expect(connection).toEqual(Option.some('offline'))
+  }).pipe(withRefusingStorage),
 )
