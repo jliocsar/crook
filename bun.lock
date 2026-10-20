@@ -60,6 +60,7 @@
         "@crook/domain": "workspace:*",
         "@crook/protocol": "workspace:*",
         "@effect/platform-bun": "4.0.5",
+        "@effect/sql-sqlite-bun": "4.0.5",
         "effect": "4.0.5",
       },
       "devDependencies": {
@@ -98,6 +99,8 @@
     "@effect/platform-bun": ["@effect/platform-bun@4.0.5", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.5" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-tB/GapZ/bVoCbwRgnojGP4TwopvkMoFoSCipXT1sf0guvG/2oRVhWzJW/1vkrYFEdLM7XyRnVVLrSJyqdok7DA=="],
 
     "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.5", "", { "dependencies": { "@types/ws": "^8.18.2", "ws": "^8.22.0" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-a8rCdEkfZBGe9C6bsIjxVZuRp73svIyK5IHwHdDAVsvZXjrbkxusfI+rZ8WlX31RP1mKizwI/E72GQTNfdMWHw=="],
+
+    "@effect/sql-sqlite-bun": ["@effect/sql-sqlite-bun@4.0.5", "", { "peerDependencies": { "effect": "^4.0.5" } }, "sha512-gL6mOT/BPM/AOWzcHhFphv6092zpgbJC79j29vfORakJ2ZLE/p+Eah9DeahokI6WBOk7AqFcaXsKVnjJBTUNXw=="],
 
     "@effect/tsgo": ["@effect/tsgo@0.36.1", "", { "optionalDependencies": { "@effect/tsgo-darwin-arm64": "0.36.1", "@effect/tsgo-darwin-x64": "0.36.1", "@effect/tsgo-linux-arm": "0.36.1", "@effect/tsgo-linux-arm64": "0.36.1", "@effect/tsgo-linux-x64": "0.36.1", "@effect/tsgo-win32-arm64": "0.36.1", "@effect/tsgo-win32-x64": "0.36.1" }, "bin": { "effect-tsgo": "dist/effect-tsgo.cjs" } }, "sha512-w52AXlRYFEJHU39FhL68dcFCGDKW7qTkrCMUWWlCMYkFoOVFvwp+4qVM4OcrqPeNFizmhqEGHGrvUabaNf086g=="],
 

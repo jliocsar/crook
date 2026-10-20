@@ -13,6 +13,7 @@ export type MachineStateVersion = typeof MachineStateVersion.Type
 export class MachineState extends Schema.Class<MachineState>('MachineState')({
   machine: MachineId,
   version: MachineStateVersion,
+  herdrVersion: Schema.String,
   workspaces: Schema.Array(Workspace),
   tabs: Schema.Array(Tab),
   agents: Schema.Array(AgentRow),

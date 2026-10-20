@@ -5,6 +5,7 @@ import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
+import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import {
   ClaudeSessionId,
@@ -33,24 +34,31 @@ const agentRow = (pane: string, claudeSession: Option.Option<ClaudeSessionId>) =
     status: 'blocked',
     title: 'EX-253 Example feature',
     cwd: '/home/jliocsar/Projects/crook',
+    branch: Option.some('feat/jc-97-98-registry-seen'),
     claudeSession,
     stateChangeSeq: 7,
     statusChangedAt: observedAt,
   })
 
 const herd = new HerdView({
+  hubVersion: CrookVersion.make('0.1.0'),
   machines: [
     new HerdMachine({
       machine: new Machine({
         id: laptop,
         label: 'laptop',
         connection: 'online',
+        connectionChangedAt: observedAt,
         lastSeenAt: observedAt,
+        agentVersion: Option.some(CrookVersion.make('0.0.9')),
+        herdrVersion: Option.some('0.9.1'),
       }),
+      seen: [PaneId.make('w1:p2')],
       state: Option.some(
         new MachineState({
           machine: laptop,
           version: MachineStateVersion.make(3),
+          herdrVersion: '0.9.1',
           workspaces: [new Workspace({ id: workspace, label: 'crook' })],
           tabs: [new Tab({ id: tab, workspace, label: 'main' })],
           agents: [
@@ -65,9 +73,13 @@ const herd = new HerdView({
         id: MachineId.make('work-vm'),
         label: 'work-vm',
         connection: 'offline',
+        connectionChangedAt: observedAt,
         lastSeenAt: observedAt,
+        agentVersion: Option.none(),
+        herdrVersion: Option.none(),
       }),
       state: Option.none(),
+      seen: [],
     }),
   ],
 })
@@ -83,6 +95,7 @@ describe('HerdView', () => {
     const encoded = Schema.encodeSync(HerdView)(herd)
 
     expect(encoded.machines[1]?.state).toBeNull()
+    expect(encoded.machines[1]?.machine.agentVersion).toBeNull()
     expect(encoded.machines[0]?.machine.lastSeenAt).toBe('2026-10-17T14:00:00.000Z')
   })
 })

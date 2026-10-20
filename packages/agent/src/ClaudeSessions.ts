@@ -6,6 +6,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
+import { flatMapSome } from '@crook/agent/OptionEffect'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 import {
   HerdrClient,
@@ -55,15 +56,6 @@ const startTime = (stat: string) =>
     stat.slice(stat.lastIndexOf(STAT_COMM_TERMINATOR) + STAT_COMM_TERMINATOR.length).split(' '),
     STAT_START_TIME_INDEX,
   )
-
-const flatMapSome =
-  <Value, Next, Failure, Requirements>(
-    next: (value: Value) => Effect.Effect<Option.Option<Next>, Failure, Requirements>,
-  ) =>
-  <SelfFailure, SelfRequirements>(
-    self: Effect.Effect<Option.Option<Value>, SelfFailure, SelfRequirements>,
-  ) =>
-    Effect.flatMap(self, Option.match({ onNone: () => Effect.succeedNone, onSome: next }))
 
 const make = (procRoot: string) =>
   Effect.gen(function* () {

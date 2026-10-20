@@ -3,6 +3,7 @@ import * as BunSocket from '@effect/platform-bun/BunSocket'
 import { expect, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Clock from 'effect/Clock'
+import * as DateTime from 'effect/DateTime'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -19,7 +20,9 @@ import type * as RpcGroup from 'effect/rpc/RpcGroup'
 import type * as Rpc from 'effect/rpc/Rpc'
 
 import type { HerdView } from '@crook/domain/HerdView'
-import { MachineId } from '@crook/domain/Ids'
+import { AgentRow } from '@crook/domain/AgentRow'
+import { CrookVersion } from '@crook/domain/CrookVersion'
+import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import {
@@ -30,15 +33,34 @@ import {
   OwnerEmailRejected,
   UpgradeOriginRejected,
 } from '@crook/hub/ExeDevIdentity'
+import * as Database from '@crook/hub/Database'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
-import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
-import { ClientApi } from '@crook/protocol/ClientApi'
+import { AGENT_PING_INTERVAL, AgentLink, Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { ClientApi, MachineStillConnected } from '@crook/protocol/ClientApi'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 const OWNER = 'owner@example.com'
 const HUB_ORIGIN = 'https://my-hub.exe.xyz'
 const EVIL_ORIGIN = 'https://evil.example'
 const STRANGER = 'someone@example.com'
+const IN_MEMORY = ':memory:'
+const PANE = PaneId.make('w1:p1')
+
+const hello = new Hello({ agentVersion: CrookVersion.make('0.0.9'), label: Option.none() })
+
+const agentAt = (pane: PaneId) =>
+  new AgentRow({
+    pane,
+    workspace: WorkspaceId.make('w1'),
+    tab: TabId.make('w1:t1'),
+    status: 'done',
+    title: 'EX-253 Example feature',
+    cwd: '/home/jliocsar/Projects/crook',
+    branch: Option.none(),
+    claudeSession: Option.none(),
+    stateChangeSeq: 7,
+    statusChangedAt: DateTime.makeUnsafe(0),
+  })
 
 const ownerLogin = { 'X-ExeDev-Email': OWNER, Origin: HUB_ORIGIN }
 const tokenContextOf = (machine: string) => ({
@@ -50,9 +72,10 @@ const stateOf = (machine: MachineId, version: number) =>
   new MachineState({
     machine,
     version: MachineStateVersion.make(version),
+    herdrVersion: '0.9.1',
     workspaces: [],
     tabs: [],
-    agents: [],
+    agents: [agentAt(PANE)],
   })
 
 const configFor = (origin: string) =>
@@ -78,7 +101,7 @@ const servedHub = Layer.mergeAll(
   testClient,
 ).pipe(Layer.provideMerge(testServer))
 
-const testHub = Layer.provide(servedHub, configFor(HUB_ORIGIN))
+const testHub = Layer.provide(servedHub, [configFor(HUB_ORIGIN), Database.layerAt(IN_MEMORY)])
 
 const socketUrl = (path: string) =>
   HttpServer.addressFormattedWith((address) =>
@@ -107,7 +130,7 @@ const attachAs = Effect.fn('attachAs')(function* (
 ) {
   const agent = yield* connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(machine), pingInterval)
 
-  yield* agent.Attach().pipe(Stream.runDrain, Effect.ignore, Effect.forkScoped)
+  yield* agent.Attach({ hello }).pipe(Stream.runDrain, Effect.ignore, Effect.forkScoped)
   yield* agent.PublishState({ state: stateOf(machine, 1) })
 
   return agent
@@ -198,19 +221,41 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
     }),
   )
 
-  live.effect('shows an attached agent online with its state, then offline when it drops', () =>
-    Effect.gen(function* () {
-      const laptop = MachineId.make('laptop')
-      const online = yield* Effect.scoped(
-        Effect.andThen(attachAs(laptop), machineShows(laptop, 'online')),
-      )
-      const offline = yield* machineShows(laptop, 'offline')
+  live.effect(
+    'shows an attached agent online with its state, then reconnecting when it drops',
+    () =>
+      Effect.gen(function* () {
+        const laptop = MachineId.make('laptop')
+        const online = yield* Effect.scoped(
+          Effect.andThen(attachAs(laptop), machineShows(laptop, 'online')),
+        )
+        const dropped = yield* machineShows(laptop, 'reconnecting')
 
-      expect(Option.flatMap(machineIn(online, laptop), (entry) => entry.state)).toEqual(
-        Option.some(stateOf(laptop, 1)),
+        expect(Option.flatMap(machineIn(online, laptop), (entry) => entry.state)).toEqual(
+          Option.some(stateOf(laptop, 1)),
+        )
+        expect(Option.flatMap(machineIn(dropped, laptop), (entry) => entry.state)).toEqual(
+          Option.some(stateOf(laptop, 1)),
+        )
+      }),
+  )
+
+  live.effect('marks a pane seen and refuses to forget a connected machine for the phone', () =>
+    Effect.gen(function* () {
+      const laptop = MachineId.make('seen-laptop')
+
+      yield* attachAs(laptop)
+      const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+      const refused = yield* phone.ForgetMachine({ machine: laptop }).pipe(Effect.flip)
+
+      yield* phone.MarkSeen({ machine: laptop, pane: PANE })
+      const seen = yield* herdWhere((view) =>
+        Option.exists(machineIn(view, laptop), (entry) => entry.seen.includes(PANE)),
       )
-      expect(Option.flatMap(machineIn(offline, laptop), (entry) => entry.state)).toEqual(
-        Option.some(stateOf(laptop, 1)),
+
+      expect(refused).toEqual(new MachineStillConnected({ machine: laptop, connection: 'online' }))
+      expect(Option.map(machineIn(seen, laptop), (entry) => entry.seen)).toEqual(
+        Option.some([PANE]),
       )
     }),
   )
@@ -240,7 +285,7 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
         yield* attachAs(silent, Duration.infinity)
         yield* attachAs(pinging)
         const silentSince = yield* Clock.currentTimeMillis
-        yield* machineShows(silent, 'offline')
+        yield* machineShows(silent, 'reconnecting')
         const silentFor = Duration.millis((yield* Clock.currentTimeMillis) - silentSince)
 
         expect(Duration.isGreaterThanOrEqualTo(silentFor, HttpRoutes.SOCKET_SILENCE_TIMEOUT)).toBe(

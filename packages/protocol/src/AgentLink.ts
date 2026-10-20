@@ -3,6 +3,7 @@ import * as Rpc from 'effect/rpc/Rpc'
 import * as RpcGroup from 'effect/rpc/RpcGroup'
 import * as Schema from 'effect/Schema'
 
+import { CrookVersion } from '@crook/domain/CrookVersion'
 import { MachineId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
 
@@ -20,7 +21,16 @@ export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
   }
 }
 
-export const Attach = Rpc.make('Attach', { success: Schema.Never, stream: true })
+export class Hello extends Schema.Class<Hello>('Hello')({
+  agentVersion: CrookVersion,
+  label: Schema.OptionFromNullOr(Schema.NonEmptyString),
+}) {}
+
+export const Attach = Rpc.make('Attach', {
+  payload: { hello: Hello },
+  success: Schema.Never,
+  stream: true,
+})
 
 export const PublishState = Rpc.make('PublishState', {
   payload: { state: MachineState },

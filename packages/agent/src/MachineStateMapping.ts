@@ -13,9 +13,11 @@ import type { AgentInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
 export interface ResolvedAgent {
   readonly info: AgentInfo
   readonly claudeSession: Option.Option<ClaudeSessionId>
+  readonly branch: Option.Option<string>
 }
 
 export interface HerdReading {
+  readonly herdrVersion: string
   readonly workspaces: readonly WorkspaceInfo[]
   readonly tabs: readonly TabInfo[]
   readonly agents: readonly ResolvedAgent[]
@@ -45,9 +47,12 @@ const statusChangedAt =
       }),
     )
 
+export const cwdOf = (info: AgentInfo): string =>
+  Option.orElse(info.foreground_cwd, () => info.cwd).pipe(Option.getOrElse(() => ''))
+
 const toAgentRow =
   (since: (info: AgentInfo) => DateTime.Utc) =>
-  ({ info, claudeSession }: ResolvedAgent) =>
+  ({ info, claudeSession, branch }: ResolvedAgent) =>
     new AgentRow({
       pane: PaneId.make(info.pane_id),
       workspace: WorkspaceId.make(info.workspace_id),
@@ -56,7 +61,8 @@ const toAgentRow =
       title: Option.firstSomeOf([info.terminal_title_stripped, info.title, info.name]).pipe(
         Option.getOrElse(() => ''),
       ),
-      cwd: Option.orElse(info.foreground_cwd, () => info.cwd).pipe(Option.getOrElse(() => '')),
+      cwd: cwdOf(info),
+      branch,
       claudeSession,
       stateChangeSeq: info.state_change_seq,
       statusChangedAt: since(info),
@@ -67,6 +73,7 @@ const herdContents = (
   reading: HerdReading,
   now: DateTime.Utc,
 ) => ({
+  herdrVersion: reading.herdrVersion,
   workspaces: reading.workspaces.map(toWorkspace),
   tabs: reading.tabs.map(toTab),
   agents: reading.agents.map(toAgentRow(statusChangedAt(previousAgents, now))),
