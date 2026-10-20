@@ -30,12 +30,12 @@ interface PendingCommand {
   readonly reply: Deferred.Deferred<CommandReceipt, AgentCommandFailure>
 }
 
-const withAttachment =
+const withOutbox =
   (outbox: Outbox) =>
   (current: Option.Option<readonly Outbox[]>): Option.Option<readonly Outbox[]> =>
     Option.some(Arr.append(Option.getOrElse(current, Arr.empty), outbox))
 
-const withoutAttachment =
+const withoutOutbox =
   (outbox: Outbox) =>
   (current: Option.Option<readonly Outbox[]>): Option.Option<readonly Outbox[]> =>
     Option.flatMap(current, (attached) =>
@@ -56,10 +56,10 @@ const make = Effect.gen(function* () {
         const outbox = yield* Queue.unbounded<RoutedCommand>()
 
         yield* Effect.acquireRelease(
-          Ref.update(attachments, HashMap.modifyAt(machine, withAttachment(outbox))),
+          Ref.update(attachments, HashMap.modifyAt(machine, withOutbox(outbox))),
           () =>
             Effect.andThen(
-              Ref.update(attachments, HashMap.modifyAt(machine, withoutAttachment(outbox))),
+              Ref.update(attachments, HashMap.modifyAt(machine, withoutOutbox(outbox))),
               Queue.shutdown(outbox),
             ),
         )
@@ -69,10 +69,11 @@ const make = Effect.gen(function* () {
     )
 
   const newestOutbox = (machine: MachineId) =>
-    Effect.map(Ref.get(attachments), (current) =>
-      pipe(HashMap.get(current, machine), Option.flatMap(Arr.last)),
-    ).pipe(
-      Effect.flatMap((outbox) => Effect.fromOption(outbox, () => new MachineOffline({ machine }))),
+    Effect.flatMap(Ref.get(attachments), (current) =>
+      Effect.fromOption(
+        pipe(HashMap.get(current, machine), Option.flatMap(Arr.last)),
+        () => new MachineOffline({ machine }),
+      ),
     )
 
   const send = Effect.fn('CommandRouter.send')(function* (
