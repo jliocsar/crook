@@ -42,21 +42,23 @@ Schemas and their types, side by side (locality rule). No services, no IO.
 - Entities: `Machine`, `Workspace`, `Tab`, `AgentRow`, `AgentStatus` (`idle|working|blocked|done|unknown`), `MachineState` (one machine's whole herd), `HerdView` (all machines + connectivity).
 - Transcript model: `TranscriptMessage`, content blocks (`Text`, `Thinking`, `ToolUse`, `ToolResult`, `Image`), `TranscriptChunk { offset, messages }`.
 - `Ask` (permission | question | unknown) with options as key sequences.
+- Commands: the `Command` union (`Prompt { pane, text }`, `SendKeys { pane, keys }`) and `CommandReceipt` (`InputDelivered { pane, stateChangeSeq }`). Stop is `SendKeys` with `esc`, herdr's canonical name for Escape (`interrupt(pane)`). `hasMovedSince(receipt, row)` is the phone's "done": the pane shows a later `stateChangeSeq` than the one the agent read just before it sent.
 
 ### 2.2 `@crook/protocol`
 
 Two `RpcGroup`s and the wire-level tagged errors. Nothing else.
 
 - `AgentLink` — called **by the agent** on the hub (the agent dials out, so it's always the RPC client):
-  - `Attach` (streaming) → `Stream<Command>`: the hub pushes commands down this stream for as long as the connection lives.
+  - `Attach` (streaming) → `Stream<RoutedCommand>`: the hub pushes `{ id, key, command }` down this stream for as long as the connection lives.
   - `PublishState { state: MachineState, version }`
-  - `CompleteCommand { commandId, result }`
+  - `CompleteCommand { id, result }`, where `result` is a `Result<CommandReceipt, AgentCommandFailure>`
   - `PublishTranscript { pane, chunk }` (only while some phone has that pane open)
 - `ClientApi` — called **by the PWA** on the hub:
   - `WatchHerd` (streaming) → `Stream<HerdView>`
   - `WatchTranscript { pane, fromOffset }` (streaming) → `Stream<TranscriptChunk>`
   - `WatchScreen { pane }` (streaming) → `Stream<ScreenFrame>` (terminal fallback view)
-  - `Prompt`, `SendKeys`, `AnswerAsk`, `StartAgent`, `CreateTab`, `CreateWorktree`, `Rename`, `Close`, `MarkSeen` — each with an `IdempotencyKey`
+  - `SendCommand { machine, key, command }` → `CommandReceipt`, failing with one tagged error per reason. One RPC carries every `Command` variant (`AnswerAsk`, `StartAgent`, `CreateWorktree`, `Rename`, `Close`, `Pin` join the union as their tickets land), so the hub routes them all the same way and a new variant changes no RPC.
+  - `MarkSeen`
   - `ForgetMachine`
 - Serialization: `RpcSerialization.layerNdjson` (sockets need framing).
 
@@ -67,14 +69,15 @@ Why "agent is always the client": Effect RPC servers listen; the agent can't (la
 An Effect client for Herdr's socket API. Private like everything else, but kept free of crook concepts anyway: it's the cleanest seam for testing the agent.
 
 - `HerdrClient` service: `request(method, params)` typed by a `HerdrMethod` value (params + result schema), `snapshot`, and `subscribe(subscriptions)`. `subscribe` is scoped and resolves only once Herdr acks with `subscription_started`, yielding a `Stream<HerdrEvent>`; that ordering is the recovery contract, so the caller can `subscribe` then `snapshot` and miss nothing.
-- Methods are added by the ticket that first calls them; today `ping`, `session.snapshot` and `pane.process_info`.
+- Methods are added by the ticket that first calls them; today `ping`, `session.snapshot`, `pane.process_info`, `agent.prompt` and `agent.send_keys`.
+- Agent input (measured, herdr 0.9.5): `agent.prompt { target, text }` answers `agent_prompted` after 302–403 ms (6 runs: it pastes, then sends Enter); `agent.send_keys { target, keys }` answers `ok` in 0.7–2.1 ms. Both take a pane id as `target` and reject a pane that hosts no agent with `agent_not_found`, so herdr enforces the same rule as `CommandPolicy`. An unknown key name is `invalid_key`; an empty key list is accepted and does nothing. A prompt to an agent already at an approval dialog is `agent_blocked`, rejected before any input is sent (herdr's own docs).
 - Error codes crook acts on get their own tagged error: `events_lost` → `HerdrEventsLost`, `pane_not_found` → `HerdrPaneNotFound` (from any request or the subscribe itself). Every other code stays `HerdrRequestRejected`.
 - `state_change_seq` decodes to herdr's schema default of 0 when absent, so it is a plain `Int`.
 - Schemas are hand-written from `herdr api schema --json` and decode only the fields crook reads: excess keys are ignored, so `layouts`, `tokens`, `state_labels` and `scroll` are left out. Optional or nullable fields decode to `Option`. Field names stay snake_case, as on the wire; mapping to `@crook/domain` happens in the agent, not here.
 - Transport: NDJSON over a Unix socket via `@effect/platform-bun`'s `BunSocket.makeNet({ path })`. **One connection per request**: Herdr answers one request line and closes the connection, a second request on it gets nothing (measured, herdr 0.9.1). A subscription connection stays open; `events_lost` arrives as an error response carrying the subscribe request's id, then Herdr closes it.
 - Event wire shape (measured): a lifecycle event is `{"event":"pane_closed","data":{"type":"pane_closed",…}}` — snake_case, even though it is subscribed as `pane.closed`. The pane-scoped `pane.agent_status_changed` keeps the dotted name and carries no `data.type`.
 - **Status changes need a pane-scoped subscription** (measured): `pane.agent_status_changed` requires a `pane_id`, and a lifecycle-only subscriber sees a `pane_updated` on the first detection of an agent but nothing for later working → blocked → idle moves. The agent subscribes per agent pane and resubscribes when the pane set changes (subscriptions are fixed per connection). An unknown `pane_id` rejects the whole subscribe with `pane_not_found`.
-- Layers: `HerdrClient.layer` (socket path from `HERDR_SOCKET_PATH`, else `$HOME/.config/herdr/herdr.sock`), `HerdrClient.layerAt(path)`, `HerdrClient.layerTest({ responses, events })`. Scripted responses are encoded lines run through the live decoder; events come from a `Queue` whose failure becomes the stream's.
+- Layers: `HerdrClient.layer` (socket path from `HERDR_SOCKET_PATH`, else `$HOME/.config/herdr/herdr.sock`), `HerdrClient.layerAt(path)`, `HerdrClient.layerTest({ responses, events, sent })`. Scripted responses are encoded lines run through the live decoder; events come from a `Queue` whose failure becomes the stream's; the optional `sent` queue receives every request line as it would go over the socket, so a test can assert what was sent and how often.
 
 ### 2.4 `@crook/claude`
 
@@ -118,6 +121,17 @@ HubLink (built in JC-89):
 - `HUB_RECONNECT_BASE` is 77 ms, the slowest of 9 warm HTTPS requests from the laptop to an exe.dev VM's proxy (52–77 ms; the cold first one took 626 ms). `AGENT_PING_INTERVAL` (in `@crook/protocol`, since the hub times agents out on it too) is effect's RpcClient default of 5 s, written out because the cap, the healthy period and the hub's silence timeout reuse it. S1 measured no proxy idle timeout within 900 s, so the ping exists to detect a dead hub, not to keep the proxy open.
 - Config: `CROOK_HUB_URL` (the `ws`/`wss` URL of the hub's `/rpc/agent`) and `CROOK_HUB_TOKEN` (`Config.Redacted`), sent as `X-Exedev-Authorization: Bearer <token>`.
 
+Commands (built in JC-103):
+
+- `HubLink` runs the commands `Attach` delivers one at a time, in arrival order, and answers each with `CompleteCommand`. Input to one pane must keep its order (Stop, then a new prompt), and the slowest command measured is one prompt (403 ms), so nothing is gained by running them side by side. A `CompleteCommand` that fails ends the session like any other call.
+- `CommandPolicy` admits input only to a pane that is in the current `MachineState.agents`, i.e. a pane herdr recognizes as hosting an agent, and returns that row. The agent reads its own state, never anything the hub claims.
+- `CommandExecutor` remembers outcomes in an effect `Cache` keyed by `{ key, command }`, with effect's own structural equality: a retry is the same key carrying the same command. It remembers exactly the outcomes after which herdr may have acted, and forgets the rest:
+  - remembered: `InputDelivered`, and `CommandDeliveryUnknown` (herdr closed the connection or answered something unreadable after the request went out). A retry replays them and never sends twice.
+  - forgotten: `PaneNotAgent` (policy, or herdr's `pane_not_found`), `HerdrRefusedCommand` (any other herdr rejection, code and detail passed through), `HerdrUnavailable` (socket would not open). Nothing was sent, so a retry runs again.
+- `COMMAND_REPLAY_CAPACITY` is 1024 keys, effect's `PersistedCache` default in-memory capacity, which is the same job: remember request outcomes by key in memory. When full the oldest key goes first. Nothing is persisted, so an agent restart forgets every key.
+- `execute` is uninterruptible. A pending `Cache` lookup whose every caller is interrupted is itself interrupted and dropped from the cache (measured), so a session closing mid-prompt would otherwise let the retry send the prompt again.
+- Herdr's `HerdrRequestInvalid` (crook built params herdr's schema cannot encode) is a defect: every `Command` that decodes encodes.
+
 ### 2.6 `@crook/hub`
 
 ```
@@ -150,6 +164,14 @@ Server, identity and Herd (built in JC-90):
 - A dead agent socket that never closes is caught by Bun's `idleTimeout`, set to `SOCKET_SILENCE_TIMEOUT` (two `AGENT_PING_INTERVAL`s, the same rule effect's RpcClient uses to call a hub dead). Bun's own pings are off (`sendPings: false`): through the proxy the proxy would answer them and keep a dead agent online. The agent's RPC pings are data frames, so a healthy agent stays up. A silent agent showed offline after 11.8–11.9 s against the 10 s timeout (5 runs). A kill closes the socket and shows offline at once. The timeout is server-wide, so the PWA's client must ping within it too.
 - Shutdown uses a `gracefulShutdownTimeout` of zero: sockets never finish on their own, so a grace period would only ever be waited out in full, and agents reconnect anyway.
 - Config: `CROOK_HUB_PORT`, `CROOK_OWNER_EMAIL` (compared exactly), `CROOK_HUB_ORIGIN`, `CROOK_WEB_ROOT`.
+
+CommandRouter (built in JC-103):
+
+- Each `Attach` registers an outbox with the router for as long as it lives, alongside `Herd.hold`. A command goes to the newest `Attach` of its machine, so while a reconnect overlaps a dying connection the command reaches the live one. No `Attach` at all is `MachineOffline`, before anything is sent.
+- `send` gives the command the next `CommandId` (a counter: ids only have to be unique among the commands waiting in this process), parks a `Deferred` under it and awaits `CompleteCommand` for `COMMAND_TIMEOUT`, then fails with `CommandTimedOut`. The timeout is `AGENT_PING_INTERVAL` (5 s), the link's own heartbeat: over 10 times the slowest measured prompt (403 ms) plus the slowest measured warm round trip to the proxy (77 ms).
+- `complete` resolves the `Deferred` only if the answering connection is the machine the command was routed to; a late answer (after the timeout) or one from another machine is dropped with a debug log.
+- A timed-out command may still run. The phone retries with the same key, and the agent answers with the first outcome instead of running it twice.
+- Commands are not persisted: a hub restart loses those in flight, and the phone sees them time out.
 
 ### 2.7 `@crook/web`
 
@@ -186,6 +208,7 @@ Transcripts are append-only files, so they travel as `TranscriptChunk { offset, 
 - Hub: `CommandRouter` gives the command an id, pushes it down that machine's `Attach` stream, awaits `CompleteCommand` with a timeout.
 - Agent: `CommandExecutor` checks a bounded cache of recent keys → replays the stored result instead of re-executing.
 - The UI shows "sent" on ack and "done" only when `MachineState` shows the effect (status leaves `blocked`, a new pane appears). Lost acks never cause double prompts.
+- The ack is `SendCommand`'s `CommandReceipt`. For input it carries the pane's `stateChangeSeq` as the agent read it just before sending, and "done" is `hasMovedSince(receipt, row)` on the row `WatchHerd` delivers. The pending action (sent, acked, done, failed) lives in a PWA atom keyed by its `IdempotencyKey`; the hub and the agent keep nothing per action beyond the agent's replay cache.
 
 ### 3.4 Effect conventions (from `effect-best-practices` + `AGENTS.md`)
 

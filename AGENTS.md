@@ -183,6 +183,22 @@ connection the moment its constructor returns and never dials (measured). Build 
 the scope that should own it, with `Layer.build`, and provide the resulting context.
 :::
 
+:::warning
+An effect `Cache` lookup that every caller abandons is interrupted and dropped from the cache, so
+the next `get` runs it again (measured). Where running twice is the bug — anything that types into
+a terminal — make the `get` uninterruptible, so a started lookup always finishes and is remembered.
+:::
+
+:::tip
+A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
+`effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
+
+`RpcTest` wires client to server without serialization (read in its source), so it cannot catch a
+wire type that fails to encode. Round-trip such a schema through
+`Schema.fromJsonString(Schema.toCodecJson(schema))`, which is the codec the NDJSON serialization
+uses, or test over a real socket.
+:::
+
 :::tip
 A member that runs on Bun and touches Bun-only APIs in tests (`BunHttpServer` reads the global
 `Bun`) sets its `test` script to `bun --bun vitest run`. Plain `vitest run` runs on Node, where that
