@@ -30,7 +30,7 @@ export class PaneNotInHerd extends Schema.TaggedError<PaneNotInHerd>()('PaneNotI
   pane: PaneId,
 }) {
   override get message(): string {
-    return `Machine "${this.machine}" has no agent in pane ${this.pane} in its last published state, so there is nothing to mark seen. The pane most likely closed: pull to resync.`
+    return `Machine "${this.machine}" has no agent in pane ${this.pane} in its last published state, so there is nothing to mark seen or pin. The pane most likely closed: pull to resync.`
   }
 }
 
@@ -54,10 +54,21 @@ export const MarkSeen = Rpc.make('MarkSeen', {
   error: Schema.Union([MachineNotInHerd, PaneNotInHerd, HubStorageFailed]),
 })
 
+export const SetPinned = Rpc.make('SetPinned', {
+  payload: { machine: MachineId, pane: PaneId, pinned: Schema.Boolean },
+  error: Schema.Union([MachineNotInHerd, PaneNotInHerd, HubStorageFailed]),
+})
+
 export const SendCommand = Rpc.make('SendCommand', {
   payload: { machine: MachineId, key: IdempotencyKey, command: Command },
   success: CommandReceipt,
   error: CommandFailure,
 })
 
-export class ClientApi extends RpcGroup.make(WatchHerd, ForgetMachine, MarkSeen, SendCommand) {}
+export class ClientApi extends RpcGroup.make(
+  WatchHerd,
+  ForgetMachine,
+  MarkSeen,
+  SetPinned,
+  SendCommand,
+) {}

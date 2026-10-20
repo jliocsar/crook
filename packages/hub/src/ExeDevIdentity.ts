@@ -117,11 +117,11 @@ const make = Effect.gen(function* () {
     ),
   )
 
-  const requireOwner = (headers: Headers.Headers) => {
+  const requireOwner = (headers: Headers.Headers): Effect.Effect<string, OwnerEmailRejected> => {
     const email = Headers.get(headers, EMAIL_HEADER)
 
     return Option.contains(email, ownerEmail)
-      ? Effect.void
+      ? Effect.succeed(ownerEmail)
       : Effect.fail(new OwnerEmailRejected({ email }))
   }
 
@@ -140,7 +140,10 @@ const make = Effect.gen(function* () {
     admitAgent: (headers) => Effect.andThen(requireOwner(headers), machineOf(headers)),
     admitPhonePage,
     admitPhoneSocket: (headers) =>
-      Effect.andThen(admitPhonePage(headers), requireSameOrigin(headers)),
+      requireOwner(headers).pipe(
+        Effect.tap(() => requireBrowserLogin(headers)),
+        Effect.tap(() => requireSameOrigin(headers)),
+      ),
   })
 })
 
@@ -155,7 +158,7 @@ export class ExeDevIdentity extends Context.Service<
     ) => Effect.Effect<void, OwnerEmailRejected | BrowserLoginRequired>
     readonly admitPhoneSocket: (
       headers: Headers.Headers,
-    ) => Effect.Effect<void, OwnerEmailRejected | BrowserLoginRequired | UpgradeOriginRejected>
+    ) => Effect.Effect<string, OwnerEmailRejected | BrowserLoginRequired | UpgradeOriginRejected>
   }
 >()('@crook/hub/ExeDevIdentity') {
   static readonly layer = Layer.effect(this, make)

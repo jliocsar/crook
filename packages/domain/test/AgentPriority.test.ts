@@ -37,6 +37,7 @@ const machineWith = (
   agents: readonly AgentRow[],
   options: {
     readonly seen?: readonly string[]
+    readonly pinned?: readonly string[]
     readonly connection?: MachineConnection
     readonly published?: boolean
   } = {},
@@ -65,6 +66,7 @@ const machineWith = (
       () => options.published ?? true,
     ),
     seen: (options.seen ?? []).map((pane) => PaneId.make(pane)),
+    pinned: (options.pinned ?? []).map((pane) => PaneId.make(pane)),
   })
 }
 
@@ -127,6 +129,33 @@ describe('orderAgents', () => {
       'idle-new',
       'done-seen-old',
     ])
+  })
+
+  it('puts pinned agents first, ordered among themselves like the rest', () => {
+    const machine = machineWith(
+      [
+        agent('blocked', 'blocked', 0),
+        agent('pinned-idle', 'idle', 0),
+        agent('working', 'working', 0),
+        agent('pinned-blocked', 'blocked', 3),
+      ],
+      { pinned: ['pinned-idle', 'pinned-blocked'] },
+    )
+
+    expect(panesOf(orderAgents(machine))).toEqual([
+      'pinned-blocked',
+      'pinned-idle',
+      'blocked',
+      'working',
+    ])
+  })
+
+  it('still counts a pinned agent that needs you, and never counts one for being pinned', () => {
+    const machine = machineWith([agent('blocked', 'blocked', 0), agent('idle', 'idle', 0)], {
+      pinned: ['blocked', 'idle'],
+    })
+
+    expect(needsYouCount(machine)).toBe(1)
   })
 
   it('has nothing to order before the machine has published a state', () => {

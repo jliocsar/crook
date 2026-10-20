@@ -2,6 +2,7 @@ import * as Config from 'effect/Config'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import * as Stream from 'effect/Stream'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
@@ -11,6 +12,8 @@ import * as RpcServer from 'effect/rpc/RpcServer'
 import type { SqlError } from 'effect/sql/SqlError'
 
 import type { MachineId } from '@crook/domain/Ids'
+import { commandAudit } from '@crook/domain/Audit'
+import { AuditTrail } from '@crook/hub/AuditTrail'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
 import { Herd } from '@crook/hub/Herd'
@@ -37,19 +40,53 @@ const routes = Effect.gen(function* () {
   const herd = yield* Herd
   const router = yield* CommandRouter
   const identity = yield* ExeDevIdentity
+  const audit = yield* AuditTrail
   const serialization = yield* RpcSerialization.RpcSerialization
   const serveWeb = yield* HttpStaticServer.make({ root: yield* CrookWebRoot, spa: true })
-  const clientHandlers = yield* ClientApi.toHandlers({
-    WatchHerd: () => herd.view,
-    ForgetMachine: ({ machine }) =>
-      herd.forget(machine).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
-    MarkSeen: ({ machine, pane }) =>
-      herd.markSeen(machine, pane).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
-    SendCommand: ({ machine, key, command }) => router.send(machine, key, command),
-  })
-  const serveClients = yield* RpcServer.toHttpEffectWebsocket(ClientApi).pipe(
-    Effect.provide(clientHandlers),
-  )
+
+  const serveClientAs = (actor: string) =>
+    ClientApi.toHandlers({
+      WatchHerd: () => herd.view,
+      ForgetMachine: ({ machine }) =>
+        herd.forget(machine).pipe(
+          Effect.catchTag('SqlError', storageFailureToWire),
+          audit.audited({
+            actor,
+            machine,
+            idempotencyKey: Option.none(),
+            operation: 'ForgetMachine',
+            arguments: {},
+          }),
+        ),
+      MarkSeen: ({ machine, pane }) =>
+        herd.markSeen(machine, pane).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
+      SetPinned: ({ machine, pane, pinned }) =>
+        herd.setPinned(machine, pane, pinned).pipe(
+          Effect.catchTag('SqlError', storageFailureToWire),
+          audit.audited({
+            actor,
+            machine,
+            idempotencyKey: Option.none(),
+            operation: 'SetPinned',
+            arguments: { pane, pinned },
+          }),
+        ),
+      SendCommand: ({ machine, key, command }) =>
+        router.send(machine, key, command).pipe(
+          audit.audited({
+            actor,
+            machine,
+            idempotencyKey: Option.some(key),
+            ...commandAudit(command),
+          }),
+        ),
+    }).pipe(
+      Effect.flatMap((handlers) =>
+        RpcServer.toHttpEffectWebsocket(ClientApi).pipe(Effect.flatten, Effect.provide(handlers)),
+      ),
+      Effect.provideService(RpcSerialization.RpcSerialization, serialization),
+      Effect.annotateLogs('actor', actor),
+    )
 
   const serveAgentAs = (machine: MachineId) =>
     AgentLink.toHandlers({
@@ -71,7 +108,7 @@ const routes = Effect.gen(function* () {
       Effect.flatMap(identity.admitAgent(request.headers), serveAgentAs),
     ),
     HttpRouter.route('GET', CLIENT_PATH, (request) =>
-      Effect.andThen(identity.admitPhoneSocket(request.headers), serveClients),
+      Effect.flatMap(identity.admitPhoneSocket(request.headers), serveClientAs),
     ),
     HttpRouter.route('GET', '/*', (request) =>
       Effect.andThen(identity.admitPhonePage(request.headers), serveWeb),
@@ -80,5 +117,11 @@ const routes = Effect.gen(function* () {
 })
 
 export const layer = HttpRouter.addAll(routes).pipe(
-  Layer.provide([Herd.layer, CommandRouter.layer, ExeDevIdentity.layer, protocolSerialization]),
+  Layer.provide([
+    Herd.layer,
+    CommandRouter.layer,
+    ExeDevIdentity.layer,
+    AuditTrail.layer,
+    protocolSerialization,
+  ]),
 )

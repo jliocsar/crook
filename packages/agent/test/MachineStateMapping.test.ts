@@ -10,7 +10,7 @@ import {
 import { AgentRow } from '@crook/domain/AgentRow'
 import { ClaudeSessionId, MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 
-import { agentInfo, tabInfo, workspaceInfo } from './Fixtures'
+import { agentInfo, paneInfo, tabInfo, workspaceInfo } from './Fixtures'
 
 const MACHINE = MachineId.make('laptop')
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
@@ -22,6 +22,7 @@ const reading = (agents: HerdReading['agents'], herdrVersion = HERDR_VERSION): H
   herdrVersion,
   workspaces: [workspaceInfo],
   tabs: [tabInfo],
+  panes: [],
   agents,
 })
 
@@ -79,6 +80,39 @@ describe('MachineStateMapping', () => {
 
     expect(row?.title).toBe('reviewer')
     expect(row?.cwd).toBe('/home/jliocsar/Projects/crook/packages/agent')
+  })
+
+  it('carries the name the pane was given in herdr, and none for an empty or absent one', () => {
+    const agents = [
+      { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+      {
+        info: agentInfo({ pane_id: 'w1:p2' }),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+      },
+      {
+        info: agentInfo({ pane_id: 'w1:p3' }),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+      },
+    ]
+    const state = initialMachineState(
+      MACHINE,
+      {
+        ...reading(agents),
+        panes: [
+          paneInfo({ label: Option.some('Payments') }),
+          paneInfo({ pane_id: 'w1:p2', label: Option.some('') }),
+        ],
+      },
+      STARTED,
+    )
+
+    expect(state.agents.map((row) => [row.title, row.label])).toEqual([
+      ['EX-253 Example feature', Option.some('Payments')],
+      ['EX-253 Example feature', Option.none()],
+      ['EX-253 Example feature', Option.none()],
+    ])
   })
 
   it('keeps the version when a re-read changes nothing', () => {

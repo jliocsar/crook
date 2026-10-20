@@ -5,6 +5,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
+import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
@@ -29,6 +30,7 @@ import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/p
 import packageJson from '../package.json' with { type: 'json' }
 
 import { MachineRecord, MachineRegistry } from '@crook/hub/MachineRegistry'
+import { PinRecord, PinnedAgents } from '@crook/hub/PinnedAgents'
 import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 
 interface MachineEntry {
@@ -43,6 +45,7 @@ interface MachineEntry {
   readonly herdrVersion: Option.Option<string>
   readonly state: Option.Option<MachineState>
   readonly seen: HashMap.HashMap<PaneId, number>
+  readonly pinned: HashSet.HashSet<PaneId>
 }
 
 export const RECONNECT_GRACE = Duration.sum(AGENT_SOCKET_OPEN_TIMEOUT, AGENT_PING_INTERVAL)
@@ -60,6 +63,13 @@ const seenPanes = (entry: MachineEntry) =>
     Arr.map((row) => row.pane),
   )
 
+const pinnedPanes = (entry: MachineEntry) =>
+  pipe(
+    agentsIn(entry.state),
+    Arr.filter((row) => HashSet.has(entry.pinned, row.pane)),
+    Arr.map((row) => row.pane),
+  )
+
 const toHerdMachine = (entry: MachineEntry) =>
   new HerdMachine({
     machine: new Machine({
@@ -73,6 +83,7 @@ const toHerdMachine = (entry: MachineEntry) =>
     }),
     state: entry.state,
     seen: seenPanes(entry),
+    pinned: pinnedPanes(entry),
   })
 
 const toView = (entries: HashMap.HashMap<MachineId, MachineEntry>) =>
@@ -97,7 +108,7 @@ const toRecord = (entry: MachineEntry) =>
   })
 
 const fromRecord =
-  (seen: readonly SeenRecord[]) =>
+  (seen: readonly SeenRecord[], pins: readonly PinRecord[]) =>
   (record: MachineRecord): MachineEntry => ({
     id: record.id,
     label: record.label,
@@ -115,6 +126,12 @@ const fromRecord =
       Arr.map((mark): [PaneId, number] => [mark.pane, mark.stateChangeSeq]),
       HashMap.fromIterable,
     ),
+    pinned: pipe(
+      pins,
+      Arr.filter((pin) => pin.machine === record.id),
+      Arr.map((pin) => pin.pane),
+      HashSet.fromIterable,
+    ),
   })
 
 const firstSighting = (id: MachineId, now: DateTime.Utc): MachineEntry => ({
@@ -129,6 +146,7 @@ const firstSighting = (id: MachineId, now: DateTime.Utc): MachineEntry => ({
   herdrVersion: Option.none(),
   state: Option.none(),
   seen: HashMap.empty(),
+  pinned: HashSet.empty(),
 })
 
 const attached =
@@ -194,14 +212,16 @@ const logSeenDropFailure = (id: MachineId) => (error: SqlError) =>
 const make = Effect.gen(function* () {
   const registry = yield* MachineRegistry
   const seenTracker = yield* SeenTracker
+  const pinnedAgents = yield* PinnedAgents
   const scope = yield* Effect.scope
   const records = yield* registry.all
   const marks = yield* seenTracker.all
+  const pins = yield* pinnedAgents.all
   const entries = yield* SubscriptionRef.make(
     HashMap.fromIterable(
       Arr.map(records, (record): [MachineId, MachineEntry] => [
         record.id,
-        fromRecord(marks)(record),
+        fromRecord(marks, pins)(record),
       ]),
     ),
   )
@@ -339,11 +359,44 @@ const make = Effect.gen(function* () {
     )
   })
 
+  const setPinned = Effect.fn('Herd.setPinned')(function* (
+    id: MachineId,
+    pane: PaneId,
+    pinned: boolean,
+  ) {
+    yield* change(id, (entry) =>
+      Effect.gen(function* () {
+        const found = yield* visible(id, entry)
+
+        if (HashSet.has(found.pinned, pane) === pinned) {
+          return Option.none()
+        }
+
+        const record = new PinRecord({ machine: id, pane })
+
+        if (!pinned) {
+          yield* pinnedAgents.unpin(record)
+
+          return Option.some({ ...found, pinned: HashSet.remove(found.pinned, pane) })
+        }
+
+        if (!Arr.some(agentsIn(found.state), (agent) => agent.pane === pane)) {
+          return yield* new PaneNotInHerd({ machine: id, pane })
+        }
+
+        yield* pinnedAgents.pin(record)
+
+        return Option.some({ ...found, pinned: HashSet.add(found.pinned, pane) })
+      }),
+    )
+  })
+
   return Herd.of({
     hold,
     publish,
     forget,
     markSeen,
+    setPinned,
     view: SubscriptionRef.changes(entries).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
       Stream.map(toView),
@@ -363,12 +416,17 @@ export class Herd extends Context.Service<
       id: MachineId,
       pane: PaneId,
     ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd | SqlError>
+    readonly setPinned: (
+      id: MachineId,
+      pane: PaneId,
+      pinned: boolean,
+    ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd | SqlError>
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {
   static readonly layerWithoutDependencies = Layer.effect(this, make)
 
   static readonly layer = this.layerWithoutDependencies.pipe(
-    Layer.provide([MachineRegistry.layer, SeenTracker.layer]),
+    Layer.provide([MachineRegistry.layer, SeenTracker.layer, PinnedAgents.layer]),
   )
 }

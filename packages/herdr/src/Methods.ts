@@ -34,6 +34,16 @@ export const AgentSendKeysMethod = makeMethod('agent.send_keys', {
   result: Schema.Struct({ type: Schema.Literal('ok') }),
 })
 
+export const PaneRenameMethod = makeMethod('pane.rename', {
+  params: Schema.Struct({ pane_id: Schema.String, label: Schema.NullOr(Schema.String) }),
+  result: Schema.Struct({ type: Schema.Literal('pane_info') }),
+})
+
+export const PaneCloseMethod = makeMethod('pane.close', {
+  params: Schema.Struct({ pane_id: Schema.String }),
+  result: Schema.Struct({ type: Schema.Literal('ok') }),
+})
+
 export const PaneProcessInfoMethod = makeMethod('pane.process_info', {
   params: Schema.Struct({ pane_id: Schema.String }),
   result: Schema.Struct({

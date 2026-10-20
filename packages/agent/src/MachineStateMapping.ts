@@ -2,13 +2,14 @@ import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
+import * as Str from 'effect/String'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { type ClaudeSessionId, type MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
-import type { AgentInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
+import type { AgentInfo, PaneInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
 
 export interface ResolvedAgent {
   readonly info: AgentInfo
@@ -20,6 +21,7 @@ export interface HerdReading {
   readonly herdrVersion: string
   readonly workspaces: readonly WorkspaceInfo[]
   readonly tabs: readonly TabInfo[]
+  readonly panes: readonly PaneInfo[]
   readonly agents: readonly ResolvedAgent[]
 }
 
@@ -50,8 +52,14 @@ const statusChangedAt =
 export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
   Option.orElse(info.foreground_cwd, () => info.cwd)
 
+const labelIn = (panes: readonly PaneInfo[]) => (info: AgentInfo) =>
+  Arr.findFirst(panes, (pane) => pane.pane_id === info.pane_id).pipe(
+    Option.flatMap((pane) => pane.label),
+    Option.filter(Str.isNonEmpty),
+  )
+
 const toAgentRow =
-  (since: (info: AgentInfo) => DateTime.Utc) =>
+  (since: (info: AgentInfo) => DateTime.Utc, labelOf: (info: AgentInfo) => Option.Option<string>) =>
   ({ info, claudeSession, branch }: ResolvedAgent) =>
     new AgentRow({
       pane: PaneId.make(info.pane_id),
@@ -61,6 +69,7 @@ const toAgentRow =
       title: Option.firstSomeOf([info.terminal_title_stripped, info.title, info.name]).pipe(
         Option.getOrElse(() => ''),
       ),
+      label: labelOf(info),
       cwd: Option.getOrElse(workingDirectoryOf(info), () => ''),
       branch,
       claudeSession,
@@ -76,7 +85,9 @@ const herdContents = (
   herdrVersion: reading.herdrVersion,
   workspaces: reading.workspaces.map(toWorkspace),
   tabs: reading.tabs.map(toTab),
-  agents: reading.agents.map(toAgentRow(statusChangedAt(previousAgents, now))),
+  agents: reading.agents.map(
+    toAgentRow(statusChangedAt(previousAgents, now), labelIn(reading.panes)),
+  ),
 })
 
 export const initialMachineState = (

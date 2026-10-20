@@ -54,6 +54,7 @@ const herd = new HerdView({
         herdrVersion: Option.some('0.9.1'),
       }),
       seen: [PaneId.make('w1:p2')],
+      pinned: [PaneId.make('w1:p1')],
       state: Option.some(
         new MachineState({
           machine: laptop,

@@ -4,15 +4,32 @@ import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import { AgentRow } from '@crook/domain/AgentRow'
-import { Command, InputDelivered, SendKeys, hasMovedSince, interrupt } from '@crook/domain/Command'
+import { AgentRow, agentTitle } from '@crook/domain/AgentRow'
+import {
+  ClosePane,
+  Command,
+  InputDelivered,
+  PaneClosed,
+  PaneRenamed,
+  RenameAgent,
+  SendKeys,
+  hasMovedSince,
+  interrupt,
+  isObservedIn,
+  targetPane,
+} from '@crook/domain/Command'
 import { PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 
 const pane = PaneId.make('w1:p1')
 
-const rowAt = (rowPane: PaneId, stateChangeSeq: number) =>
+const rowAt = (
+  rowPane: PaneId,
+  stateChangeSeq: number,
+  label: Option.Option<string> = Option.none(),
+) =>
   new AgentRow({
     pane: rowPane,
+    label,
     workspace: WorkspaceId.make('w1'),
     tab: TabId.make('w1:t1'),
     status: 'working',
@@ -59,5 +76,61 @@ describe('hasMovedSince', () => {
 
   it('does not hold for another pane', () => {
     expect(hasMovedSince(receipt, rowAt(PaneId.make('w1:p2'), 9))).toBe(false)
+  })
+})
+
+describe('rename and close', () => {
+  it('decodes a rename that clears the name and a close that carries its confirmation', () => {
+    const decode = Schema.decodeUnknownSync(Command)
+
+    expect(decode({ _tag: 'RenameAgent', pane: 'w1:p1', label: null })).toEqual(
+      new RenameAgent({ pane, label: Option.none() }),
+    )
+    expect(decode({ _tag: 'ClosePane', pane: 'w1:p1', confirmed: false })).toEqual(
+      new ClosePane({ pane, confirmed: false }),
+    )
+  })
+
+  it('rejects an empty name: clearing one is an absent label', () => {
+    const decode = Schema.decodeUnknownResult(Command)
+
+    expect(Result.isFailure(decode({ _tag: 'RenameAgent', pane: 'w1:p1', label: '' }))).toBe(true)
+  })
+
+  it('targets the pane every command names', () => {
+    expect(targetPane(new RenameAgent({ pane, label: Option.some('Herd') }))).toBe(pane)
+    expect(targetPane(new ClosePane({ pane, confirmed: true }))).toBe(pane)
+  })
+})
+
+describe('isObservedIn', () => {
+  it('sees input once the pane moves on', () => {
+    const receipt = new InputDelivered({ pane, stateChangeSeq: 4 })
+
+    expect(isObservedIn(receipt, [rowAt(pane, 4)])).toBe(false)
+    expect(isObservedIn(receipt, [rowAt(pane, 5)])).toBe(true)
+  })
+
+  it('sees a rename once the pane carries the new name, and a cleared one once it has none', () => {
+    const renamed = new PaneRenamed({ pane, label: Option.some('Herd screen') })
+    const cleared = new PaneRenamed({ pane, label: Option.none() })
+
+    expect(isObservedIn(renamed, [rowAt(pane, 4)])).toBe(false)
+    expect(isObservedIn(renamed, [rowAt(pane, 4, Option.some('Herd screen'))])).toBe(true)
+    expect(isObservedIn(cleared, [rowAt(pane, 4)])).toBe(true)
+  })
+
+  it('sees a close once the pane is gone from the agents', () => {
+    const closed = new PaneClosed({ pane })
+
+    expect(isObservedIn(closed, [rowAt(pane, 4)])).toBe(false)
+    expect(isObservedIn(closed, [rowAt(PaneId.make('w1:p2'), 4)])).toBe(true)
+  })
+})
+
+describe('agentTitle', () => {
+  it('prefers the name the pane was given in herdr over the title Claude sets', () => {
+    expect(agentTitle(rowAt(pane, 1))).toBe('EX-253 Example feature')
+    expect(agentTitle(rowAt(pane, 1, Option.some('Payments')))).toBe('Payments')
   })
 })

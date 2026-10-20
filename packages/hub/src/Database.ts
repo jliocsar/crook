@@ -61,9 +61,48 @@ const createSeen = Effect.flatMap(
   `,
 )
 
+const createPins = Effect.flatMap(
+  SqlClient.SqlClient,
+  (sql) => sql`
+    CREATE TABLE pins (
+      machine TEXT NOT NULL,
+      pane TEXT NOT NULL,
+      PRIMARY KEY (machine, pane)
+    )
+  `,
+)
+
+const createAudit = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+
+  yield* sql`
+    CREATE TABLE audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      operation TEXT NOT NULL,
+      machine TEXT NOT NULL,
+      arguments TEXT NOT NULL,
+      idempotency_key TEXT,
+      outcome TEXT NOT NULL,
+      failure TEXT
+    )
+  `
+  yield* sql`
+    CREATE TRIGGER audit_is_append_only_on_update BEFORE UPDATE ON audit
+    BEGIN SELECT RAISE(ABORT, 'the audit table is append-only'); END
+  `
+  yield* sql`
+    CREATE TRIGGER audit_is_append_only_on_delete BEFORE DELETE ON audit
+    BEGIN SELECT RAISE(ABORT, 'the audit table is append-only'); END
+  `
+})
+
 const migrations = SqliteMigrator.fromRecord({
   '1_machines': createMachines,
   '2_seen': createSeen,
+  '3_pins': createPins,
+  '4_audit': createAudit,
 })
 
 export const layerAt = (filename: string) =>

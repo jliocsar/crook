@@ -118,6 +118,7 @@ const make = Effect.gen(function* () {
       herdrVersion: snapshot.version,
       workspaces: snapshot.workspaces,
       tabs: snapshot.tabs,
+      panes: snapshot.panes,
       agents,
     }
 
@@ -158,7 +159,14 @@ const make = Effect.gen(function* () {
     Effect.forkScoped,
   )
 
-  return MachineStateSync.fromRef(state)
+  const scope = yield* Effect.scope
+  const invalidate = refresh.pipe(
+    Effect.tapError(logHerdrFailure),
+    Effect.ignore,
+    Effect.forkIn(scope),
+  )
+
+  return MachineStateSync.fromRef(state, invalidate)
 })
 
 export class MachineStateSync extends Context.Service<
@@ -166,16 +174,23 @@ export class MachineStateSync extends Context.Service<
   {
     readonly current: Effect.Effect<MachineState>
     readonly changes: Stream.Stream<MachineState>
+    readonly invalidate: Effect.Effect<void>
   }
 >()('@crook/agent/MachineStateSync') {
   static readonly layer = Layer.effect(this, make)
 
-  static readonly fromRef = (state: SubscriptionRef.SubscriptionRef<MachineState>) =>
+  static readonly fromRef = (
+    state: SubscriptionRef.SubscriptionRef<MachineState>,
+    invalidate: Effect.Effect<void> = Effect.void,
+  ) =>
     MachineStateSync.of({
       current: SubscriptionRef.get(state),
       changes: SubscriptionRef.changes(state),
+      invalidate,
     })
 
-  static readonly layerTest = (state: SubscriptionRef.SubscriptionRef<MachineState>) =>
-    Layer.succeed(this, this.fromRef(state))
+  static readonly layerTest = (
+    state: SubscriptionRef.SubscriptionRef<MachineState>,
+    invalidate: Effect.Effect<void> = Effect.void,
+  ) => Layer.succeed(this, this.fromRef(state, invalidate))
 }

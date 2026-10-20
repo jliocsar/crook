@@ -23,6 +23,15 @@ export class PaneNotAgent extends Schema.TaggedError<PaneNotAgent>()('PaneNotAge
   }
 }
 
+export class PaneNotCreatedByCrook extends Schema.TaggedError<PaneNotCreatedByCrook>()(
+  'PaneNotCreatedByCrook',
+  { pane: PaneId },
+) {
+  override get message(): string {
+    return `crook did not create pane ${this.pane}, so it will not close it unless you confirm that you mean it. Nothing was closed: confirm the close to close it anyway.`
+  }
+}
+
 export class HerdrRefusedCommand extends Schema.TaggedError<HerdrRefusedCommand>()(
   'HerdrRefusedCommand',
   { code: Schema.String, detail: Schema.String },
@@ -69,6 +78,7 @@ export class CommandTimedOut extends Schema.TaggedError<CommandTimedOut>()('Comm
 
 export const AgentCommandFailure = Schema.Union([
   PaneNotAgent,
+  PaneNotCreatedByCrook,
   HerdrRefusedCommand,
   HerdrUnavailable,
   CommandDeliveryUnknown,

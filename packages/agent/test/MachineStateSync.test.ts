@@ -22,7 +22,7 @@ import {
 } from '@crook/herdr/HerdrClient'
 import type { SessionSnapshot } from '@crook/herdr/Records'
 
-import { agentInfo, sessionSnapshot } from './Fixtures'
+import { agentInfo, paneInfo, sessionSnapshot } from './Fixtures'
 
 interface FakeSubscription {
   readonly subscriptions: readonly Subscription[]
@@ -134,6 +134,23 @@ it.effect('re-reads on every event and bumps the version only when the state cha
     const state = yield* stateAt(sync, 1)
 
     expect(state.agents.map((row) => row.status)).toEqual(['blocked'])
+  }),
+)
+
+it.effect('re-reads when asked to, for a change herdr announces no event for', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, answerRead } = yield* startSync(working)
+
+    yield* Queue.take(subscriptions)
+    yield* answerRead(working)
+    yield* sync.invalidate
+    yield* answerRead(
+      sessionSnapshot([agentInfo()], [paneInfo({ label: Option.some('Payments') })]),
+    )
+
+    const state = yield* stateAt(sync, 1)
+
+    expect(state.agents.map((row) => row.label)).toEqual([Option.some('Payments')])
   }),
 )
 

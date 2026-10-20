@@ -13,6 +13,7 @@ import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 import * as Schedule from 'effect/Schedule'
+import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
@@ -22,12 +23,23 @@ import * as HttpServer from 'effect/http/HttpServer'
 import * as RpcClient from 'effect/rpc/RpcClient'
 import type * as RpcGroup from 'effect/rpc/RpcGroup'
 import type * as Rpc from 'effect/rpc/Rpc'
+import * as SqlClient from 'effect/sql/SqlClient'
 
+import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
+import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AgentRow } from '@crook/domain/AgentRow'
-import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
+import { REDACTED } from '@crook/domain/Audit'
+import {
+  ClosePane,
+  InputDelivered,
+  PaneRenamed,
+  Prompt,
+  RenameAgent,
+  SendKeys,
+} from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import { IdempotencyKey, MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import type { MachineConnection } from '@crook/domain/Machine'
@@ -40,6 +52,7 @@ import {
   OwnerEmailRejected,
   UpgradeOriginRejected,
 } from '@crook/hub/ExeDevIdentity'
+import { HubAuditRecord } from '@crook/hub/AuditTrail'
 import * as Database from '@crook/hub/Database'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
@@ -51,11 +64,12 @@ import {
 import { AgentPromptMethod } from '@crook/herdr/Methods'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
 import { AGENT_PING_INTERVAL, AgentLink, Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
-import { ClientApi, MachineStillConnected } from '@crook/protocol/ClientApi'
+import { ClientApi, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
 import {
   type CommandResult,
   MachineOffline,
   PaneNotAgent,
+  PaneNotCreatedByCrook,
   type RoutedCommand,
 } from '@crook/protocol/Commands'
 import { protocolSerialization } from '@crook/protocol/Serialization'
@@ -122,7 +136,19 @@ const servedHub = Layer.mergeAll(
   testClient,
 ).pipe(Layer.provideMerge(testServer))
 
-const testHub = Layer.provide(servedHub, [configFor(HUB_ORIGIN), Database.layerAt(IN_MEMORY)])
+const testHub = Layer.provideMerge(
+  Layer.provide(servedHub, configFor(HUB_ORIGIN)),
+  Database.layerAt(IN_MEMORY),
+)
+
+const agentAudit = Layer.succeed(AuditLog, AuditLog.of({ record: () => Effect.void }))
+
+const auditedOn = Effect.fn('auditedOn')(function* (machine: MachineId) {
+  const sql = yield* SqlClient.SqlClient
+  const rows = yield* sql`SELECT * FROM audit WHERE machine = ${machine} ORDER BY id`
+
+  return yield* Schema.decodeUnknownEffect(Schema.Array(HubAuditRecord))(rows)
+})
 
 const socketUrl = (path: string) =>
   HttpServer.addressFormattedWith((address) =>
@@ -351,6 +377,9 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
             Prompt: (prompt) =>
               Result.succeed(new InputDelivered({ pane: prompt.pane, stateChangeSeq: 4 })),
             SendKeys: (sendKeys) => Result.fail(new PaneNotAgent({ pane: sendKeys.pane })),
+            RenameAgent: (rename) =>
+              Result.succeed(new PaneRenamed({ pane: rename.pane, label: rename.label })),
+            ClosePane: (close) => Result.fail(new PaneNotCreatedByCrook({ pane: close.pane })),
           }),
         ),
       )
@@ -411,7 +440,12 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         yield* Layer.build(
           Layer.provide(
             HubLink.layerWith(dialHub, hello),
-            Layer.provideMerge(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr]),
+            Layer.provideMerge(CommandExecutor.layer, [
+              MachineStateSync.layerTest(state),
+              CreatedPanes.layerTest(),
+              agentAudit,
+              herdr,
+            ]),
           ),
         )
         yield* machineShows(machine, 'online')
@@ -426,6 +460,105 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
           'agent.prompt',
         ])
       }),
+  )
+
+  live.effect(
+    'audits each command with the login the upgrade carried, however the call is dressed',
+    () =>
+      Effect.gen(function* () {
+        const machine = MachineId.make('audit-laptop')
+
+        yield* answeringAgent(machine, (routed) =>
+          Match.value(routed.command).pipe(
+            Match.tagsExhaustive({
+              Prompt: (prompt) =>
+                Result.succeed(new InputDelivered({ pane: prompt.pane, stateChangeSeq: 4 })),
+              SendKeys: (sendKeys) => Result.fail(new PaneNotAgent({ pane: sendKeys.pane })),
+              RenameAgent: (rename) =>
+                Result.succeed(new PaneRenamed({ pane: rename.pane, label: rename.label })),
+              ClosePane: (close) => Result.fail(new PaneNotCreatedByCrook({ pane: close.pane })),
+            }),
+          ),
+        )
+        const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+
+        yield* phone
+          .SendCommand({ machine, key, command: new Prompt({ pane, text: 'ship it' }) })
+          .pipe(RpcClient.withHeaders({ 'X-ExeDev-Email': STRANGER }))
+        yield* phone.SendCommand({
+          machine,
+          key,
+          command: new RenameAgent({ pane, label: Option.some('Payments') }),
+        })
+        const notOurs = yield* phone
+          .SendCommand({ machine, key, command: new ClosePane({ pane, confirmed: false }) })
+          .pipe(Effect.flip)
+        const audited = yield* auditedOn(machine)
+
+        expect(notOurs).toEqual(new PaneNotCreatedByCrook({ pane }))
+        expect(
+          audited.map((entry) => [
+            entry.actor,
+            entry.operation,
+            entry.arguments,
+            entry.idempotencyKey,
+            entry.outcome,
+            entry.failure,
+          ]),
+        ).toEqual([
+          [OWNER, 'Prompt', { pane, text: REDACTED }, Option.some(key), 'succeeded', Option.none()],
+          [
+            OWNER,
+            'RenameAgent',
+            { pane, label: 'Payments' },
+            Option.some(key),
+            'succeeded',
+            Option.none(),
+          ],
+          [
+            OWNER,
+            'ClosePane',
+            { pane, confirmed: false },
+            Option.some(key),
+            'failed',
+            Option.some('PaneNotCreatedByCrook'),
+          ],
+        ])
+      }),
+  )
+
+  live.effect('pins an agent for the phone and audits pins and forgets, never mark seen', () =>
+    Effect.gen(function* () {
+      const machine = MachineId.make('pin-laptop')
+
+      yield* attachAs(machine)
+      const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+
+      yield* phone.SetPinned({ machine, pane, pinned: true })
+      const pinned = yield* herdWhere((view) =>
+        Option.exists(machineIn(view, machine), (entry) => entry.pinned.includes(pane)),
+      )
+      const unknownPane = PaneId.make('w1:p9')
+      const refused = yield* phone
+        .SetPinned({ machine, pane: unknownPane, pinned: true })
+        .pipe(Effect.flip)
+
+      yield* phone.MarkSeen({ machine, pane })
+      yield* phone.ForgetMachine({ machine }).pipe(Effect.flip)
+      const audited = yield* auditedOn(machine)
+
+      expect(Option.map(machineIn(pinned, machine), (entry) => entry.pinned)).toEqual(
+        Option.some([pane]),
+      )
+      expect(refused).toEqual(new PaneNotInHerd({ machine, pane: unknownPane }))
+      expect(
+        audited.map((entry) => [entry.operation, entry.arguments, entry.outcome, entry.failure]),
+      ).toEqual([
+        ['SetPinned', { pane, pinned: true }, 'succeeded', Option.none()],
+        ['SetPinned', { pane: unknownPane, pinned: true }, 'failed', Option.some('PaneNotInHerd')],
+        ['ForgetMachine', {}, 'failed', Option.some('MachineStillConnected')],
+      ])
+    }),
   )
 
   live.effect('answers MachineOffline for a machine whose agent is not attached', () =>

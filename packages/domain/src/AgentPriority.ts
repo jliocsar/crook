@@ -13,6 +13,7 @@ import { agentsIn } from '@crook/domain/MachineState'
 
 interface RankedAgent {
   readonly row: AgentRow
+  readonly pinned: boolean
   readonly tier: PriorityTier
 }
 
@@ -44,14 +45,27 @@ const byTier = Order.mapInput(Order.Number, (ranked: RankedAgent) =>
   PriorityTier.literals.indexOf(ranked.tier),
 )
 
-const byPriority: Order.Order<RankedAgent> = Order.combine(byTier, (self, that) =>
-  withinTier[self.tier](self, that),
+const byPinnedFirst = Order.mapInput(
+  Order.flip(Order.Boolean),
+  (ranked: RankedAgent) => ranked.pinned,
 )
+
+const byPriority: Order.Order<RankedAgent> = Order.combineAll([
+  byPinnedFirst,
+  byTier,
+  (self, that) => withinTier[self.tier](self, that),
+])
 
 export const isSeen = (machine: HerdMachine) => {
   const seenPanes = HashSet.fromIterable(machine.seen)
 
   return (row: AgentRow): boolean => HashSet.has(seenPanes, row.pane)
+}
+
+export const isPinned = (machine: HerdMachine) => {
+  const pinnedPanes = HashSet.fromIterable(machine.pinned)
+
+  return (row: AgentRow): boolean => HashSet.has(pinnedPanes, row.pane)
 }
 
 export const priorityTier = (machine: HerdMachine) => {
@@ -76,10 +90,11 @@ export const needsYou = (machine: HerdMachine) => {
 
 export const orderAgents = (machine: HerdMachine): AgentRow[] => {
   const tierOf = priorityTier(machine)
+  const pinned = isPinned(machine)
 
   return pipe(
     agentsIn(machine.state),
-    Arr.map((row): RankedAgent => ({ row, tier: tierOf(row) })),
+    Arr.map((row): RankedAgent => ({ row, pinned: pinned(row), tier: tierOf(row) })),
     Arr.sort(byPriority),
     Arr.map((ranked) => ranked.row),
   )

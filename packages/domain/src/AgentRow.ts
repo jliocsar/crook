@@ -1,3 +1,5 @@
+import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AgentStatus } from '@crook/domain/AgentStatus'
@@ -9,9 +11,14 @@ export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   tab: TabId,
   status: AgentStatus,
   title: Schema.String,
+  label: Schema.OptionFromNullOr(Schema.String).pipe(
+    Schema.withConstructorDefault(Effect.succeed(Option.none())),
+  ),
   cwd: Schema.String,
   branch: Schema.OptionFromNullOr(Schema.String),
   claudeSession: Schema.OptionFromNullOr(ClaudeSessionId),
   stateChangeSeq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   statusChangedAt: Schema.DateTimeUtcFromString,
 }) {}
+
+export const agentTitle = (row: AgentRow): string => Option.getOrElse(row.label, () => row.title)

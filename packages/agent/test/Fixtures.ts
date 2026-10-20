@@ -1,15 +1,25 @@
 import * as DateTime from 'effect/DateTime'
+import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import type * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import { AuditLog, DEFAULT_AUDIT_ARGUMENT_LIMIT } from '@crook/agent/AuditLog'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
+import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AgentRow } from '@crook/domain/AgentRow'
+import { AuditPolicy } from '@crook/domain/Audit'
 import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import type { HerdrClient } from '@crook/herdr/HerdrClient'
-import { AgentInfo, SessionSnapshot, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
+import { AgentInfo, PaneInfo, SessionSnapshot, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
+
+export interface ExecutorOptions {
+  readonly created?: Iterable<PaneId>
+  readonly invalidate?: Effect.Effect<void>
+  readonly audit?: Layer.Layer<AuditLog>
+}
 
 export const workspaceInfo = new WorkspaceInfo({
   workspace_id: 'w1',
@@ -55,7 +65,27 @@ export const agentInfo = (fields: Partial<ConstructorParameters<typeof AgentInfo
     ...fields,
   })
 
-export const sessionSnapshot = (agents: readonly AgentInfo[]) =>
+export const paneInfo = (fields: Partial<ConstructorParameters<typeof PaneInfo>[0]> = {}) =>
+  new PaneInfo({
+    pane_id: 'w1:p1',
+    terminal_id: 'term_1',
+    workspace_id: 'w1',
+    tab_id: 'w1:t1',
+    focused: true,
+    revision: 3,
+    agent_status: 'working',
+    agent: Option.some('claude'),
+    display_agent: Option.some('claude'),
+    agent_session: Option.none(),
+    label: Option.none(),
+    title: Option.none(),
+    terminal_title: Option.some('◑ EX-253 Example feature'),
+    cwd: Option.some('/home/jliocsar/Projects/crook'),
+    foreground_cwd: Option.none(),
+    ...fields,
+  })
+
+export const sessionSnapshot = (agents: readonly AgentInfo[], panes: readonly PaneInfo[] = []) =>
   new SessionSnapshot({
     version: '0.9.1',
     protocol: 22,
@@ -64,7 +94,7 @@ export const sessionSnapshot = (agents: readonly AgentInfo[]) =>
     focused_pane_id: Option.none(),
     workspaces: [workspaceInfo],
     tabs: [tabInfo],
-    panes: [],
+    panes,
     agents,
   })
 
@@ -95,7 +125,21 @@ export const machineStateWith = (agents: readonly AgentRow[]) =>
     agents,
   })
 
+export const AUDIT_EVERYTHING = new AuditPolicy({
+  argumentLimit: DEFAULT_AUDIT_ARGUMENT_LIMIT,
+  redactedArguments: [],
+})
+
+export const discardingAudit = Layer.succeed(AuditLog, AuditLog.of({ record: () => Effect.void }))
+
 export const executorWith = (
   herdr: Layer.Layer<HerdrClient>,
   state: SubscriptionRef.SubscriptionRef<MachineState>,
-) => Layer.provideMerge(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr])
+  options: ExecutorOptions = {},
+) =>
+  Layer.provideMerge(CommandExecutor.layer, [
+    MachineStateSync.layerTest(state, options.invalidate),
+    CreatedPanes.layerTest(options.created),
+    options.audit ?? discardingAudit,
+    herdr,
+  ])
