@@ -1,0 +1,22 @@
+{
+  "extends": "@crook/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "paths": {
+      "@crook/web/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "brand/**/*.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "pwa-assets.config.ts"
+  ],
+  "exclude": ["src/sw/**"]
+}

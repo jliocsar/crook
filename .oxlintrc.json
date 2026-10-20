@@ -17,7 +17,14 @@
     "pedantic": "error"
   },
 
-  "ignorePatterns": ["**/dist/**", "**/*.d.ts", ".claude/**", ".agents/**", ".husky/**"],
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/*.d.ts",
+    "**/routeTree.gen.ts",
+    ".claude/**",
+    ".agents/**",
+    ".husky/**"
+  ],
 
   // `jsPlugins` resolves a package specifier; `extends` above does not, hence
   // the path. The severities live in the package's own `preset.json`.
@@ -89,7 +96,14 @@
 
   "overrides": [
     {
-      "files": ["**/*.test.ts", "**/test/**/*.ts"],
+      "files": ["packages/*/*.config.ts"],
+      "rules": {
+        "effecttsgo/async-function": "off",
+        "effecttsgo/node-builtin-import": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/test/**/*.ts", "**/test/**/*.tsx"],
       "rules": {
         "begone-slop/expect-padding": "error",
         "max-lines-per-function": "off",

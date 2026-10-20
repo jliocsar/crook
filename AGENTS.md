@@ -359,6 +359,88 @@ without a major bump. The plugin's own test suite is what catches that — after
 bump and test it there too rather than assuming the pair still agree.
 :::
 
+## Web
+
+The PWA is a Vite app, so it carries a few things the Bun members do not.
+
+- The generated route tree is gitignored, so `typecheck` and `test` both run the router's
+  generator first: a test imports the tree, and the gate's order must not be what makes it exist.
+  A route file declares its `Route` constant above its component: `statement-order` ranks
+  constants above functions, and a function declaration is hoisted, so the order is legal.
+- The tool-loaded config files (Vite, Vitest, the PWA assets config) have an override turning off
+  `effecttsgo/async-function` and `effecttsgo/node-builtin-import`. Their hooks are async callbacks
+  a tool awaits, not Effect programs. Everything under `src` keeps both rules.
+- The service worker's precache injection point is renamed from `self.__WB_MANIFEST`, which
+  `no-underscore-dangle` rejects. The worker compiles under its own tsconfig with the WebWorker lib.
+- The member reaches its own leaves as `@crook/web/...` through a tsconfig `paths` alias, which
+  Vite and Vitest read too. Its `exports` map is for other members, and a subpath pattern there
+  substitutes into one fixed extension, so `./src/*.ts` reaches the `.ts` leaves and never a
+  `.tsx` one. `components.json` names the same alias, so `shadcn add` writes it.
+- `@tanstack/history` is a direct dependency pinned to the exact version the router pins, only so
+  history state can be typed by module augmentation. An augmentation merges into the copy the
+  compiler resolves from this member; a second copy would leave the router's type untouched.
+  The router, its Vite plugin and its CLI are pinned exactly as well, and the four bump together:
+  a caret router resolves on a fresh install to a release that may pin another history.
+- `no-underscore-dangle` allows a dangling underscore in a destructuring pattern. The router
+  offers no other name for a history entry's index than its own underscored state field, so that
+  one field is read by destructuring it into a plain name.
+- TanStack Router updates `location` when a navigation starts, commits the new matches when it
+  has loaded, and only then updates `resolvedLocation`. A
+  component still mounted when `resolvedLocation` changes is part of where the navigation landed.
+  `status` is `pending` from the first step until the last, which sets it back to `idle` in the
+  same batch, so a newly mounted screen can see a `resolvedLocation` one entry behind its own.
+- The router's `navigate` commits no history entry when the target's href and user state equal
+  the location it is already on, a pending one included; `router.history.push` always pushes
+  (measured).
+- Motion stops a motion value's animation by the next frame once nothing observes the value, so
+  an animation whose `motion` element has unmounted never completes, and its `onComplete` never
+  runs (measured). `stop()` does not call `onComplete` either; a step that must happen on arrival
+  is run by whatever stops the animation.
+- A one-shot Bun script keeps `Effect.provide` at its entry and disables
+  `effecttsgo/strict-effect-provide` there, as the rule's own message allows at an entry point.
+  The long-running members' `Layer.launch` form does not carry over: it never returns, and the
+  script hung until killed (measured).
+
+:::warning
+`shadcn add` writes a `utils` module even when `components.json` aliases `utils` to the `cn`
+package (measured on 4.22.0). That module only re-exports `cn`, which
+`no-reexport-only-modules` rejects. Delete it after every add; components import `cn` from `cn`.
+:::
+
+:::warning
+The PWA assets generator writes its PNGs next to the source image. The image must live in Vite's
+public directory or the icons never reach the build (measured).
+:::
+
+:::warning
+fontkit cannot apply a variation to a WOFF2 font: it crashes reading the `cmap` (measured). Decompress
+to an sfnt with `wawoff2` first; variations and kerning then work.
+:::
+
+:::tip
+happy-dom, measured:
+
+- Its `Element.animate` rejects with an `AbortError` on cancel, which surfaces as unhandled
+  rejections from Motion. The test setup deletes `animate` from the element prototype, so Motion
+  falls back to its JS animator.
+- Its pointer events always carry a `pageX` of 0, whatever the init says. Motion's drag reads
+  `pageX`, so a drag test defines it on each event before dispatching.
+- It does not resolve custom properties from stylesheets. Code that reads a CSS token at runtime
+  gets nothing unless the setup copies the tokens onto the root element from the raw stylesheet.
+  Vitest empties CSS imports, a `?raw` one included, unless its `css.include` names that file.
+:::
+
+:::tip
+A component test awaits testing-library promises, and an `async` test body trips
+`effecttsgo/async-function`. Write it as `it.effect`, with `Effect.promise` around each
+testing-library call.
+:::
+
+:::tip
+Tailwind v4 skips gitignored files when it scans for classes, so a probe page under `tmp/` renders
+without any class only it uses (measured). Use inline styles there, or classes the app already uses.
+:::
+
 ## Establishing a fact
 
 Do not guess about Effect, oxc or Bun. Do not trust a plausible claim in a review.
