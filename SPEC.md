@@ -150,7 +150,7 @@ Responsibilities
 - Keep an in-memory merged view: `machines[id] → { status, snapshot, agents }`. Not durable; rebuilt from agents on reconnect.
 - Relay commands phone → agent, results agent → phone. Correlate by request id.
 - Hark (agent API, bearer token from `Config.redacted`, no webhook): one Live Activity summarising the herd (iOS allows one per device), updated on meaningful transitions only; permission prompts become approval interactions answered from the lock screen; `done` and non-approval questions become plain notifications with no `url`. Answers are read by long-polling the interaction (callbacks can't reach a private exe.dev VM) and routed like any other command. A notification is withdrawn and a pending interaction cancelled as soon as the observed state moves on (answered in the terminal, seen in crook). Payload = machine label + workspace label + agent title + tool name. No pane content, no transcript text.
-- Persist (small, on disk): open Hark notification / interaction / activity ids, machine registry (machine id, label, last seen, forgotten flag), audit log.
+- Persist (small, on disk): open Hark notification / interaction / activity ids, machine registry (machine id, label, last seen, forgotten flag), seen marks (per pane, so a restart doesn't bring back every opened agent as "needs you"), audit log.
 - Stale machines: a machine whose agent stops connecting shows as offline with "last seen". Swipe to forget removes it from the herd; it reappears on its own if its agent ever connects again. No automatic exe.dev API lookups (the hub holds no exe.dev API token).
 - Auth: see §7.
 

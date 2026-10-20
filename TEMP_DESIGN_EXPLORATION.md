@@ -102,8 +102,8 @@ These are guesses. Settle them on the phone:
 
 ### Gaps and conflicts found
 
-- **`AgentRow` lacks fields the rows need.** It has no branch and no pending-ask summary (blocked
-  rows show the ask). The ask waits on S5.
+- **`AgentRow` lacks a field the rows need:** the pending-ask summary (blocked rows show the ask).
+  The ask waits on S5. The branch is closed: the agent reads it from git (JC-98).
 - **Dots: decided, Halo** (user, 2026-10-20). The blocked dot gets a ring, because the working and
   blocked colors collapse under deuteranopia. `DESIGN.md` has the numbers. Amber (blocked moves to
   amber) and Flip (blocked takes tomato, working turns ink) are dead ends (sheet:

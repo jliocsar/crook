@@ -36,10 +36,12 @@ packages/
 
 ### 2.1 `@crook/domain`
 
-Schemas and their types, side by side (locality rule). No services, no IO.
+Schemas and their types, side by side (locality rule), plus the pure functions over them that more than one app needs. No services, no IO.
 
 - Branded ids: `MachineId`, `WorkspaceId`, `TabId`, `PaneId` (herdr's `w1:p1`), `GlobalPaneId` (`<machine>/<pane>`), `ClaudeSessionId`, `IdempotencyKey`, `TranscriptOffset`.
 - Entities: `Machine`, `Workspace`, `Tab`, `AgentRow`, `AgentStatus` (`idle|working|blocked|done|unknown`), `MachineState` (one machine's whole herd), `HerdView` (all machines + connectivity).
+- `CrookVersion`: `major.minor.patch`, compared as numbers, so the PWA can tell an agent that is behind the hub (`isBehind`). Each app reads its own `package.json` version.
+- `AgentPriority` (built in JC-98): the order of one machine's agents and the needs-you count, shared by the herd list and the tab badge. See "Seen and needs-you" under 2.6.
 - Transcript model: `TranscriptMessage`, content blocks (`Text`, `Thinking`, `ToolUse`, `ToolResult`, `Image`), `TranscriptChunk { offset, messages }`.
 - `Ask` (permission | question | unknown) with options as key sequences.
 
@@ -48,7 +50,7 @@ Schemas and their types, side by side (locality rule). No services, no IO.
 Two `RpcGroup`s and the wire-level tagged errors. Nothing else.
 
 - `AgentLink` — called **by the agent** on the hub (the agent dials out, so it's always the RPC client):
-  - `Attach` (streaming) → `Stream<Command>`: the hub pushes commands down this stream for as long as the connection lives.
+  - `Attach { hello }` (streaming) → `Stream<Command>`: the hub pushes commands down this stream for as long as the connection lives. `hello` carries the agent's `CrookVersion` and an optional label, so a machine is never online without them.
   - `PublishState { state: MachineState, version }`
   - `CompleteCommand { commandId, result }`
   - `PublishTranscript { pane, chunk }` (only while some phone has that pane open)
@@ -57,7 +59,8 @@ Two `RpcGroup`s and the wire-level tagged errors. Nothing else.
   - `WatchTranscript { pane, fromOffset }` (streaming) → `Stream<TranscriptChunk>`
   - `WatchScreen { pane }` (streaming) → `Stream<ScreenFrame>` (terminal fallback view)
   - `Prompt`, `SendKeys`, `AnswerAsk`, `StartAgent`, `CreateTab`, `CreateWorktree`, `Rename`, `Close`, `MarkSeen` — each with an `IdempotencyKey`
-  - `ForgetMachine`
+  - `ForgetMachine { machine }`: offline machines only. `MarkSeen { machine, pane }` needs no idempotency key: marking the same state seen twice changes nothing.
+  - Built so far: `WatchHerd`, `ForgetMachine`, `MarkSeen`. Their refusals are `MachineNotInHerd`, `MachineStillConnected`, `PaneNotInHerd` and `HubStorageFailed` (the hub's database refused the write, so nothing changed).
 - Serialization: `RpcSerialization.layerNdjson` (sockets need framing).
 
 Why "agent is always the client": Effect RPC servers listen; the agent can't (laptop behind NAT, no inbound). A server-streamed `Attach` gives the hub a push channel to the agent without reverse-RPC plumbing.
@@ -108,6 +111,8 @@ MachineStateSync (built in JC-88, verified against a live herdr 0.9.1):
 - When a re-read shows a different set of agent panes, the subscription is closed and opened again with the new set. `events_lost` resubscribes at once; `pane_not_found` (a pane closed between the read and the subscribe) re-reads first so the next subscribe names live panes only; every other herdr failure waits `HERDR_RECONNECT_INTERVAL` (100 ms, from a measured 101–114 ms cold start of a herdr server) and retries forever. A local socket connect is cheap, so the herdr leg uses a fixed interval rather than §3.5's exponential schedule.
 - `ClaudeSessions` resolves a pane to its Claude session per S4: `agent_session` of kind `id` first, then the pid file (`pane.process_info` → the `claude` foreground process → its `CLAUDE_CONFIG_DIR` or `$HOME/.claude` from `/proc/<pid>/environ` → `sessions/<pid>.json`, kept only when its `procStart` matches `/proc/<pid>/stat` field 22). A missing file or closed pane is `None`. An unreadable or reshaped file, or a rejected or malformed `pane.process_info`, is logged as a warning and that one pane goes without a session; only transport failures abort the whole read. Herdr failures log at warning, except `HerdrUnreachable`, which repeats every interval while herdr is down and logs at debug. On the laptop 9 of 11 live agents resolve only through the pid file.
 - The machine id comes from `CROOK_MACHINE_ID`.
+- `MachineState` carries herdr's server version from `session.snapshot`, not the hello: herdr can be updated or restarted under a running agent whose hub link never drops, and a version in the hello would go stale until the next reconnect. A herdr update bumps the state version like any other change.
+- Branch (built in JC-98): herdr records carry the pane's `cwd` and `foreground_cwd` but no branch, and `worktree.list` reports branches per repository, not per pane. `GitBranches` finds the `.git` entry above the agent's cwd (a directory, or a linked worktree's `gitdir:` file), caches that lookup per cwd for the agent's lifetime, and reads `HEAD` on every re-read, so a checkout shows up with the next herdr event. A detached `HEAD`, a folder outside git and an empty cwd are `None`. An unreadable `HEAD` is logged as a warning and that pane goes without a branch, like an unreadable Claude session file. A folder that becomes a repository after the first lookup stays branchless until the agent restarts.
 
 HubLink (built in JC-89):
 
@@ -116,7 +121,8 @@ HubLink (built in JC-89):
 - A drop fails every in-flight call, because the socket protocol broadcasts the error before it consults its own retry, so `Attach` fails and the session ends. The protocol's retry is switched off (`retryPolicy: Schedule.recurs(0)`) so nothing redials inside a closing session; HubLink's schedule is the only one: exponential from `HUB_RECONNECT_BASE`, capped at `AGENT_PING_INTERVAL`.
 - A connection is healthy once the hub has accepted a publish and the link stayed up for a whole ping interval after it. When a healthy connection drops, HubLink reconnects at once and the backoff starts over. The clock starts at the first accepted publish, not at connect: a hub that takes the TCP connection but never finishes the upgrade fails each attempt after the socket's 10 s open timeout, and timing from connect would call that healthy and never back off (measured).
 - `HUB_RECONNECT_BASE` is 77 ms, the slowest of 9 warm HTTPS requests from the laptop to an exe.dev VM's proxy (52–77 ms; the cold first one took 626 ms). `AGENT_PING_INTERVAL` (in `@crook/protocol`, since the hub times agents out on it too) is effect's RpcClient default of 5 s, written out because the cap, the healthy period and the hub's silence timeout reuse it. S1 measured no proxy idle timeout within 900 s, so the ping exists to detect a dead hub, not to keep the proxy open.
-- Config: `CROOK_HUB_URL` (the `ws`/`wss` URL of the hub's `/rpc/agent`) and `CROOK_HUB_TOKEN` (`Config.Redacted`), sent as `X-Exedev-Authorization: Bearer <token>`.
+- Config: `CROOK_HUB_URL` (the `ws`/`wss` URL of the hub's `/rpc/agent`) and `CROOK_HUB_TOKEN` (`Config.Redacted`), sent as `X-Exedev-Authorization: Bearer <token>`. `CROOK_MACHINE_LABEL` is optional; the hub labels a machine by its id without it.
+- Every `Attach` sends the hello: the agent's own `package.json` version and the label.
 
 ### 2.6 `@crook/hub`
 
@@ -146,10 +152,33 @@ Server, identity and Herd (built in JC-90):
   - `/rpc/client` also wants `Origin` to equal `CROOK_HUB_ORIGIN`, which must be `https` (anything else fails at startup: a scheme-less value parses to origin `"null"`, which sandboxed pages send).
   - A token minted without a `ctx` looks exactly like a browser login. Only the owner can mint one, which is outside the threat model.
 - Machine identity is read once, at the agent's upgrade, and each agent connection gets its own RPC server whose handlers close over that machine id. Handler `headers` can't be trusted for it: per-call headers override the upgrade's (AGENTS.md).
-- `Herd` holds one entry per machine: the number of live `Attach` streams, `lastSeenAt` and the last `MachineState`. Online means at least one `Attach` is open; counting lets a reconnect overlap the old connection without a false offline. Offline keeps the last state. `WatchHerd` is `SubscriptionRef.changes` behind a sliding buffer of one, so it emits the current view first and a slow phone only gets the newest. Machines are listed by id; the label is the id until the registry lands (JC-97).
+- `Herd` holds one entry per machine: the number of live `Attach` streams, `lastSeenAt` and the last `MachineState`. Online means at least one `Attach` is open; counting lets a reconnect overlap the old connection without a false offline. Offline keeps the last state. `WatchHerd` is `SubscriptionRef.changes` behind a sliding buffer of one, so it emits the current view first and a slow phone only gets the newest. Machines are listed by id.
 - A dead agent socket that never closes is caught by Bun's `idleTimeout`, set to `SOCKET_SILENCE_TIMEOUT` (two `AGENT_PING_INTERVAL`s, the same rule effect's RpcClient uses to call a hub dead). Bun's own pings are off (`sendPings: false`): through the proxy the proxy would answer them and keep a dead agent online. The agent's RPC pings are data frames, so a healthy agent stays up. A silent agent showed offline after 11.8–11.9 s against the 10 s timeout (5 runs). A kill closes the socket and shows offline at once. The timeout is server-wide, so the PWA's client must ping within it too.
 - Shutdown uses a `gracefulShutdownTimeout` of zero: sockets never finish on their own, so a grace period would only ever be waited out in full, and agents reconnect anyway.
-- Config: `CROOK_HUB_PORT`, `CROOK_OWNER_EMAIL` (compared exactly), `CROOK_HUB_ORIGIN`, `CROOK_WEB_ROOT`.
+- Config: `CROOK_HUB_PORT`, `CROOK_OWNER_EMAIL` (compared exactly), `CROOK_HUB_ORIGIN`, `CROOK_WEB_ROOT`, `CROOK_HUB_DATABASE_PATH`.
+
+Database (built in JC-97, shared by every later table):
+
+- One SQLite file through `@effect/sql-sqlite-bun`, at `CROOK_HUB_DATABASE_PATH`. `Database.layer` builds the client and runs the migrations before anything reads, and `main.ts` provides it once; `Database.layerAt(":memory:")` is the test database.
+- Every table comes from a numbered migration in the one migration record in `Database`, never from the module that reads it: migrations are history, and an `ALTER` belongs to no single repository. A later ticket appends the next number.
+- Columns are snake_case. The client maps names camelCase ↔ snake_case both ways, so `sql.insert({ lastSeenAt })` writes `last_seen_at` and rows come back as `lastSeenAt`. Raw SQL text is not mapped.
+- Rows decode through a schema; a row that does not decode is `StoredRowInvalid` and stops the hub at startup rather than serving a half-read herd.
+- Memory stays authoritative while the hub runs; the database is what survives a restart. A write the agent link causes (attach, drop, publish) that fails is logged at error and the hub carries on from memory: failing it would drop every machine over a full disk. A write the phone asks for (forget, mark seen) runs before memory changes, and a failure returns `HubStorageFailed` with nothing changed.
+
+Machine registry (built in JC-97):
+
+- `machines` keeps id, label, last seen, forgotten, and the last agent and herdr versions, so after a hub restart every known machine is listed offline with its last seen and versions until its agent reconnects. The last state is not stored: an offline machine's agents are unknown.
+- The label is the hello's label, else the id. It is rewritten on every attach.
+- Connection is `online`, `reconnecting` or `offline`, and `connectionChangedAt` is when the machine last came online or last dropped ("Online for", "Reconnecting for"). A dropped machine is `reconnecting` for `RECONNECT_GRACE` (two `AGENT_PING_INTERVAL`s: a live agent redials at least once per interval, so two leave room for one failed attempt), then `offline`. A machine loaded at startup is `offline`, with `connectionChangedAt` equal to its last seen.
+- `ForgetMachine` hides an offline machine (online and reconnecting ones are refused); the row stays with `forgotten` set. The next `Attach` clears it, so a forgotten machine returns on its own.
+
+Seen and needs-you (built in JC-98):
+
+- The hub keeps, per machine and pane, the `state_change_seq` the user last saw. A pane is seen when that number equals the pane's current one. Equality, not "at least": herdr's sequence can restart lower, and a stale higher mark must not hide a new state.
+- `MarkSeen` records the pane's current sequence in the hub's last state for that machine; the phone sends it when a chat opens and again while a chat stays open on an agent that changes. Herdr focus is never called (D12): the hub has no herdr connection at all.
+- A publish drops the marks of panes no longer in the state, so a reused pane id starts unseen.
+- Seen survives a hub restart (`seen` table). Lost marks would bring every opened done agent back as "needs you" after each deploy, inflate the tab badge, and (JC-107) notify again for what was already read. Marks are few and the table already exists, so the cost is one upsert per chat open.
+- `HerdMachine.seen` lists the panes seen at their current sequence. `AgentPriority.orderAgents` sorts a machine's agents: blocked (longest waiting first), done and unseen (newest first), working, then idle and seen done, then unknown, keeping herdr's order inside the last three. Ties use `statusChangedAt`. `needsYouCount` counts blocked plus unseen done and is zero for an offline machine; `herdNeedsYouCount` sums the machines. Pins (JC-112) become one more tier in front.
 
 ### 2.7 `@crook/web`
 
