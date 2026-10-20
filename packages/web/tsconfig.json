@@ -5,7 +5,7 @@
     "jsx": "react-jsx",
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@crook/web/*": ["./src/*"]
     }
   },
   "include": [

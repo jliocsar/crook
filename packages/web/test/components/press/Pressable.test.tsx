@@ -3,23 +3,22 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import { afterEach, beforeEach, vi } from 'vitest'
 
-import { LONG_PRESS_MS } from '@/components/swipe/Gestures'
-import { Pressable } from '@/components/swipe/Pressable'
+import { Pressable } from '@crook/web/components/press/Pressable'
+import { LONG_PRESS_MS } from '@crook/web/components/press/PressGesture'
 
 const advance = (milliseconds: number) =>
   Effect.promise(() => vi.advanceTimersByTimeAsync(milliseconds))
 
 const renderPressable = () => {
-  const onTap = vi.fn<() => void>()
+  const onTap = vi.fn<(opener: HTMLElement) => void>()
   const onLongPress = vi.fn<() => void>()
-
-  render(
+  const { unmount } = render(
     <Pressable onTap={onTap} onLongPress={onLongPress}>
       Review WatchHerd snapshot diff
     </Pressable>,
   )
 
-  return { onTap, onLongPress, button: screen.getByRole('button') }
+  return { onTap, onLongPress, unmount, button: screen.getByRole('button') }
 }
 
 beforeEach(() => {
@@ -31,12 +30,12 @@ afterEach(() => {
 })
 
 describe('Pressable', () => {
-  it('taps', () => {
+  it('taps, handing over the element it was tapped on', () => {
     const { onTap, onLongPress, button } = renderPressable()
 
     fireEvent.click(button)
 
-    expect(onTap).toHaveBeenCalledOnce()
+    expect(onTap).toHaveBeenCalledExactlyOnceWith(button)
     expect(onLongPress).not.toHaveBeenCalled()
   })
 
@@ -73,6 +72,18 @@ describe('Pressable', () => {
       fireEvent.pointerDown(button, { button: 0, clientX: 10, clientY: 10 })
       yield* advance(LONG_PRESS_MS / 2)
       fireEvent.pointerUp(button)
+      yield* advance(LONG_PRESS_MS)
+
+      expect(onLongPress).not.toHaveBeenCalled()
+    }),
+  )
+
+  it.effect('drops the long-press when it unmounts mid-hold', () =>
+    Effect.gen(function* () {
+      const { onLongPress, unmount, button } = renderPressable()
+
+      fireEvent.pointerDown(button, { button: 0, clientX: 10, clientY: 10 })
+      unmount()
       yield* advance(LONG_PRESS_MS)
 
       expect(onLongPress).not.toHaveBeenCalled()

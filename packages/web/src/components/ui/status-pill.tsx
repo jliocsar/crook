@@ -4,7 +4,7 @@ import { cn } from 'cn'
 
 export type StatusTone = 'ok' | 'warn' | 'blocked' | 'down' | 'idle' | 'working' | 'unknown'
 
-export type StatusPillProps = Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> & {
+export type StatusPillProps = Omit<React.HTMLAttributes<HTMLElement>, 'children'> & {
   children: React.ReactNode
   tone?: StatusTone
   href?: string
@@ -52,7 +52,7 @@ export function StatusPill({
 
   if (href !== undefined) {
     return (
-      <a data-slot="status-pill" data-tone={tone} href={href} className={shape}>
+      <a data-slot="status-pill" data-tone={tone} href={href} className={shape} {...rootProps}>
         {content}
       </a>
     )

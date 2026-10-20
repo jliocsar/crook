@@ -1,8 +1,9 @@
 import { createRouter } from '@tanstack/react-router'
 
-import { routeTree } from '@/routeTree.gen'
+import { ROUTE_FALLBACKS } from '@crook/web/router/RouteFallbacks'
+import { routeTree } from '@crook/web/routeTree.gen'
 
-export const router = createRouter({ routeTree })
+export const router = createRouter({ routeTree, ...ROUTE_FALLBACKS })
 
 declare module '@tanstack/react-router' {
   interface Register {

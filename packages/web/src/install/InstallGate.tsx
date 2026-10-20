@@ -1,9 +1,9 @@
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
-import { installBrowser } from '@/install/InstallBrowser'
-import { InstallScreen } from '@/install/InstallScreen'
-import { isStandalone } from '@/install/Standalone'
+import { installBrowser } from '@crook/web/install/InstallBrowser'
+import { InstallScreen } from '@crook/web/install/InstallScreen'
+import { isStandalone } from '@crook/web/install/Standalone'
 
 const CONTINUED_KEY = 'crook.install.continued'
 const CONTINUED = 'yes'

@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { StatusDot } from '@/components/StatusDot'
+import { StatusDot } from '@crook/web/components/StatusDot'
 
 const innerDot = (container: HTMLElement) =>
   container.querySelector('[data-status] > span')?.className ?? ''

@@ -3,9 +3,9 @@ import * as Effect from 'effect/Effect'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import '@/index.css'
-import { registerServiceWorker } from '@/pwa/RegisterServiceWorker'
-import { router } from '@/router/Router'
+import '@crook/web/index.css'
+import { registerServiceWorker } from '@crook/web/pwa/RegisterServiceWorker'
+import { router } from '@crook/web/router/Router'
 
 const ROOT_ELEMENT_ID = 'root'
 

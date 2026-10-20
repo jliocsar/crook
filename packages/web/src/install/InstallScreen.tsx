@@ -4,10 +4,11 @@ import { motion, stagger } from 'motion/react'
 import type { Variants } from 'motion/react'
 import type * as React from 'react'
 
-import { Button } from '@/components/ui/button'
-import type { InstallBrowser } from '@/install/InstallBrowser'
-import { motionTokens } from '@/motion/MotionTokens'
-import { useTransformString } from '@/motion/TransformString'
+import { Button } from '@crook/web/components/ui/button'
+import type { InstallBrowser } from '@crook/web/install/InstallBrowser'
+import { motionTokens } from '@crook/web/motion/MotionTokens'
+import { useTransformString } from '@crook/web/motion/TransformString'
+import { COLUMN_MAX_WIDTH } from '@crook/web/navigation/Column'
 
 type Step = { readonly text: string; readonly hint: string | null; readonly Icon: LucideIcon }
 
@@ -15,6 +16,7 @@ const STAGGER_SECONDS = 0.05
 const RISE_DISTANCE = 6
 const ICON_FROM_SCALE = 0.96
 const HERO_ICON_SIZE = 88
+const ICON_CORNER_SHARE = '22.5%'
 const STEP_ICON_SIZE = 36
 const APP_ICON_SOURCE = '/apple-touch-icon-180x180.png'
 const ADD_TO_HOME_SCREEN: Step = { text: 'Choose Add to Home Screen', hint: null, Icon: SquarePlus }
@@ -37,7 +39,7 @@ function AppIcon({ size, className }: { size: number; className?: string }) {
       width={size}
       height={size}
       className={className}
-      style={{ borderRadius: '22.5%' }}
+      style={{ borderRadius: ICON_CORNER_SHARE }}
     />
   )
 }
@@ -98,7 +100,10 @@ export function InstallScreen({
   const steps = INSTALL_STEPS[browser]
 
   return (
-    <main className="mx-auto flex h-dvh max-w-[430px] flex-col px-6 pt-[calc(var(--safe-top)+3rem)] pb-[calc(var(--safe-bottom)+0.75rem)]">
+    <main
+      style={{ maxWidth: COLUMN_MAX_WIDTH }}
+      className="mx-auto flex h-dvh flex-col px-6 pt-[calc(var(--safe-top)+3rem)] pb-[calc(var(--safe-bottom)+0.75rem)]"
+    >
       <motion.div
         initial="hidden"
         animate="shown"

@@ -3,6 +3,7 @@ import type { TargetAndTransition, Transition } from 'motion/react'
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
 
 type CubicBezier = readonly [number, number, number, number]
 
@@ -27,15 +28,7 @@ export const parseCubicBezier = (value: string): Option.Option<CubicBezier> =>
     Option.fromNullishOr(CUBIC_BEZIER.exec(value)?.[1]),
     Option.map((list) => Arr.map(list.split(','), (point) => Number(point.trim()))),
     Option.filter((points) => Arr.every(points, Number.isFinite)),
-    Option.flatMap(([x1, y1, x2, y2, ...rest]) =>
-      x1 !== undefined &&
-      y1 !== undefined &&
-      x2 !== undefined &&
-      y2 !== undefined &&
-      rest.length === 0
-        ? Option.some([x1, y1, x2, y2] as const)
-        : Option.none(),
-    ),
+    Option.filter((points) => Predicate.isTupleOf(points, 4)),
   )
 
 export const readMotionTokens = (read: (property: string) => string): Option.Option<MotionTokens> =>
@@ -63,12 +56,16 @@ const fromDocument = (): MotionTokens => {
   )
 }
 
-export const motionTokens = (): MotionTokens =>
-  Option.getOrElse(cached, () => {
-    const tokens = fromDocument()
-    cached = Option.some(tokens)
+export const motionTokens = (): MotionTokens => {
+  if (Option.isSome(cached)) {
+    return cached.value
+  }
 
-    return tokens
-  })
+  const tokens = fromDocument()
+
+  cached = Option.some(tokens)
+
+  return tokens
+}
 
 let cached: Option.Option<MotionTokens> = Option.none()

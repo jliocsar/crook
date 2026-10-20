@@ -2,12 +2,12 @@ import type { AgentStatus } from '@crook/domain/AgentStatus'
 
 import { AnimatePresence, motion } from 'motion/react'
 
-import { AGENT_STATUS_TONE } from '@/components/AgentStatusTone'
-import { STATUS_DOT } from '@/components/ui/status-pill'
+import { AGENT_STATUS_TONE } from '@crook/web/components/AgentStatusTone'
+import { STATUS_DOT } from '@crook/web/components/ui/status-pill'
 import { cn } from 'cn'
-import { motionTokens } from '@/motion/MotionTokens'
-import { SPRING } from '@/motion/Springs'
-import { scale, useTransformString } from '@/motion/TransformString'
+import { motionTokens } from '@crook/web/motion/MotionTokens'
+import { SPRING } from '@crook/web/motion/Springs'
+import { scale, useTransformString } from '@crook/web/motion/TransformString'
 
 const POP_FROM = 0.5
 

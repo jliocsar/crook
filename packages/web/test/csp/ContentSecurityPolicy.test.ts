@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CONTENT_SECURITY_POLICY,
   CONTENT_SECURITY_POLICY_DIRECTIVES,
-} from '@/csp/ContentSecurityPolicy'
+} from '@crook/web/csp/ContentSecurityPolicy'
 
 describe('CONTENT_SECURITY_POLICY', () => {
   it('allows no inline or evaluated code', () => {

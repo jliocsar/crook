@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { commitsBack } from '@/navigation/BackGesture'
+import { commitsBack } from '@crook/web/navigation/BackGesture'
 
 describe('commitsBack', () => {
   it('commits past a third of the width', () => {

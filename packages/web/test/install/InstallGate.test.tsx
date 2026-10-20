@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import { beforeEach, vi } from 'vitest'
 
-import { InstallGate } from '@/install/InstallGate'
+import { InstallGate } from '@crook/web/install/InstallGate'
 
 import { click } from '../Dom.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'

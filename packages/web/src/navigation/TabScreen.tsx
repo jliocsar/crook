@@ -1,7 +1,7 @@
 import { Outlet } from '@tanstack/react-router'
 import type * as React from 'react'
 
-import { useCoveredByPushedScreen } from '@/navigation/Pushed'
+import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 
 export function TabHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (

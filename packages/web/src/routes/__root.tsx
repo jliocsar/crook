@@ -1,8 +1,8 @@
 import { createRootRoute } from '@tanstack/react-router'
 import { MotionConfig } from 'motion/react'
 
-import { InstallGate } from '@/install/InstallGate'
-import { Shell } from '@/navigation/Shell'
+import { InstallGate } from '@crook/web/install/InstallGate'
+import { Shell } from '@crook/web/navigation/Shell'
 
 export const Route = createRootRoute({ component: Root })
 

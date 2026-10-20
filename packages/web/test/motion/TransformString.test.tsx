@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { scale, translate, useTransformString } from '@/motion/TransformString'
+import { scale, translate, useTransformString } from '@crook/web/motion/TransformString'
 
 import { stubMediaQueries } from '../MediaQueries.ts'
 

@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router'
 import { Bot, Server, Settings } from 'lucide-react'
 
-import { COLUMN_STYLE } from '@/navigation/Column'
-import { SECTIONS_LABEL } from '@/navigation/Focus'
-import { useAnyScreenPushed } from '@/navigation/Pushed'
+import { COLUMN_STYLE } from '@crook/web/navigation/Column'
+import { SECTIONS_LABEL } from '@crook/web/navigation/Focus'
+import { useAnyScreenPushed } from '@crook/web/navigation/Pushed'
 
 const ACTIVE_STROKE = 2.25
 const IDLE_STROKE = 1.75

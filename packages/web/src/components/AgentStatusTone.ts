@@ -1,6 +1,6 @@
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 
-import type { StatusTone } from '@/components/ui/status-pill'
+import type { StatusTone } from '@crook/web/components/ui/status-pill'
 
 export const AGENT_STATUS_TONE = {
   idle: 'idle',

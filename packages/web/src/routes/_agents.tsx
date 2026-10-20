@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { TabScreen } from '@/navigation/TabScreen'
+import { TabScreen } from '@crook/web/navigation/TabScreen'
 
 export const Route = createFileRoute('/_agents')({ component: Agents })
 

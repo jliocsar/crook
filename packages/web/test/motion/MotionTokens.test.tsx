@@ -6,7 +6,7 @@ import {
   parseCubicBezier,
   parseMilliseconds,
   readMotionTokens,
-} from '@/motion/MotionTokens'
+} from '@crook/web/motion/MotionTokens'
 
 describe('parseMilliseconds', () => {
   it('reads a millisecond token as seconds', () => {

@@ -12,11 +12,11 @@
   },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "@/components",
+    "components": "@crook/web/components",
     "utils": "cn",
-    "ui": "@/components/ui",
-    "lib": "@/lib",
-    "hooks": "@/hooks"
+    "ui": "@crook/web/components/ui",
+    "lib": "@crook/web/lib",
+    "hooks": "@crook/web/hooks"
   },
   "registries": {}
 }

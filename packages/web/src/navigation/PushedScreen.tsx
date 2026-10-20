@@ -1,4 +1,4 @@
-import { useMatch, useMatches, useRouter } from '@tanstack/react-router'
+import { useLocation, useParentMatches, useRouter } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
@@ -6,13 +6,14 @@ import { ChevronLeft } from 'lucide-react'
 import { animate, motion, useMotionValue, useReducedMotion } from 'motion/react'
 import * as React from 'react'
 
-import { Button } from '@/components/ui/button'
-import { GLIDE } from '@/motion/Springs'
-import { commitsBack } from '@/navigation/BackGesture'
-import { COLUMN_STYLE, useColumnWidth } from '@/navigation/Column'
-import { focusScreenTitle, restoreFocus } from '@/navigation/Focus'
-import { useCoveredByPushedScreen } from '@/navigation/Pushed'
-import { useShellReady } from '@/navigation/ShellReady'
+import { Button } from '@crook/web/components/ui/button'
+import { GLIDE } from '@crook/web/motion/Springs'
+import { commitsBack } from '@crook/web/navigation/BackGesture'
+import { COLUMN_STYLE, useColumnWidth } from '@crook/web/navigation/Column'
+import { focusScreenTitle, restoreFocus } from '@crook/web/navigation/Focus'
+import { findOpener, forgetOpener } from '@crook/web/navigation/Opener'
+import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
+import { useShellReady } from '@crook/web/navigation/ShellReady'
 
 type EdgeHandlers = Pick<
   React.DOMAttributes<HTMLDivElement>,
@@ -28,18 +29,31 @@ const ROOT_PATHNAME = '/'
 
 const PushedScreenContext = React.createContext<Option.Option<PushedScreenControls>>(Option.none())
 
-const useParentPathname = (): string => {
-  const ownId = useMatch({ strict: false, select: (match) => match.id })
-
-  return useMatches({
+const useParentPathname = (): string =>
+  useParentMatches({
     select: (matches) =>
       pipe(
-        Arr.findFirstIndex(matches, (match) => match.id === ownId),
-        Option.flatMap((index) => Arr.get(matches, index - 1)),
+        Arr.last(matches),
         Option.map((parent) => parent.pathname),
         Option.getOrElse(() => ROOT_PATHNAME),
       ),
   })
+
+const useOpener = (): Element | null => {
+  const openerKey = useLocation({ select: (location) => location.state.openerKey })
+  const [opener] = React.useState(() =>
+    Option.getOrElse(findOpener(openerKey), () => document.activeElement),
+  )
+
+  React.useEffect(
+    () => () => {
+      forgetOpener(openerKey)
+      restoreFocus(opener)
+    },
+    [openerKey, opener],
+  )
+
+  return opener
 }
 
 export const usePushedScreen = (): PushedScreenControls =>
@@ -56,11 +70,12 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
   const reduce = useReducedMotion() ?? false
   const shellReady = useShellReady()
   const [slidesIn] = React.useState(() => shellReady.current && !reduce)
-  const [opener] = React.useState(() => document.activeElement)
   const [leaving, setLeaving] = React.useState(false)
   const offsetX = useMotionValue(slidesIn ? width : 0)
   const screen = React.useRef<HTMLDivElement>(null)
   const dragOrigin = React.useRef<Option.Option<number>>(Option.none())
+
+  useOpener()
 
   React.useEffect(() => {
     if (!slidesIn) {
@@ -80,13 +95,6 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
       controls.stop()
     }
   }, [slidesIn, offsetX])
-
-  React.useEffect(
-    () => () => {
-      restoreFocus(opener)
-    },
-    [opener],
-  )
 
   const leave = () => {
     if (router.history.canGoBack()) {
@@ -142,9 +150,9 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
       dragOrigin.current = Option.some(event.clientX - offsetX.get())
     },
     onPointerMove: (event) => {
-      Option.map(dragOrigin.current, (origin) => {
-        offsetX.set(Math.max(0, event.clientX - origin))
-      })
+      if (Option.isSome(dragOrigin.current)) {
+        offsetX.set(Math.max(0, event.clientX - dragOrigin.current.value))
+      }
     },
     onPointerUp: release,
     onPointerCancel: release,
@@ -173,7 +181,7 @@ function EdgeBack() {
     <div
       aria-hidden="true"
       data-slot="edge-back"
-      className="absolute inset-y-0 left-0 z-20 w-4 touch-none"
+      className="absolute inset-y-0 left-0 z-5 w-4 touch-none"
       {...edge}
     />
   )

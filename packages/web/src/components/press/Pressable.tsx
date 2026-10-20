@@ -2,8 +2,8 @@ import { cn } from 'cn'
 import { motion } from 'motion/react'
 import * as React from 'react'
 
-import { useLongPress } from '@/components/swipe/LongPress'
-import { motionTokens } from '@/motion/MotionTokens'
+import { useLongPress } from '@crook/web/components/press/LongPress'
+import { motionTokens } from '@crook/web/motion/MotionTokens'
 
 const INSTANT = { duration: 0 } as const
 const HOVER_HIGHLIGHT = 0.5
@@ -36,7 +36,7 @@ export function Pressable({
   frameClassName,
   children,
 }: {
-  onTap: () => void
+  onTap: (opener: HTMLElement) => void
   onLongPress: () => void
   suppress?: boolean
   className?: string
@@ -66,9 +66,9 @@ export function Pressable({
         setHovered(false)
       }}
       {...press.handlers}
-      onClick={() => {
+      onClick={(event) => {
         if (!press.consumeLongPress()) {
-          onTap()
+          onTap(event.currentTarget)
         }
       }}
       className={cn(

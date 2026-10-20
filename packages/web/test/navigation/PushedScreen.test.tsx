@@ -11,9 +11,10 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import { beforeEach } from 'vitest'
 
-import { PushedHeader, PushedScreen } from '@/navigation/PushedScreen'
-import { Shell } from '@/navigation/Shell'
-import { TabScreen } from '@/navigation/TabScreen'
+import { openedFrom } from '@crook/web/navigation/Opener'
+import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
+import { Shell } from '@crook/web/navigation/Shell'
+import { TabScreen } from '@crook/web/navigation/TabScreen'
 
 import { click, eventually, findByRole } from '../Dom.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
@@ -67,6 +68,14 @@ function Agents() {
       >
         Open detail
       </button>
+      <button
+        type="button"
+        onClick={(event) => {
+          router.history.push('/detail', openedFrom(event.currentTarget))
+        }}
+      >
+        Open detail from a tap
+      </button>
     </TabScreen>
   )
 }
@@ -118,6 +127,26 @@ describe('PushedScreen', () => {
       expect(router.state.location.pathname).toBe('/')
       expect(document.activeElement).toBe(opener)
       expect(screen.getByRole('navigation', { name: 'Sections' })).toHaveProperty('inert', false)
+    }),
+  )
+
+  it.effect('returns focus to the opener a tap never focused, as WebKit taps do', () =>
+    Effect.gen(function* () {
+      yield* renderAt('/')
+      const opener = yield* findByRole('button', 'Open detail from a tap')
+
+      fireEvent.click(opener)
+      const title = yield* findByRole('heading', 'Detail')
+
+      yield* eventually(() => {
+        expect(document.activeElement).toBe(title)
+      })
+      yield* click(yield* findByRole('button', 'Back to agents'))
+      yield* eventually(() => {
+        expect(screen.queryByRole('heading', { name: 'Detail' })).toBeNull()
+      })
+
+      expect(document.activeElement).toBe(opener)
     }),
   )
 

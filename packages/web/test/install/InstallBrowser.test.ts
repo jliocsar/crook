@@ -1,7 +1,7 @@
 import * as Option from 'effect/Option'
 import { describe, expect, it } from 'vitest'
 
-import { installBrowser } from '@/install/InstallBrowser'
+import { installBrowser } from '@crook/web/install/InstallBrowser'
 
 const IPHONE_SAFARI =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1'

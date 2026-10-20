@@ -1,12 +1,10 @@
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as Fiber from 'effect/Fiber'
 import * as Option from 'effect/Option'
-import type * as React from 'react'
-import { useRef } from 'react'
+import * as React from 'react'
 
-import { LONG_PRESS_MS, movedPastSlop } from '@/components/swipe/Gestures'
-import type { Point } from '@/components/swipe/Gestures'
+import { LONG_PRESS_MS, movedPastSlop } from '@crook/web/components/press/PressGesture'
+import type { Point } from '@crook/web/components/press/PressGesture'
 
 type LongPressHandlers = Pick<
   React.DOMAttributes<HTMLElement>,
@@ -21,17 +19,23 @@ type LongPressHandlers = Pick<
 const PRIMARY_BUTTON = 0
 
 export const useLongPress = (onLongPress: () => void) => {
-  const timer = useRef<Option.Option<Fiber.Fiber<void>>>(Option.none())
-  const origin = useRef<Option.Option<Point>>(Option.none())
-  const fired = useRef(false)
+  const timer = React.useRef<Option.Option<() => void>>(Option.none())
+  const origin = React.useRef<Option.Option<Point>>(Option.none())
+  const fired = React.useRef(false)
 
   const clear = () => {
-    Option.map(timer.current, (fiber) => Effect.runFork(Fiber.interrupt(fiber)))
+    if (Option.isSome(timer.current)) {
+      timer.current.value()
+    }
+
     timer.current = Option.none()
     origin.current = Option.none()
   }
 
+  React.useEffect(() => clear, [])
+
   const fire = () => {
+    timer.current = Option.none()
     fired.current = true
     onLongPress()
   }
@@ -42,10 +46,11 @@ export const useLongPress = (onLongPress: () => void) => {
         return
       }
 
+      clear()
       fired.current = false
       origin.current = Option.some({ clientX: event.clientX, clientY: event.clientY })
       timer.current = Option.some(
-        Effect.runFork(
+        Effect.runCallback(
           Effect.sleep(Duration.millis(LONG_PRESS_MS)).pipe(Effect.andThen(Effect.sync(fire))),
         ),
       )

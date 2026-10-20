@@ -10,7 +10,7 @@ import {
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 
-import { TabBar } from '@/navigation/TabBar'
+import { TabBar } from '@crook/web/navigation/TabBar'
 
 import { click, findByRole } from '../Dom.ts'
 
