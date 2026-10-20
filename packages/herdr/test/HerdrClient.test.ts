@@ -286,6 +286,23 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
     }),
   )
 
+  it.effect('fails with HerdrUnreachable when a crashed herdr left its socket file behind', () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem
+      const directory = yield* fileSystem.makeTempDirectoryScoped()
+      const socketPath = `${directory}/herdr.sock`
+
+      yield* fileSystem.writeFileString(socketPath, '')
+
+      const client = yield* Layer.build(HerdrClient.layerAt(socketPath)).pipe(
+        Effect.map((context) => Context.get(context, HerdrClient)),
+      )
+      const error = yield* client.snapshot.pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(HerdrUnreachable)
+    }),
+  )
+
   it.effect('streams lifecycle and pane-scoped events once the subscription starts', () =>
     Effect.gen(function* () {
       const { client, received } = yield* fakeHerdr([
