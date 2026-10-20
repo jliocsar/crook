@@ -16,6 +16,7 @@ import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import {
   AGENT_PING_INTERVAL,
   AGENT_SOCKET_OPEN_TIMEOUT,
@@ -70,10 +71,16 @@ export const connectTo = (url: URL, token: Redacted.Redacted) =>
     ),
   ).pipe(Effect.flatMap((protocol) => RpcClient.make(AgentLink).pipe(Effect.provide(protocol))))
 
+const transcriptLinkOf = (client: AgentLinkClient): TranscriptLink => ({
+  demands: client.TranscriptDemands(),
+  publish: (watch, update) => client.PublishTranscript({ watch, update }),
+})
+
 const make = (connect: HubConnect, hello: Hello) =>
   Effect.gen(function* () {
     const sync = yield* MachineStateSync
     const executor = yield* CommandExecutor
+    const transcripts = yield* TranscriptStreams
 
     const holdAttach = (client: AgentLinkClient) =>
       client.Attach({ hello }).pipe(
@@ -112,10 +119,17 @@ const make = (connect: HubConnect, hello: Hello) =>
           Option.exists(accepted, (first) => now - first >= Duration.toMillis(AGENT_PING_INTERVAL)),
       )
 
-      yield* Effect.all([holdAttach(client), publishChanges(client, markAccepted)], {
-        concurrency: 'unbounded',
-        discard: true,
-      }).pipe(
+      yield* Effect.all(
+        [
+          holdAttach(client),
+          publishChanges(client, markAccepted),
+          transcripts.serve(transcriptLinkOf(client)),
+        ],
+        {
+          concurrency: 'unbounded',
+          discard: true,
+        },
+      ).pipe(
         Effect.catchDefect((cause) => Effect.fail(new HubCallDefected({ cause }))),
         Effect.tapError((error) => Effect.logWarning(error.message)),
         Effect.catch((error) =>

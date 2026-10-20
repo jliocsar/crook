@@ -11,6 +11,7 @@
     "test": "bun --bun vitest run"
   },
   "dependencies": {
+    "@crook/claude": "workspace:*",
     "@crook/domain": "workspace:*",
     "@crook/herdr": "workspace:*",
     "@crook/protocol": "workspace:*",

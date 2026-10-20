@@ -22,6 +22,7 @@
       "name": "@crook/agent",
       "version": "0.0.1",
       "dependencies": {
+        "@crook/claude": "workspace:*",
         "@crook/domain": "workspace:*",
         "@crook/herdr": "workspace:*",
         "@crook/protocol": "workspace:*",

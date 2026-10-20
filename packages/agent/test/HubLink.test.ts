@@ -46,7 +46,7 @@ import { protocolSerialization } from '@crook/protocol/Serialization'
 
 import packageJson from '../package.json' with { type: 'json' }
 
-import { LAPTOP, agentRow, executorWith } from './Fixtures'
+import { LAPTOP, agentRow, linkedAgentWith } from './Fixtures'
 
 interface HubScript {
   readonly attachLifetime: Option.Option<Duration.Duration>
@@ -110,7 +110,7 @@ const agentWith = (
       sent,
     })
 
-    return executorWith(herdr, state)
+    return linkedAgentWith(herdr, state)
   })
 
 const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> = {}) {
@@ -142,6 +142,8 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
           Queue.offer(received, published).pipe(Effect.andThen(reply(published))),
         CompleteCommand: (completion) =>
           Queue.offer(completed, completion).pipe(Effect.andThen(Effect.void)),
+        TranscriptDemands: () => Stream.never,
+        PublishTranscript: () => Effect.void,
       }),
     )
 
@@ -310,6 +312,8 @@ const hubServer = (port: number, hub: RealHub) =>
             }).pipe(Effect.andThen(Effect.void)),
           CompleteCommand: (completion) =>
             Queue.offer(hub.completions, completion).pipe(Effect.andThen(Effect.void)),
+          TranscriptDemands: () => Stream.never,
+          PublishTranscript: () => Effect.void,
         }),
         hubProtocol,
       ]),

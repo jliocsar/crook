@@ -1,3 +1,4 @@
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import * as BunHttpServer from '@effect/platform-bun/BunHttpServer'
 import * as BunSocket from '@effect/platform-bun/BunSocket'
 import { expect, layer } from '@effect/vitest'
@@ -26,6 +27,7 @@ import type * as Rpc from 'effect/rpc/Rpc'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
@@ -411,7 +413,10 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         yield* Layer.build(
           Layer.provide(
             HubLink.layerWith(dialHub, hello),
-            Layer.provideMerge(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr]),
+            Layer.provideMerge(
+              Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt([])),
+              [MachineStateSync.layerTest(state), herdr, BunFileSystem.layer],
+            ),
           ),
         )
         yield* machineShows(machine, 'online')

@@ -1,3 +1,4 @@
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import * as DateTime from 'effect/DateTime'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
@@ -5,6 +6,7 @@ import type * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
@@ -99,3 +101,13 @@ export const executorWith = (
   herdr: Layer.Layer<HerdrClient>,
   state: SubscriptionRef.SubscriptionRef<MachineState>,
 ) => Layer.provideMerge(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr])
+
+export const linkedAgentWith = (
+  herdr: Layer.Layer<HerdrClient>,
+  state: SubscriptionRef.SubscriptionRef<MachineState>,
+) =>
+  Layer.provideMerge(Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt([])), [
+    MachineStateSync.layerTest(state),
+    herdr,
+    BunFileSystem.layer,
+  ])
