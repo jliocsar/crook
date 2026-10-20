@@ -1,0 +1,2 @@
+{"type": "some-future-type", "sessionId": "ff0f77be-1e98-4bb2-8b24-38d673361867", "timestamp": "2026-10-20T18:00:00.000Z", "payload": {"x": 1}}
+{"parentUuid": null, "isSidechain": false, "type": "assistant", "message": {"role": "assistant", "content": [{"type": "some_future_block", "value": 1}]}, "uuid": "00000000-0000-4000-8000-000000000001", "timestamp": "2026-10-20T18:00:00.000Z", "sessionId": "ff0f77be-1e98-4bb2-8b24-38d673361867"}

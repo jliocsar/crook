@@ -32,6 +32,18 @@
         "@crook/tsconfig": "workspace:*",
       },
     },
+    "packages/claude": {
+      "name": "@crook/claude",
+      "version": "0.0.1",
+      "dependencies": {
+        "@crook/domain": "workspace:*",
+        "effect": "4.0.5",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+        "@effect/platform-bun": "4.0.5",
+      },
+    },
     "packages/domain": {
       "name": "@crook/domain",
       "version": "0.0.1",
@@ -332,6 +344,8 @@
     "@canvas/image-data": ["@canvas/image-data@1.1.0", "", {}, "sha512-QdObRRjRbcXGmM1tmJ+MrHcaz1MftF2+W7YI+MsphnsCrmtyfS0d5qJbk0MeSbUeyM/jCb0hmnkXPsy026L7dA=="],
 
     "@crook/agent": ["@crook/agent@workspace:packages/agent"],
+
+    "@crook/claude": ["@crook/claude@workspace:packages/claude"],
 
     "@crook/domain": ["@crook/domain@workspace:packages/domain"],
 

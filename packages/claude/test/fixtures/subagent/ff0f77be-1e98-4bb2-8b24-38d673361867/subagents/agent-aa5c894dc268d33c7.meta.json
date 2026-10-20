@@ -1,0 +1,10 @@
+{
+  "agentType": "general-purpose",
+  "launchedWithDefaults": true,
+  "description": "Run sleep then echo",
+  "toolUseId": "toolu_01ChD5J64zNtNw3N4bkav5Fx",
+  "spawnDepth": 1,
+  "requestShape": "background",
+  "requestNonInteractive": true,
+  "finished": true
+}
