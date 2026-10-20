@@ -7,7 +7,9 @@ import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Result from 'effect/Result'
 import * as Schedule from 'effect/Schedule'
 import * as Stream from 'effect/Stream'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
@@ -18,8 +20,9 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import type * as RpcGroup from 'effect/rpc/RpcGroup'
 import type * as Rpc from 'effect/rpc/Rpc'
 
+import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import { MachineId } from '@crook/domain/Ids'
+import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import {
@@ -33,6 +36,12 @@ import {
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
 import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
+import {
+  type CommandResult,
+  MachineOffline,
+  PaneNotAgent,
+  type RoutedCommand,
+} from '@crook/protocol/Commands'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 const OWNER = 'owner@example.com'
@@ -135,6 +144,20 @@ const herdWhere = Effect.fn('herdWhere')(function* (predicate: (view: HerdView) 
     .WatchHerd()
     .pipe(Stream.filter(predicate), Stream.runHead, Effect.flatMap(Effect.fromOption))
 }, Effect.scoped)
+
+const answeringAgent = Effect.fn('answeringAgent')(function* (
+  machine: MachineId,
+  answer: (routed: RoutedCommand) => CommandResult,
+) {
+  const agent = yield* connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(machine))
+
+  yield* agent.Attach().pipe(
+    Stream.runForEach((routed) => agent.CompleteCommand({ id: routed.id, result: answer(routed) })),
+    Effect.ignore,
+    Effect.forkScoped,
+  )
+  yield* agent.PublishState({ state: stateOf(machine, 1) })
+})
 
 const machineShows = (id: MachineId, connection: MachineConnection) =>
   herdWhere((view) =>
@@ -254,6 +277,51 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
         ).toEqual(Option.some('online'))
       }),
     { timeout: Duration.toMillis(Duration.times(HttpRoutes.SOCKET_SILENCE_TIMEOUT, 2)) },
+  )
+})
+
+layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (live) => {
+  const pane = PaneId.make('w1:p1')
+  const key = IdempotencyKey.make('3f1c8a52-0b7e-4d0a-9a51-6f3f0d2f8e11')
+
+  live.effect('relays a phone command to the agent of that machine and its answer back', () =>
+    Effect.gen(function* () {
+      const machine = MachineId.make('command-laptop')
+
+      yield* answeringAgent(machine, (routed) =>
+        Match.value(routed.command).pipe(
+          Match.tagsExhaustive({
+            Prompt: (prompt) =>
+              Result.succeed(new InputDelivered({ pane: prompt.pane, stateChangeSeq: 4 })),
+            SendKeys: (sendKeys) => Result.fail(new PaneNotAgent({ pane: sendKeys.pane })),
+          }),
+        ),
+      )
+      const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+      const receipt = yield* phone.SendCommand({
+        machine,
+        key,
+        command: new Prompt({ pane, text: 'continue' }),
+      })
+      const refused = yield* phone
+        .SendCommand({ machine, key, command: new SendKeys({ pane, keys: ['esc'] }) })
+        .pipe(Effect.flip)
+
+      expect(receipt).toEqual(new InputDelivered({ pane, stateChangeSeq: 4 }))
+      expect(refused).toEqual(new PaneNotAgent({ pane }))
+    }),
+  )
+
+  live.effect('answers MachineOffline for a machine whose agent is not attached', () =>
+    Effect.gen(function* () {
+      const machine = MachineId.make('command-nowhere')
+      const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+      const offline = yield* phone
+        .SendCommand({ machine, key, command: new Prompt({ pane, text: 'continue' }) })
+        .pipe(Effect.flip)
+
+      expect(offline).toEqual(new MachineOffline({ machine }))
+    }),
   )
 })
 

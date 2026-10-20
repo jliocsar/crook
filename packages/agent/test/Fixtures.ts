@@ -1,5 +1,9 @@
+import * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 
+import { AgentRow } from '@crook/domain/AgentRow'
+import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
+import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { AgentInfo, SessionSnapshot, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
 
 export const workspaceInfo = new WorkspaceInfo({
@@ -56,5 +60,30 @@ export const sessionSnapshot = (agents: readonly AgentInfo[]) =>
     workspaces: [workspaceInfo],
     tabs: [tabInfo],
     panes: [],
+    agents,
+  })
+
+export const LAPTOP = MachineId.make('laptop')
+
+export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[0]> = {}) =>
+  new AgentRow({
+    pane: PaneId.make('w1:p1'),
+    workspace: WorkspaceId.make('w1'),
+    tab: TabId.make('w1:t1'),
+    status: 'idle',
+    title: 'EX-253 Example feature',
+    cwd: '/home/jliocsar/Projects/crook',
+    claudeSession: Option.none(),
+    stateChangeSeq: 4,
+    statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+    ...fields,
+  })
+
+export const machineStateWith = (agents: readonly AgentRow[]) =>
+  new MachineState({
+    machine: LAPTOP,
+    version: MachineStateVersion.make(0),
+    workspaces: [],
+    tabs: [],
     agents,
   })

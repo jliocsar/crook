@@ -14,6 +14,7 @@ import * as Stream from 'effect/Stream'
 import * as RpcClient from 'effect/rpc/RpcClient'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
+import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
 import { protocolSerialization } from '@crook/protocol/Serialization'
@@ -61,9 +62,20 @@ export const connectTo = (url: URL, token: Redacted.Redacted) =>
 const make = (connect: HubConnect) =>
   Effect.gen(function* () {
     const sync = yield* MachineStateSync
+    const executor = yield* CommandExecutor
 
     const holdAttach = (client: AgentLinkClient) =>
-      client.Attach().pipe(Stream.runDrain, Effect.andThen(Effect.fail(new HubAttachEnded())))
+      client.Attach().pipe(
+        Stream.mapEffect((routed) =>
+          executor.execute(routed.key, routed.command).pipe(
+            Effect.result,
+            Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
+            Effect.annotateLogs('command', routed.id),
+          ),
+        ),
+        Stream.runDrain,
+        Effect.andThen(Effect.fail(new HubAttachEnded())),
+      )
 
     const publishChanges = (client: AgentLinkClient, markAccepted: Effect.Effect<void>) =>
       sync.changes.pipe(

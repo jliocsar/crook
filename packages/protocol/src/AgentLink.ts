@@ -5,6 +5,7 @@ import * as Schema from 'effect/Schema'
 
 import { MachineId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
+import { CommandId, CommandResult, RoutedCommand } from '@crook/protocol/Commands'
 
 export const AGENT_PING_INTERVAL = Duration.seconds(5)
 
@@ -20,11 +21,15 @@ export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
   }
 }
 
-export const Attach = Rpc.make('Attach', { success: Schema.Never, stream: true })
+export const Attach = Rpc.make('Attach', { success: RoutedCommand, stream: true })
 
 export const PublishState = Rpc.make('PublishState', {
   payload: { state: MachineState },
   error: MachineIdMismatch,
 })
 
-export class AgentLink extends RpcGroup.make(Attach, PublishState) {}
+export const CompleteCommand = Rpc.make('CompleteCommand', {
+  payload: { id: CommandId, result: CommandResult },
+})
+
+export class AgentLink extends RpcGroup.make(Attach, PublishState, CompleteCommand) {}

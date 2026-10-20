@@ -12,6 +12,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
+import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -22,16 +23,36 @@ import * as RpcServer from 'effect/rpc/RpcServer'
 import * as RpcTest from 'effect/rpc/RpcTest'
 import * as TestClock from 'effect/testing/TestClock'
 
+import { CommandExecutor } from '@crook/agent/CommandExecutor'
+import { CommandPolicy } from '@crook/agent/CommandPolicy'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { MachineId } from '@crook/domain/Ids'
+import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
+import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import type { HerdrEvent } from '@crook/herdr/Events'
+import {
+  HerdrClient,
+  type HerdrSubscriptionError,
+  type SentRequest,
+  scriptedResult,
+} from '@crook/herdr/HerdrClient'
+import { AgentPromptMethod, AgentSendKeysMethod } from '@crook/herdr/Methods'
 import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import {
+  CommandId,
+  type CommandResult,
+  PaneNotAgent,
+  RoutedCommand,
+} from '@crook/protocol/Commands'
 import { protocolSerialization } from '@crook/protocol/Serialization'
+
+import { agentRow } from './Fixtures'
 
 interface HubScript {
   readonly attachLifetime: Option.Option<Duration.Duration>
   readonly reply: (state: MachineState) => Effect.Effect<void, MachineIdMismatch>
+  readonly commands: readonly RoutedCommand[]
 }
 
 interface Publication {
@@ -39,9 +60,23 @@ interface Publication {
   readonly state: MachineState
 }
 
+interface Completion {
+  readonly id: CommandId
+  readonly result: CommandResult
+}
+
+interface RealHub {
+  readonly publications: Queue.Queue<Publication>
+  readonly completions: Queue.Queue<Completion>
+}
+
 const HUB_PATH = '/rpc/agent'
 const LAPTOP = MachineId.make('laptop')
 const TICK = Duration.millis(1)
+const AGENT_PANE = PaneId.make('w1:p1')
+const SHELL_PANE = PaneId.make('w1:p2')
+const ACTION = IdempotencyKey.make('3f1c8a52-0b7e-4d0a-9a51-6f3f0d2f8e11')
+const OTHER_ACTION = IdempotencyKey.make('9b2e4d17-5c6a-4f81-8e0d-2a7c1b9f4e63')
 
 const stateAt = (version: number) =>
   new MachineState({
@@ -49,15 +84,47 @@ const stateAt = (version: number) =>
     version: MachineStateVersion.make(version),
     workspaces: [],
     tabs: [],
-    agents: [],
+    agents: [agentRow()],
+  })
+
+const routed = (id: number, key: IdempotencyKey, command: RoutedCommand['command']) =>
+  new RoutedCommand({ id: CommandId.make(id), key, command })
+
+const continuePrompt = new Prompt({ pane: AGENT_PANE, text: 'continue' })
+
+const delivered = Result.succeed(new InputDelivered({ pane: AGENT_PANE, stateChangeSeq: 4 }))
+
+const agentWith = (
+  state: SubscriptionRef.SubscriptionRef<MachineState>,
+  sent: Queue.Queue<SentRequest>,
+) =>
+  Effect.map(Queue.unbounded<HerdrEvent, HerdrSubscriptionError>(), (events) => {
+    const sync = MachineStateSync.layerTest(state)
+    const herdr = HerdrClient.layerTest({
+      responses: [
+        scriptedResult(AgentPromptMethod, { type: 'agent_prompted' }),
+        scriptedResult(AgentSendKeysMethod, { type: 'ok' }),
+      ],
+      events,
+      sent,
+    })
+    const executor = Layer.provide(CommandExecutor.layer, [
+      Layer.provide(CommandPolicy.layer, sync),
+      herdr,
+    ])
+
+    return Layer.merge(sync, executor)
   })
 
 const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> = {}) {
   const attachLifetime = script.attachLifetime ?? Option.none()
   const reply = script.reply ?? (() => Effect.void)
+  const commands = script.commands ?? []
   const state = yield* SubscriptionRef.make(stateAt(0))
   const attempts = yield* Ref.make<readonly number[]>([])
   const received = yield* Queue.unbounded<MachineState>()
+  const completed = yield* Queue.unbounded<Completion>()
+  const sent = yield* Queue.unbounded<SentRequest>()
 
   const connect = Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis
@@ -67,21 +134,26 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
     const handlers = yield* Layer.build(
       AgentLink.toLayer({
         Attach: () =>
-          Option.match(attachLifetime, {
-            onNone: () => Stream.never,
-            onSome: (lifetime) => Stream.fromEffectDrain(Effect.sleep(lifetime)),
-          }),
+          Stream.concat(
+            Stream.fromIterable(commands),
+            Option.match(attachLifetime, {
+              onNone: () => Stream.never,
+              onSome: (lifetime) => Stream.fromEffectDrain(Effect.sleep(lifetime)),
+            }),
+          ),
         PublishState: ({ state: published }) =>
           Queue.offer(received, published).pipe(Effect.andThen(reply(published))),
+        CompleteCommand: (completion) =>
+          Queue.offer(completed, completion).pipe(Effect.andThen(Effect.void)),
       }),
     )
 
     return yield* RpcTest.makeClient(AgentLink).pipe(Effect.provide(handlers))
   })
 
-  yield* Layer.build(Layer.provide(HubLink.layerWith(connect), MachineStateSync.layerTest(state)))
+  yield* Layer.build(Layer.provide(HubLink.layerWith(connect), yield* agentWith(state, sent)))
 
-  return { state, received, attempts: Ref.get(attempts) }
+  return { state, received, completed, sent: Queue.clear(sent), attempts: Ref.get(attempts) }
 })
 
 const backoffTimeline = (failedAttempts: number, attachLifetime: Duration.Duration) =>
@@ -180,6 +252,26 @@ it.effect('reconnects with backoff when a hub call dies', () =>
   }),
 )
 
+it.effect('runs each command the hub pushes down Attach and answers it with its outcome', () =>
+  Effect.gen(function* () {
+    const { completed, sent } = yield* startLink({
+      commands: [
+        routed(0, ACTION, continuePrompt),
+        routed(1, ACTION, continuePrompt),
+        routed(2, OTHER_ACTION, new SendKeys({ pane: SHELL_PANE, keys: ['esc'] })),
+      ],
+    })
+    const answers = yield* Queue.takeN(completed, 3)
+
+    expect(answers).toEqual([
+      { id: CommandId.make(0), result: delivered },
+      { id: CommandId.make(1), result: delivered },
+      { id: CommandId.make(2), result: Result.fail(new PaneNotAgent({ pane: SHELL_PANE })) },
+    ])
+    expect((yield* sent).map((request) => request.method)).toEqual(['agent.prompt'])
+  }),
+)
+
 it.effect('skips the versions that went stale while a publish was in flight', () =>
   Effect.gen(function* () {
     const accepted = yield* Deferred.make<void>()
@@ -200,17 +292,19 @@ const hubProtocol = RpcServer.layerProtocolWebsocket({ path: HUB_PATH }).pipe(
   Layer.provide(protocolSerialization),
 )
 
-const hubServer = (port: number, publications: Queue.Queue<Publication>) =>
+const hubServer = (port: number, hub: RealHub) =>
   HttpRouter.serve(
     RpcServer.layer(AgentLink).pipe(
       Layer.provide([
         AgentLink.toLayer({
-          Attach: () => Stream.never,
+          Attach: () => Stream.concat(Stream.make(routed(0, ACTION, continuePrompt)), Stream.never),
           PublishState: ({ state }, { headers }) =>
-            Queue.offer(publications, {
+            Queue.offer(hub.publications, {
               authorization: Headers.get(headers, 'x-exedev-authorization'),
               state,
             }).pipe(Effect.andThen(Effect.void)),
+          CompleteCommand: (completion) =>
+            Queue.offer(hub.completions, completion).pipe(Effect.andThen(Effect.void)),
         }),
         hubProtocol,
       ]),
@@ -222,12 +316,9 @@ const hubServer = (port: number, publications: Queue.Queue<Publication>) =>
     ),
   )
 
-const startHub = Effect.fn('startHub')(function* (
-  port: number,
-  publications: Queue.Queue<Publication>,
-) {
+const startHub = Effect.fn('startHub')(function* (port: number, hub: RealHub) {
   const scope = yield* Scope.fork(yield* Effect.scope)
-  const context = yield* Layer.buildWithScope(hubServer(port, publications), scope)
+  const context = yield* Layer.buildWithScope(hubServer(port, hub), scope)
   const address = yield* HttpServer.addressFormattedWith(Effect.succeed).pipe(
     Effect.provide(context),
   )
@@ -239,12 +330,14 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
   live.effect('sends the bearer token and republishes after the hub restarts', () =>
     Effect.gen(function* () {
       const publications = yield* Queue.unbounded<Publication>()
-      const hub = yield* startHub(0, publications)
+      const completions = yield* Queue.unbounded<Completion>()
+      const hub = yield* startHub(0, { publications, completions })
       const state = yield* SubscriptionRef.make(stateAt(0))
+      const sent = yield* Queue.unbounded<SentRequest>()
 
       yield* Layer.build(
         Layer.provide(HubLink.layer, [
-          MachineStateSync.layerTest(state),
+          yield* agentWith(state, sent),
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
               CROOK_HUB_URL: `ws://${hub.url.host}${HUB_PATH}`,
@@ -261,10 +354,41 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
 
       yield* Scope.close(hub.scope, Exit.void)
       yield* SubscriptionRef.set(state, stateAt(1))
-      yield* startHub(Number(hub.url.port), publications)
+      yield* startHub(Number(hub.url.port), { publications, completions })
       const republished = yield* Queue.take(publications)
 
       expect(republished.state).toEqual(stateAt(1))
+    }),
+  )
+
+  live.effect('answers a command over the wire, and replays it when the hub resends it', () =>
+    Effect.gen(function* () {
+      const publications = yield* Queue.unbounded<Publication>()
+      const completions = yield* Queue.unbounded<Completion>()
+      const hub = yield* startHub(0, { publications, completions })
+      const state = yield* SubscriptionRef.make(stateAt(0))
+      const sent = yield* Queue.unbounded<SentRequest>()
+
+      yield* Layer.build(
+        Layer.provide(HubLink.layer, [
+          yield* agentWith(state, sent),
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              CROOK_HUB_URL: `ws://${hub.url.host}${HUB_PATH}`,
+              CROOK_HUB_TOKEN: 'exe0.vm-token',
+            }),
+          ),
+        ]),
+      )
+      const answered = yield* Queue.take(completions)
+
+      yield* Scope.close(hub.scope, Exit.void)
+      yield* startHub(Number(hub.url.port), { publications, completions })
+      const replayed = yield* Queue.take(completions)
+
+      expect(answered).toEqual({ id: CommandId.make(0), result: delivered })
+      expect(replayed).toEqual(answered)
+      expect(yield* Queue.clear(sent)).toHaveLength(1)
     }),
   )
 })
