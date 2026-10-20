@@ -161,7 +161,7 @@ subpixel line.
 
 ### Motion
 
-Mischief's rules, unchanged.
+Mischief's rules, except where crook overrides them below.
 
 Timing:
 
@@ -172,7 +172,12 @@ Timing:
 Easing:
 
 - Springs for pointer-driven, interruptible movement.
-- Ease-out for entrances, ease-in for exits.
+- Ease-out for entrances and for exits.
+- A full `transform` string, not Motion's `x`, `y` or `scale` keys, unless a drag or a `layout`
+  animation owns the transform. The animate skill says those keys drop frames under load.
+- `MotionConfig reducedMotion="user"` only skips positional keys (the box and Motion's named
+  transform keys), so each `transform` string checks `useReducedMotion` itself (measured in
+  `motion-dom` 14.3.0).
 
 Restraint:
 
@@ -252,6 +257,11 @@ These fields ship under 16px:
 
 iOS Safari zooms the page when a field under 16px takes focus. That's known iOS behavior, but it
 hasn't been checked on the user's phone yet. Raise all three to `text-base`.
+
+### Exits ease out
+
+Mischief's `DESIGN.md` says ease-in for exits. crook eases out both ways, because ease-in starts
+slow and delays the moment the user is watching (the animate skill, from Emil Kowalski's rules).
 
 ### Two more Status Pill tones
 

@@ -76,8 +76,11 @@ Everything moves through Motion (`motion/react`).
   `--ease-out`): the status word swap, fades and the press highlight.
 - The press highlight comes in instantly and fades out on release.
 - Nothing animates when the list first loads. It's the landing screen, opened many times a day.
-- Reduced motion uses Motion's named transform keys, so `MotionConfig reducedMotion="user"` covers
-  them. The imperative `animate()` calls jump instead.
+- Drags (the sheet, swipes) and `layout` animations keep Motion's named keys, which they own.
+  The imperative `animate()` calls jump instead.
+- The working pulse is CSS (`animate-pulse`, as `DESIGN.md`'s table says) on an inner dot. A Motion
+  keyframe pulse never started on a dot that was already working at first render, because
+  `AnimatePresence initial={false}` skips the mount animation.
 
 ### Unmeasured knobs
 
@@ -101,10 +104,9 @@ These are guesses. Settle them on the phone:
 
 - **`AgentRow` lacks fields the rows need.** It has no branch and no pending-ask summary (blocked
   rows show the ask). The ask waits on S5.
-- **`DESIGN.md` says "ease-in for exits".** The animate skill says never ease-in on UI. The
-  prototype uses ease-out, and `DESIGN.md` should change.
 - **The working dot (tomato) and the blocked dot (the destructive/accent mix) look alike at 8px.**
   The status words carry the state, but the colors are worth revisiting.
+- **The armed swipe label scales to 1.1,** past `DESIGN.md`'s 0.96 to 1.04 deformation range.
 - **New Status Pill tones:** the copied Status Pill gained `working` and `unknown` tones, as
   `DESIGN.md` planned.
 - **Button sizes:** Button gained crook's 44px `touch` and `icon-touch` sizes.
