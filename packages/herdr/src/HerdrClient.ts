@@ -32,6 +32,11 @@ export interface ScriptedResponse {
   readonly line: string
 }
 
+export interface SentRequest {
+  readonly method: string
+  readonly line: string
+}
+
 const SUBSCRIBE_METHOD = 'events.subscribe'
 const EVENTS_LOST_CODE = 'events_lost'
 const PANE_NOT_FOUND_CODE = 'pane_not_found'
@@ -273,12 +278,18 @@ const makeLive = (socketPath: string) => {
 const makeTest = (script: {
   readonly responses: readonly ScriptedResponse[]
   readonly events: Queue.Dequeue<HerdrEvent, HerdrSubscriptionError>
+  readonly sent?: Queue.Enqueue<SentRequest>
 }) => {
   const request = Effect.fn('HerdrClient.request')(function* <Params, Result>(
     method: HerdrMethod<Params, Result>,
     params: Params,
   ) {
-    yield* encodeRequest(method, params)
+    const line = yield* encodeRequest(method, params)
+
+    if (script.sent !== undefined) {
+      yield* Queue.offer(script.sent, { method: method.name, line })
+    }
+
     const scripted = script.responses.find((response) => response.method === method.name)
 
     if (scripted === undefined) {
