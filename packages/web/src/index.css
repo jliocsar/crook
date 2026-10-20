@@ -1,0 +1,148 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/schibsted-grotesk';
+@import '@fontsource-variable/geist-mono';
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme inline {
+  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-weight-semibold: 620;
+  --font-weight-bold: 650;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-fast: 120ms;
+  --motion: 180ms;
+  --motion-slow: 280ms;
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+
+  --radius: 0.75rem;
+  color-scheme: light dark;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.215 0.018 58);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.215 0.018 58);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.215 0.018 58);
+  --primary: oklch(0.675 0.205 32);
+  --primary-foreground: oklch(0.99 0.005 84);
+  --secondary: oklch(0.955 0.012 80);
+  --secondary-foreground: oklch(0.27 0.02 58);
+  --muted: oklch(0.958 0.009 82);
+  --muted-foreground: oklch(0.48 0.025 58);
+  --accent: oklch(0.78 0.16 128);
+  --accent-foreground: oklch(0.24 0.04 128);
+  --destructive: oklch(0.58 0.22 28);
+  --destructive-foreground: oklch(0.985 0.01 84);
+  --warning: color-mix(in oklab, var(--destructive) 55%, var(--accent));
+  --border: oklch(0.215 0.018 58 / 16%);
+  --input: oklch(0.215 0.018 58 / 20%);
+  --ring: oklch(0.675 0.205 32);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.17 0.012 58);
+    --foreground: oklch(0.94 0.01 84);
+    --card: oklch(0.215 0.014 58);
+    --card-foreground: oklch(0.94 0.01 84);
+    --popover: oklch(0.215 0.014 58);
+    --popover-foreground: oklch(0.94 0.01 84);
+    --primary: oklch(0.72 0.185 32);
+    --primary-foreground: oklch(0.16 0.012 58);
+    --secondary: oklch(0.27 0.018 58);
+    --secondary-foreground: oklch(0.92 0.01 84);
+    --muted: oklch(0.25 0.014 58);
+    --muted-foreground: oklch(0.72 0.016 76);
+    --accent: oklch(0.72 0.14 128);
+    --accent-foreground: oklch(0.17 0.035 128);
+    --destructive: oklch(0.68 0.2 28);
+    --destructive-foreground: oklch(0.17 0.02 28);
+    --border: oklch(0.94 0.01 84 / 15%);
+    --input: oklch(0.94 0.01 84 / 20%);
+    --ring: oklch(0.72 0.185 32);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-optical-sizing: auto;
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility hit-area {
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    translate: -50% -50%;
+  }
+}
