@@ -104,10 +104,7 @@ const make = Effect.gen(function* () {
   }
 
   const headAfterLookingAgain = (cwd: string) =>
-    Cache.invalidate(gitDirectories, cwd).pipe(
-      Effect.andThen(Cache.get(gitDirectories, cwd)),
-      flatMapSome(headIn),
-    )
+    Cache.refresh(gitDirectories, cwd).pipe(flatMapSome(headIn))
 
   const branchOf = Effect.fn('GitBranches.branchOf')(function* (cwd: string) {
     if (!path.isAbsolute(cwd)) {

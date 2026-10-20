@@ -56,7 +56,7 @@ const byMachineId = Order.mapInput(Order.String, (entry: MachineEntry) => entry.
 const seenPanes = (entry: MachineEntry) =>
   pipe(
     agentsIn(entry.state),
-    Arr.filter((row) => Option.contains(HashMap.get(entry.seen, row.pane), row.stateChangeSeq)),
+    Arr.filter((row) => HashMap.has(entry.seen, row.pane)),
     Arr.map((row) => row.pane),
   )
 
@@ -186,6 +186,11 @@ const logStorageFailure = (what: string) => (error: SqlError) =>
     `The hub could not store ${what} in its database, so it keeps it in memory only and loses it on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
   )
 
+const logSeenDropFailure = (id: MachineId) => (error: SqlError) =>
+  Effect.logError(
+    `The hub could not delete the outdated seen marks of machine ${id} from its database, so it drops them in memory only and loads them again on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
+  )
+
 const make = Effect.gen(function* () {
   const registry = yield* MachineRegistry
   const seenTracker = yield* SeenTracker
@@ -218,10 +223,8 @@ const make = Effect.gen(function* () {
   const changeFromLink = (
     id: MachineId,
     update: (entry: MachineEntry, now: DateTime.Utc) => MachineEntry,
-    afterwards: (
-      previous: MachineEntry,
-      next: MachineEntry,
-    ) => Effect.Effect<void, SqlError> = () => Effect.void,
+    afterwards: (previous: MachineEntry, next: MachineEntry) => Effect.Effect<void> = () =>
+      Effect.void,
   ) =>
     change(id, (entry, now) => {
       const previous = Option.getOrElse(entry, () => firstSighting(id, now))
@@ -230,8 +233,8 @@ const make = Effect.gen(function* () {
       return registry
         .save(toRecord(next))
         .pipe(
-          Effect.andThen(afterwards(previous, next)),
           Effect.catchTag('SqlError', logStorageFailure(`machine ${id}`)),
+          Effect.andThen(afterwards(previous, next)),
           Effect.as(Option.some(next)),
         )
     })
@@ -285,7 +288,10 @@ const make = Effect.gen(function* () {
     return yield* changeFromLink(id, published(state), (previous, next) =>
       Arr.match(droppedSeenPanes(previous, next), {
         onEmpty: () => Effect.void,
-        onNonEmpty: (panes) => seenTracker.dropPanes(id, panes),
+        onNonEmpty: (panes) =>
+          seenTracker
+            .dropPanes(id, panes)
+            .pipe(Effect.catchTag('SqlError', logSeenDropFailure(id))),
       }),
     )
   })
@@ -320,7 +326,7 @@ const make = Effect.gen(function* () {
           Effect.mapError(() => new PaneNotInHerd({ machine: id, pane })),
         )
 
-        if (Option.contains(HashMap.get(found.seen, pane), row.stateChangeSeq)) {
+        if (HashMap.has(found.seen, pane)) {
           return Option.none()
         }
 

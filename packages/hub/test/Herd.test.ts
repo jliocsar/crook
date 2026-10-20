@@ -99,11 +99,13 @@ const storageRefused = new SqlError({
   reason: new UnknownError({ cause: DISK_FULL, message: DISK_FULL }),
 })
 
+const refusingRegistry = Layer.succeed(
+  MachineRegistry,
+  MachineRegistry.of({ all: Effect.succeed([]), save: () => Effect.fail(storageRefused) }),
+)
+
 const refusingStorage = Layer.mergeAll(
-  Layer.succeed(
-    MachineRegistry,
-    MachineRegistry.of({ all: Effect.succeed([]), save: () => Effect.fail(storageRefused) }),
-  ),
+  refusingRegistry,
   Layer.succeed(
     SeenTracker,
     SeenTracker.of({
@@ -113,6 +115,24 @@ const refusingStorage = Layer.mergeAll(
     }),
   ),
 )
+
+const withRefusingRegistry = <Success, Failure, Requirements>(
+  test: Effect.Effect<Success, Failure, Requirements>,
+) =>
+  Effect.scoped(
+    Effect.flatMap(
+      Layer.build(
+        Layer.provideMerge(
+          Herd.layerWithoutDependencies,
+          Layer.provide(
+            Layer.mergeAll(refusingRegistry, SeenTracker.layer),
+            Database.layerAt(IN_MEMORY),
+          ),
+        ),
+      ),
+      (context) => Effect.provide(test, context),
+    ),
+  )
 
 const withRefusingStorage = <Success, Failure, Requirements>(
   test: Effect.Effect<Success, Failure, Requirements>,
@@ -448,6 +468,23 @@ it.effect('follows the agent link from memory when the database refuses its writ
     expect(laptop.machine.connection).toBe('online')
     expect(laptop.state).toEqual(Option.some(stateOf(LAPTOP, 1, [agentAt(PANE, 7)])))
   }).pipe(withRefusingStorage),
+)
+
+it.effect('deletes dropped seen marks even when storing the machine fails', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+    const seenTracker = yield* SeenTracker
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+    yield* herd.markSeen(LAPTOP, PANE)
+    const marked = yield* seenTracker.all
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [agentAt(PANE, 8)]))
+    const stored = yield* seenTracker.all
+
+    expect(marked.map((record) => record.pane)).toEqual([PANE])
+    expect(stored).toEqual([])
+  }).pipe(withRefusingRegistry),
 )
 
 it.effect('refuses forget and mark seen with nothing changed when the database refuses', () =>
