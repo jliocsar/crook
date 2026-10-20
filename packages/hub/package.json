@@ -18,6 +18,8 @@
     "effect": "4.0.5"
   },
   "devDependencies": {
+    "@crook/agent": "workspace:*",
+    "@crook/herdr": "workspace:*",
     "@crook/tsconfig": "workspace:*"
   }
 }

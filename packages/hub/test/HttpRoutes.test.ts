@@ -4,14 +4,17 @@ import { expect, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Clock from 'effect/Clock'
 import * as ConfigProvider from 'effect/ConfigProvider'
+import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 import * as Schedule from 'effect/Schedule'
 import * as Stream from 'effect/Stream'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpClient from 'effect/http/HttpClient'
 import * as HttpRouter from 'effect/http/HttpRouter'
@@ -20,9 +23,13 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import type * as RpcGroup from 'effect/rpc/RpcGroup'
 import type * as Rpc from 'effect/rpc/Rpc'
 
+import { CommandExecutor } from '@crook/agent/CommandExecutor'
+import * as HubLink from '@crook/agent/HubLink'
+import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { AgentRow } from '@crook/domain/AgentRow'
 import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import { IdempotencyKey, MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import {
@@ -33,6 +40,14 @@ import {
   OwnerEmailRejected,
   UpgradeOriginRejected,
 } from '@crook/hub/ExeDevIdentity'
+import type { HerdrEvent } from '@crook/herdr/Events'
+import {
+  HerdrClient,
+  type HerdrSubscriptionError,
+  type SentRequest,
+  scriptedResult,
+} from '@crook/herdr/HerdrClient'
+import { AgentPromptMethod } from '@crook/herdr/Methods'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
 import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
@@ -310,6 +325,63 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
       expect(receipt).toEqual(new InputDelivered({ pane, stateChangeSeq: 4 }))
       expect(refused).toEqual(new PaneNotAgent({ pane }))
     }),
+  )
+
+  live.effect(
+    'carries a phone command through the real agent to herdr, and replays the same key',
+    () =>
+      Effect.gen(function* () {
+        const machine = MachineId.make('command-agent')
+        const server = yield* HttpServer.HttpServer
+        const state = yield* SubscriptionRef.make(
+          new MachineState({
+            machine,
+            version: MachineStateVersion.make(1),
+            workspaces: [],
+            tabs: [],
+            agents: [
+              new AgentRow({
+                pane,
+                workspace: WorkspaceId.make('w1'),
+                tab: TabId.make('w1:t1'),
+                status: 'idle',
+                title: 'EX-253 Example feature',
+                cwd: '/home/jliocsar/Projects/crook',
+                claudeSession: Option.none(),
+                stateChangeSeq: 4,
+                statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+              }),
+            ],
+          }),
+        )
+        const sent = yield* Queue.unbounded<SentRequest>()
+        const herdr = HerdrClient.layerTest({
+          responses: [scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })],
+          events: yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>(),
+          sent,
+        })
+        const dialHub = connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(machine)).pipe(
+          Effect.provideService(HttpServer.HttpServer, server),
+        )
+
+        yield* Layer.build(
+          Layer.provide(HubLink.layerWith(dialHub), [
+            MachineStateSync.layerTest(state),
+            Layer.provide(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr]),
+          ]),
+        )
+        yield* machineShows(machine, 'online')
+        const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+        const command = new Prompt({ pane, text: 'continue' })
+        const receipt = yield* phone.SendCommand({ machine, key, command })
+        const replayed = yield* phone.SendCommand({ machine, key, command })
+
+        expect(receipt).toEqual(new InputDelivered({ pane, stateChangeSeq: 4 }))
+        expect(replayed).toEqual(receipt)
+        expect((yield* Queue.clear(sent)).map((request) => request.method)).toEqual([
+          'agent.prompt',
+        ])
+      }),
   )
 
   live.effect('answers MachineOffline for a machine whose agent is not attached', () =>
