@@ -27,7 +27,7 @@ export class TranscriptFile extends Schema.Class<TranscriptFile>('TranscriptFile
 
 export class TranscriptSessionInvalid extends Schema.TaggedError<TranscriptSessionInvalid>()(
   'TranscriptSessionInvalid',
-  { session: Schema.String },
+  { session: ClaudeSessionId },
 ) {
   override get message(): string {
     return `"${this.session}" is not a Claude session id: crook only looks up ids made of letters, digits and dashes, so it never builds a path from anything else. Pick the session from the pane again.`
@@ -161,7 +161,18 @@ const make = (roots: readonly string[]) =>
       })
     })
 
-    return TranscriptLocator.of({ roots, locate, await: awaitSession })
+    const awaitSubagent = Effect.fn('TranscriptLocator.awaitSubagent')(function* (
+      file: TranscriptFile,
+      subagent: SubagentId,
+    ) {
+      const target = subagentFileOf(file, subagent)
+
+      yield* awaitPath(fileSystem, target.path).pipe(Effect.mapError(unreadable(target.path)))
+
+      return target
+    })
+
+    return TranscriptLocator.of({ roots, locate, await: awaitSession, awaitSubagent })
   })
 
 export class TranscriptLocator extends Context.Service<
@@ -172,6 +183,10 @@ export class TranscriptLocator extends Context.Service<
       session: ClaudeSessionId,
     ) => Effect.Effect<Option.Option<TranscriptFile>, LocateError>
     readonly await: (session: ClaudeSessionId) => Effect.Effect<TranscriptFile, LocateError>
+    readonly awaitSubagent: (
+      file: TranscriptFile,
+      subagent: SubagentId,
+    ) => Effect.Effect<TranscriptFile, TranscriptDirectoryUnreadable>
   }
 >()('@crook/claude/TranscriptLocator') {
   static readonly layerAt = (roots: readonly string[]) => Layer.effect(this, make(roots))
