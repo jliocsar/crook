@@ -684,9 +684,108 @@ Measured from local Claude Code transcripts (2026-10-20):
 2. The thumbnail kept a focus ring after you closed the viewer with a tap. Now the ring only
    shows when you closed it from the keyboard.
 
+## Outside the app: decided, variant "Word"
+
+### Prototype
+
+- `src/outside/`:
+  - `identity.tsx`: the three icons as data, one SVG renderer and one canvas renderer for the
+    splash image;
+  - `data.ts`: the scene switch, the notification and Live Activity copy, and the lock screen
+    demo script;
+  - `parts.tsx`: the Home Screen, Launch, Install and Lock Screen scenes.
+- The picker's `?v=3` is Word. Crook (`?v=1`) and Herd (`?v=2`) are dead ends now. Its scene
+  menu (or the S key) switches scenes, and Next (or N) steps the lock screen demo.
+- The prototype sets the real `apple-touch-icon`, a startup image drawn for the phone's own
+  screen in each theme, and a manifest. So adding it to the Home Screen shows the real icon and
+  splash. `?bar=` overrides the status bar style.
+- `?icon=<id>` renders one icon full-bleed, which is how its 180px PNG was made.
+- The lock screen is a mock. Hark draws the real cards, and their look wasn't checked.
+
+### Layout
+
+- **The icon** is the lowercase wordmark "crook" in Bricolage Grotesque at 650, dark ink
+  (`#201711`, the light theme's foreground) on cream (`#FDFCF8`, the light theme's
+  primary-foreground). It's a full-bleed square; iOS rounds the corners.
+- **The splash** is the wordmark alone, in the theme's foreground on its background, centred.
+- **The install screen**, shown in a browser tab only:
+  - the icon, "Add crook to your Home Screen", then "crook runs from your Home Screen, like an
+    app. Logins are kept per app, so log in once it's there.";
+  - numbered steps for the browser you're in. Safari: "Tap Share in the toolbar" (with "Can't
+    see it? Tap ⋯ first."), "Choose Add to Home Screen". Chrome: "Tap Share in the address
+    bar", then the same. Both end with "Open crook from your Home Screen";
+  - a quiet "Continue in browser" at the bottom.
+- **Notifications**: the title is the agent's title, so each agent threads on its own. The body
+  is a verb and where it runs: "Wants to run Bash · laptop / crook", "Has a question · desk /
+  notes", "Finished · laptop / crook". All go into a `crook` project in Hark's inbox.
+- **The Live Activity**: the title is "crook". The status is the herd in one line: "1 needs
+  you · 2 working", "3 working", "All done". The detail is the agent that has waited longest
+  ("Prototype the herd screen wants Bash · laptop"), or the latest working one. The symbol is
+  `warning`, `terminal` or `success`, with no progress bar. The accent is the dark theme's
+  foreground (`#EEEBE4`).
+
+### Behaviour
+
+- **Approvals** are Hark approval interactions on a normal notification, not on the Live
+  Activity, so the herd card keeps the device's one slot. Approve and Deny both withdraw the
+  notification. The prompt names the tool only, never the command. It uses Hark's longest
+  expiry and is cancelled as soon as the agent stops waiting.
+- **Questions** can't be answered from Hark, so they're plain notifications.
+- **Every notification is withdrawn** once you've seen it in crook or the state moved on.
+  Tapping one opens nothing (no `url`), per D16.
+- **The Live Activity starts** when the herd goes from idle to busy, because a start makes a
+  sound. It updates on each meaningful change, ends on "All done", and leaves after a short
+  linger. Hark caps a card at 8h, so it's then restarted with a fixed `key` and `replace:
+true`, at least a minute after the last start (Hark warns iOS drops faster ones).
+- **The install screen** shows when crook isn't running standalone. "Continue in browser"
+  carries on to the login. From the Home Screen, crook goes straight to "Log in with exe.dev".
+- **The manifest**: `name` and `short_name` are `crook`, `display` is `standalone`, the
+  background and theme colours are the light background, and the orientation isn't locked.
+
+### Decided against
+
+- **Crook**, a shepherd's crook in cream on tomato, and **Herd**, a cluster of status dots
+  on the dark ground.
+- **A custom notification avatar**: Hark's `imageUrl` must be a public HTTPS URL, and the hub
+  is private.
+- **Approvals on the Live Activity**: they would take the herd card's slot.
+- **Filing notifications under the machine label** (JC-107's first cut): one `crook` project
+  keeps them together, and the body already names the machine.
+
+### Unmeasured knobs
+
+These were picked in the prototype, not measured:
+
+- the wordmark is 26% of the icon's width with `-0.03em` tracking;
+- the splash mark is 30% of the screen's width;
+- the install screen staggers its pieces by 50ms;
+- how long the "All done" card lingers isn't picked yet.
+
+### Data this needs
+
+- **Hark's limits** (from its docs): title 80, Live Activity status 60 and detail 240
+  characters; one Live Activity per device; at most 8h per activity.
+- **The PNG icons and the startup images** are build output. The wordmark should be outlined to
+  a path before export, so it doesn't depend on the font loading.
+- **Standalone detection**: `display-mode: standalone`, or `navigator.standalone` on iOS.
+
+### Known issues
+
+To check on the phone, with the prototype added to the Home Screen:
+
+- the status bar style in both themes (`default` against `black-translucent`);
+- whether a startup image with `prefers-color-scheme` in its media query is honoured;
+- how iOS treats a web app's icon in dark and tinted Home Screen modes;
+- whether Safari's canvas supports `letterSpacing`, which the splash image uses;
+- the install steps' wording on the phone's iOS version, in Safari and in Chrome.
+
+### History
+
+1. Crook, Herd and Word, after 8 calls agreed up front. **Word picked.**
+
 ## Next
 
-- **The rest of JC-117**: what shows outside the app, and wide layouts.
+- **The rest of JC-117**: wide layouts (possibly not v1), and housekeeping.
 - **When web starts,** the settled pieces go into `DESIGN.md`:
   - the herd layout;
   - the chat layout;
@@ -696,6 +795,7 @@ Measured from local Claude Code transcripts (2026-10-20):
   - the connection banner, the dimmed stale state and the first-load skeleton;
   - the empty states, the ended and offline chat cards, and the toast;
   - the image thumbnails and viewer, the subagent tree and screen, and the chat's `…` button;
+  - the Word icon, the splash and the install screen;
   - the Status Pill machine badge.
 - **The SPEC changes** go in at the same time:
   - drop the terminal view and the Ask's "show screen";
@@ -704,4 +804,6 @@ Measured from local Claude Code transcripts (2026-10-20):
     can change;
   - §5.3's Settings gains Account and the test notification, and its prefs are stored on the hub;
   - add Motion to §8.1;
-  - the Subagent Tree is for the `Agent` tool, not `Task`.
+  - the Subagent Tree is for the `Agent` tool, not `Task`;
+  - §8.1 gains the install screen and the manifest, and the Hark payloads get the copy from
+    "Outside the app".
