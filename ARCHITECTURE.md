@@ -154,16 +154,33 @@ Server, identity and Herd (built in JC-90):
 ### 2.7 `@crook/web`
 
 ```
+brand/                    outlines the wordmark from the font into public/wordmark.svg; icons and startup images derive from it at build
 src/
   main.tsx                React root, RegistryProvider
-  routes/                 TanStack Router, file-based (generated route tree): herd, machine, pane chat, terminal, new agent, settings
+  routes/                 TanStack Router, file-based (generated route tree): herd, machine, pane chat, new agent, settings
+  navigation/             the shell: tab bar, root-list screens, pushed screens, edge-swipe back, focus handoff
+  install/                install screen, shown outside a Home Screen app
+  motion/                 springs, Mischief's motion tokens read from CSS, reduced-motion-aware transform strings
+  csp/                    the Content-Security-Policy the hub sends
   rpc/                    RpcClient over WebSocket (browser socket layer), runtime
-  atoms/                  herd, connection, transcript (family by pane), screen, commands
+  atoms/                  herd, connection, transcript (family by pane), commands
   components/ui/          Mischief UI, copied in with the shadcn CLI (we own this code)
-  components/             app components built from ui/ (AgentRow, AskCard, KeyStrip, …)
+  components/             app components built from ui/ (StatusDot, swipe rows, AskCard, …)
   highlight/              shiki setup (JS regex engine, fine-grained langs, hast → JSX)
   sw/                     service worker: app shell cache only
 ```
+
+- **A pushed screen is a child route** marked `staticData.pushed`, so its parent root list stays rendered (and inert) beneath it, and a deep link still has a parent to go back to.
+- **The hub sends the CSP as a header** on every response, never a meta tag: a meta can't carry `frame-ancestors`, and Vite's dev server needs inline scripts. The policy:
+
+  ```
+  default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  ```
+
+  `vite preview` sends the same header, so a production build is checked under it locally.
+
+- **The service worker never calls `skipWaiting`.** A new shell takes over once every crook window has closed, so a running page never loads chunks from a build it didn't come from.
+- Tests run on vitest with happy-dom for components and node for pure modules.
 
 ## 3. Patterns
 

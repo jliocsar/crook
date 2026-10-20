@@ -185,6 +185,8 @@ The Herdr plugin (`herdr-plugin.toml`)
 
 ### 5.3 PWA (iPhone)
 
+Navigation: a tab bar with **Agents** (home, the herd), **Machines** and **Settings**, shown on those three root lists only. Everything else is a screen pushed over them, with an edge swipe back. The look is in `DESIGN.md`.
+
 Screens
 
 1. **Home / Herd** — the sidebar, mobile-shaped.
@@ -196,17 +198,19 @@ Screens
 2. **Agent chat**
    - Transcript rendered as chat: user bubbles, assistant markdown, tool calls collapsed by default (name + one-line summary, expand for input/output), diffs with syntax highlight, images.
    - Live tail while `working` (streaming indicator from Herdr status; message text arrives as transcript lines are appended).
-   - Ask card pinned above the composer when `blocked`: header, command/diff, buttons (Yes / Yes always / No / options from AskUserQuestion), "show screen" escape hatch.
+   - Ask card pinned above the composer when `blocked`: header, command/diff, buttons (Yes / Yes always / No / options from AskUserQuestion).
    - Composer: plain textarea (system dictation works), send button, key strip (Esc, Ctrl+C, ↑, ↓, Tab, Enter), slash-command shortcuts.
-   - Toggle to **Terminal view**: `agent.read --format ansi --source visible`, refreshed on `pane.updated` / short interval while open.
-3. **New agent** — pick machine → workspace (or new) → cwd → optional worktree → kind (claude) → start. Uses `pane.split`/`tab.create` + `agent.start`.
-4. **Settings** — notifications on/off per event type, machines list (label, version, last seen, swipe to forget).
+   - No terminal view: the chat is the only view of an agent.
+3. **Machines** — one card per machine: label, connection badge, agent counts, crook agent and Herdr versions, "update agent" when the agent is older than the hub. A pushed machine screen lists its agents and its details. An offline machine can be forgotten from here (swipe, or hold to forget on its screen).
+4. **New agent** — the task comes first; machine, folder and branch (or a new worktree) are defaults you can change, starting from the most recent place. Uses `workspace.create`/`worktree.create`/`tab.create` + `agent.start`, then the task as the first prompt.
+5. **Settings** — notifications on/off per event type, stored on the hub so every device shares them, with a test notification; Account (the exe.dev email, log out); the hub's status, address and version.
 
 Behavior
 
 - One WSS to the hub while visible. On `visibilitychange` → visible: reconnect, request fresh merged snapshot, reconcile.
 - Cache last snapshot in IndexedDB for instant paint (render dimmed + "syncing" until fresh).
 - Service worker: app shell caching only. No push, no notification click.
+- Outside a Home Screen app, an install screen shows the Add to Home Screen steps for iOS Safari and Chrome, with "Continue in browser".
 
 ## 6. Protocol
 
@@ -230,7 +234,7 @@ Layers
 2. **No device pairing, no command signing** (D4). The exe.dev session is the boundary.
 3. **Machine identity** comes from the exe.dev VM token's signed `ctx`, never from anything the agent claims in its own messages.
 4. **Agent-side policy.** Default allowlist: prompt/keys only to panes that currently host a recognized agent; `start` only for configured kinds; no raw shell text to plain shell panes unless explicitly enabled per machine.
-5. **Web hygiene.** Strict CSP (`script-src 'self'`), no `innerHTML` for transcript content, sanitize markdown, same-origin checks on WSS upgrade (Origin header), no CORS.
+5. **Web hygiene.** Strict CSP, sent by the hub as a response header (the policy is in `ARCHITECTURE.md` §2.7; a meta tag can't carry `frame-ancestors`). No `innerHTML` for transcript content, sanitize markdown, same-origin checks on WSS upgrade (Origin header), no CORS.
 6. **Hark payloads** carry labels only, no content: Hark is a third party.
 7. **Audit log** on each agent (local) and hub: who/when/op, truncated args, configurable redaction.
 8. **Supply chain.** Few deps, lockfile committed, pinned CI action SHAs, signed release artifacts (minisign/cosign) checked by the installer and plugin update path. No auto-update.
@@ -242,18 +246,19 @@ Accepted risks (v1): the hub sees everything agents send (transcripts, screens).
 
 TypeScript + Bun throughout so the protocol types are shared. Monorepo with Bun workspaces. Package layout and design patterns: see `ARCHITECTURE.md`.
 
-### 8.1 PWA (`apps/web`) — decided except state
+### 8.1 PWA (`packages/web`) — decided except state
 
 - React 19 + Vite + TypeScript, Tailwind v4.
 - **UI: Mischief UI** (ui.tinkererslabs.com, MIT). shadcn registry on Base UI + Tailwind tokens. Install components with the shadcn CLI so the source is **copied into the repo** (we own it). Don't depend on the `mischief-ui` npm package: the project is small and young (4 stars, created 2026-08, last push 2026-09).
-  - Components we'll use: Conversation, Message, Response, Prompt Input, Tool Call, Thinking State, Questionnaire (AskUserQuestion), Code Block, Diff View, Terminal Output, Status Pill, Hold Button (destructive confirms), Empty State, Skeleton, Side Panel, Command Palette, Kbd, Agent Checklist (TodoWrite), Subagent Tree (Task tool).
+  - Components we'll use: Conversation, Message, Response, Prompt Input, Tool Call, Thinking State, Questionnaire (AskUserQuestion), Code Block, Diff View, Status Pill, Hold Button (destructive confirms), Empty State, Skeleton, Side Panel, Command Palette, Kbd, Agent Checklist (TodoWrite), Subagent Tree (Agent tool). Each is copied in by the ticket that first uses it.
 - **Markdown:** Mischief's Response already uses `react-markdown` + `remark-gfm`. It renders to React elements (no `innerHTML`), which keeps the CSP strict. Transcript messages land whole from the jsonl (no token streaming), so the cost is one parse per message, memoized. Revisit (`streamdown` / `markdown-to-jsx`) only if long threads are slow.
 - **Highlighting: Shiki**, wired into Code Block via Response's `renderCode` and into Diff View lines. Use `codeToHast` + `hast-util-to-jsx-runtime` (React elements, no `innerHTML`) and the **JavaScript regex engine** (no Oniguruma WASM, so no `wasm-unsafe-eval` in the CSP). Fine-grained bundle, small language set, lazy-loaded.
 - **Diffs:** Diff View fed from Claude's Edit/Write/MultiEdit tool inputs (`old_string`/`new_string`), or `hunks` when we have a real patch.
-- **Terminal fallback view:** Mischief's Terminal Output strips ANSI (no colour). Good enough for v1; swap to `anser` spans if colour turns out to matter.
+- **Motion** (`motion`) for every animation: springs for gestures and pushes, Mischief's motion tokens for tweens (`DESIGN.md`).
 - **TanStack:** Router with file-based routes (typed routes `/m/$machine/p/$pane`), Virtual (long transcripts), Query only if a plain HTTP endpoint ever appears (everything goes over Effect RPC today).
 - **State:** Effect atoms, see §8.3.
 - PWA plumbing: `vite-plugin-pwa` (injectManifest, our own service worker for the app shell), `idb-keyval` for the offline snapshot cache.
+- **Manifest and install:** a `standalone` manifest (`crook`, light background, no orientation lock), linked with `crossorigin="use-credentials"` so the exe.dev proxy's cookie goes with it. The wordmark icon and per-theme startup images are generated at build time. The install screen and the Hark notification and Live Activity copy are in `DESIGN.md` (Outside the app).
 
 ### 8.2 Hub + agent — Effect v4
 

@@ -4,7 +4,9 @@ This is a working note while the PWA's screens get prototyped. It isn't the desi
 `DESIGN.md` is. A decision here moves into `DESIGN.md` (and SPEC §8.1 when it's a stack choice)
 once web implementation starts. Then this file goes.
 
-The web halt still stands: nothing here starts JC-92.
+JC-92 started the web app and moved the cross-cutting pieces into `DESIGN.md`: tokens, motion,
+the navigation shell, outside the app, the dots and touch targets. Each moved part below says so
+and stays only as history. The screens move with the ticket that builds each one.
 
 ## Herd screen: decided, variant "Reveal"
 
@@ -65,6 +67,8 @@ The landing screen is the herd: every agent on every machine.
 
 ### Motion
 
+**Moved to `DESIGN.md` (Motion, Agent status).**
+
 Everything moves through Motion (`motion/react`).
 
 - Springs:
@@ -104,12 +108,12 @@ These are guesses. Settle them on the phone:
 
 - **`AgentRow` lacks fields the rows need.** It has no branch and no pending-ask summary (blocked
   rows show the ask). The ask waits on S5.
-- **Dots: decided, Halo** (user, 2026-10-20). The blocked dot gets a ring, because the working and
+- **Dots: decided, Halo** (user, 2026-10-20). **Moved to `DESIGN.md` (Agent status).** The blocked dot gets a ring, because the working and
   blocked colors collapse under deuteranopia. `DESIGN.md` has the numbers. Amber (blocked moves to
   amber) and Flip (blocked takes tomato, working turns ink) are dead ends (sheet:
   `tmp/prototypes/herd/dots.html`). The mix became a `warning` token, and Status Pill gained a
   `blocked` tone.
-- **Touch targets: 44px to hit, 24px to see** (user, 2026-10-20), in `DESIGN.md`. An audit of the
+- **Touch targets: 44px to hit, 24px to see** (user, 2026-10-20). **Moved to `DESIGN.md`.** An audit of the
   prototype's Agents, chat, New agent, Machines and Settings found one control under 44px: the
   Settings switch, 48 by 28px, now given a 44px hit area.
 - **The armed swipe label scales to 1.1,** past `DESIGN.md`'s 0.96 to 1.04 deformation range.
@@ -258,6 +262,8 @@ These were bugs or `DESIGN.md` misses in the components as shipped:
 
 ### Navigation
 
+**Moved to `DESIGN.md` (Navigation).**
+
 - **Three tabs:** Agents, Machines, Settings. Agents (the herd) is home; there's no separate
   dashboard, because the herd already puts what needs you first.
 - **The tab bar shows on the three root lists only.** Pushed screens (a chat, a machine) cover it,
@@ -309,6 +315,8 @@ Machines as soon as it connects".
 See "Settings: decided" below.
 
 ### Lists
+
+**Moved to `DESIGN.md` (Navigation, Agent status).**
 
 - **Info lists and settings rows are flat:** full-bleed rows with no dividers between them. The
   only rule is the one under the section label. DESIGN.md already bans grouped iOS Settings lists.
@@ -712,6 +720,8 @@ Measured from local Claude Code transcripts (2026-10-20):
 
 ### Layout
 
+**Moved to `DESIGN.md` (Outside the app).**
+
 - **The icon** is the lowercase wordmark "crook" in Bricolage Grotesque at 650, dark ink
   (`#201711`, the light theme's foreground) on cream (`#FDFCF8`, the light theme's
   primary-foreground). It's a full-bleed square; iOS rounds the corners.
@@ -749,6 +759,9 @@ true`, at least a minute after the last start (Hark warns iOS drops faster ones)
   carries on to the login. From the Home Screen, crook goes straight to "Log in with exe.dev".
 - **The manifest**: `name` and `short_name` are `crook`, `display` is `standalone`, the
   background and theme colours are the light background, and the orientation isn't locked.
+
+The install screen and the manifest moved to `DESIGN.md` (Outside the app). Approvals,
+questions, withdrawal and the Live Activity's lifecycle stay here for JC-107.
 
 ### Decided against
 
@@ -803,9 +816,9 @@ To check on the phone, with the prototype added to the Home Screen:
   - the connection banner, the dimmed stale state and the first-load skeleton;
   - the empty states, the ended and offline chat cards, and the toast;
   - the image thumbnails and viewer, the subagent tree and screen, and the chat's `…` button;
-  - the Word icon, the splash and the install screen;
+  - the Word icon, the splash and the install screen (moved, JC-92);
   - the Status Pill machine badge.
-- **The SPEC changes** go in at the same time:
+- **The SPEC changes** (landed with JC-92):
   - drop the terminal view and the Ask's "show screen";
   - §5.3 gains the tab bar and the Machines screen, and Forget moves from Settings to Machines;
   - §5.3's New agent order becomes task first, with machine, folder and branch as defaults you

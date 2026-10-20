@@ -321,6 +321,57 @@ without a major bump. The plugin's own test suite is what catches that — after
 bump and test it there too rather than assuming the pair still agree.
 :::
 
+## Web
+
+The PWA is a Vite app, so it carries a few things the Bun members do not.
+
+- The generated route tree is gitignored, so `typecheck` runs the router's generator before `tsc`.
+  A route file declares its `Route` constant above its component: `statement-order` ranks
+  constants above functions, and a function declaration is hoisted, so the order is legal.
+- The tool-loaded config files (Vite, Vitest, the PWA assets config) have an override turning off
+  `effecttsgo/async-function` and `effecttsgo/node-builtin-import`. Their hooks are async callbacks
+  a tool awaits, not Effect programs. Everything under `src` keeps both rules.
+- The service worker's precache injection point is renamed from `self.__WB_MANIFEST`, which
+  `no-underscore-dangle` rejects. The worker compiles under its own tsconfig with the WebWorker lib.
+
+:::warning
+`shadcn add` writes a `utils` module even when `components.json` aliases `utils` to the `cn`
+package (measured on 4.22.0). That module only re-exports `cn`, which
+`no-reexport-only-modules` rejects. Delete it after every add; components import `cn` from `cn`.
+:::
+
+:::warning
+The PWA assets generator writes its PNGs next to the source image. The image must live in Vite's
+public directory or the icons never reach the build (measured).
+:::
+
+:::warning
+fontkit cannot apply a variation to a WOFF2 font: it crashes reading the `cmap` (measured). Decompress
+to an sfnt with `wawoff2` first; variations and kerning then work.
+:::
+
+:::tip
+happy-dom, measured:
+
+- Its `Element.animate` rejects with an `AbortError` on cancel, which surfaces as unhandled
+  rejections from Motion. The test setup deletes `animate` from the element prototype, so Motion
+  falls back to its JS animator.
+- It does not resolve custom properties from stylesheets. Code that reads a CSS token at runtime
+  gets nothing unless the setup copies the tokens onto the root element from the raw stylesheet.
+  Vitest empties CSS imports, a `?raw` one included, unless its `css.include` names that file.
+:::
+
+:::tip
+A component test awaits testing-library promises, and an `async` test body trips
+`effecttsgo/async-function`. Write it as `it.effect`, with `Effect.promise` around each
+testing-library call.
+:::
+
+:::tip
+Tailwind v4 skips gitignored files when it scans for classes, so a probe page under `tmp/` renders
+without any class only it uses (measured). Use inline styles there, or classes the app already uses.
+:::
+
 ## Establishing a fact
 
 Do not guess about Effect, oxc or Bun. Do not trust a plausible claim in a review.

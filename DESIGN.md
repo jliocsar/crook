@@ -113,7 +113,14 @@ Notes on the mapping:
   cue that survives color blindness. Its 2px width and 35% are unmeasured picks. A box that clips,
   like `truncate`, needs 2px of room on each side of a blocked dot or the ring is cut.
 - **`working`, `unknown` and `blocked` are extra entries in the copied Status Pill's dot map.**
-  crook owns the copied source (SPEC §8.1). Status Pill's `warn` uses `bg-warning`.
+  crook owns the copied source (SPEC §8.1). Status Pill's `warn` uses `bg-warning`, and the pill
+  has a `blocked` tone that wears the same halo.
+- **The dot sits on the text's x-height,** not its line box: an inline dot with
+  `vertical-align: middle`, in Status Pill and beside an agent's status word alike.
+- **The working pulse is CSS** (`animate-pulse`, with `motion-reduce:animate-none`) on the inner
+  dot. A status change swaps the dot through `AnimatePresence`: the new one pops in on the bouncy
+  spring, the old one fades out. A Motion keyframe pulse never started on a dot that was already
+  working at first render, because `AnimatePresence initial={false}` skips the mount animation.
 
 ### Type
 
@@ -191,6 +198,88 @@ Restraint:
 - Keep deformation between 0.96 and 1.04.
 - Respect `prefers-reduced-motion`.
 
+crook's motion, through Motion (`motion/react`):
+
+- **Two springs.** Reorders, collapses and the status-dot pop use
+  `{ type: 'spring', duration: 0.5, bounce: 0.2 }`, from the animate skill's table. Swipes, screen
+  pushes and sheets use the same spring with `bounce: 0`, because a bounce of 0.2 measured a 5px
+  overshoot on a push.
+- **Tweens read Mischief's tokens** from the stylesheet: `--motion-fast` (120ms) and `--motion`
+  (180ms) with `--ease-out`. That covers word swaps, fades and the press highlight. The tokens
+  stay in CSS only, and code reads them once at runtime, so there is one source.
+- **The press highlight** comes in instantly and fades out on release.
+- **Nothing animates on first load.** The landing screen is opened many times a day, and the shell
+  doesn't slide its first screen in.
+- **Drags and `layout` animations keep Motion's named keys,** which they own. Under reduced motion
+  their imperative `animate()` calls jump to the end instead.
+
+## Navigation
+
+- **Three tabs:** Agents, Machines, Settings. Agents (the herd) is home; there's no separate
+  dashboard, because the herd already puts what needs you first.
+- **The tab bar shows on the three root lists only.** Pushed screens (a chat, a machine) cover it,
+  so the chat's dock stays clear.
+  - Icons are 20px over a 12px label, in a 56px row plus the bottom safe area.
+  - The active tab is `primary`.
+  - Agents carries a small `primary` count of the agents that need you. The count is hidden from
+    screen readers, which hear ", N need you" instead.
+  - Switching tabs replaces the history entry, so Back never walks through tabs.
+- **Root lists have a sticky header:** the title in display 24/32, with at most one action on the
+  right. Agents has `+` (New agent); Machines has `+` (Add a machine); Settings has none.
+- **Pushed screens** slide in from the right on the `bounce: 0` spring and cover the root list
+  beneath, which stays mounted and inert. An edge swipe from the left goes back.
+  - The header's back button names where it goes ("Back to laptop" when a chat was opened from
+    that machine).
+  - The new screen's title takes focus once it has arrived, and Back returns focus to whatever
+    opened it, or to the active tab when that's gone.
+  - Back slides the screen out, then pops the history entry. With no entry to pop (the screen was
+    opened from a link), it replaces the URL with its parent.
+  - The browser's own back is instant: the slide belongs to the in-app gesture and button.
+- **Lists are flat:** full-bleed rows with no dividers between them. The only rule is the one
+  under a section label.
+- **Swipe rows:** swiping a card left reveals its actions; only one card is open at a time, and
+  tapping another card closes the open one and does nothing else. Long-press opens the card's
+  action sheet. Swiping right isn't used.
+
+Unmeasured knobs, picked rather than measured; settle them on the phone:
+
+- the edge swipe starts in a 16px gutter and commits past a third of the screen, or at 500px/s;
+- a swipe row opens past half its actions' width, or at 500px/s;
+- the actions are 64px wide with 8px gaps;
+- long-press is 500ms, with 8px of movement allowed.
+
+## Outside the app
+
+- **The icon** is the lowercase wordmark "crook" in Bricolage Grotesque at 650, dark ink
+  (`#201711`, the light theme's foreground) on cream (`#FDFCF8`, the light theme's
+  primary-foreground). It's a full-bleed square; iOS rounds the corners. The wordmark is outlined
+  to a path from the font before any PNG is exported, so no image depends on a font loading.
+- **The splash** is the wordmark alone, in the theme's foreground on its background, centred. Each
+  iPhone size gets a light and a dark startup image, picked by `prefers-color-scheme`.
+- **The install screen** shows in a browser tab only, on an iPhone or iPad, in Safari or Chrome:
+  - the icon, "Add crook to your Home Screen", then "crook runs from your Home Screen, like an
+    app. Logins are kept per app, so log in once it's there.";
+  - numbered steps for the browser you're in. Safari: "Tap Share in the toolbar" (with "Can't
+    see it? Tap ⋯ first."), "Choose Add to Home Screen". Chrome: "Tap Share in the address
+    bar", then the same. Both end with "Open crook from your Home Screen";
+  - a quiet "Continue in browser" at the bottom, which lasts for the browser session.
+  - Other iOS browsers and every desktop browser go straight to the app: crook has no steps
+    to show them.
+- **The manifest**: `name` and `short_name` are `crook`, `display` is `standalone`, the
+  background and theme colours are the light background, and the orientation isn't locked.
+  It's fetched with credentials, because the exe.dev proxy guards every path.
+- **Notifications**: the title is the agent's title, so each agent threads on its own. The body
+  is a verb and where it runs: "Wants to run Bash · laptop / crook", "Has a question · desk /
+  notes", "Finished · laptop / crook". All go into a `crook` project in Hark's inbox.
+- **The Live Activity**: the title is "crook". The status is the herd in one line: "1 needs
+  you · 2 working", "3 working", "All done". The detail is the agent that has waited longest
+  ("Prototype the herd screen wants Bash · laptop"), or the latest working one. The symbol is
+  `warning`, `terminal` or `success`, with no progress bar. The accent is the dark theme's
+  foreground (`#EEEBE4`).
+
+Unmeasured knobs: the wordmark is 26% of the icon's width with `-0.03em` tracking, the splash mark
+is 30% of the screen's width, and the install screen staggers its pieces by 50ms.
+
 ## Components
 
 This is the list in SPEC §8.1, plus Spinner, with what each component is for in crook.
@@ -207,9 +296,8 @@ This is the list in SPEC §8.1, plus Spinner, with what each component is for in
 | Questionnaire   | AskUserQuestion, on a blocked agent                         |
 | Code Block      | Snippets and commands                                       |
 | Diff View       | Edit and Write tool inputs                                  |
-| Terminal Output | The terminal fallback view                                  |
 | Agent Checklist | TodoWrite                                                   |
-| Subagent Tree   | Task tool subagents                                         |
+| Subagent Tree   | Agent tool subagents                                        |
 | Hold Button     | Destructive confirms, such as closing an agent              |
 | Empty State     | Nothing needs you; no machines yet                          |
 | Skeleton        | First load with no cached snapshot                          |
@@ -261,7 +349,8 @@ shipped controls fall short of that:
 | Side Panel close                    | 32px                    |
 
 All of them get 44px hit areas. The primary ones also show at 44px, and Button needs a size of
-crook's own for that, because base-nova doesn't have one that large.
+crook's own for that, because base-nova doesn't have one that large: `touch` (44px tall) and
+`icon-touch` (44px square).
 
 ### Text fields at 16px
 
@@ -327,6 +416,6 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 
 ## Open
 
-- Navigation: a push stack (herd → chat) or a tab bar.
-- What each herd row shows, and how "Needs you" looks.
 - The machine badge's tone for each state: online, offline, reconnecting.
+- The screens decided in `TEMP_DESIGN_EXPLORATION.md` (herd, chat, Machines, New agent,
+  Settings, connection and empty states) move here with the ticket that builds each one.
