@@ -37,7 +37,7 @@ export function Pressable({
   children,
 }: {
   onTap: (opener: HTMLElement) => void
-  onLongPress: () => void
+  onLongPress?: () => void
   suppress?: boolean
   className?: string
   frameClassName?: string

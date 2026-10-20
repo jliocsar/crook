@@ -1,12 +1,16 @@
 import { Outlet } from '@tanstack/react-router'
 import type * as React from 'react'
 
+import { HeaderBanner } from '@crook/web/connection/ConnectionBanner'
 import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
+
+export const TAB_SCROLLER_SELECTOR = '[data-slot="tab-scroller"]'
 
 export function TabHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
-    <header className="bg-background/90 sticky top-0 z-10 px-4 pt-[var(--safe-top)] backdrop-blur">
-      <div className="flex h-14 items-center justify-between gap-2">
+    <header className="bg-background/90 sticky top-0 z-10 pt-[var(--safe-top)] backdrop-blur">
+      <HeaderBanner />
+      <div className="flex h-14 items-center justify-between gap-2 px-4">
         <h1 className="font-display text-2xl leading-8 font-bold tracking-[-0.025em]">{title}</h1>
         {action}
       </div>
@@ -29,7 +33,8 @@ export function TabScreen({
     <>
       <div
         inert={covered}
-        className="no-scrollbar h-dvh overflow-y-auto pb-[calc(3.5rem+var(--safe-bottom)+1rem)]"
+        data-slot="tab-scroller"
+        className="no-scrollbar h-dvh overflow-y-auto overscroll-y-none pb-[calc(3.5rem+var(--safe-bottom)+1rem)]"
       >
         <TabHeader title={title} action={action} />
         {children}

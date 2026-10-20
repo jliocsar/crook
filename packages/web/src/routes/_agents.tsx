@@ -1,9 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { TabScreen } from '@crook/web/navigation/TabScreen'
+import { HerdScreen } from '@crook/web/herd/HerdScreen'
 
-export const Route = createFileRoute('/_agents')({ component: Agents })
-
-function Agents() {
-  return <TabScreen title="crook" />
-}
+export const Route = createFileRoute('/_agents')({ component: HerdScreen })
