@@ -104,10 +104,16 @@ These are guesses. Settle them on the phone:
 
 - **`AgentRow` lacks fields the rows need.** It has no branch and no pending-ask summary (blocked
   rows show the ask). The ask waits on S5.
-- **The working dot (tomato) and the blocked dot (the destructive/accent mix) look alike at 8px.**
-  The status words carry the state, but the colors are worth revisiting.
+- **Dots: decided, Halo** (user, 2026-10-20). The blocked dot gets a ring, because the working and
+  blocked colors collapse under deuteranopia. `DESIGN.md` has the numbers. Amber (blocked moves to
+  amber) and Flip (blocked takes tomato, working turns ink) are dead ends (sheet:
+  `tmp/prototypes/herd/dots.html`). The mix became a `warning` token, and Status Pill gained a
+  `blocked` tone.
+- **Touch targets: 44px to hit, 24px to see** (user, 2026-10-20), in `DESIGN.md`. An audit of the
+  prototype's Agents, chat, New agent, Machines and Settings found one control under 44px: the
+  Settings switch, 48 by 28px, now given a 44px hit area.
 - **The armed swipe label scales to 1.1,** past `DESIGN.md`'s 0.96 to 1.04 deformation range.
-- **New Status Pill tones:** the copied Status Pill gained `working` and `unknown` tones, as
+- **New Status Pill tones:** the copied Status Pill gained `working`, `unknown` and `blocked` tones, as
   `DESIGN.md` planned.
 - **Button sizes:** Button gained crook's 44px `touch` and `icon-touch` sizes.
 

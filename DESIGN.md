@@ -61,27 +61,28 @@ Every screen is designed and checked in both themes.
 
 ### Color
 
-| Variable                 | Light                         | Dark                        | Role                         |
-| ------------------------ | ----------------------------- | --------------------------- | ---------------------------- |
-| `background`             | `oklch(1 0 0)`                | `oklch(0.17 0.012 58)`      | Page ground                  |
-| `foreground`             | `oklch(0.215 0.018 58)`       | `oklch(0.94 0.01 84)`       | Primary text, strong borders |
-| `card`                   | `oklch(1 0 0)`                | `oklch(0.215 0.014 58)`     | Raised rows, sheets          |
-| `card-foreground`        | `oklch(0.215 0.018 58)`       | `oklch(0.94 0.01 84)`       |                              |
-| `popover`                | `oklch(1 0 0)`                | `oklch(0.215 0.014 58)`     | Menus, popovers              |
-| `popover-foreground`     | `oklch(0.215 0.018 58)`       | `oklch(0.94 0.01 84)`       |                              |
-| `primary`                | `oklch(0.675 0.205 32)`       | `oklch(0.72 0.185 32)`      | Tomato: links, active, focus |
-| `primary-foreground`     | `oklch(0.99 0.005 84)`        | `oklch(0.16 0.012 58)`      |                              |
-| `secondary`              | `oklch(0.955 0.012 80)`       | `oklch(0.27 0.018 58)`      | Secondary buttons            |
-| `secondary-foreground`   | `oklch(0.27 0.02 58)`         | `oklch(0.92 0.01 84)`       |                              |
-| `muted`                  | `oklch(0.958 0.009 82)`       | `oklch(0.25 0.014 58)`      | Quiet fills, code wells      |
-| `muted-foreground`       | `oklch(0.48 0.025 58)`        | `oklch(0.72 0.016 76)`      | Supporting text, meta        |
-| `accent`                 | `oklch(0.78 0.16 128)`        | `oklch(0.72 0.14 128)`      | Leaf: small success details  |
-| `accent-foreground`      | `oklch(0.24 0.04 128)`        | `oklch(0.17 0.035 128)`     |                              |
-| `destructive`            | `oklch(0.58 0.22 28)`         | `oklch(0.68 0.2 28)`        | Kill, deny, errors           |
-| `destructive-foreground` | `oklch(0.985 0.01 84)`        | `oklch(0.17 0.02 28)`       |                              |
-| `border`                 | `oklch(0.215 0.018 58 / 16%)` | `oklch(0.94 0.01 84 / 15%)` | Rules, quiet borders         |
-| `input`                  | `oklch(0.215 0.018 58 / 20%)` | `oklch(0.94 0.01 84 / 20%)` | Field borders                |
-| `ring`                   | `oklch(0.675 0.205 32)`       | `oklch(0.72 0.185 32)`      | Focus ring                   |
+| Variable                 | Light                                    | Dark                        | Role                         |
+| ------------------------ | ---------------------------------------- | --------------------------- | ---------------------------- |
+| `background`             | `oklch(1 0 0)`                           | `oklch(0.17 0.012 58)`      | Page ground                  |
+| `foreground`             | `oklch(0.215 0.018 58)`                  | `oklch(0.94 0.01 84)`       | Primary text, strong borders |
+| `card`                   | `oklch(1 0 0)`                           | `oklch(0.215 0.014 58)`     | Raised rows, sheets          |
+| `card-foreground`        | `oklch(0.215 0.018 58)`                  | `oklch(0.94 0.01 84)`       |                              |
+| `popover`                | `oklch(1 0 0)`                           | `oklch(0.215 0.014 58)`     | Menus, popovers              |
+| `popover-foreground`     | `oklch(0.215 0.018 58)`                  | `oklch(0.94 0.01 84)`       |                              |
+| `primary`                | `oklch(0.675 0.205 32)`                  | `oklch(0.72 0.185 32)`      | Tomato: links, active, focus |
+| `primary-foreground`     | `oklch(0.99 0.005 84)`                   | `oklch(0.16 0.012 58)`      |                              |
+| `secondary`              | `oklch(0.955 0.012 80)`                  | `oklch(0.27 0.018 58)`      | Secondary buttons            |
+| `secondary-foreground`   | `oklch(0.27 0.02 58)`                    | `oklch(0.92 0.01 84)`       |                              |
+| `muted`                  | `oklch(0.958 0.009 82)`                  | `oklch(0.25 0.014 58)`      | Quiet fills, code wells      |
+| `muted-foreground`       | `oklch(0.48 0.025 58)`                   | `oklch(0.72 0.016 76)`      | Supporting text, meta        |
+| `accent`                 | `oklch(0.78 0.16 128)`                   | `oklch(0.72 0.14 128)`      | Leaf: small success details  |
+| `accent-foreground`      | `oklch(0.24 0.04 128)`                   | `oklch(0.17 0.035 128)`     |                              |
+| `destructive`            | `oklch(0.58 0.22 28)`                    | `oklch(0.68 0.2 28)`        | Kill, deny, errors           |
+| `destructive-foreground` | `oklch(0.985 0.01 84)`                   | `oklch(0.17 0.02 28)`       |                              |
+| `warning`                | `destructive` 55% into `accent` in OKLab | the same mix                | Blocked, reconnecting        |
+| `border`                 | `oklch(0.215 0.018 58 / 16%)`            | `oklch(0.94 0.01 84 / 15%)` | Rules, quiet borders         |
+| `input`                  | `oklch(0.215 0.018 58 / 20%)`            | `oklch(0.94 0.01 84 / 20%)` | Field borders                |
+| `ring`                   | `oklch(0.675 0.205 32)`                  | `oklch(0.72 0.185 32)`      | Focus ring                   |
 
 Borders use alpha colors, so they work in both themes.
 
@@ -91,13 +92,13 @@ crook's agent statuses reuse Mischief's own dots. Status Pill has four tones: `o
 and `idle`. Subagent Tree draws three dot styles the pill lacks: `running`, `queued` and its
 `done`.
 
-| Status    | Dot                                                             | Source                  |
-| --------- | --------------------------------------------------------------- | ----------------------- |
-| `idle`    | `bg-muted-foreground`                                           | Status Pill `idle`      |
-| `working` | `bg-primary animate-pulse`                                      | Subagent Tree `running` |
-| `blocked` | `bg-[color-mix(in_oklab,var(--destructive)_55%,var(--accent))]` | Status Pill `warn`      |
-| `done`    | `bg-accent`                                                     | Status Pill `ok`        |
-| `unknown` | `border border-muted-foreground/40`, hollow                     | Subagent Tree `queued`  |
+| Status    | Dot                                         | Source                  |
+| --------- | ------------------------------------------- | ----------------------- |
+| `idle`    | `bg-muted-foreground`                       | Status Pill `idle`      |
+| `working` | `bg-primary animate-pulse`                  | Subagent Tree `running` |
+| `blocked` | `bg-warning ring-2 ring-warning/35`         | Status Pill `warn`      |
+| `done`    | `bg-accent`                                 | Status Pill `ok`        |
+| `unknown` | `border border-muted-foreground/40`, hollow | Subagent Tree `queued`  |
 
 Notes on the mapping:
 
@@ -107,8 +108,12 @@ Notes on the mapping:
 - **A done agent is green, a done subagent stays grey.** Subagent Tree's `done` is
   `bg-muted-foreground/40`. The decision: green is for an agent the user should look at, while a
   finished subagent is history inside it.
-- **`working` and `unknown` are two extra entries in the copied Status Pill's dot map.** crook owns
-  the copied source (SPEC §8.1).
+- **`blocked` wears a halo.** Working and blocked differ by hue alone: ΔE OK 0.112 in light and
+  0.096 in dark, and 0.012 and 0.021 under simulated deuteranopia (Machado 2009). The ring is the
+  cue that survives color blindness. Its 2px width and 35% are unmeasured picks. A box that clips,
+  like `truncate`, needs 2px of room on each side of a blocked dot or the ring is cut.
+- **`working`, `unknown` and `blocked` are extra entries in the copied Status Pill's dot map.**
+  crook owns the copied source (SPEC §8.1). Status Pill's `warn` uses `bg-warning`.
 
 ### Type
 
@@ -227,11 +232,21 @@ AskUserQuestion. It gets composed from a card surface, Code Block or Diff View, 
 
 These are deliberate departures from the shipped source, because crook is phone-first.
 
-### Touch targets of at least 44px
+### Touch targets: 44px to hit, 24px to see
 
-On a phone this is the visible control, not an invisible larger hit area. Mischief's `DESIGN.md`
-asks for 44px touch targets and says mobile actions stay 44px tall. Its shipped controls fall
-short of that:
+Every control's hit area is at least 44 by 44px (Apple's HIG). What a control shows can be smaller:
+
+- **Primary actions show at 44px:** buttons, send and stop, the Ask's choices and its Back, Skip
+  and Next, list rows and the tab bar.
+- **Compact controls may show as small as 24px**, the minimum in WCAG 2.2's 2.5.8 (AA), when an
+  invisible hit area takes them to 44px. That covers switches, chips and inline icon buttons.
+- **Hit areas never overlap.** Space compact controls at least 44px apart, centre to centre, or
+  show them larger.
+
+Compact controls get their hit area from crook's `hit-area` utility.
+
+Mischief's `DESIGN.md` asks for 44px touch targets and says mobile actions stay 44px tall. Its
+shipped controls fall short of that:
 
 | Control                             | Shipped                 |
 | ----------------------------------- | ----------------------- |
@@ -245,8 +260,8 @@ short of that:
 | Conversation jump-to-latest         | 36px                    |
 | Side Panel close                    | 32px                    |
 
-All of them go to 44px. Button needs a size of crook's own, because base-nova doesn't have one that
-large.
+All of them get 44px hit areas. The primary ones also show at 44px, and Button needs a size of
+crook's own for that, because base-nova doesn't have one that large.
 
 ### Text fields at 16px
 
@@ -262,10 +277,6 @@ hasn't been checked on the user's phone yet. Raise all three to `text-base`.
 
 Mischief's `DESIGN.md` says ease-in for exits. crook eases out both ways, because ease-in starts
 slow and delays the moment the user is watching (the animate skill, from Emil Kowalski's rules).
-
-### Two more Status Pill tones
-
-`working` and `unknown`, as described under Agent status.
 
 ### Phone behavior we get for free
 
