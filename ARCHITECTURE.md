@@ -165,19 +165,15 @@ src/
   rpc/                    RpcClient over WebSocket (browser socket layer), runtime
   atoms/                  herd, connection, transcript (family by pane), commands
   components/ui/          Mischief UI, copied in with the shadcn CLI (we own this code)
-  components/             app components built from ui/ (StatusDot, swipe rows, AskCard, …)
+  components/             app components built from ui/ (StatusDot, press and long-press, swipe rows, AskCard, …)
+  router/                 the router, with its not-found (home) and error fallbacks
   highlight/              shiki setup (JS regex engine, fine-grained langs, hast → JSX)
   sw/                     service worker: app shell cache only
 ```
 
 - **A pushed screen is a child route** marked `staticData.pushed`, so its parent root list stays rendered (and inert) beneath it, and a deep link still has a parent to go back to.
-- **The hub sends the CSP as a header** on every response, never a meta tag: a meta can't carry `frame-ancestors`, and Vite's dev server needs inline scripts. The policy:
-
-  ```
-  default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
-  ```
-
-  `vite preview` sends the same header, so a production build is checked under it locally.
+- **The hub sends the CSP as a header** on every response, never a meta tag: a meta can't carry `frame-ancestors`, and Vite's dev server needs inline scripts. The policy is decided once, as `CONTENT_SECURITY_POLICY` in `@crook/web/csp/ContentSecurityPolicy`: everything `'self'`, with `default-src`, `base-uri`, `form-action` and `frame-ancestors` at `'none'`. The hub imports that leaf (JC-115) rather than restating it. `vite preview` sends the same header, so a production build is checked under it locally.
+- **A push hands over its opener.** The caller passes `openedFrom(element)` as the navigation's history state, with the element that was tapped (`Pressable` and `SwipeRow` give it to `onTap`). The pushed screen returns focus there on Back, falling back to whatever had focus, then to the active tab. Document focus alone can't name the opener on an iPhone, where a tap doesn't focus a button.
 
 - **The service worker never calls `skipWaiting`.** A new shell takes over once every crook window has closed, so a running page never loads chunks from a build it didn't come from.
 - Tests run on vitest with happy-dom for components and node for pure modules.

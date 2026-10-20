@@ -88,17 +88,18 @@ Borders use alpha colors, so they work in both themes.
 
 ### Agent status
 
-crook's agent statuses reuse Mischief's own dots. Status Pill has four tones: `ok`, `warn`, `down`
-and `idle`. Subagent Tree draws three dot styles the pill lacks: `running`, `queued` and its
-`done`.
+crook's agent statuses reuse Mischief's own dots. The copied Status Pill has seven tones: `ok`,
+`warn`, `blocked`, `down`, `idle`, `working` and `unknown`. Mischief's pill ships the four of them
+that are not agent-specific; `working` and `unknown` take Subagent Tree's `running` and `queued`
+dots, and `blocked` is `warn` with a halo.
 
-| Status    | Dot                                         | Source                  |
-| --------- | ------------------------------------------- | ----------------------- |
-| `idle`    | `bg-muted-foreground`                       | Status Pill `idle`      |
-| `working` | `bg-primary animate-pulse`                  | Subagent Tree `running` |
-| `blocked` | `bg-warning ring-2 ring-warning/35`         | Status Pill `warn`      |
-| `done`    | `bg-accent`                                 | Status Pill `ok`        |
-| `unknown` | `border border-muted-foreground/40`, hollow | Subagent Tree `queued`  |
+| Status    | Dot                                         | Source                |
+| --------- | ------------------------------------------- | --------------------- |
+| `idle`    | `bg-muted-foreground`                       | Status Pill `idle`    |
+| `working` | `bg-primary animate-pulse`                  | Status Pill `working` |
+| `blocked` | `bg-warning ring-2 ring-warning/35`         | Status Pill `blocked` |
+| `done`    | `bg-accent`                                 | Status Pill `ok`      |
+| `unknown` | `border border-muted-foreground/40`, hollow | Status Pill `unknown` |
 
 Notes on the mapping:
 
@@ -112,9 +113,8 @@ Notes on the mapping:
   0.096 in dark, and 0.012 and 0.021 under simulated deuteranopia (Machado 2009). The ring is the
   cue that survives color blindness. Its 2px width and 35% are unmeasured picks. A box that clips,
   like `truncate`, needs 2px of room on each side of a blocked dot or the ring is cut.
-- **`working`, `unknown` and `blocked` are extra entries in the copied Status Pill's dot map.**
-  crook owns the copied source (SPEC §8.1). Status Pill's `warn` uses `bg-warning`, and the pill
-  has a `blocked` tone that wears the same halo.
+- **The three extra tones live in the copied Status Pill's dot map,** because crook owns the copied
+  source (SPEC §8.1). Its `warn` uses `bg-warning`.
 - **The dot sits on the text's x-height,** not its line box: an inline dot with
   `vertical-align: middle`, in Status Pill and beside an agent's status word alike.
 - **The working pulse is CSS** (`animate-pulse`, with `motion-reduce:animate-none`) on the inner
@@ -227,11 +227,13 @@ crook's motion, through Motion (`motion/react`):
 - **Root lists have a sticky header:** the title in display 24/32, with at most one action on the
   right. Agents has `+` (New agent); Machines has `+` (Add a machine); Settings has none.
 - **Pushed screens** slide in from the right on the `bounce: 0` spring and cover the root list
-  beneath, which stays mounted and inert. An edge swipe from the left goes back.
+  beneath, which stays mounted and inert. An edge swipe from the left goes back. The edge gutter
+  sits under the header, so the back button keeps its whole 44px.
   - The header's back button names where it goes ("Back to laptop" when a chat was opened from
     that machine).
   - The new screen's title takes focus once it has arrived, and Back returns focus to whatever
-    opened it, or to the active tab when that's gone.
+    opened it, or to the active tab when that's gone. The opener is the element that was tapped,
+    not the focused one: a WebKit tap doesn't focus a button.
   - Back slides the screen out, then pops the history entry. With no entry to pop (the screen was
     opened from a link), it replaces the URL with its parent.
   - The browser's own back is instant: the slide belongs to the in-app gesture and button.
@@ -246,6 +248,7 @@ Unmeasured knobs, picked rather than measured; settle them on the phone:
 - the edge swipe starts in a 16px gutter and commits past a third of the screen, or at 500px/s;
 - a swipe row opens past half its actions' width, or at 500px/s;
 - the actions are 64px wide with 8px gaps;
+- a swipe row's drag gives 0.15 of the distance past fully open and 0.05 past closed;
 - long-press is 500ms, with 8px of movement allowed.
 
 ## Outside the app

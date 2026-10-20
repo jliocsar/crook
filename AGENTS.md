@@ -333,6 +333,17 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   a tool awaits, not Effect programs. Everything under `src` keeps both rules.
 - The service worker's precache injection point is renamed from `self.__WB_MANIFEST`, which
   `no-underscore-dangle` rejects. The worker compiles under its own tsconfig with the WebWorker lib.
+- The member reaches its own leaves as `@crook/web/...` through a tsconfig `paths` alias, which
+  Vite and Vitest read too. Its `exports` map is for other members, and a subpath pattern there
+  substitutes into one fixed extension, so `./src/*.ts` reaches the `.ts` leaves and never a
+  `.tsx` one. `components.json` names the same alias, so `shadcn add` writes it.
+- `@tanstack/history` is a direct dependency pinned to the exact version the router pins, only so
+  history state can be typed by module augmentation. An augmentation merges into the copy the
+  compiler resolves from this member; a second copy would leave the router's type untouched.
+- A one-shot Bun script keeps `Effect.provide` at its entry and disables
+  `effecttsgo/strict-effect-provide` there, as the rule's own message allows at an entry point.
+  The long-running members' `Layer.launch` form does not carry over: it never returns, and the
+  script hung until killed (measured).
 
 :::warning
 `shadcn add` writes a `utils` module even when `components.json` aliases `utils` to the `cn`
@@ -356,6 +367,8 @@ happy-dom, measured:
 - Its `Element.animate` rejects with an `AbortError` on cancel, which surfaces as unhandled
   rejections from Motion. The test setup deletes `animate` from the element prototype, so Motion
   falls back to its JS animator.
+- Its pointer events always carry a `pageX` of 0, whatever the init says. Motion's drag reads
+  `pageX`, so a drag test defines it on each event before dispatching.
 - It does not resolve custom properties from stylesheets. Code that reads a CSS token at runtime
   gets nothing unless the setup copies the tokens onto the root element from the raw stylesheet.
   Vitest empties CSS imports, a `?raw` one included, unless its `css.include` names that file.
