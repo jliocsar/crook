@@ -6,8 +6,9 @@ import * as HttpClient from 'effect/http/HttpClient'
 
 import { AGENT_SOCKET_OPEN_TIMEOUT } from '@crook/protocol/AgentLink'
 
-const HEALTH_PATH = '/health'
 const OPAQUE_REDIRECT_STATUS = 0
+
+export const HEALTH_PATH = '/health'
 
 const checkThroughProxy = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
