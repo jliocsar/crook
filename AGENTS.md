@@ -205,6 +205,13 @@ connection the moment its constructor returns and never dials (measured). Build 
 the scope that should own it, with `Layer.build`, and provide the resulting context.
 :::
 
+:::tip
+`Queue.fail` lets a consumer take everything buffered before it sees the failure, so failing a
+queue to end a stream drops nothing already queued (measured). `Stream.runCollect` over that stream
+still reports only the failure, so a test that needs the items as well collects them with
+`runForEach`.
+:::
+
 :::warning
 An effect `Cache` lookup that every caller abandons is interrupted and dropped from the cache, so
 the next `get` runs it again (measured). Where running twice is the bug — anything that types into
@@ -456,6 +463,14 @@ Do not guess about Effect, oxc or Bun. Do not trust a plausible claim in a revie
    found to lint" (measured — it does this even with `--no-ignore`, and even for a project nested
    under the ignored directory). Probe it from a directory outside any ignored tree.
 3. Record it here — never as a comment; `no-comments` rejects one anyway.
+:::
+
+:::warning
+`src/` also carries `@internal` exports that the shipped declarations strip, so a name found by
+grepping it can still fail to typecheck. `Schema.UnknownFromJsonString` is one, and
+`effecttsgo/prefer-schema-over-json` suggests it in its message anyway; the public spelling is
+`Schema.fromJsonString(Schema.Json)` (both measured on `effect@4.0.5`). Check a name found in `src`
+for `@internal` before building on it.
 :::
 
 ## Pull requests

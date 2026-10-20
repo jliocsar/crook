@@ -79,6 +79,7 @@ Claude integration
 - Many panes share one cwd (laptop has ~8 Claude panes in `hapana-gcp`), so "newest jsonl in the cwd dir" is ambiguous. Need the session id from `agent_session`.
 - Hooks (`SessionStart`, `PreToolUse`, `Notification`, `Stop`, …) can feed structured events. Possible source for structured approval requests instead of screen parsing. **Spike S5** (confirm which hook gives the pending permission payload).
 - Heuristic worth testing: when Herdr says `blocked`, the last `tool_use` in the transcript without a matching `tool_result` is what's being asked.
+- Transcript behaviour crook relies on (S7, see 10.1): no file before the first prompt, appends land in 4096-byte pieces, `/clear` starts a new session and file at once, `/compact` appends to the same file, subagents write `<session>/subagents/agent-<id>.jsonl` with a `.meta.json` beside it.
 
 ### 3.3 exe.dev
 
@@ -173,7 +174,7 @@ Responsibilities
 - Optionally write `pane.report_metadata` tokens back into Herdr (e.g. show in the TUI sidebar that the phone is attached).
 - Seen: when a phone opens an agent's chat, the hub marks that pane seen at its current `state_change_seq`; a later transition makes it unseen again. Herdr's own Done badge is left alone, because its only way to mark seen is a focus command, which jumps every attached TUI to that pane (D12, S8).
 - One Herdr session per machine: always the default socket (or `HERDR_SOCKET_PATH`). Named sessions are out of scope for v1.
-- Config: `HERDR_SOCKET_PATH` (or default), Claude roots (comma list, default `~/.claude`, honor `CLAUDE_CONFIG_DIR`), hub URL, exe.dev VM token for the hub VM (its signed `ctx` carries the machine id), label.
+- Config: `HERDR_SOCKET_PATH` (or default), Claude roots (`CROOK_CLAUDE_ROOTS`, comma list, default `~/.claude`, plus `CLAUDE_CONFIG_DIR` when set), hub URL, exe.dev VM token for the hub VM (its signed `ctx` carries the machine id), label.
 
 The Herdr plugin (`herdr-plugin.toml`)
 
@@ -219,7 +220,8 @@ Effect RPC over WebSockets, NDJSON serialization. Two RPC groups, both defined o
 Invariants that hold whatever the shapes end up being:
 
 - Machine state travels as **whole values**, never as replayable events (Herdr's own contract: events invalidate, reads are authoritative).
-- Transcripts travel as **offset-addressed appends**, so a reconnect resumes from an offset instead of refetching.
+- Transcripts travel as **offset-addressed appends**, so a reconnect resumes from an offset instead of refetching. A new Claude session on the same pane (`/clear`) is announced in the stream, never inferred by the phone.
+- Images travel **inline** in the transcript stream, base64, once per image. The largest measured image line is far under the WebSocket payload limit (ARCHITECTURE.md §2.6).
 - Every command carries an **idempotency key** minted on the phone; a retry never prompts an agent twice.
 - A command's success is confirmed by **observed state** (status leaves `blocked`), not just by an ack.
 - Global pane id = `<machine_id>/<herdr pane id>`; machine id comes from the exe.dev token `ctx`.
@@ -306,6 +308,17 @@ Effect atoms end to end. See `ARCHITECTURE.md` §3.7.
 | S8  | Does `agent.focus` from the API move an attached TUI client's view, or only mark seen?                                                             | Call it from a script while watching the TUI                                                                 | D12                                                  |
 
 ### 10.1 Spike results
+
+**S7 — Claude transcripts (spike 82, then measured again while building JC-99 and JC-100).**
+
+- No file exists before the first prompt. A tail waits for it rather than failing.
+- Appends land in 4096-byte pieces, so a reader can see half a line; one append reached 122 KB. The tail parses complete lines only and holds the rest.
+- `/clear` creates a new session id and a new file at once; herdr's `agent_session` follows it (S4). `/compact` appends a boundary and a summary to the same file.
+- Subagents write `<session>/subagents/agent-<id>.jsonl` with an `agent-<id>.meta.json` beside it.
+- 55 records in the laptop's history are torn mid-file (a cut record with the next one glued on); all 55 are recovered by trying each `{"parentUuid"` / `{"type"` offset.
+- A prompt queued while Claude works is only a `queued_command` attachment, never a user entry (0 of 262).
+- Images are stored twice per tool result. Base64 per image across 908 images: p50 82,668 B, p99 518,524 B, max 671,428 B. Transcript files: p50 357,002 B, p99 4,272,872 B, max 97,251,741 B.
+- Decision: images inline (no fetch RPC); one tail per phone watch, cursor-only hub (D10 holds).
 
 **S4 — pane → Claude session (verified 2026-10-16).**
 
