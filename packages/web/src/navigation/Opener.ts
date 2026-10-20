@@ -4,13 +4,20 @@ import * as Option from 'effect/Option'
 
 const openers = new Map<string, WeakRef<HTMLElement>>()
 
-export const openedFrom = (opener: HTMLElement): HistoryState => {
-  const openerKey = String(openers.size)
+const openerKeys = new WeakMap<HTMLElement, string>()
+
+const registerOpener = (opener: HTMLElement): string => {
+  const openerKey = `${performance.timeOrigin}:${openers.size}`
 
   openers.set(openerKey, new WeakRef(opener))
+  openerKeys.set(opener, openerKey)
 
-  return { openerKey }
+  return openerKey
 }
+
+export const openedFrom = (opener: HTMLElement): HistoryState => ({
+  openerKey: openerKeys.get(opener) ?? registerOpener(opener),
+})
 
 export const findOpener = (openerKey: string | undefined): Option.Option<HTMLElement> =>
   pipe(

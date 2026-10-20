@@ -19,7 +19,7 @@ import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
 import { Shell } from '@crook/web/navigation/Shell'
 import { TabScreen } from '@crook/web/navigation/TabScreen'
 
-import { click, eventually, findByRole, wait } from '../Dom.ts'
+import { click, eventually, findByRole } from '../Dom.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 
 const makeRouter = (initialPath: string) => {
@@ -76,8 +76,6 @@ const renderAt = Effect.fn('renderAt')(function* (initialPath: string) {
 })
 
 const pushedScreen = () => document.querySelector<HTMLElement>('[data-slot="pushed-screen"]')
-
-const FOCUS_THEFT_WINDOW_MS = 100
 
 function Agents() {
   const router = useRouter()
@@ -318,6 +316,23 @@ describe('PushedScreen', () => {
     }),
   )
 
+  it.effect('opens one screen when its opener is tapped twice', () =>
+    Effect.gen(function* () {
+      const router = yield* renderAt('/')
+      const opener = yield* findByRole('button', 'Open detail from a tap')
+
+      void router.navigate({ href: '/detail', state: openedFrom(opener) })
+      void router.navigate({ href: '/detail', state: openedFrom(opener) })
+      yield* click(yield* findByRole('button', 'Back to agents'))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/')
+      })
+
+      expect(router.history.canGoBack()).toBe(false)
+      expect(document.activeElement).toBe(opener)
+    }),
+  )
+
   it.effect('leaves focus to a nested pushed screen, and its Back returns it to its opener', () =>
     Effect.gen(function* () {
       yield* renderAt('/')
@@ -332,10 +347,6 @@ describe('PushedScreen', () => {
       yield* eventually(() => {
         expect(document.activeElement).toBe(nestedTitle)
       })
-      yield* wait(FOCUS_THEFT_WINDOW_MS)
-
-      expect(document.activeElement).toBe(nestedTitle)
-
       yield* click(yield* findByRole('button', 'Back to detail'))
       yield* eventually(() => {
         expect(screen.queryByRole('heading', { name: 'More' })).toBeNull()

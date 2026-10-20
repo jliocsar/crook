@@ -4,6 +4,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Outlet,
   RouterProvider,
   useMatch,
   useRouter,
@@ -31,6 +32,13 @@ const makeRouter = (initialEntries: string[]) => {
     staticData: { pushed: true },
     component: Detail,
   })
+  const loading = createRoute({
+    getParentRoute: () => detail,
+    path: 'loading',
+    staticData: { pushed: true },
+    loader: () => Effect.runPromise(Effect.never),
+    component: Loading,
+  })
   const item = createRoute({
     getParentRoute: () => agents,
     path: '/item/$itemId',
@@ -44,7 +52,10 @@ const makeRouter = (initialEntries: string[]) => {
   })
 
   return createRouter({
-    routeTree: root.addChildren([agents.addChildren([agentsIndex, detail, item]), machines]),
+    routeTree: root.addChildren([
+      agents.addChildren([agentsIndex, detail.addChildren([loading]), item]),
+      machines,
+    ]),
     history: createMemoryHistory({ initialEntries }),
     defaultRemountDeps: remountWhenParamsChange,
   })
@@ -106,8 +117,19 @@ function Agents() {
 
 function Detail() {
   return (
+    <>
+      <PushedScreen>
+        <PushedHeader title="Detail" backLabel="Back to agents" />
+      </PushedScreen>
+      <Outlet />
+    </>
+  )
+}
+
+function Loading() {
+  return (
     <PushedScreen>
-      <PushedHeader title="Detail" backLabel="Back to agents" />
+      <PushedHeader title="Loading" backLabel="Back to detail" />
     </PushedScreen>
   )
 }
@@ -206,6 +228,54 @@ describe('PushedScreen with motion', () => {
       yield* springSettles
 
       expect(router.state.location.pathname).toBe('/')
+    }),
+  )
+
+  it.effect('cancels a push that is still loading when Back is tapped beneath it', () =>
+    Effect.gen(function* () {
+      const router = yield* renderAt(['/'])
+
+      yield* click(yield* findByRole('button', 'Open detail'))
+      const title = yield* findByRole('heading', 'Detail')
+
+      yield* afterSpring(() => {
+        expect(document.activeElement).toBe(title)
+      })
+      router.history.push('/detail/loading')
+      yield* eventually(() => {
+        expect(router.state.status).toBe('pending')
+      })
+      yield* click(yield* findByRole('button', 'Back to agents'))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/detail')
+        expect(router.state.status).toBe('idle')
+      })
+
+      expect(pushedScreen()).toHaveProperty('inert', false)
+      expect(pushedScreen()?.style.transform).toBe('none')
+
+      yield* click(yield* findByRole('button', 'Back to agents'))
+      yield* afterSpring(() => {
+        expect(router.state.location.pathname).toBe('/')
+      })
+    }),
+  )
+
+  it.effect('shows a screen that replaces another in place', () =>
+    Effect.gen(function* () {
+      const router = yield* renderAt(['/'])
+
+      yield* click(yield* findByRole('button', 'Open item 1'))
+      const firstTitle = yield* findByRole('heading', 'Item 1')
+
+      yield* afterSpring(() => {
+        expect(document.activeElement).toBe(firstTitle)
+      })
+      void router.navigate({ href: '/item/2', replace: true })
+      const secondTitle = yield* findByRole('heading', 'Item 2')
+
+      expect(pushedScreen()?.style.transform).toBe('none')
+      expect(document.activeElement).toBe(secondTitle)
     }),
   )
 

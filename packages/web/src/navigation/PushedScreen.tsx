@@ -62,10 +62,10 @@ const useOpener = (): void => {
 
 const historyIndex = ({ state: { __TSR_index: index } }: HistoryEntry): number => index
 
-const arrivedByGoingBack = (router: AnyRouter): boolean =>
+const arrivedByPush = (router: AnyRouter): boolean =>
   Option.exists(
     Option.fromUndefinedOr(router.state.resolvedLocation),
-    (previous) => historyIndex(previous) > historyIndex(router.state.location),
+    (previous) => historyIndex(router.state.location) > historyIndex(previous),
   )
 
 const useLandedIndex = (): number | undefined =>
@@ -88,15 +88,16 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
   const reduce = useReducedMotion() ?? false
   const shellReady = useShellReady()
   const landedIndex = useLandedIndex()
-  const [slidesIn] = React.useState(
-    () => shellReady.current && !reduce && !arrivedByGoingBack(router),
-  )
+  const [slidesIn] = React.useState(() => shellReady.current && !reduce && arrivedByPush(router))
   const [leftFrom, setLeftFrom] = React.useState<Option.Option<number>>(Option.none())
   const offsetX = useMotionValue(slidesIn ? width : 0)
   const screen = React.useRef<HTMLDivElement>(null)
   const arrived = React.useRef(false)
   const dragOrigin = React.useRef<Option.Option<number>>(Option.none())
-  const landedOnAnotherEntry = Option.exists(leftFrom, (index) => index !== landedIndex)
+  const landedOnAnotherEntry = Option.exists(
+    leftFrom,
+    (index) => landedIndex !== undefined && landedIndex < index,
+  )
   const leaving = Option.isSome(leftFrom) && !landedOnAnotherEntry
 
   useOpener()
@@ -140,6 +141,13 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
 
   const back = () => {
     if (leaving) {
+      return
+    }
+
+    if (router.state.status === 'pending') {
+      offsetX.jump(0)
+      leave()
+
       return
     }
 
