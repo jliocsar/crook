@@ -19,8 +19,8 @@ const HEAD_FILE = 'HEAD'
 const GITDIR_PREFIX = 'gitdir: '
 const BRANCH_REF_PREFIX = 'ref: refs/heads/'
 
-export class GitHeadUnreadable extends Schema.TaggedError<GitHeadUnreadable>()(
-  'GitHeadUnreadable',
+export class GitMetadataUnreadable extends Schema.TaggedError<GitMetadataUnreadable>()(
+  'GitMetadataUnreadable',
   { path: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
@@ -36,7 +36,7 @@ const afterPrefix = (prefix: string) => (text: string) =>
 
 const branchOfHead = afterPrefix(BRANCH_REF_PREFIX)
 
-const keepOnlyFound = (exit: Exit.Exit<Option.Option<string>, GitHeadUnreadable>) =>
+const keepOnlyFound = (exit: Exit.Exit<Option.Option<string>, GitMetadataUnreadable>) =>
   Exit.match(exit, {
     onSuccess: (found) => (Option.isSome(found) ? Duration.infinity : Duration.zero),
     onFailure: () => Duration.zero,
@@ -59,7 +59,7 @@ const make = Effect.gen(function* () {
     read.pipe(
       Effect.map(Option.some),
       Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeedNone),
-      Effect.mapError((cause) => new GitHeadUnreadable({ path: target, cause })),
+      Effect.mapError((cause) => new GitMetadataUnreadable({ path: target, cause })),
     )
 
   const pointedGitDirectory = (directory: string, entry: string) =>
@@ -85,7 +85,7 @@ const make = Effect.gen(function* () {
 
   const firstGitDirectory = (
     directories: readonly string[],
-  ): Effect.Effect<Option.Option<string>, GitHeadUnreadable> =>
+  ): Effect.Effect<Option.Option<string>, GitMetadataUnreadable> =>
     Arr.match(directories, {
       onEmpty: () => Effect.succeed(Option.none<string>()),
       onNonEmpty: ([directory, ...above]) =>
@@ -97,17 +97,27 @@ const make = Effect.gen(function* () {
     { capacity: Number.POSITIVE_INFINITY, timeToLive: keepOnlyFound },
   )
 
+  const headIn = (directory: string) => {
+    const head = path.join(directory, HEAD_FILE)
+
+    return ifPresent(head, fileSystem.readFileString(head))
+  }
+
+  const headAfterLookingAgain = (cwd: string) =>
+    Cache.invalidate(gitDirectories, cwd).pipe(
+      Effect.andThen(Cache.get(gitDirectories, cwd)),
+      flatMapSome(headIn),
+    )
+
   const branchOf = Effect.fn('GitBranches.branchOf')(function* (cwd: string) {
     if (!path.isAbsolute(cwd)) {
       return Option.none()
     }
 
     return yield* Cache.get(gitDirectories, cwd).pipe(
-      flatMapSome((directory: string) => {
-        const head = path.join(directory, HEAD_FILE)
-
-        return ifPresent(head, fileSystem.readFileString(head))
-      }),
+      flatMapSome((directory: string) =>
+        headIn(directory).pipe(orElseSome(() => headAfterLookingAgain(cwd))),
+      ),
       Effect.map(Option.flatMap(branchOfHead)),
     )
   })
@@ -118,7 +128,7 @@ const make = Effect.gen(function* () {
 export class GitBranches extends Context.Service<
   GitBranches,
   {
-    readonly branchOf: (cwd: string) => Effect.Effect<Option.Option<string>, GitHeadUnreadable>
+    readonly branchOf: (cwd: string) => Effect.Effect<Option.Option<string>, GitMetadataUnreadable>
   }
 >()('@crook/agent/GitBranches') {
   static readonly layer = Layer.effect(this, make)

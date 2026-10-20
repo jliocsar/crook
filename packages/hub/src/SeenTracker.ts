@@ -8,7 +8,11 @@ import type { SqlError } from 'effect/sql/SqlError'
 import * as SqlSchema from 'effect/sql/SqlSchema'
 
 import { MachineId, PaneId } from '@crook/domain/Ids'
-import { type StoredRowInvalid, encodedRecord, rowsOf } from '@crook/hub/Database'
+import {
+  type StoredRowInvalid,
+  dieOnUnencodableRecord,
+  storedRowInvalidIn,
+} from '@crook/hub/Database'
 
 export class SeenRecord extends Schema.Class<SeenRecord>('SeenRecord')({
   machine: MachineId,
@@ -33,10 +37,13 @@ const make = Effect.gen(function* () {
     `,
   })
 
-  const all = findAll(undefined).pipe(rowsOf('seen'), Effect.withSpan('SeenTracker.all'))
+  const all = findAll(undefined).pipe(
+    storedRowInvalidIn('seen'),
+    Effect.withSpan('SeenTracker.all'),
+  )
 
   const mark = (record: SeenRecord) =>
-    upsert(record).pipe(encodedRecord, Effect.withSpan('SeenTracker.mark'))
+    upsert(record).pipe(dieOnUnencodableRecord, Effect.withSpan('SeenTracker.mark'))
 
   const dropPanes = Effect.fn('SeenTracker.dropPanes')(function* (
     machine: MachineId,

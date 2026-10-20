@@ -24,7 +24,6 @@ import {
   nextMachineState,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
-import { flatMapSome } from '@crook/agent/OptionEffect'
 import { MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import type { LifecycleEventKind, Subscription } from '@crook/herdr/Events'
@@ -89,12 +88,17 @@ const make = Effect.gen(function* () {
     )
 
   const branchOf = (info: AgentInfo) =>
-    Effect.succeed(workingDirectoryOf(info)).pipe(
-      flatMapSome(gitBranches.branchOf),
-      Effect.catchTag('GitHeadUnreadable', (error) =>
-        Effect.as(Effect.logWarning(error.message), Option.none<string>()),
-      ),
-    )
+    Option.match(workingDirectoryOf(info), {
+      onNone: () => Effect.succeedNone,
+      onSome: (cwd) =>
+        gitBranches
+          .branchOf(cwd)
+          .pipe(
+            Effect.catchTag('GitMetadataUnreadable', (error) =>
+              Effect.as(Effect.logWarning(error.message), Option.none<string>()),
+            ),
+          ),
+    })
 
   const resolveAgent = (info: AgentInfo) =>
     Effect.zipWith(

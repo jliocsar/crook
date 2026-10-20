@@ -5,7 +5,6 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
-import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
@@ -157,14 +156,18 @@ const detached = (entry: MachineEntry, now: DateTime.Utc): MachineEntry =>
       }
 
 const published = (state: MachineState) => {
-  const livePanes = HashSet.fromIterable(state.agents.map((row) => row.pane))
+  const currentSequences = HashMap.fromIterable(
+    Arr.map(state.agents, (row): [PaneId, number] => [row.pane, row.stateChangeSeq]),
+  )
 
   return (entry: MachineEntry, now: DateTime.Utc): MachineEntry => ({
     ...entry,
     lastSeenAt: now,
     herdrVersion: Option.some(state.herdrVersion),
     state: Option.some(state),
-    seen: HashMap.filter(entry.seen, (_seq, pane) => HashSet.has(livePanes, pane)),
+    seen: HashMap.filter(entry.seen, (seenSequence, pane) =>
+      Option.contains(HashMap.get(currentSequences, pane), seenSequence),
+    ),
   })
 }
 
@@ -357,9 +360,9 @@ export class Herd extends Context.Service<
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {
-  static readonly layerNeedingStorage = Layer.effect(this, make)
+  static readonly layerWithoutDependencies = Layer.effect(this, make)
 
-  static readonly layer = this.layerNeedingStorage.pipe(
+  static readonly layer = this.layerWithoutDependencies.pipe(
     Layer.provide([MachineRegistry.layer, SeenTracker.layer]),
   )
 }

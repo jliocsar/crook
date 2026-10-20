@@ -82,7 +82,7 @@ const currentView = viewWhere(() => true)
 const attach = Effect.fn('attach')(function* (id: MachineId, greeting: Hello = hello) {
   const herd = yield* Herd
 
-  return yield* Effect.forkChild(herd.hold(id, greeting), { startImmediately: true })
+  return yield* Effect.forkScoped(herd.hold(id, greeting), { startImmediately: true })
 })
 
 const withFreshHerd = <Success, Failure, Requirements>(
@@ -119,7 +119,7 @@ const withRefusingStorage = <Success, Failure, Requirements>(
 ) =>
   Effect.scoped(
     Effect.flatMap(
-      Layer.build(Layer.provide(Herd.layerNeedingStorage, refusingStorage)),
+      Layer.build(Layer.provide(Herd.layerWithoutDependencies, refusingStorage)),
       (context) => Effect.provide(test, context),
     ),
   )
@@ -356,6 +356,19 @@ it.effect('treats a state_change_seq that went backwards as unseen', () =>
     yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
     yield* herd.markSeen(LAPTOP, PANE)
     yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [agentAt(PANE, 2)]))
+
+    expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([]))
+  }).pipe(withFreshHerd),
+)
+
+it.effect('keeps a restarted state_change_seq unseen as it climbs back past the old mark', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+    yield* herd.markSeen(LAPTOP, PANE)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [agentAt(PANE, 2)]))
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 3, [agentAt(PANE, 7)]))
 
     expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([]))
   }).pipe(withFreshHerd),

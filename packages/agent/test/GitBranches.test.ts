@@ -6,7 +6,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 
-import { GitBranches, GitHeadUnreadable } from '@crook/agent/GitBranches'
+import { GitBranches, GitMetadataUnreadable } from '@crook/agent/GitBranches'
 
 const BRANCH = 'feat/jc-97-98-registry-seen'
 const DETACHED_HEAD = 'b3f1c2d0e9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4\n'
@@ -103,7 +103,37 @@ layer(Layer.provideMerge(GitBranches.layer, services), { excludeTestServices: tr
       }),
     )
 
-    live.effect('fails with GitHeadUnreadable when HEAD exists but cannot be read', () =>
+    live.effect('looks again when a linked worktree is re-added under new metadata', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const root = yield* checkout(branchHead('main'))
+        const linkWorktree = Effect.fn('linkWorktree')(function* (name: string, branch: string) {
+          yield* fileSystem.makeDirectory(`${root}/repo/.git/worktrees/${name}`, {
+            recursive: true,
+          })
+          yield* fileSystem.writeFileString(
+            `${root}/repo/.git/worktrees/${name}/HEAD`,
+            branchHead(branch),
+          )
+          yield* fileSystem.writeFileString(
+            `${root}/herd/.git`,
+            `gitdir: ../repo/.git/worktrees/${name}\n`,
+          )
+        })
+
+        yield* fileSystem.makeDirectory(`${root}/herd`)
+        yield* linkWorktree('herd', 'main')
+        const before = yield* branchOf(`${root}/herd`)
+
+        yield* fileSystem.remove(`${root}/repo/.git/worktrees/herd`, { recursive: true })
+        yield* linkWorktree('herd1', BRANCH)
+
+        expect(before).toEqual(Option.some('main'))
+        expect(yield* branchOf(`${root}/herd`)).toEqual(Option.some(BRANCH))
+      }),
+    )
+
+    live.effect('fails with GitMetadataUnreadable when HEAD exists but cannot be read', () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem
         const root = yield* checkout(branchHead(BRANCH))
@@ -112,7 +142,7 @@ layer(Layer.provideMerge(GitBranches.layer, services), { excludeTestServices: tr
         yield* fileSystem.makeDirectory(`${root}/repo/.git/HEAD`)
         const failure = yield* branchOf(`${root}/repo`).pipe(Effect.flip)
 
-        expect(failure).toBeInstanceOf(GitHeadUnreadable)
+        expect(failure).toBeInstanceOf(GitMetadataUnreadable)
         expect(failure.path).toBe(`${root}/repo/.git/HEAD`)
       }),
     )

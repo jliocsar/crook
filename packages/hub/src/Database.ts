@@ -19,7 +19,7 @@ export class StoredRowInvalid extends Schema.TaggedError<StoredRowInvalid>()('St
   }
 }
 
-export const rowsOf =
+export const storedRowInvalidIn =
   (table: string) =>
   <Success, Requirements>(
     read: Effect.Effect<Success, SqlError | Schema.SchemaError, Requirements>,
@@ -30,7 +30,7 @@ export const rowsOf =
       ),
     )
 
-export const encodedRecord = <Success, Requirements>(
+export const dieOnUnencodableRecord = <Success, Requirements>(
   write: Effect.Effect<Success, SqlError | Schema.SchemaError, Requirements>,
 ): Effect.Effect<Success, SqlError, Requirements> =>
   write.pipe(Effect.catchTag('SchemaError', (error) => Effect.die(error)))
