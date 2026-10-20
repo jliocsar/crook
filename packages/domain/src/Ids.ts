@@ -20,6 +20,11 @@ export type GlobalPaneId = typeof GlobalPaneId.Type
 export const ClaudeSessionId = Schema.NonEmptyString.pipe(Schema.brand('ClaudeSessionId'))
 export type ClaudeSessionId = typeof ClaudeSessionId.Type
 
+export const SubagentId = Schema.NonEmptyString.check(Schema.isPattern(/^[0-9a-f]+$/u)).pipe(
+  Schema.brand('SubagentId'),
+)
+export type SubagentId = typeof SubagentId.Type
+
 export const IdempotencyKey = Schema.NonEmptyString.pipe(Schema.brand('IdempotencyKey'))
 export type IdempotencyKey = typeof IdempotencyKey.Type
 
