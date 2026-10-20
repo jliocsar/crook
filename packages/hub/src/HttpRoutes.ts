@@ -8,12 +8,13 @@ import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import * as HttpStaticServer from 'effect/http/HttpStaticServer'
 import * as RpcSerialization from 'effect/rpc/RpcSerialization'
 import * as RpcServer from 'effect/rpc/RpcServer'
+import type { SqlError } from 'effect/sql/SqlError'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
 import { Herd } from '@crook/hub/Herd'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
-import { ClientApi } from '@crook/protocol/ClientApi'
+import { ClientApi, HubStorageFailed } from '@crook/protocol/ClientApi'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 export const AGENT_PATH = '/rpc/agent'
@@ -28,19 +29,28 @@ export const socketOptions = {
   idleTimeout: Duration.toSeconds(SOCKET_SILENCE_TIMEOUT),
 }
 
+const storageFailureToWire = (error: SqlError) =>
+  Effect.fail(new HubStorageFailed({ detail: error.message }))
+
 const routes = Effect.gen(function* () {
   const herd = yield* Herd
   const identity = yield* ExeDevIdentity
   const serialization = yield* RpcSerialization.RpcSerialization
   const serveWeb = yield* HttpStaticServer.make({ root: yield* CrookWebRoot, spa: true })
-  const clientHandlers = yield* ClientApi.toHandlers({ WatchHerd: () => herd.view })
+  const clientHandlers = yield* ClientApi.toHandlers({
+    WatchHerd: () => herd.view,
+    ForgetMachine: ({ machine }) =>
+      herd.forget(machine).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
+    MarkSeen: ({ machine, pane }) =>
+      herd.markSeen(machine, pane).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
+  })
   const serveClients = yield* RpcServer.toHttpEffectWebsocket(ClientApi).pipe(
     Effect.provide(clientHandlers),
   )
 
   const serveAgentAs = (machine: MachineId) =>
     AgentLink.toHandlers({
-      Attach: () => Stream.fromEffectDrain(herd.hold(machine)),
+      Attach: ({ hello }) => Stream.fromEffectDrain(herd.hold(machine, hello)),
       PublishState: ({ state }) => herd.publish(machine, state),
     }).pipe(
       Effect.flatMap((handlers) =>

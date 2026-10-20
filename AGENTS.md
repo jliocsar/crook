@@ -171,6 +171,28 @@ touches. Apply it inline (measured).
 :::
 
 :::tip
+An app reads its own version with `import packageJson from '../package.json' with { type: 'json' }`.
+The house tsconfig accepts it without `resolveJsonModule`, and Bun runs it (both measured). A
+relative path inside one member is fine; the package-specifier rule is about reaching another one.
+:::
+
+:::warning
+The agent and the hub release under one version and bump together. The phone compares an agent's
+version with the hub's to offer "update agent", so a hub-only bump would flag every machine though
+no newer agent exists. Versions stay plain `major.minor.patch`: the hub reads its own strictly, so
+its tests fail on anything else, and an agent version it cannot read shows as no version rather
+than keeping the machine offline.
+:::
+
+:::caution
+`tsc` clean is not lint clean. oxlint's type-aware pass typed an `Effect.all` over a record of
+effects, each wrapped in its own `catchTags`, as `any` in the error channel while `tsc` typed it
+fine; the same two effects joined with `Effect.zipWith` typed fine under both (measured). When
+`any-unknown-in-error-context` fires on code `tsc` accepts, split the expression before blaming
+the code.
+:::
+
+:::tip
 `@effect/vitest`'s `layer(L)(name, (it) => …)` hands out an `it` without `.live`. A test that needs
 the real clock or real IO (sockets, temp dirs) passes `layer(L, { excludeTestServices: true })` and
 keeps writing `it.effect`.

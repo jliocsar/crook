@@ -9,6 +9,7 @@ import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
+import { GitBranches } from '@crook/agent/GitBranches'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
@@ -29,6 +30,7 @@ interface FakeSubscription {
 }
 
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
+const BRANCH = 'feat/jc-97-98-registry-seen'
 
 const paneClosed: HerdrEvent = {
   event: 'pane_closed',
@@ -68,6 +70,7 @@ const startSync = Effect.fn('startSync')(function* (
     Layer.provide(MachineStateSync.layer, [
       herdr,
       ClaudeSessions.layerTest(new Map([['w1:p1', SESSION]])),
+      GitBranches.layerTest(new Map([['/home/jliocsar/Projects/crook', BRANCH]])),
       ConfigProvider.layer(ConfigProvider.fromUnknown({ CROOK_MACHINE_ID: 'laptop' })),
     ]),
   )
@@ -100,9 +103,10 @@ it.effect('starts from the herdr snapshot as version 0', () =>
 
     expect(state.machine).toBe('laptop')
     expect(state.version).toBe(0)
-    expect(state.agents.map((row) => [row.pane, row.status, row.claudeSession])).toEqual([
-      ['w1:p1', 'working', Option.some(SESSION)],
-    ])
+    expect(state.herdrVersion).toBe('0.9.1')
+    expect(
+      state.agents.map((row) => [row.pane, row.status, row.claudeSession, row.branch]),
+    ).toEqual([['w1:p1', 'working', Option.some(SESSION), Option.some(BRANCH)]])
   }),
 )
 

@@ -10,6 +10,7 @@ export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   status: AgentStatus,
   title: Schema.String,
   cwd: Schema.String,
+  branch: Schema.OptionFromNullOr(Schema.String),
   claudeSession: Schema.OptionFromNullOr(ClaudeSessionId),
   stateChangeSeq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   statusChangedAt: Schema.DateTimeUtcFromString,

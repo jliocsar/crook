@@ -7,6 +7,7 @@ import { MachineId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
 
 export const AGENT_PING_INTERVAL = Duration.seconds(5)
+export const AGENT_SOCKET_OPEN_TIMEOUT = Duration.seconds(10)
 
 export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
   'MachineIdMismatch',
@@ -20,7 +21,16 @@ export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
   }
 }
 
-export const Attach = Rpc.make('Attach', { success: Schema.Never, stream: true })
+export class Hello extends Schema.Class<Hello>('Hello')({
+  agentVersion: Schema.String,
+  label: Schema.OptionFromNullOr(Schema.NonEmptyString),
+}) {}
+
+export const Attach = Rpc.make('Attach', {
+  payload: { hello: Hello },
+  success: Schema.Never,
+  stream: true,
+})
 
 export const PublishState = Rpc.make('PublishState', {
   payload: { state: MachineState },

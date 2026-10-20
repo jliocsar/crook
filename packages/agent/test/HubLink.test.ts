@@ -26,8 +26,10 @@ import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { MachineId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
-import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { AGENT_PING_INTERVAL, AgentLink, Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { protocolSerialization } from '@crook/protocol/Serialization'
+
+import packageJson from '../package.json' with { type: 'json' }
 
 interface HubScript {
   readonly attachLifetime: Option.Option<Duration.Duration>
@@ -43,10 +45,13 @@ const HUB_PATH = '/rpc/agent'
 const LAPTOP = MachineId.make('laptop')
 const TICK = Duration.millis(1)
 
+const hello = new Hello({ agentVersion: HubLink.agentVersion, label: Option.none() })
+
 const stateAt = (version: number) =>
   new MachineState({
     machine: LAPTOP,
     version: MachineStateVersion.make(version),
+    herdrVersion: '0.9.1',
     workspaces: [],
     tabs: [],
     agents: [],
@@ -79,7 +84,9 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
     return yield* RpcTest.makeClient(AgentLink).pipe(Effect.provide(handlers))
   })
 
-  yield* Layer.build(Layer.provide(HubLink.layerWith(connect), MachineStateSync.layerTest(state)))
+  yield* Layer.build(
+    Layer.provide(HubLink.layerWith(connect, hello), MachineStateSync.layerTest(state)),
+  )
 
   return { state, received, attempts: Ref.get(attempts) }
 })
@@ -200,12 +207,17 @@ const hubProtocol = RpcServer.layerProtocolWebsocket({ path: HUB_PATH }).pipe(
   Layer.provide(protocolSerialization),
 )
 
-const hubServer = (port: number, publications: Queue.Queue<Publication>) =>
+const hubServer = (
+  port: number,
+  publications: Queue.Queue<Publication>,
+  hellos: Queue.Queue<Hello>,
+) =>
   HttpRouter.serve(
     RpcServer.layer(AgentLink).pipe(
       Layer.provide([
         AgentLink.toLayer({
-          Attach: () => Stream.never,
+          Attach: ({ hello: greeting }) =>
+            Stream.unwrap(Effect.as(Queue.offer(hellos, greeting), Stream.never)),
           PublishState: ({ state }, { headers }) =>
             Queue.offer(publications, {
               authorization: Headers.get(headers, 'x-exedev-authorization'),
@@ -225,9 +237,10 @@ const hubServer = (port: number, publications: Queue.Queue<Publication>) =>
 const startHub = Effect.fn('startHub')(function* (
   port: number,
   publications: Queue.Queue<Publication>,
+  hellos: Queue.Queue<Hello>,
 ) {
   const scope = yield* Scope.fork(yield* Effect.scope)
-  const context = yield* Layer.buildWithScope(hubServer(port, publications), scope)
+  const context = yield* Layer.buildWithScope(hubServer(port, publications, hellos), scope)
   const address = yield* HttpServer.addressFormattedWith(Effect.succeed).pipe(
     Effect.provide(context),
   )
@@ -239,7 +252,8 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
   live.effect('sends the bearer token and republishes after the hub restarts', () =>
     Effect.gen(function* () {
       const publications = yield* Queue.unbounded<Publication>()
-      const hub = yield* startHub(0, publications)
+      const hellos = yield* Queue.unbounded<Hello>()
+      const hub = yield* startHub(0, publications, hellos)
       const state = yield* SubscriptionRef.make(stateAt(0))
 
       yield* Layer.build(
@@ -249,6 +263,7 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
             ConfigProvider.fromUnknown({
               CROOK_HUB_URL: `ws://${hub.url.host}${HUB_PATH}`,
               CROOK_HUB_TOKEN: 'exe0.vm-token',
+              CROOK_MACHINE_LABEL: 'Laptop',
             }),
           ),
         ]),
@@ -258,10 +273,16 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
         authorization: Option.some('Bearer exe0.vm-token'),
         state: stateAt(0),
       })
+      expect(yield* Queue.take(hellos)).toEqual(
+        new Hello({
+          agentVersion: packageJson.version,
+          label: Option.some('Laptop'),
+        }),
+      )
 
       yield* Scope.close(hub.scope, Exit.void)
       yield* SubscriptionRef.set(state, stateAt(1))
-      yield* startHub(Number(hub.url.port), publications)
+      yield* startHub(Number(hub.url.port), publications, hellos)
       const republished = yield* Queue.take(publications)
 
       expect(republished.state).toEqual(stateAt(1))

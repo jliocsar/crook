@@ -15,8 +15,15 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
+import {
+  AGENT_PING_INTERVAL,
+  AGENT_SOCKET_OPEN_TIMEOUT,
+  AgentLink,
+  Hello,
+} from '@crook/protocol/AgentLink'
 import { protocolSerialization } from '@crook/protocol/Serialization'
+
+import packageJson from '../package.json' with { type: 'json' }
 
 export type AgentLinkClient = RpcClient.FromGroup<typeof AgentLink, RpcClientError>
 
@@ -28,6 +35,9 @@ export const HUB_RECONNECT_BASE = Duration.millis(77)
 
 export const CrookHubUrl = Config.URL('CROOK_HUB_URL')
 export const CrookHubToken = Config.Redacted('CROOK_HUB_TOKEN')
+export const CrookMachineLabel = Config.option(Config.NonEmptyString('CROOK_MACHINE_LABEL'))
+
+export const agentVersion = packageJson.version
 
 export class HubAttachEnded extends Schema.TaggedError<HubAttachEnded>()('HubAttachEnded', {}) {
   override get message(): string {
@@ -51,6 +61,7 @@ export const connectTo = (url: URL, token: Redacted.Redacted) =>
     }).pipe(
       Layer.provide([
         BunSocket.layerWebSocket(url.href, {
+          openTimeout: AGENT_SOCKET_OPEN_TIMEOUT,
           headers: { [HUB_AUTHORIZATION_HEADER]: `Bearer ${Redacted.value(token)}` },
         }),
         protocolSerialization,
@@ -58,12 +69,14 @@ export const connectTo = (url: URL, token: Redacted.Redacted) =>
     ),
   ).pipe(Effect.flatMap((protocol) => RpcClient.make(AgentLink).pipe(Effect.provide(protocol))))
 
-const make = (connect: HubConnect) =>
+const make = (connect: HubConnect, hello: Hello) =>
   Effect.gen(function* () {
     const sync = yield* MachineStateSync
 
     const holdAttach = (client: AgentLinkClient) =>
-      client.Attach().pipe(Stream.runDrain, Effect.andThen(Effect.fail(new HubAttachEnded())))
+      client
+        .Attach({ hello })
+        .pipe(Stream.runDrain, Effect.andThen(Effect.fail(new HubAttachEnded())))
 
     const publishChanges = (client: AgentLinkClient, markAccepted: Effect.Effect<void>) =>
       sync.changes.pipe(
@@ -113,13 +126,15 @@ const make = (connect: HubConnect) =>
     )
   })
 
-export const layerWith = (connect: HubConnect) => Layer.effectDiscard(make(connect))
+export const layerWith = (connect: HubConnect, hello: Hello) =>
+  Layer.effectDiscard(make(connect, hello))
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
     const url = yield* CrookHubUrl
     const token = yield* CrookHubToken
+    const label = yield* CrookMachineLabel
 
-    return layerWith(connectTo(url, token))
+    return layerWith(connectTo(url, token), new Hello({ agentVersion, label }))
   }),
 )

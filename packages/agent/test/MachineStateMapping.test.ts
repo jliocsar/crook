@@ -16,8 +16,10 @@ const MACHINE = MachineId.make('laptop')
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 const STARTED = DateTime.makeUnsafe('2026-10-17T10:00:00Z')
 const LATER = DateTime.makeUnsafe('2026-10-17T10:05:00Z')
+const HERDR_VERSION = '0.9.1'
 
-const reading = (agents: HerdReading['agents']): HerdReading => ({
+const reading = (agents: HerdReading['agents'], herdrVersion = HERDR_VERSION): HerdReading => ({
+  herdrVersion,
   workspaces: [workspaceInfo],
   tabs: [tabInfo],
   agents,
@@ -27,11 +29,14 @@ describe('MachineStateMapping', () => {
   it('maps a herdr reading to version 0, stamping every status with the read time', () => {
     const state = initialMachineState(
       MACHINE,
-      reading([{ info: agentInfo(), claudeSession: Option.some(SESSION) }]),
+      reading([
+        { info: agentInfo(), claudeSession: Option.some(SESSION), branch: Option.some('main') },
+      ]),
       STARTED,
     )
 
     expect(state.version).toBe(0)
+    expect(state.herdrVersion).toBe(HERDR_VERSION)
     expect(state.workspaces.map((workspace) => [workspace.id, workspace.label])).toEqual([
       ['w1', 'crook'],
     ])
@@ -46,6 +51,7 @@ describe('MachineStateMapping', () => {
         status: 'working',
         title: 'EX-253 Example feature',
         cwd: '/home/jliocsar/Projects/crook',
+        branch: Option.some('main'),
         claudeSession: Option.some(SESSION),
         stateChangeSeq: 14162,
         statusChangedAt: STARTED,
@@ -64,6 +70,7 @@ describe('MachineStateMapping', () => {
             foreground_cwd: Option.some('/home/jliocsar/Projects/crook/packages/agent'),
           }),
           claudeSession: Option.none(),
+          branch: Option.none(),
         },
       ]),
       STARTED,
@@ -75,7 +82,7 @@ describe('MachineStateMapping', () => {
   })
 
   it('keeps the version when a re-read changes nothing', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none() }]
+    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
     const previous = initialMachineState(MACHINE, reading(agents), STARTED)
 
     expect(nextMachineState(previous, reading(agents), LATER)).toEqual(Option.none())
@@ -85,8 +92,12 @@ describe('MachineStateMapping', () => {
     const previous = initialMachineState(
       MACHINE,
       reading([
-        { info: agentInfo(), claudeSession: Option.none() },
-        { info: agentInfo({ pane_id: 'w1:p2' }), claudeSession: Option.none() },
+        { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+        {
+          info: agentInfo({ pane_id: 'w1:p2' }),
+          claudeSession: Option.none(),
+          branch: Option.none(),
+        },
       ]),
       STARTED,
     )
@@ -94,8 +105,16 @@ describe('MachineStateMapping', () => {
       nextMachineState(
         previous,
         reading([
-          { info: agentInfo({ agent_status: 'blocked' }), claudeSession: Option.none() },
-          { info: agentInfo({ pane_id: 'w1:p2' }), claudeSession: Option.none() },
+          {
+            info: agentInfo({ agent_status: 'blocked' }),
+            claudeSession: Option.none(),
+            branch: Option.none(),
+          },
+          {
+            info: agentInfo({ pane_id: 'w1:p2' }),
+            claudeSession: Option.none(),
+            branch: Option.none(),
+          },
         ]),
         LATER,
       ),
@@ -111,7 +130,7 @@ describe('MachineStateMapping', () => {
   it('bumps the version on a title change without restamping the status', () => {
     const previous = initialMachineState(
       MACHINE,
-      reading([{ info: agentInfo(), claudeSession: Option.none() }]),
+      reading([{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]),
       STARTED,
     )
     const next = Option.getOrThrow(
@@ -121,6 +140,7 @@ describe('MachineStateMapping', () => {
           {
             info: agentInfo({ terminal_title_stripped: Option.some('MEM-690 mobile cut') }),
             claudeSession: Option.none(),
+            branch: Option.none(),
           },
         ]),
         LATER,
@@ -129,5 +149,14 @@ describe('MachineStateMapping', () => {
 
     expect(next.version).toBe(1)
     expect(next.agents.map((row) => row.statusChangedAt)).toEqual([STARTED])
+  })
+
+  it('bumps the version when herdr itself is updated under a running agent', () => {
+    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
+    const previous = initialMachineState(MACHINE, reading(agents), STARTED)
+    const next = Option.getOrThrow(nextMachineState(previous, reading(agents, '0.9.5'), LATER))
+
+    expect(next.version).toBe(1)
+    expect(next.herdrVersion).toBe('0.9.5')
   })
 })

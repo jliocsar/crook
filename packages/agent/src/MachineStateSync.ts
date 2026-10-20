@@ -16,10 +16,13 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
+import { GitBranches } from '@crook/agent/GitBranches'
 import {
   type HerdReading,
+  type ResolvedAgent,
   initialMachineState,
   nextMachineState,
+  workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
 import { MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
@@ -71,9 +74,10 @@ const logHerdrFailure = (error: HerdrSubscriptionError) =>
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
   const claudeSessions = yield* ClaudeSessions
+  const gitBranches = yield* GitBranches
   const machine = yield* CrookMachineId
 
-  const resolveAgent = (info: AgentInfo) =>
+  const sessionOf = (info: AgentInfo) =>
     claudeSessions.resolve(info).pipe(
       Effect.catchTags({
         ClaudeSessionFileUnreadable: (error) =>
@@ -81,16 +85,40 @@ const make = Effect.gen(function* () {
         HerdrRequestRejected: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
         HerdrResponseInvalid: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
       }),
-      Effect.annotateLogs('pane', info.pane_id),
-      Effect.map((claudeSession) => ({ info, claudeSession })),
     )
+
+  const branchOf = (info: AgentInfo) =>
+    Option.match(workingDirectoryOf(info), {
+      onNone: () => Effect.succeedNone,
+      onSome: (cwd) =>
+        gitBranches
+          .branchOf(cwd)
+          .pipe(
+            Effect.catchTag('GitMetadataUnreadable', (error) =>
+              Effect.as(Effect.logWarning(error.message), Option.none<string>()),
+            ),
+          ),
+    })
+
+  const resolveAgent = (info: AgentInfo) =>
+    Effect.zipWith(
+      sessionOf(info),
+      branchOf(info),
+      (claudeSession, branch): ResolvedAgent => ({ info, claudeSession, branch }),
+      { concurrent: true },
+    ).pipe(Effect.annotateLogs('pane', info.pane_id))
 
   const read = Effect.fn('MachineStateSync.read')(function* () {
     const snapshot = yield* herdr.snapshot
     const agents = yield* Effect.forEach(snapshot.agents, resolveAgent, {
       concurrency: 'unbounded',
     })
-    const reading: HerdReading = { workspaces: snapshot.workspaces, tabs: snapshot.tabs, agents }
+    const reading: HerdReading = {
+      herdrVersion: snapshot.version,
+      workspaces: snapshot.workspaces,
+      tabs: snapshot.tabs,
+      agents,
+    }
 
     return { reading, now: yield* DateTime.now }
   })

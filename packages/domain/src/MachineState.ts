@@ -1,3 +1,4 @@
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
@@ -13,7 +14,11 @@ export type MachineStateVersion = typeof MachineStateVersion.Type
 export class MachineState extends Schema.Class<MachineState>('MachineState')({
   machine: MachineId,
   version: MachineStateVersion,
+  herdrVersion: Schema.String,
   workspaces: Schema.Array(Workspace),
   tabs: Schema.Array(Tab),
   agents: Schema.Array(AgentRow),
 }) {}
+
+export const agentsIn = (state: Option.Option<MachineState>): readonly AgentRow[] =>
+  Option.match(state, { onNone: () => [], onSome: (found) => found.agents })
