@@ -97,4 +97,4 @@ export const machineStateWith = (agents: readonly AgentRow[]) =>
 export const executorWith = (
   herdr: Layer.Layer<HerdrClient>,
   state: SubscriptionRef.SubscriptionRef<MachineState>,
-) => Layer.provide(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr])
+) => Layer.provideMerge(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr])

@@ -24,7 +24,6 @@ import * as RpcTest from 'effect/rpc/RpcTest'
 import * as TestClock from 'effect/testing/TestClock'
 
 import * as HubLink from '@crook/agent/HubLink'
-import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
@@ -105,7 +104,7 @@ const agentWith = (
       sent,
     })
 
-    return Layer.merge(MachineStateSync.layerTest(state), executorWith(herdr, state))
+    return executorWith(herdr, state)
   })
 
 const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> = {}) {

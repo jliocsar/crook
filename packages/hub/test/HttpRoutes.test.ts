@@ -365,10 +365,10 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         )
 
         yield* Layer.build(
-          Layer.provide(HubLink.layerWith(dialHub), [
-            MachineStateSync.layerTest(state),
-            Layer.provide(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr]),
-          ]),
+          Layer.provide(
+            HubLink.layerWith(dialHub),
+            Layer.provideMerge(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr]),
+          ),
         )
         yield* machineShows(machine, 'online')
         const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
