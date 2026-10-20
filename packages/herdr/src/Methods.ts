@@ -24,6 +24,16 @@ export const Ping = makeMethod('ping', {
   }),
 })
 
+export const AgentPromptMethod = makeMethod('agent.prompt', {
+  params: Schema.Struct({ target: Schema.String, text: Schema.String }),
+  result: Schema.Struct({ type: Schema.Literal('agent_prompted') }),
+})
+
+export const AgentSendKeysMethod = makeMethod('agent.send_keys', {
+  params: Schema.Struct({ target: Schema.String, keys: Schema.Array(Schema.String) }),
+  result: Schema.Struct({ type: Schema.Literal('ok') }),
+})
+
 export const PaneProcessInfoMethod = makeMethod('pane.process_info', {
   params: Schema.Struct({ pane_id: Schema.String }),
   result: Schema.Struct({

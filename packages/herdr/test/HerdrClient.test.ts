@@ -15,6 +15,7 @@ import * as Stream from 'effect/Stream'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
   HerdrClient,
+  HerdrAgentNotFound,
   HerdrConnectionClosed,
   HerdrEventsLost,
   HerdrPaneNotFound,
@@ -25,7 +26,12 @@ import {
   scriptedRejection,
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
-import { PaneProcessInfoMethod, Ping, SessionSnapshotMethod } from '@crook/herdr/Methods'
+import {
+  AgentPromptMethod,
+  PaneProcessInfoMethod,
+  Ping,
+  SessionSnapshotMethod,
+} from '@crook/herdr/Methods'
 import { SessionSnapshot } from '@crook/herdr/Records'
 
 interface ConnectionScript {
@@ -231,6 +237,22 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
 
       expect(error).toBeInstanceOf(HerdrPaneNotFound)
       expect(error).toMatchObject({ method: 'pane.process_info' })
+    }),
+  )
+
+  it.effect('fails with HerdrAgentNotFound when the pane hosts no agent', () =>
+    Effect.gen(function* () {
+      const { client } = yield* fakeHerdr([
+        replyOnce(
+          '{"id":"agent.prompt","error":{"code":"agent_not_found","message":"agent not found"}}',
+        ),
+      ])
+      const error = yield* client
+        .request(AgentPromptMethod, { target: 'w1:p2', text: 'continue' })
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(HerdrAgentNotFound)
+      expect(error).toMatchObject({ method: 'agent.prompt' })
     }),
   )
 

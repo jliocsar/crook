@@ -23,6 +23,7 @@ export type HerdrRequestError =
   | HerdrRequestInvalid
   | HerdrRequestRejected
   | HerdrPaneNotFound
+  | HerdrAgentNotFound
   | HerdrResponseInvalid
 
 export type HerdrSubscriptionError = HerdrRequestError | HerdrEventsLost
@@ -32,9 +33,15 @@ export interface ScriptedResponse {
   readonly line: string
 }
 
+export interface SentRequest {
+  readonly method: string
+  readonly line: string
+}
+
 const SUBSCRIBE_METHOD = 'events.subscribe'
 const EVENTS_LOST_CODE = 'events_lost'
 const PANE_NOT_FOUND_CODE = 'pane_not_found'
+const AGENT_NOT_FOUND_CODE = 'agent_not_found'
 
 export class HerdrUnreachable extends Schema.TaggedError<HerdrUnreachable>()('HerdrUnreachable', {
   socketPath: Schema.String,
@@ -78,6 +85,15 @@ export class HerdrPaneNotFound extends Schema.TaggedError<HerdrPaneNotFound>()(
 ) {
   override get message(): string {
     return `Herdr reported pane_not_found for ${this.method}: ${this.detail}. The pane most likely closed in the meantime: re-read state with session.snapshot.`
+  }
+}
+
+export class HerdrAgentNotFound extends Schema.TaggedError<HerdrAgentNotFound>()(
+  'HerdrAgentNotFound',
+  { method: Schema.String, detail: Schema.String },
+) {
+  override get message(): string {
+    return `Herdr reported agent_not_found for ${this.method}: ${this.detail}. The pane no longer hosts an agent herdr recognizes, most likely because the agent exited: re-read state with session.snapshot.`
   }
 }
 
@@ -144,13 +160,19 @@ const encodeRequest = Effect.fn('HerdrClient.encodeRequest')(function* <Params>(
 })
 
 const rejection = (method: string, response: HerdrErrorResponse) =>
-  response.error.code === PANE_NOT_FOUND_CODE
-    ? new HerdrPaneNotFound({ method, detail: response.error.message })
-    : new HerdrRequestRejected({
-        method,
-        code: response.error.code,
-        detail: response.error.message,
-      })
+  Match.value(response.error.code).pipe(
+    Match.when(
+      PANE_NOT_FOUND_CODE,
+      () => new HerdrPaneNotFound({ method, detail: response.error.message }),
+    ),
+    Match.when(
+      AGENT_NOT_FOUND_CODE,
+      () => new HerdrAgentNotFound({ method, detail: response.error.message }),
+    ),
+    Match.orElse(
+      (code) => new HerdrRequestRejected({ method, code, detail: response.error.message }),
+    ),
+  )
 
 const decodeResponse = Effect.fn('HerdrClient.decodeResponse')(function* <Result>(
   method: HerdrMethod<unknown, Result>,
@@ -273,12 +295,18 @@ const makeLive = (socketPath: string) => {
 const makeTest = (script: {
   readonly responses: readonly ScriptedResponse[]
   readonly events: Queue.Dequeue<HerdrEvent, HerdrSubscriptionError>
+  readonly sent?: Queue.Enqueue<SentRequest>
 }) => {
   const request = Effect.fn('HerdrClient.request')(function* <Params, Result>(
     method: HerdrMethod<Params, Result>,
     params: Params,
   ) {
-    yield* encodeRequest(method, params)
+    const line = yield* encodeRequest(method, params)
+
+    if (script.sent !== undefined) {
+      yield* Queue.offer(script.sent, { method: method.name, line })
+    }
+
     const scripted = script.responses.find((response) => response.method === method.name)
 
     if (scripted === undefined) {

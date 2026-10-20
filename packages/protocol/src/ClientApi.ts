@@ -2,9 +2,11 @@ import * as Rpc from 'effect/rpc/Rpc'
 import * as RpcGroup from 'effect/rpc/RpcGroup'
 import * as Schema from 'effect/Schema'
 
+import { Command, CommandReceipt } from '@crook/domain/Command'
 import { HerdView } from '@crook/domain/HerdView'
-import { MachineId, PaneId } from '@crook/domain/Ids'
+import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { MachineConnection } from '@crook/domain/Machine'
+import { CommandFailure } from '@crook/protocol/Commands'
 
 export class MachineNotInHerd extends Schema.TaggedError<MachineNotInHerd>()('MachineNotInHerd', {
   machine: MachineId,
@@ -52,4 +54,10 @@ export const MarkSeen = Rpc.make('MarkSeen', {
   error: Schema.Union([MachineNotInHerd, PaneNotInHerd, HubStorageFailed]),
 })
 
-export class ClientApi extends RpcGroup.make(WatchHerd, ForgetMachine, MarkSeen) {}
+export const SendCommand = Rpc.make('SendCommand', {
+  payload: { machine: MachineId, key: IdempotencyKey, command: Command },
+  success: CommandReceipt,
+  error: CommandFailure,
+})
+
+export class ClientApi extends RpcGroup.make(WatchHerd, ForgetMachine, MarkSeen, SendCommand) {}

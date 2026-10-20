@@ -11,6 +11,7 @@ import * as RpcServer from 'effect/rpc/RpcServer'
 import type { SqlError } from 'effect/sql/SqlError'
 
 import type { MachineId } from '@crook/domain/Ids'
+import { CommandRouter } from '@crook/hub/CommandRouter'
 import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
 import { Herd } from '@crook/hub/Herd'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
@@ -34,6 +35,7 @@ const storageFailureToWire = (error: SqlError) =>
 
 const routes = Effect.gen(function* () {
   const herd = yield* Herd
+  const router = yield* CommandRouter
   const identity = yield* ExeDevIdentity
   const serialization = yield* RpcSerialization.RpcSerialization
   const serveWeb = yield* HttpStaticServer.make({ root: yield* CrookWebRoot, spa: true })
@@ -43,6 +45,7 @@ const routes = Effect.gen(function* () {
       herd.forget(machine).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
     MarkSeen: ({ machine, pane }) =>
       herd.markSeen(machine, pane).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
+    SendCommand: ({ machine, key, command }) => router.send(machine, key, command),
   })
   const serveClients = yield* RpcServer.toHttpEffectWebsocket(ClientApi).pipe(
     Effect.provide(clientHandlers),
@@ -50,8 +53,10 @@ const routes = Effect.gen(function* () {
 
   const serveAgentAs = (machine: MachineId) =>
     AgentLink.toHandlers({
-      Attach: ({ hello }) => Stream.fromEffectDrain(herd.hold(machine, hello)),
+      Attach: ({ hello }) =>
+        Stream.merge(Stream.fromEffectDrain(herd.hold(machine, hello)), router.attach(machine)),
       PublishState: ({ state }) => herd.publish(machine, state),
+      CompleteCommand: ({ id, result }) => router.complete(machine, id, result),
     }).pipe(
       Effect.flatMap((handlers) =>
         RpcServer.toHttpEffectWebsocket(AgentLink).pipe(Effect.flatten, Effect.provide(handlers)),
@@ -75,5 +80,5 @@ const routes = Effect.gen(function* () {
 })
 
 export const layer = HttpRouter.addAll(routes).pipe(
-  Layer.provide([Herd.layer, ExeDevIdentity.layer, protocolSerialization]),
+  Layer.provide([Herd.layer, CommandRouter.layer, ExeDevIdentity.layer, protocolSerialization]),
 )
