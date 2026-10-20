@@ -236,7 +236,7 @@ Layers
 4. **Agent-side policy.** Default allowlist: prompt/keys only to panes that currently host a recognized agent; `start` only for configured kinds; no raw shell text to plain shell panes unless explicitly enabled per machine.
 5. **Web hygiene.** Strict CSP, sent by the hub as a response header (the policy is in `ARCHITECTURE.md` §2.7; a meta tag can't carry `frame-ancestors`). No `innerHTML` for transcript content, sanitize markdown, same-origin checks on WSS upgrade (Origin header), no CORS.
 6. **Hark payloads** carry labels only, no content: Hark is a third party.
-7. **Audit log** on each agent (local) and hub: who/when/op, truncated args, configurable redaction.
+7. **Audit log** on each agent (local) and hub: who/when/op, truncated args, configurable redaction. The agent appends JSONL per command it ran; the hub keeps an append-only SQLite table of the phone's commands, pins and forgets, keyed to the agent's lines by the idempotency key. Prompt text is redacted on the hub by default and kept on the agent, beside the transcript that already holds it (`ARCHITECTURE.md` §2.5, §2.6).
 8. **Supply chain.** Few deps, lockfile committed, pinned CI action SHAs, signed release artifacts (minisign/cosign) checked by the installer and plugin update path. No auto-update.
 9. Lost phone: log out of exe.dev sessions; nothing device-specific to revoke.
 

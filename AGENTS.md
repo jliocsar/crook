@@ -168,6 +168,11 @@ feeding one go in a single `Layer.provide(target, [a, b, c])`, which is what
 A data-last combinator stored in a variable before it meets its input — `const retry = Effect.retry({ … })`
 — infers `unknown` for the error, and `effecttsgo/any-unknown-in-error-context` reports every effect it
 touches. Apply it inline (measured).
+
+An `Effect<A>` is assignable to `Effect<void>`: a service method typed `Effect<void>` accepts
+`Queue.offer(…)` or `Effect.forkIn(scope)` as they are, and `begone-slop/no-effect-asvoid` rejects
+the `Effect.asVoid` that would only satisfy the signature (measured: removed in three places, the
+typecheck still passed).
 :::
 
 :::tip
