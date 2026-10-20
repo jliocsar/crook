@@ -325,7 +325,8 @@ bump and test it there too rather than assuming the pair still agree.
 
 The PWA is a Vite app, so it carries a few things the Bun members do not.
 
-- The generated route tree is gitignored, so `typecheck` runs the router's generator before `tsc`.
+- The generated route tree is gitignored, so `typecheck` and `test` both run the router's
+  generator first: a test imports the tree, and the gate's order must not be what makes it exist.
   A route file declares its `Route` constant above its component: `statement-order` ranks
   constants above functions, and a function declaration is hoisted, so the order is legal.
 - The tool-loaded config files (Vite, Vitest, the PWA assets config) have an override turning off
@@ -340,6 +341,18 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - `@tanstack/history` is a direct dependency pinned to the exact version the router pins, only so
   history state can be typed by module augmentation. An augmentation merges into the copy the
   compiler resolves from this member; a second copy would leave the router's type untouched.
+  The router, its Vite plugin and its CLI are pinned exactly as well, and the four bump together:
+  a caret router resolves on a fresh install to a release that may pin another history.
+- `no-underscore-dangle` allows a dangling underscore in a destructuring pattern. The router
+  offers no other name for a history entry's index than its own underscored state field, so that
+  one field is read by destructuring it into a plain name.
+- TanStack Router updates `location` when a navigation starts, commits the new matches when it
+  has loaded, and only then updates `resolvedLocation`. A
+  component still mounted when `resolvedLocation` changes is part of where the navigation landed.
+- Motion stops a motion value's animation by the next frame once nothing observes the value, so
+  an animation whose `motion` element has unmounted never completes, and its `onComplete` never
+  runs (measured). `stop()` does not call `onComplete` either; a step that must happen on arrival
+  is run by whatever stops the animation.
 - A one-shot Bun script keeps `Effect.provide` at its entry and disables
   `effecttsgo/strict-effect-provide` there, as the rule's own message allows at an entry point.
   The long-running members' `Layer.launch` form does not carry over: it never returns, and the

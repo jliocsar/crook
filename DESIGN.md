@@ -236,6 +236,11 @@ crook's motion, through Motion (`motion/react`):
     not the focused one: a WebKit tap doesn't focus a button.
   - Back slides the screen out, then pops the history entry. With no entry to pop (the screen was
     opened from a link), it replaces the URL with its parent.
+  - The same kind of screen opened with other content (a chat from a chat) is a new screen, with
+    its own slide, focus and opener. When Back has to rebuild the screen beneath, that screen
+    appears in place.
+  - Grabbing the edge while a screen slides in stops it under the finger, and its title takes
+    focus then.
   - The browser's own back is instant: the slide belongs to the in-app gesture and button.
 - **Lists are flat:** full-bleed rows with no dividers between them. The only rule is the one
   under a section label.
