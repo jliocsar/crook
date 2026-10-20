@@ -230,7 +230,7 @@ These were bugs or `DESIGN.md` misses in the components as shipped:
   - tool calls, with durations;
   - the Ask's diff or command;
   - the plan.
-- **Images in the transcript** (SPEC §5.3) weren't prototyped.
+- **Images in the transcript** (SPEC §5.3) are decided under "Chat leftovers".
 - **Sending while the agent works:** the prototype ends the running step and replies. What
   Claude Code really does with a message sent mid-turn still needs checking.
 
@@ -594,9 +594,99 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
 
 1. Strip, Marker and Card, after 7 calls agreed up front. **Card picked.**
 
+## Chat leftovers: decided, variant "Drill"
+
+### Prototype
+
+- Subagents are in `src/subagents/`:
+  - `context.tsx`: the slot a variant plugs into;
+  - `parts.tsx`: the run rows, the "N running" pill and the subagent screen;
+  - `Drill.tsx`: the variant itself.
+- Images are in `src/chat/images.tsx`: the thumbnails and the full-screen viewer.
+- The demo pane is "Prototype the herd screen". Its two background reviewers finish about 10s
+  after you first open it, then Claude picks up their findings.
+- crook's copies of Mischief's Subagent Tree (tappable 44px rows, a mono meta line) and Tool
+  Call (a `footer` slot) were extended.
+- The picker's `?v=2` is Drill. Inline (`?v=1`) and Tray (`?v=3`) are dead ends now.
+
+### Layout
+
+- **Images Claude read** (a `Read` of a png) show as a thumbnail on the tool card, visible
+  without expanding it. Images you pasted show in your bubble.
+- **Tapping a thumbnail** opens a full-screen viewer on black: the file name and a 44px close
+  button at the top, pinch to zoom, double-tap to zoom in or out, swipe down to close.
+- **Subagents** (the `Agent` tool) render as a Subagent Tree titled "Subagents". One turn's
+  calls group into one tree. Each row is 44px: the status dot, the description, a mono line with
+  the agent type, the model and, while it runs, its current tool, then the running time and a
+  chevron.
+- **Tapping a row** pushes the subagent's own screen:
+  - the header shows its description, then status, time, type and model;
+  - "Claude asked" holds the prompt it was given;
+  - its tool calls render like the main chat's, then Working while it runs, then its result;
+  - there's no composer, just "Subagents take no messages. Reply to Claude in its chat."
+- **While any subagent runs,** the chat header shows a "2 running" pill. Tapping it scrolls to
+  the running tree.
+- **The `…` button** in the chat header opens the long-press sheet: Rename, Pin, hold to close.
+
+### Behaviour
+
+- **Background subagents keep updating** after Claude's turn ends. Sending a message or Stop
+  only ends the turn; it doesn't touch them. When they finish, Claude starts its next turn by
+  itself.
+- **A pane that closes** stops its subagents: they read "failed" with "Pane closed".
+- **Closing from the `…` sheet** goes back to the herd with a "Pane closed" toast. It doesn't
+  show the ended card, because you did it. Focus lands on the Agents tab.
+- **Rename** updates the header and the back labels live.
+- **Watching a subagent's screen** counts as watching its agent, so the agent doesn't come back
+  as "done, not opened".
+- **Focus after the viewer:** it returns to the thumbnail, with a focus ring only when you
+  closed it from the keyboard.
+
+### Decided against
+
+- **Rows that expand in place (Inline)**: the quickest look, but long results stretch the
+  chat.
+- **A strip and a sheet (Tray)**: the cleanest chat, but subagents sit one step further away.
+
+### Unmeasured knobs
+
+These were picked in the prototype, not measured:
+
+- thumbnails are 96px tall on a tool card and 160px in a bubble;
+- double-tap zooms 2.5x within 300ms, and pinch stops at 4x;
+- swipe-down closes past 96px, or at 500px/s over the last 80ms once it has moved 24px;
+- the backdrop fades out over 320px of drag.
+
+### Data this needs
+
+Measured from local Claude Code transcripts (2026-10-20):
+
+- **The tool is `Agent` now, not `Task`.** SPEC and DESIGN.md still say Task.
+- **Each subagent writes its own transcript** at `<session>/subagents/agent-<id>.jsonl`, with
+  a `.meta.json` beside it holding `agentType`, `description`, `model` and `finished`. The
+  subagent screen reads that file, so the agent has to tail it like the main transcript.
+- **No subagent found had spawned subagents of its own,** so the tree stays one level deep in
+  practice. The component nests if that changes.
+- **The images found** were inside `tool_result` blocks. The hub needs to stream them, or
+  serve them, without breaking the CSP (`img-src`).
+
+### Known issues
+
+- **Sending images from the phone** isn't designed. It's flagged on JC-104.
+- **While a machine is offline,** a running subagent's timer keeps counting. It's probably
+  still running on the machine, but nothing confirms it.
+- **On iOS,** whether the viewer can turn off the ring on returned focus
+  (`focus({ focusVisible: false })`) hasn't been checked on a device.
+
+### History
+
+1. Inline, Drill and Tray, after 8 calls agreed up front. **Drill picked.**
+2. The thumbnail kept a focus ring after you closed the viewer with a tap. Now the ring only
+   shows when you closed it from the keyboard.
+
 ## Next
 
-- **The rest of JC-117**: chat leftovers, what shows outside the app, and wide layouts.
+- **The rest of JC-117**: what shows outside the app, and wide layouts.
 - **When web starts,** the settled pieces go into `DESIGN.md`:
   - the herd layout;
   - the chat layout;
@@ -605,6 +695,7 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
   - Settings;
   - the connection banner, the dimmed stale state and the first-load skeleton;
   - the empty states, the ended and offline chat cards, and the toast;
+  - the image thumbnails and viewer, the subagent tree and screen, and the chat's `…` button;
   - the Status Pill machine badge.
 - **The SPEC changes** go in at the same time:
   - drop the terminal view and the Ask's "show screen";
@@ -612,4 +703,5 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
   - §5.3's New agent order becomes task first, with machine, folder and branch as defaults you
     can change;
   - §5.3's Settings gains Account and the test notification, and its prefs are stored on the hub;
-  - add Motion to §8.1.
+  - add Motion to §8.1;
+  - the Subagent Tree is for the `Agent` tool, not `Task`.
