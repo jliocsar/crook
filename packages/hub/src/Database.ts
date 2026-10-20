@@ -82,15 +82,15 @@ const migrations = SqliteMigrator.fromRecord({
   '3_seen_terminal': keySeenOnTerminal,
 })
 
-export const layerAt = (filename: string) =>
-  SqliteMigrator.layer({ loader: migrations }).pipe(
-    Layer.provideMerge(
-      SqliteClient.layer({
-        filename,
-        transformQueryNames: Str.camelToSnake,
-        transformResultNames: Str.snakeToCamel,
-      }),
-    ),
-  )
+export const clientAt = (filename: string) =>
+  SqliteClient.layer({
+    filename,
+    transformQueryNames: Str.camelToSnake,
+    transformResultNames: Str.snakeToCamel,
+  })
+
+export const migrated = SqliteMigrator.layer({ loader: migrations })
+
+export const layerAt = (filename: string) => migrated.pipe(Layer.provideMerge(clientAt(filename)))
 
 export const layer = Layer.unwrap(Effect.map(CrookHubDatabasePath, layerAt))

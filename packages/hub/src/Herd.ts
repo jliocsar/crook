@@ -3,6 +3,7 @@ import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Equivalence from 'effect/Equivalence'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
@@ -16,7 +17,7 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
-import type { MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
+import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { Machine, type MachineConnection } from '@crook/domain/Machine'
 import { type MachineState, agentsIn } from '@crook/domain/MachineState'
 import {
@@ -32,10 +33,7 @@ import packageJson from '../package.json' with { type: 'json' }
 import { MachineRecord, MachineRegistry } from '@crook/hub/MachineRegistry'
 import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 
-interface SeenMark {
-  readonly terminal: TerminalId
-  readonly stateChangeSeq: number
-}
+type SeenMark = Pick<AgentRow, 'terminal' | 'stateChangeSeq'>
 
 interface MachineEntry {
   readonly id: MachineId
@@ -118,10 +116,7 @@ const fromRecord =
     seen: pipe(
       seen,
       Arr.filter((mark) => mark.machine === record.id),
-      Arr.map((mark): [PaneId, SeenMark] => [
-        mark.pane,
-        { terminal: mark.terminal, stateChangeSeq: mark.stateChangeSeq },
-      ]),
+      Arr.map((mark): [PaneId, SeenMark] => [mark.pane, mark]),
       HashMap.fromIterable,
     ),
   })
@@ -164,17 +159,14 @@ const detached = (entry: MachineEntry, now: DateTime.Utc): MachineEntry =>
         lastSeenAt: now,
       }
 
-const markOf = (row: AgentRow): SeenMark => ({
-  terminal: row.terminal,
-  stateChangeSeq: row.stateChangeSeq,
+const isSameMark: Equivalence.Equivalence<SeenMark> = Equivalence.Struct({
+  terminal: Equivalence.String,
+  stateChangeSeq: Equivalence.Number,
 })
-
-const isSameMark = (mark: SeenMark) => (current: SeenMark) =>
-  current.terminal === mark.terminal && current.stateChangeSeq === mark.stateChangeSeq
 
 const published = (state: MachineState) => {
   const currentMarks = HashMap.fromIterable(
-    Arr.map(state.agents, (row): [PaneId, SeenMark] => [row.pane, markOf(row)]),
+    Arr.map(state.agents, (row): [PaneId, SeenMark] => [row.pane, row]),
   )
 
   return (entry: MachineEntry, now: DateTime.Utc): MachineEntry => ({
@@ -183,7 +175,7 @@ const published = (state: MachineState) => {
     herdrVersion: Option.some(state.herdrVersion),
     state: Option.some(state),
     seen: HashMap.filter(entry.seen, (mark, pane) =>
-      Option.exists(HashMap.get(currentMarks, pane), isSameMark(mark)),
+      Option.exists(HashMap.get(currentMarks, pane), (current) => isSameMark(mark, current)),
     ),
   })
 }
@@ -356,7 +348,7 @@ const make = Effect.gen(function* () {
           }),
         )
 
-        return Option.some({ ...found, seen: HashMap.set(found.seen, pane, markOf(row)) })
+        return Option.some({ ...found, seen: HashMap.set(found.seen, pane, row) })
       }),
     )
   })

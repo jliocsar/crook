@@ -7,16 +7,17 @@ import * as Schema from 'effect/Schema'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
-import { HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
+import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
   ClaudeSessionId,
   GlobalPaneId,
+  HerdrConnectionId,
   MachineId,
   PaneId,
   TabId,
   TerminalId,
-  WorkspaceId,
   toGlobalPaneId,
+  WorkspaceId,
 } from '@crook/domain/Ids'
 import { Machine } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
@@ -42,6 +43,7 @@ const agentRow = (pane: string, claudeSession: Option.Option<ClaudeSessionId>) =
     claudeSession,
     stateChangeSeq: 7,
     statusChangedAt: observedAt,
+    beforeHandoff: Option.none(),
   })
 
 const herd = new HerdView({

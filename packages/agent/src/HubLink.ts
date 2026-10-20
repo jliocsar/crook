@@ -1,12 +1,9 @@
 import * as BunSocket from '@effect/platform-bun/BunSocket'
-import * as Clock from 'effect/Clock'
 import * as Config from 'effect/Config'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as Option from 'effect/Option'
 import * as Redacted from 'effect/Redacted'
-import * as Ref from 'effect/Ref'
 import * as Schedule from 'effect/Schedule'
 import * as Schema from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
@@ -16,6 +13,7 @@ import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { reconnectBackoff, trackConnectionHealth } from '@crook/agent/Reconnect'
 import {
   AGENT_PING_INTERVAL,
   AGENT_SOCKET_OPEN_TIMEOUT,
@@ -88,49 +86,34 @@ const make = (connect: HubConnect, hello: Hello) =>
         Effect.andThen(Effect.fail(new HubAttachEnded())),
       )
 
-    const publishChanges = (client: AgentLinkClient, markAccepted: Effect.Effect<void>) =>
+    const publishChanges = (client: AgentLinkClient, markHealthy: Effect.Effect<void>) =>
       sync.changes.pipe(
         Stream.buffer({ capacity: 1, strategy: 'sliding' }),
         Stream.mapEffect((state) => client.PublishState({ state })),
-        Stream.tap(() => markAccepted),
+        Stream.tap(() => markHealthy),
         Stream.runDrain,
       )
 
     const session = Effect.fn('HubLink.session')(function* () {
       const client = yield* connect
-      const acceptedAt = yield* Ref.make(Option.none<number>())
-      const markAccepted = Effect.flatMap(Clock.currentTimeMillis, (now) =>
-        Ref.update(
-          acceptedAt,
-          Option.orElseSome(() => now),
-        ),
-      )
-      const stayedHealthy = Effect.zipWith(
-        Ref.get(acceptedAt),
-        Clock.currentTimeMillis,
-        (accepted, now) =>
-          Option.exists(accepted, (first) => now - first >= Duration.toMillis(AGENT_PING_INTERVAL)),
-      )
+      const health = yield* trackConnectionHealth
 
-      yield* Effect.all([holdAttach(client), publishChanges(client, markAccepted)], {
+      yield* Effect.all([holdAttach(client), publishChanges(client, health.markHealthy)], {
         concurrency: 'unbounded',
         discard: true,
       }).pipe(
         Effect.catchDefect((cause) => Effect.fail(new HubCallDefected({ cause }))),
         Effect.tapError((error) => Effect.logWarning(error.message)),
         Effect.catch((error) =>
-          Effect.flatMap(stayedHealthy, (healthy) => (healthy ? Effect.void : Effect.fail(error))),
+          Effect.flatMap(health.stayedHealthy, (healthy) =>
+            healthy ? Effect.void : Effect.fail(error),
+          ),
         ),
       )
     }, Effect.scoped)
 
     yield* session().pipe(
-      Effect.retry(
-        Schedule.min([
-          Schedule.exponential(HUB_RECONNECT_BASE),
-          Schedule.spaced(AGENT_PING_INTERVAL),
-        ]),
-      ),
+      Effect.retry(reconnectBackoff(HUB_RECONNECT_BASE)),
       Effect.forever,
       Effect.forkScoped,
     )

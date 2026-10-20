@@ -8,17 +8,18 @@ import {
   initialMachineState,
   nextMachineState,
 } from '@crook/agent/MachineStateMapping'
-import { AgentRow } from '@crook/domain/AgentRow'
-import { HerdrConnectionId } from '@crook/domain/HerdrLink'
+import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import {
   ClaudeSessionId,
+  HerdrConnectionId,
   MachineId,
   PaneId,
   TabId,
   TerminalId,
   WorkspaceId,
 } from '@crook/domain/Ids'
-import { panePresence } from '@crook/domain/MachineState'
+import { panePresence, statusChanges } from '@crook/domain/MachineState'
+import type { AgentInfo } from '@crook/herdr/Records'
 
 import { agentInfo, paneInfo, tabInfo, workspaceInfo } from './Fixtures'
 
@@ -26,6 +27,9 @@ const MACHINE = MachineId.make('laptop')
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 const STARTED = DateTime.makeUnsafe('2026-10-17T10:00:00Z')
 const LATER = DateTime.makeUnsafe('2026-10-17T10:05:00Z')
+const REDETECTED = DateTime.makeUnsafe('2026-10-17T10:05:03Z')
+const TERMINAL_BEFORE_HANDOFF = 'term_65e4959ec32112'
+const TERMINAL_AFTER_HANDOFF = 'term_65e4981ac9ff02'
 const HERDR_VERSION = '0.9.1'
 const CONNECTION = HerdrConnectionId.make(1)
 const NEXT_CONNECTION = HerdrConnectionId.make(2)
@@ -39,6 +43,46 @@ const reading = (agents: HerdReading['agents'], herdrVersion = HERDR_VERSION): H
   ),
   agents,
 })
+
+const handoffReading = (
+  terminal_id: string,
+  agent_status: AgentInfo['agent_status'],
+  state_change_seq: number,
+) =>
+  reading([
+    {
+      info: agentInfo({ pane_id: 'w1:p6', terminal_id, agent_status, state_change_seq }),
+      claudeSession: Option.none(),
+      branch: Option.none(),
+    },
+  ])
+
+const throughHandoff = (redetectedAs: AgentInfo['agent_status']) => {
+  const previous = initialMachineState(
+    MACHINE,
+    CONNECTION,
+    handoffReading(TERMINAL_BEFORE_HANDOFF, 'blocked', 5),
+    STARTED,
+  )
+  const resynced = Option.getOrThrow(
+    nextMachineState(
+      previous,
+      NEXT_CONNECTION,
+      handoffReading(TERMINAL_AFTER_HANDOFF, 'unknown', 0),
+      LATER,
+    ),
+  )
+  const redetected = Option.getOrThrow(
+    nextMachineState(
+      resynced,
+      NEXT_CONNECTION,
+      handoffReading(TERMINAL_AFTER_HANDOFF, redetectedAs, 1),
+      REDETECTED,
+    ),
+  )
+
+  return { previous, resynced, redetected }
+}
 
 describe('MachineStateMapping', () => {
   it('maps a herdr reading to version 0, stamping every status with the read time', () => {
@@ -72,6 +116,7 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.some(SESSION),
         stateChangeSeq: 14162,
         statusChangedAt: STARTED,
+        beforeHandoff: Option.none(),
       }),
     ])
   })
@@ -266,5 +311,61 @@ describe('MachineStateMapping', () => {
       next.agents.map((row) => [row.pane, row.terminal, row.status, row.stateChangeSeq]),
     ).toEqual([['w1:p6', TerminalId.make('term_65e4981ac9ff02'), 'unknown', 0]])
     expect(next.agents.map((row) => row.statusChangedAt)).toEqual([LATER])
+  })
+
+  it('remembers the status before a handoff while herdr has not re-detected the agent', () => {
+    const { resynced } = throughHandoff('blocked')
+
+    expect(
+      resynced.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff]),
+    ).toEqual([
+      [
+        'unknown',
+        LATER,
+        Option.some(new StatusBeforeHandoff({ status: 'blocked', statusChangedAt: STARTED })),
+      ],
+    ])
+  })
+
+  it('keeps the age of a status herdr re-detects unchanged after a handoff, and reports no change', () => {
+    const { previous, resynced, redetected } = throughHandoff('blocked')
+
+    expect(
+      redetected.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff]),
+    ).toEqual([['blocked', STARTED, Option.none()]])
+    expect(statusChanges(previous, resynced)).toEqual([])
+    expect(statusChanges(resynced, redetected)).toEqual([])
+  })
+
+  it('reports a status herdr re-detects differently after a handoff as a change from the old one', () => {
+    const { resynced, redetected } = throughHandoff('done')
+
+    expect(redetected.agents.map((row) => [row.status, row.statusChangedAt])).toEqual([
+      ['done', REDETECTED],
+    ])
+    expect(statusChanges(resynced, redetected)).toEqual(
+      redetected.agents.map((row) => ({ row, from: Option.some('blocked') })),
+    )
+  })
+
+  it('does not invent a status before a handoff for an agent that was unknown already', () => {
+    const previous = initialMachineState(
+      MACHINE,
+      CONNECTION,
+      handoffReading(TERMINAL_BEFORE_HANDOFF, 'unknown', 0),
+      STARTED,
+    )
+    const resynced = Option.getOrThrow(
+      nextMachineState(
+        previous,
+        NEXT_CONNECTION,
+        handoffReading(TERMINAL_AFTER_HANDOFF, 'unknown', 0),
+        LATER,
+      ),
+    )
+
+    expect(resynced.agents.map((row) => [row.statusChangedAt, row.beforeHandoff])).toEqual([
+      [STARTED, Option.none()],
+    ])
   })
 })

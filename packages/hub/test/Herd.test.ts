@@ -12,8 +12,15 @@ import * as TestClock from 'effect/testing/TestClock'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
-import { HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
-import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  HerdrConnectionId,
+  MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import * as Database from '@crook/hub/Database'
 import { Herd, RECONNECT_GRACE, hubVersion } from '@crook/hub/Herd'
@@ -50,6 +57,7 @@ const agentAt = (pane: PaneId, stateChangeSeq: number, terminal: TerminalId = BE
     claudeSession: Option.none(),
     stateChangeSeq,
     statusChangedAt: DateTime.makeUnsafe(0),
+    beforeHandoff: Option.none(),
   })
 
 const stateOf = (

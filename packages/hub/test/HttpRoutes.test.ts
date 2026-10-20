@@ -29,8 +29,9 @@ import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import { HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
+import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
+  HerdrConnectionId,
   IdempotencyKey,
   MachineId,
   PaneId,
@@ -90,6 +91,7 @@ const agentAt = (pane: PaneId) =>
     claudeSession: Option.none(),
     stateChangeSeq: 7,
     statusChangedAt: DateTime.makeUnsafe(0),
+    beforeHandoff: Option.none(),
   })
 
 const ownerLogin = { 'X-ExeDev-Email': OWNER, Origin: HUB_ORIGIN }
@@ -416,6 +418,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
                 claudeSession: Option.none(),
                 stateChangeSeq: 4,
                 statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+                beforeHandoff: Option.none(),
               }),
             ],
           }),

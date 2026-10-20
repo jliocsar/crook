@@ -13,8 +13,15 @@ import { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
-import { HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
-import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  HerdrConnectionId,
+  MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import { Machine, type MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 
@@ -33,6 +40,7 @@ const agent = (pane: string, status: AgentStatus, minutesIn: number) =>
     claudeSession: Option.none(),
     stateChangeSeq: 1,
     statusChangedAt: DateTime.addDuration(START, Duration.minutes(minutesIn)),
+    beforeHandoff: Option.none(),
   })
 
 const machineWith = (

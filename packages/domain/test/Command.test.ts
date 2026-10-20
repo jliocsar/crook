@@ -25,6 +25,7 @@ const rowAt = (rowPane: PaneId, stateChangeSeq: number, rowTerminal: TerminalId 
     claudeSession: Option.none(),
     stateChangeSeq,
     statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+    beforeHandoff: Option.none(),
   })
 
 describe('Command', () => {

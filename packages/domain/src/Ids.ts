@@ -23,6 +23,9 @@ export type ClaudeSessionId = typeof ClaudeSessionId.Type
 export const TerminalId = Schema.NonEmptyString.pipe(Schema.brand('TerminalId'))
 export type TerminalId = typeof TerminalId.Type
 
+export const HerdrConnectionId = Schema.Int.pipe(Schema.brand('HerdrConnectionId'))
+export type HerdrConnectionId = typeof HerdrConnectionId.Type
+
 export const IdempotencyKey = Schema.NonEmptyString.pipe(Schema.brand('IdempotencyKey'))
 export type IdempotencyKey = typeof IdempotencyKey.Type
 

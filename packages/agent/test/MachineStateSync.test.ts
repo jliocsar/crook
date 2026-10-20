@@ -15,8 +15,10 @@ import * as TestClock from 'effect/testing/TestClock'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
+import { RECONNECT_CAP } from '@crook/agent/Reconnect'
+import { StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import { ClaudeSessionId, PaneId } from '@crook/domain/Ids'
-import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
+import { isHerdrLost, isResync, panePresence, statusChanges } from '@crook/domain/MachineState'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -37,7 +39,13 @@ interface FakeSubscription {
 
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 const BRANCH = 'feat/jc-97-98-registry-seen'
-const EXPECTED_BACKOFF_MILLIS = [100, 200, 400, 800, 1600, 3200, 5000, 5000]
+const BACKOFF_ATTEMPTS = 8
+
+const expectedBackoffMillis = Arr.makeBy(BACKOFF_ATTEMPTS, (attempt) =>
+  Duration.toMillis(
+    Duration.min(Duration.times(HERDR_RECONNECT_BASE, 2 ** attempt), RECONNECT_CAP),
+  ),
+)
 
 const herdrStopped = new HerdrUnreachable({
   socketPath: '/home/jliocsar/.config/herdr/herdr.sock',
@@ -243,6 +251,7 @@ it.effect('resubscribes and re-reads after herdr drops events', () =>
     const first = yield* Queue.take(subscriptions)
 
     yield* answerRead(working)
+    yield* TestClock.adjust(RECONNECT_CAP)
     yield* Queue.fail(first.events, new HerdrEventsLost())
     yield* TestClock.adjust(HERDR_RECONNECT_BASE)
 
@@ -298,12 +307,12 @@ it.effect('backs off exponentially from 100 ms up to the 5 s cap while herdr sta
   Effect.gen(function* () {
     const { attempts } = yield* startSync(
       working,
-      Arr.makeBy(9, () => herdrStopped),
+      Arr.makeBy(BACKOFF_ATTEMPTS + 1, () => herdrStopped),
     )
 
     yield* TestClock.adjust(0)
     const firstAttempts = yield* Ref.get(attempts)
-    const waits = yield* Effect.forEach(EXPECTED_BACKOFF_MILLIS, (millis) =>
+    const waits = yield* Effect.forEach(expectedBackoffMillis, (millis) =>
       Effect.gen(function* () {
         const before = yield* Ref.get(attempts)
 
@@ -318,7 +327,7 @@ it.effect('backs off exponentially from 100 ms up to the 5 s cap while herdr sta
     )
 
     expect(firstAttempts).toBe(1)
-    expect(waits).toEqual(EXPECTED_BACKOFF_MILLIS.map(() => [0, 1]))
+    expect(waits).toEqual(expectedBackoffMillis.map(() => [0, 1]))
   }),
 )
 
@@ -331,6 +340,7 @@ it.effect(
       const initial = yield* sync.current
 
       yield* answerRead(beforeHandoff)
+      yield* TestClock.adjust(RECONNECT_CAP)
       yield* Queue.fail(first.events, new HerdrConnectionClosed({ method: 'events.subscribe' }))
       yield* TestClock.adjust(Duration.subtract(HERDR_RECONNECT_BASE, Duration.millis(1)))
 
@@ -356,6 +366,18 @@ it.effect(
       ).toEqual([['w1:p6', 'term_65e4981ac9ff02', 'unknown', 0]])
       expect(isResync(resynced, settled)).toBe(false)
       expect(settled.agents.map((row) => [row.status, row.stateChangeSeq])).toEqual([['idle', 1]])
+      expect(resynced.agents.map((row) => row.beforeHandoff)).toEqual(
+        initial.agents.map((row) =>
+          Option.some(
+            new StatusBeforeHandoff({ status: row.status, statusChangedAt: row.statusChangedAt }),
+          ),
+        ),
+      )
+      expect(settled.agents.map((row) => [row.beforeHandoff, row.statusChangedAt])).toEqual(
+        initial.agents.map((row) => [Option.none(), row.statusChangedAt]),
+      )
+      expect(statusChanges(initial, resynced)).toEqual([])
+      expect(statusChanges(resynced, settled)).toEqual([])
     }),
 )
 
@@ -366,6 +388,7 @@ it.effect('marks herdr lost when it does not come back, and clears it with the n
     const initial = yield* sync.current
 
     yield* answerRead(working)
+    yield* TestClock.adjust(RECONNECT_CAP)
     yield* Queue.offer(failures, herdrStopped)
     yield* Queue.fail(first.events, new HerdrConnectionClosed({ method: 'events.subscribe' }))
     yield* TestClock.adjust(HERDR_RECONNECT_BASE)
@@ -377,12 +400,49 @@ it.effect('marks herdr lost when it does not come back, and clears it with the n
     const restarted = yield* stateAt(sync, 2)
 
     expect(lost.herdr.connection).toBe(initial.herdr.connection)
-    expect(lost.herdr.lostAt).toEqual(Option.some(DateTime.makeUnsafe(100)))
+    expect(lost.herdr.lostAt).toEqual(
+      Option.some(
+        DateTime.makeUnsafe(Duration.toMillis(Duration.sum(RECONNECT_CAP, HERDR_RECONNECT_BASE))),
+      ),
+    )
     expect(lost.agents).toEqual(initial.agents)
     expect(isHerdrLost(restarted)).toBe(false)
     expect(isResync(lost, restarted)).toBe(true)
     expect(restarted.agents).toEqual([])
     expect(panePresence(restarted, PaneId.make('w1:p1'))).toBe('noAgent')
+  }),
+)
+
+it.effect('keeps backing off while herdr drops every connection before the reconnect cap', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, answerRead } = yield* startSync(working)
+    const first = yield* Queue.take(subscriptions)
+
+    yield* answerRead(working)
+    yield* Queue.fail(first.events, new HerdrConnectionClosed({ method: 'events.subscribe' }))
+    const firstLost = yield* stateAt(sync, 1)
+
+    yield* TestClock.adjust(HERDR_RECONNECT_BASE)
+    const second = yield* Queue.take(subscriptions)
+
+    yield* answerRead(working)
+    const reconnected = yield* stateAt(sync, 2)
+
+    yield* Queue.fail(second.events, new HerdrConnectionClosed({ method: 'events.subscribe' }))
+    const secondLost = yield* stateAt(sync, 3)
+
+    yield* TestClock.adjust(
+      Duration.subtract(Duration.times(HERDR_RECONNECT_BASE, 2), Duration.millis(1)),
+    )
+    const early = yield* Queue.size(subscriptions)
+
+    yield* TestClock.adjust(1)
+
+    expect(isHerdrLost(firstLost)).toBe(true)
+    expect(isHerdrLost(reconnected)).toBe(false)
+    expect(isHerdrLost(secondLost)).toBe(true)
+    expect(early).toBe(0)
+    expect(yield* Queue.size(subscriptions)).toBe(1)
   }),
 )
 

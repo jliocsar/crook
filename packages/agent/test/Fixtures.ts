@@ -6,8 +6,15 @@ import type * as SubscriptionRef from 'effect/SubscriptionRef'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AgentRow } from '@crook/domain/AgentRow'
-import { HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
-import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  HerdrConnectionId,
+  MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import type { HerdrClient } from '@crook/herdr/HerdrClient'
 import { AgentInfo, PaneInfo, SessionSnapshot, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
@@ -124,6 +131,7 @@ export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[
     claudeSession: Option.none(),
     stateChangeSeq: 4,
     statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+    beforeHandoff: Option.none(),
     ...fields,
   })
 

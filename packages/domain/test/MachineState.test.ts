@@ -4,14 +4,23 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
-import { HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
-import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import type { AgentStatus } from '@crook/domain/AgentStatus'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  HerdrConnectionId,
+  MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import {
   MachineState,
   MachineStateVersion,
   isHerdrLost,
   isResync,
   panePresence,
+  statusChanges,
 } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
 
@@ -25,7 +34,7 @@ const observedAt = DateTime.makeUnsafe('2026-10-20T18:07:41.971Z')
 const linkOn = (connection: number, lostAt: Option.Option<DateTime.Utc> = Option.none()) =>
   new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt })
 
-const stateOn = (herdr: HerdrLink) =>
+const stateOn = (herdr: HerdrLink, status: AgentStatus = 'unknown') =>
   new MachineState({
     machine: MachineId.make('laptop'),
     version: MachineStateVersion.make(4),
@@ -43,13 +52,14 @@ const stateOn = (herdr: HerdrLink) =>
         workspace,
         tab,
         terminal: TerminalId.make('term_65e4981ac9ff02'),
-        status: 'unknown',
+        status,
         title: 'Claude Code',
         cwd: '/home/jliocsar/Projects/crook',
         branch: Option.none(),
         claudeSession: Option.none(),
         stateChangeSeq: 0,
         statusChangedAt: observedAt,
+        beforeHandoff: Option.none(),
       }),
     ],
   })
@@ -84,5 +94,43 @@ describe('MachineState', () => {
     expect(isHerdrLost(lost)).toBe(true)
     expect(isHerdrLost(stateOn(linkOn(1)))).toBe(false)
     expect(wire).toEqual(lost)
+  })
+})
+
+describe('statusChanges', () => {
+  it('lists an agent whose status moved over the same connection, with the status it left', () => {
+    const next = stateOn(linkOn(1), 'blocked')
+
+    expect(statusChanges(stateOn(linkOn(1), 'working'), next)).toEqual(
+      next.agents.map((row) => ({ row, from: Option.some('working') })),
+    )
+  })
+
+  it('lists an agent the previous state did not have, with no status it left', () => {
+    const next = stateOn(linkOn(1), 'done')
+    const previous = new MachineState({
+      machine: next.machine,
+      version: next.version,
+      herdrVersion: next.herdrVersion,
+      herdr: next.herdr,
+      workspaces: [],
+      tabs: [],
+      panes: [],
+      agents: [],
+    })
+
+    expect(statusChanges(previous, next)).toEqual(
+      next.agents.map((row) => ({ row, from: Option.none() })),
+    )
+  })
+
+  it('lists nothing across a resync or while herdr is lost', () => {
+    expect(statusChanges(stateOn(linkOn(1), 'working'), stateOn(linkOn(2), 'done'))).toEqual([])
+    expect(
+      statusChanges(
+        stateOn(linkOn(1), 'working'),
+        stateOn(linkOn(1, Option.some(observedAt)), 'done'),
+      ),
+    ).toEqual([])
   })
 })

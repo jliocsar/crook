@@ -1,19 +1,21 @@
 import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
 
-import { AgentRow } from '@crook/domain/AgentRow'
-import { type HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
+import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
   type ClaudeSessionId,
+  type HerdrConnectionId,
   type MachineId,
   PaneId,
   TabId,
   TerminalId,
   WorkspaceId,
 } from '@crook/domain/Ids'
-import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { MachineState, MachineStateVersion, isHerdrLost } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
@@ -52,25 +54,54 @@ const toPane = (info: PaneInfo) =>
     tab: TabId.make(info.tab_id),
   })
 
-const statusChangedAt =
-  (previousAgents: readonly AgentRow[], now: DateTime.Utc) => (info: AgentInfo) =>
-    Arr.findFirst(
-      previousAgents,
-      (row) => row.pane === info.pane_id && row.status === info.agent_status,
-    ).pipe(
-      Option.match({
-        onNone: () => now,
-        onSome: (row) => row.statusChangedAt,
-      }),
-    )
+const previousRowOf = (previousAgents: readonly AgentRow[], info: AgentInfo) =>
+  Arr.findFirst(previousAgents, (row) => row.pane === info.pane_id)
+
+const isHandedOffFrom = (info: AgentInfo) => (row: AgentRow) =>
+  row.terminal !== info.terminal_id && row.status !== 'unknown'
+
+const beforeHandoffOf = (previous: Option.Option<AgentRow>, info: AgentInfo) =>
+  previous.pipe(
+    Option.filter(() => info.agent_status === 'unknown'),
+    Option.flatMap((row) =>
+      Option.orElse(row.beforeHandoff, () =>
+        Option.liftPredicate(row, isHandedOffFrom(info)).pipe(
+          Option.map(
+            (handedOff) =>
+              new StatusBeforeHandoff({
+                status: handedOff.status,
+                statusChangedAt: handedOff.statusChangedAt,
+              }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+const statusChangedAt = (
+  previous: Option.Option<AgentRow>,
+  info: AgentInfo,
+  now: DateTime.Utc,
+): DateTime.Utc =>
+  previous.pipe(
+    Option.flatMap((row) =>
+      Option.orElse(
+        Option.liftPredicate(row, (same) => same.status === info.agent_status),
+        () => Option.filter(row.beforeHandoff, (before) => before.status === info.agent_status),
+      ),
+    ),
+    Option.match({ onNone: () => now, onSome: (since) => since.statusChangedAt }),
+  )
 
 export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
   Option.orElse(info.foreground_cwd, () => info.cwd)
 
 const toAgentRow =
-  (since: (info: AgentInfo) => DateTime.Utc) =>
-  ({ info, claudeSession, branch }: ResolvedAgent) =>
-    new AgentRow({
+  (previousAgents: readonly AgentRow[], now: DateTime.Utc) =>
+  ({ info, claudeSession, branch }: ResolvedAgent) => {
+    const previous = previousRowOf(previousAgents, info)
+
+    return new AgentRow({
       pane: PaneId.make(info.pane_id),
       workspace: WorkspaceId.make(info.workspace_id),
       tab: TabId.make(info.tab_id),
@@ -83,8 +114,10 @@ const toAgentRow =
       branch,
       claudeSession,
       stateChangeSeq: info.state_change_seq,
-      statusChangedAt: since(info),
+      statusChangedAt: statusChangedAt(previous, info, now),
+      beforeHandoff: beforeHandoffOf(previous, info),
     })
+  }
 
 const herdContents = (
   previousAgents: readonly AgentRow[],
@@ -97,7 +130,7 @@ const herdContents = (
   workspaces: reading.workspaces.map(toWorkspace),
   tabs: reading.tabs.map(toTab),
   panes: reading.panes.map(toPane),
-  agents: reading.agents.map(toAgentRow(statusChangedAt(previousAgents, now))),
+  agents: reading.agents.map(toAgentRow(previousAgents, now)),
 })
 
 export const initialMachineState = (
@@ -139,7 +172,7 @@ export const herdrLostState = (
   previous: MachineState,
   now: DateTime.Utc,
 ): Option.Option<MachineState> =>
-  Option.liftPredicate(previous, (state) => Option.isNone(state.herdr.lostAt)).pipe(
+  Option.liftPredicate(previous, Predicate.not(isHerdrLost)).pipe(
     Option.map(
       (state) =>
         new MachineState({
