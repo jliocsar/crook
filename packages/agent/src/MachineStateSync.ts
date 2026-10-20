@@ -79,6 +79,7 @@ const make = Effect.gen(function* () {
         ClaudeSessionFileUnreadable: (error) =>
           Effect.as(Effect.logWarning(error.message), Option.none()),
         HerdrRequestRejected: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
+        HerdrAgentNotFound: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
         HerdrResponseInvalid: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
       }),
       Effect.annotateLogs('pane', info.pane_id),
