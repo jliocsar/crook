@@ -54,7 +54,7 @@ export class MachineOffline extends Schema.TaggedError<MachineOffline>()('Machin
   machine: MachineId,
 }) {
   override get message(): string {
-    return `Machine "${this.machine}" is offline, so the command was not sent. It goes through once that machine's agent reconnects to the hub.`
+    return `Machine "${this.machine}" is offline, so the command was not sent. Send it again once the machine shows online.`
   }
 }
 

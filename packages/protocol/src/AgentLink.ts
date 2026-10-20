@@ -8,6 +8,7 @@ import { MachineState } from '@crook/domain/MachineState'
 import { CommandId, CommandResult, RoutedCommand } from '@crook/protocol/Commands'
 
 export const AGENT_PING_INTERVAL = Duration.seconds(5)
+export const COMMAND_TIMEOUT = AGENT_PING_INTERVAL
 
 export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
   'MachineIdMismatch',

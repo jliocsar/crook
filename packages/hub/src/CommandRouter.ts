@@ -12,7 +12,7 @@ import * as Stream from 'effect/Stream'
 
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
-import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
+import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
 import {
   type AgentCommandFailure,
   CommandId,
@@ -23,62 +23,54 @@ import {
   RoutedCommand,
 } from '@crook/protocol/Commands'
 
-interface Attachment {
-  readonly outbox: Queue.Queue<RoutedCommand>
-}
+type Outbox = Queue.Queue<RoutedCommand>
 
 interface PendingCommand {
   readonly machine: MachineId
   readonly reply: Deferred.Deferred<CommandReceipt, AgentCommandFailure>
 }
 
-export const COMMAND_TIMEOUT = AGENT_PING_INTERVAL
-
 const withAttachment =
-  (attachment: Attachment) =>
-  (current: Option.Option<readonly Attachment[]>): Option.Option<readonly Attachment[]> =>
-    Option.some(Arr.append(Option.getOrElse(current, Arr.empty), attachment))
+  (outbox: Outbox) =>
+  (current: Option.Option<readonly Outbox[]>): Option.Option<readonly Outbox[]> =>
+    Option.some(Arr.append(Option.getOrElse(current, Arr.empty), outbox))
 
 const withoutAttachment =
-  (attachment: Attachment) =>
-  (current: Option.Option<readonly Attachment[]>): Option.Option<readonly Attachment[]> =>
+  (outbox: Outbox) =>
+  (current: Option.Option<readonly Outbox[]>): Option.Option<readonly Outbox[]> =>
     Option.flatMap(current, (attached) =>
       Option.liftPredicate(
-        Arr.filter(attached, (entry) => entry !== attachment),
+        Arr.filter(attached, (entry) => entry !== outbox),
         Arr.isReadonlyArrayNonEmpty,
       ),
     )
 
 const make = Effect.gen(function* () {
-  const attachments = yield* Ref.make(HashMap.empty<MachineId, readonly Attachment[]>())
+  const attachments = yield* Ref.make(HashMap.empty<MachineId, readonly Outbox[]>())
   const pending = yield* Ref.make(HashMap.empty<CommandId, PendingCommand>())
   const nextId = yield* Ref.make(0)
 
   const attach = (machine: MachineId) =>
     Stream.unwrap(
       Effect.gen(function* () {
-        const attachment: Attachment = { outbox: yield* Queue.unbounded<RoutedCommand>() }
+        const outbox = yield* Queue.unbounded<RoutedCommand>()
 
         yield* Effect.acquireRelease(
-          Ref.update(attachments, HashMap.modifyAt(machine, withAttachment(attachment))),
+          Ref.update(attachments, HashMap.modifyAt(machine, withAttachment(outbox))),
           () =>
             Effect.andThen(
-              Ref.update(attachments, HashMap.modifyAt(machine, withoutAttachment(attachment))),
-              Queue.shutdown(attachment.outbox),
+              Ref.update(attachments, HashMap.modifyAt(machine, withoutAttachment(outbox))),
+              Queue.shutdown(outbox),
             ),
         )
 
-        return Stream.fromQueue(attachment.outbox)
+        return Stream.fromQueue(outbox)
       }),
     )
 
   const newestOutbox = (machine: MachineId) =>
     Effect.map(Ref.get(attachments), (current) =>
-      pipe(
-        HashMap.get(current, machine),
-        Option.flatMap(Arr.last),
-        Option.map((attachment) => attachment.outbox),
-      ),
+      pipe(HashMap.get(current, machine), Option.flatMap(Arr.last)),
     ).pipe(
       Effect.flatMap((outbox) => Effect.fromOption(outbox, () => new MachineOffline({ machine }))),
     )
@@ -96,6 +88,10 @@ const make = Effect.gen(function* () {
       Ref.update(pending, HashMap.set(id, { machine, reply })),
       () =>
         Queue.offer(outbox, new RoutedCommand({ id, key, command })).pipe(
+          Effect.filterOrFail(
+            (offered) => offered,
+            () => new MachineOffline({ machine }),
+          ),
           Effect.andThen(Deferred.await(reply)),
           Effect.timeoutOrElse({
             duration: COMMAND_TIMEOUT,

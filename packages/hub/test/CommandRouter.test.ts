@@ -10,7 +10,8 @@ import * as TestClock from 'effect/testing/TestClock'
 
 import { InputDelivered, Prompt } from '@crook/domain/Command'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
-import { COMMAND_TIMEOUT, CommandRouter } from '@crook/hub/CommandRouter'
+import { CommandRouter } from '@crook/hub/CommandRouter'
+import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
 import {
   CommandTimedOut,
   MachineOffline,
@@ -92,9 +93,14 @@ it.effect('times out when the agent never answers, and drops the late answer', (
 
     yield* TestClock.adjust(COMMAND_TIMEOUT)
     const timedOut = yield* Fiber.join(sending).pipe(Effect.flip)
+    const resending = yield* sendInBackground(router, LAPTOP)
+    const rerouted = yield* Queue.take(agent.inbox)
+
     yield* router.complete(LAPTOP, routed.id, Result.succeed(delivered))
+    yield* router.complete(LAPTOP, rerouted.id, Result.fail(new PaneNotAgent({ pane: PANE })))
 
     expect(timedOut).toEqual(new CommandTimedOut({ machine: LAPTOP, timeout: COMMAND_TIMEOUT }))
+    expect(yield* Fiber.join(resending).pipe(Effect.flip)).toEqual(new PaneNotAgent({ pane: PANE }))
   }),
 )
 
