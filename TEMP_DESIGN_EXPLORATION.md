@@ -785,7 +785,7 @@ To check on the phone, with the prototype added to the Home Screen:
 
 ## Next
 
-- **The rest of JC-117**: wide layouts (possibly not v1), and housekeeping.
+- **The rest of JC-117**: housekeeping. Wide layouts are skipped; they aren't needed for now.
 - **When web starts,** the settled pieces go into `DESIGN.md`:
   - the herd layout;
   - the chat layout;
