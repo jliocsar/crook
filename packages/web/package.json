@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview --port 5191 --strictPort",
     "typecheck": "tsr generate && tsc && tsc -p src/sw",
-    "test": "tsr generate && vitest run",
+    "test": "tsr generate && vitest run --fsModuleCachePath node_modules/.vitest-cache",
     "brand": "bun brand/Generate.ts"
   },
   "dependencies": {

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run --fsModuleCachePath node_modules/.vitest-cache"
   },
   "dependencies": {
     "@crook/domain": "workspace:*",
