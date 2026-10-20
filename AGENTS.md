@@ -349,6 +349,11 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - TanStack Router updates `location` when a navigation starts, commits the new matches when it
   has loaded, and only then updates `resolvedLocation`. A
   component still mounted when `resolvedLocation` changes is part of where the navigation landed.
+  `status` is `pending` from the first step until the last, which sets it back to `idle` in the
+  same batch, so a newly mounted screen can see a `resolvedLocation` one entry behind its own.
+- The router's `navigate` commits no history entry when the target's href and user state equal
+  the location it is already on, a pending one included; `router.history.push` always pushes
+  (measured).
 - Motion stops a motion value's animation by the next frame once nothing observes the value, so
   an animation whose `motion` element has unmounted never completes, and its `onComplete` never
   runs (measured). `stop()` does not call `onComplete` either; a step that must happen on arrival

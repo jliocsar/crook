@@ -237,8 +237,13 @@ crook's motion, through Motion (`motion/react`):
   - Back slides the screen out, then pops the history entry. With no entry to pop (the screen was
     opened from a link), it replaces the URL with its parent.
   - The same kind of screen opened with other content (a chat from a chat) is a new screen, with
-    its own slide, focus and opener. When Back has to rebuild the screen beneath, that screen
-    appears in place.
+    its own slide, focus and opener. It takes the place of the screen it was opened from, so the
+    root list shows beneath it during the slide, both ways.
+  - Only a push slides in. A screen that Back rebuilds, or one that replaces the current screen
+    (a restarted chat), appears in place.
+  - Back tapped while a push is still loading cancels that push at once, and the screen it was
+    tapped on stays.
+  - Tapping the same row twice opens one screen.
   - Grabbing the edge while a screen slides in stops it under the finger, and its title takes
     focus then.
   - The browser's own back is instant: the slide belongs to the in-app gesture and button.
