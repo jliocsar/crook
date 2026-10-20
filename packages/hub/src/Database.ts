@@ -61,9 +61,25 @@ const createSeen = Effect.flatMap(
   `,
 )
 
+const keySeenOnTerminal = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+
+  yield* sql`DROP TABLE seen`
+  yield* sql`
+    CREATE TABLE seen (
+      machine TEXT NOT NULL,
+      pane TEXT NOT NULL,
+      terminal TEXT NOT NULL,
+      state_change_seq INTEGER NOT NULL,
+      PRIMARY KEY (machine, pane)
+    )
+  `
+})
+
 const migrations = SqliteMigrator.fromRecord({
   '1_machines': createMachines,
   '2_seen': createSeen,
+  '3_seen_terminal': keySeenOnTerminal,
 })
 
 export const layerAt = (filename: string) =>

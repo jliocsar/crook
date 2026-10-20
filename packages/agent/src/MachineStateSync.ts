@@ -11,6 +11,8 @@ import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Random from 'effect/Random'
+import * as Ref from 'effect/Ref'
 import * as Schedule from 'effect/Schedule'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -20,17 +22,18 @@ import { GitBranches } from '@crook/agent/GitBranches'
 import {
   type HerdReading,
   type ResolvedAgent,
+  herdrLostState,
   initialMachineState,
   nextMachineState,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
+import { HerdrConnectionId } from '@crook/domain/HerdrLink'
 import { MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import type { LifecycleEventKind, Subscription } from '@crook/herdr/Events'
 import { HerdrClient, type HerdrSubscriptionError } from '@crook/herdr/HerdrClient'
 import type { AgentInfo } from '@crook/herdr/Records'
-
-const HERDR_RECONNECT_INTERVAL = Duration.millis(100)
+import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
 
 const STATE_EVENT_KINDS: NonEmptyArray.NonEmptyReadonlyArray<LifecycleEventKind> = [
   'workspace.created',
@@ -51,7 +54,17 @@ const STATE_EVENT_KINDS: NonEmptyArray.NonEmptyReadonlyArray<LifecycleEventKind>
   'pane.agent_detected',
 ]
 
+export const HERDR_RECONNECT_BASE = Duration.millis(100)
+export const HERDR_RECONNECT_CAP = AGENT_PING_INTERVAL
+
 export const CrookMachineId = Config.schema(MachineId, 'CROOK_MACHINE_ID')
+
+const herdrBackoff = Schedule.min([
+  Schedule.exponential(HERDR_RECONNECT_BASE),
+  Schedule.spaced(HERDR_RECONNECT_CAP),
+])
+
+const mintConnection = Effect.map(Random.nextInt, (value) => HerdrConnectionId.make(value))
 
 const agentPanes = (state: MachineState) =>
   HashSet.fromIterable(state.agents.map((row) => row.pane))
@@ -118,45 +131,73 @@ const make = Effect.gen(function* () {
       herdrVersion: snapshot.version,
       workspaces: snapshot.workspaces,
       tabs: snapshot.tabs,
+      panes: snapshot.panes,
       agents,
     }
 
     return { reading, now: yield* DateTime.now }
   })
 
+  const firstConnection = yield* mintConnection
   const initial = yield* read().pipe(
-    Effect.map(({ reading, now }) => initialMachineState(machine, reading, now)),
+    Effect.map(({ reading, now }) => initialMachineState(machine, firstConnection, reading, now)),
     Effect.tapError(logHerdrFailure),
-    Effect.retry(Schedule.spaced(HERDR_RECONNECT_INTERVAL)),
+    Effect.retry(herdrBackoff),
   )
   const state = yield* SubscriptionRef.make(initial)
+  const resyncPending = yield* Ref.make(false)
+
+  const connectionAfter = (previous: MachineState) =>
+    Effect.flatMap(Ref.getAndSet(resyncPending, false), (pending) =>
+      pending ? mintConnection : Effect.succeed(previous.herdr.connection),
+    )
 
   const refresh = SubscriptionRef.updateSomeAndGetEffect(state, (previous) =>
-    Effect.map(read(), ({ reading, now }) => nextMachineState(previous, reading, now)),
+    Effect.gen(function* () {
+      const { reading, now } = yield* read()
+      const connection = yield* connectionAfter(previous)
+
+      return nextMachineState(previous, connection, reading, now)
+    }),
   )
 
-  const follow = Effect.fn('MachineStateSync.follow')(function* () {
+  const markHerdrLost = Effect.flatMap(DateTime.now, (now) =>
+    SubscriptionRef.updateSome(state, (previous) => herdrLostState(previous, now)),
+  )
+
+  const follow = Effect.fn('MachineStateSync.follow')(function* (healthy: Ref.Ref<boolean>) {
     const subscribed = agentPanes(yield* SubscriptionRef.get(state))
     const events = yield* herdr.subscribe(subscriptionsFor(subscribed))
 
     yield* Stream.concat(Stream.succeed(undefined), events).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
       Stream.mapEffect(() => refresh),
+      Stream.tap(() => Ref.set(healthy, true)),
       Stream.takeUntil((next) => !Equal.equals(agentPanes(next), subscribed)),
       Stream.runDrain,
     )
   }, Effect.scoped)
 
-  yield* follow().pipe(
-    Effect.catchTags({
-      HerdrEventsLost: (error) => Effect.logDebug(error.message),
-      HerdrPaneNotFound: (error) => Effect.andThen(Effect.logDebug(error.message), refresh),
-    }),
-    Effect.tapError(logHerdrFailure),
-    Effect.retry(Schedule.spaced(HERDR_RECONNECT_INTERVAL)),
-    Effect.forever,
-    Effect.forkScoped,
-  )
+  const connection = Effect.gen(function* () {
+    const healthy = yield* Ref.make(false)
+
+    yield* follow(healthy).pipe(
+      Effect.catchTag('HerdrPaneNotFound', (error) =>
+        Effect.andThen(Effect.logDebug(error.message), refresh),
+      ),
+      Effect.tapError(logHerdrFailure),
+      Effect.tapError(() => Ref.set(resyncPending, true)),
+      Effect.catch((error) =>
+        Effect.flatMap(Ref.get(healthy), (wasHealthy) =>
+          wasHealthy
+            ? Effect.sleep(HERDR_RECONNECT_BASE)
+            : Effect.andThen(markHerdrLost, Effect.fail(error)),
+        ),
+      ),
+    )
+  })
+
+  yield* connection.pipe(Effect.retry(herdrBackoff), Effect.forever, Effect.forkScoped)
 
   return MachineStateSync.fromRef(state)
 })

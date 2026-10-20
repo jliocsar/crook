@@ -1,17 +1,22 @@
 import { expect, it } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Context from 'effect/Context'
+import * as DateTime from 'effect/DateTime'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { GitBranches } from '@crook/agent/GitBranches'
-import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { ClaudeSessionId } from '@crook/domain/Ids'
+import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
+import { ClaudeSessionId, PaneId } from '@crook/domain/Ids'
+import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -19,10 +24,11 @@ import {
   HerdrEventsLost,
   HerdrPaneNotFound,
   type HerdrSubscriptionError,
+  HerdrUnreachable,
 } from '@crook/herdr/HerdrClient'
-import type { SessionSnapshot } from '@crook/herdr/Records'
+import { type AgentInfo, type SessionSnapshot, TabInfo } from '@crook/herdr/Records'
 
-import { agentInfo, sessionSnapshot } from './Fixtures'
+import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from './Fixtures'
 
 interface FakeSubscription {
   readonly subscriptions: readonly Subscription[]
@@ -31,6 +37,65 @@ interface FakeSubscription {
 
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 const BRANCH = 'feat/jc-97-98-registry-seen'
+const EXPECTED_BACKOFF_MILLIS = [100, 200, 400, 800, 1600, 3200, 5000, 5000]
+
+const herdrStopped = new HerdrUnreachable({
+  socketPath: '/home/jliocsar/.config/herdr/herdr.sock',
+  cause: new Error('connect ENOENT /home/jliocsar/.config/herdr/herdr.sock'),
+})
+
+const lastPaneExited: HerdrEvent = {
+  event: 'pane_exited',
+  data: { type: 'pane_exited', pane_id: 'w1:p7', workspace_id: 'w1' },
+}
+
+const redetectedIdle: HerdrEvent = {
+  event: 'pane.agent_status_changed',
+  data: {
+    pane_id: 'w1:p6',
+    workspace_id: 'w1',
+    agent_status: 'idle',
+    agent: Option.some('claude'),
+    display_agent: Option.none(),
+    title: Option.none(),
+  },
+}
+
+const exitTestTab = new TabInfo({
+  tab_id: 'w1:t4',
+  workspace_id: 'w1',
+  number: 4,
+  label: 'exit-test',
+  focused: false,
+  pane_count: 1,
+  agent_status: 'unknown',
+})
+
+const handoffAgent = (fields: Partial<ConstructorParameters<typeof AgentInfo>[0]>) =>
+  agentInfo({ pane_id: 'w1:p6', cwd: Option.none(), ...fields })
+
+const beforeHandoff = sessionSnapshot([
+  handoffAgent({
+    terminal_id: 'term_65e4959ec32112',
+    agent_status: 'idle',
+    state_change_seq: 2,
+    completion_seq: Option.some(2),
+  }),
+])
+
+const afterHandoff = sessionSnapshot([
+  handoffAgent({
+    terminal_id: 'term_65e4981ac9ff02',
+    agent_status: 'unknown',
+    state_change_seq: 0,
+  }),
+])
+
+const redetected = sessionSnapshot([
+  handoffAgent({ terminal_id: 'term_65e4981ac9ff02', agent_status: 'idle', state_change_seq: 1 }),
+])
+
+const restartedWithoutAgents = sessionSnapshot([], [paneInfo({ terminal_id: 'term_restarted' })])
 
 const paneClosed: HerdrEvent = {
   event: 'pane_closed',
@@ -52,6 +117,7 @@ const startSync = Effect.fn('startSync')(function* (
   const replies = yield* Queue.unbounded<SessionSnapshot>()
   const failures = yield* Queue.unbounded<HerdrSubscriptionError>()
   const subscriptions = yield* Queue.unbounded<FakeSubscription>()
+  const attempts = yield* Ref.make(0)
 
   yield* Queue.offer(replies, initial)
   yield* Queue.offerAll(failures, subscribeFailures)
@@ -59,7 +125,8 @@ const startSync = Effect.fn('startSync')(function* (
   const herdr = Layer.mock(HerdrClient, {
     snapshot: Queue.offer(readStarted, undefined).pipe(Effect.andThen(Queue.take(replies))),
     subscribe: (entries) =>
-      Queue.poll(failures).pipe(
+      Ref.update(attempts, (count) => count + 1).pipe(
+        Effect.andThen(Queue.poll(failures)),
         Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: Effect.fail })),
         Effect.andThen(Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()),
         Effect.tap((events) => Queue.offer(subscriptions, { subscriptions: entries, events })),
@@ -85,6 +152,8 @@ const startSync = Effect.fn('startSync')(function* (
     subscriptions,
     readStarted,
     replies,
+    failures,
+    attempts,
     answerRead,
   }
 })
@@ -175,6 +244,7 @@ it.effect('resubscribes and re-reads after herdr drops events', () =>
 
     yield* answerRead(working)
     yield* Queue.fail(first.events, new HerdrEventsLost())
+    yield* TestClock.adjust(HERDR_RECONNECT_BASE)
 
     const second = yield* Queue.take(subscriptions)
 
@@ -204,6 +274,7 @@ it.effect('re-reads before resubscribing when a subscribed pane has closed', () 
 
     expect(statusPanes(subscription)).toEqual(['w1:p1'])
     expect(state.agents.map((row) => row.pane)).toEqual(['w1:p1'])
+    expect(isHerdrLost(state)).toBe(false)
   }),
 )
 
@@ -220,5 +291,117 @@ it.effect('waits the reconnect interval before trying herdr again', () =>
     yield* TestClock.adjust(1)
 
     expect(yield* Queue.size(subscriptions)).toBe(1)
+  }),
+)
+
+it.effect('backs off exponentially from 100 ms up to the 5 s cap while herdr stays down', () =>
+  Effect.gen(function* () {
+    const { attempts } = yield* startSync(
+      working,
+      Arr.makeBy(9, () => herdrStopped),
+    )
+
+    yield* TestClock.adjust(0)
+    const firstAttempts = yield* Ref.get(attempts)
+    const waits = yield* Effect.forEach(EXPECTED_BACKOFF_MILLIS, (millis) =>
+      Effect.gen(function* () {
+        const before = yield* Ref.get(attempts)
+
+        yield* TestClock.adjust(millis - 1)
+        const early = yield* Ref.get(attempts)
+
+        yield* TestClock.adjust(1)
+        const onTime = yield* Ref.get(attempts)
+
+        return [early - before, onTime - before]
+      }),
+    )
+
+    expect(firstAttempts).toBe(1)
+    expect(waits).toEqual(EXPECTED_BACKOFF_MILLIS.map(() => [0, 1]))
+  }),
+)
+
+it.effect(
+  'reconnects after a handoff under a new herdr connection, without showing herdr lost',
+  () =>
+    Effect.gen(function* () {
+      const { sync, subscriptions, answerRead } = yield* startSync(beforeHandoff)
+      const first = yield* Queue.take(subscriptions)
+      const initial = yield* sync.current
+
+      yield* answerRead(beforeHandoff)
+      yield* Queue.fail(first.events, new HerdrConnectionClosed({ method: 'events.subscribe' }))
+      yield* TestClock.adjust(Duration.subtract(HERDR_RECONNECT_BASE, Duration.millis(1)))
+
+      expect(yield* Queue.size(subscriptions)).toBe(0)
+
+      yield* TestClock.adjust(1)
+      const second = yield* Queue.take(subscriptions)
+
+      yield* answerRead(afterHandoff)
+      const resynced = yield* stateAt(sync, 1)
+
+      yield* Queue.offer(second.events, redetectedIdle)
+      yield* answerRead(redetected)
+      const settled = yield* stateAt(sync, 2)
+
+      expect(initial.agents.map((row) => [row.pane, row.status, row.stateChangeSeq])).toEqual([
+        ['w1:p6', 'idle', 2],
+      ])
+      expect(isResync(initial, resynced)).toBe(true)
+      expect(isHerdrLost(resynced)).toBe(false)
+      expect(
+        resynced.agents.map((row) => [row.pane, row.terminal, row.status, row.stateChangeSeq]),
+      ).toEqual([['w1:p6', 'term_65e4981ac9ff02', 'unknown', 0]])
+      expect(isResync(resynced, settled)).toBe(false)
+      expect(settled.agents.map((row) => [row.status, row.stateChangeSeq])).toEqual([['idle', 1]])
+    }),
+)
+
+it.effect('marks herdr lost when it does not come back, and clears it with the next read', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, failures, answerRead } = yield* startSync(working)
+    const first = yield* Queue.take(subscriptions)
+    const initial = yield* sync.current
+
+    yield* answerRead(working)
+    yield* Queue.offer(failures, herdrStopped)
+    yield* Queue.fail(first.events, new HerdrConnectionClosed({ method: 'events.subscribe' }))
+    yield* TestClock.adjust(HERDR_RECONNECT_BASE)
+    const lost = yield* stateAt(sync, 1)
+
+    yield* TestClock.adjust(HERDR_RECONNECT_BASE)
+    yield* Queue.take(subscriptions)
+    yield* answerRead(restartedWithoutAgents)
+    const restarted = yield* stateAt(sync, 2)
+
+    expect(lost.herdr.connection).toBe(initial.herdr.connection)
+    expect(lost.herdr.lostAt).toEqual(Option.some(DateTime.makeUnsafe(100)))
+    expect(lost.agents).toEqual(initial.agents)
+    expect(isHerdrLost(restarted)).toBe(false)
+    expect(isResync(lost, restarted)).toBe(true)
+    expect(restarted.agents).toEqual([])
+    expect(panePresence(restarted, PaneId.make('w1:p1'))).toBe('noAgent')
+  }),
+)
+
+it.effect('drops a tab that vanished with only the pane_exited of its last pane', () =>
+  Effect.gen(function* () {
+    const twoTabs = sessionSnapshot(
+      [agentInfo()],
+      [paneInfo(), paneInfo({ pane_id: 'w1:p7', terminal_id: 'term_7', tab_id: 'w1:t4' })],
+      [tabInfo, exitTestTab],
+    )
+    const { sync, subscriptions, answerRead } = yield* startSync(twoTabs)
+    const subscription = yield* Queue.take(subscriptions)
+
+    yield* answerRead(twoTabs)
+    yield* Queue.offer(subscription.events, lastPaneExited)
+    yield* answerRead(working)
+    const state = yield* stateAt(sync, 1)
+
+    expect(state.tabs.map((tab) => tab.id)).toEqual(['w1:t1'])
+    expect(panePresence(state, PaneId.make('w1:p7'))).toBe('gone')
   }),
 )

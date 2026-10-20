@@ -7,7 +7,7 @@ import * as SqlClient from 'effect/sql/SqlClient'
 import type { SqlError } from 'effect/sql/SqlError'
 import * as SqlSchema from 'effect/sql/SqlSchema'
 
-import { MachineId, PaneId } from '@crook/domain/Ids'
+import { MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import {
   type StoredRowInvalid,
   dieOnUnencodableRecord,
@@ -17,6 +17,7 @@ import {
 export class SeenRecord extends Schema.Class<SeenRecord>('SeenRecord')({
   machine: MachineId,
   pane: PaneId,
+  terminal: TerminalId,
   stateChangeSeq: Schema.Int,
 }) {}
 
@@ -33,7 +34,9 @@ const make = Effect.gen(function* () {
     Request: SeenRecord,
     execute: (row) => sql`
       INSERT INTO seen ${sql.insert(row)}
-      ON CONFLICT (machine, pane) DO UPDATE SET state_change_seq = excluded.state_change_seq
+      ON CONFLICT (machine, pane) DO UPDATE SET
+        terminal = excluded.terminal,
+        state_change_seq = excluded.state_change_seq
     `,
   })
 

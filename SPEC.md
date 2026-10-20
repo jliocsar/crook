@@ -321,6 +321,14 @@ Effect atoms end to end. See `ARCHITECTURE.md` §3.7.
 - No mark-seen method exists in the schema; "seen" appears only as an `agent.view` filter/sort field.
 - Decision (D12): crook tracks seen itself; focus is only called when the user explicitly asks to jump the desktop to a pane.
 
+**S6 — `events.subscribe` across restarts, handoffs and slow readers (verified 2026-10-20 on a 0.9.5 probe session; overnight idle, `herdr update --handoff`, a 0.9.1 → 0.9.5 handoff and the `events_lost` wire shape not run).**
+
+- Stop, `kill -9` and a live handoff all end the subscription with a clean EOF and no error line. A reader that stops reading is cut off the same way once its socket buffer fills; `events_lost` was never seen.
+- Events carry no sequence and no heartbeat is sent. Workspace, tab and pane ids survive every restart and are never reused; `terminal_id` changes and `revision`, `state_change_seq` and `completion_seq` restart.
+- A stop or crash leaves no agents; a handoff keeps the processes and shows each agent `unknown` with sequence 0 for about 3 s before herdr re-detects it.
+- Close events are incomplete: a tab can vanish with only its last pane's `pane_exited`.
+- Decision: the agent never resumes, it resyncs from `session.snapshot` on every reconnect, with an exponential backoff from 100 ms to 5 s; seen marks are scoped to `terminal_id`; a state read over a new herdr connection is marked as a resync so notifications skip it (ARCHITECTURE §2.5, §2.6).
+
 **S1 — WebSockets through the exe.dev proxy (partly verified).**
 
 - WSS upgrade works with a VM bearer token in `X-Exedev-Authorization`; the upgrade request carries `X-ExeDev-Token-Ctx`.

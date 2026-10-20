@@ -32,7 +32,11 @@ export const COMMAND_REPLAY_CAPACITY = 1024
 export const HERDR_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_PROMPT, 10)
 
 const receiptFor = (row: AgentRow): CommandReceipt =>
-  new InputDelivered({ pane: row.pane, stateChangeSeq: row.stateChangeSeq })
+  new InputDelivered({
+    pane: row.pane,
+    terminal: row.terminal,
+    stateChangeSeq: row.stateChangeSeq,
+  })
 
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient

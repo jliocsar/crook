@@ -20,6 +20,9 @@ export type GlobalPaneId = typeof GlobalPaneId.Type
 export const ClaudeSessionId = Schema.NonEmptyString.pipe(Schema.brand('ClaudeSessionId'))
 export type ClaudeSessionId = typeof ClaudeSessionId.Type
 
+export const TerminalId = Schema.NonEmptyString.pipe(Schema.brand('TerminalId'))
+export type TerminalId = typeof TerminalId.Type
+
 export const IdempotencyKey = Schema.NonEmptyString.pipe(Schema.brand('IdempotencyKey'))
 export type IdempotencyKey = typeof IdempotencyKey.Type
 

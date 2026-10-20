@@ -1,12 +1,13 @@
 import * as Schema from 'effect/Schema'
 
 import { AgentStatus } from '@crook/domain/AgentStatus'
-import { ClaudeSessionId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
+import { ClaudeSessionId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 
 export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   pane: PaneId,
   workspace: WorkspaceId,
   tab: TabId,
+  terminal: TerminalId,
   status: AgentStatus,
   title: Schema.String,
   cwd: Schema.String,

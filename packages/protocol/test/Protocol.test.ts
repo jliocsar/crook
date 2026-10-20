@@ -1,5 +1,6 @@
 import { describe, expect, it, layer } from '@effect/vitest'
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
@@ -8,7 +9,8 @@ import * as RpcTest from 'effect/rpc/RpcTest'
 import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
-import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import { HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
+import { IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { ClientApi, MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
@@ -30,8 +32,10 @@ const emptyState = (machine: MachineId) =>
     machine,
     version: MachineStateVersion.make(1),
     herdrVersion: '0.9.1',
+    herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
     workspaces: [],
     tabs: [],
+    panes: [],
     agents: [],
   })
 
@@ -64,7 +68,13 @@ const clientApiHandlers = ClientApi.toLayer({
     Effect.fail(new PaneNotInHerd({ machine, pane: markedPane })),
   SendCommand: ({ machine, command }) =>
     machine === laptop
-      ? Effect.succeed(new InputDelivered({ pane: command.pane, stateChangeSeq: 0 }))
+      ? Effect.succeed(
+          new InputDelivered({
+            pane: command.pane,
+            terminal: TerminalId.make('term_1'),
+            stateChangeSeq: 0,
+          }),
+        )
       : Effect.fail(new MachineOffline({ machine })),
 })
 
@@ -119,7 +129,9 @@ layer(clientApiHandlers)('ClientApi', (rpc) => {
         .SendCommand({ machine: impostor, key, command })
         .pipe(Effect.flip)
 
-      expect(receipt).toEqual(new InputDelivered({ pane, stateChangeSeq: 0 }))
+      expect(receipt).toEqual(
+        new InputDelivered({ pane, terminal: TerminalId.make('term_1'), stateChangeSeq: 0 }),
+      )
       expect(offline).toEqual(new MachineOffline({ machine: impostor }))
     }),
   )
@@ -137,7 +149,9 @@ describe('Command wire shapes', () => {
   })
 
   it('carries both sides of a command result through JSON', () => {
-    const delivered = Result.succeed(new InputDelivered({ pane, stateChangeSeq: 14162 }))
+    const delivered = Result.succeed(
+      new InputDelivered({ pane, terminal: TerminalId.make('term_1'), stateChangeSeq: 14162 }),
+    )
     const refused = Result.fail(new PaneNotAgent({ pane }))
     const unknown = Result.fail(new CommandDeliveryUnknown())
 

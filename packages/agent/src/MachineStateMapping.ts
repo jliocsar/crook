@@ -4,11 +4,20 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
-import { type ClaudeSessionId, type MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
+import { type HerdrConnectionId, HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  type ClaudeSessionId,
+  type MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { Pane } from '@crook/domain/Pane'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
-import type { AgentInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
+import type { AgentInfo, PaneInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
 
 export interface ResolvedAgent {
   readonly info: AgentInfo
@@ -20,6 +29,7 @@ export interface HerdReading {
   readonly herdrVersion: string
   readonly workspaces: readonly WorkspaceInfo[]
   readonly tabs: readonly TabInfo[]
+  readonly panes: readonly PaneInfo[]
   readonly agents: readonly ResolvedAgent[]
 }
 
@@ -33,6 +43,13 @@ const toTab = (info: TabInfo) =>
     id: TabId.make(info.tab_id),
     workspace: WorkspaceId.make(info.workspace_id),
     label: info.label,
+  })
+
+const toPane = (info: PaneInfo) =>
+  new Pane({
+    id: PaneId.make(info.pane_id),
+    workspace: WorkspaceId.make(info.workspace_id),
+    tab: TabId.make(info.tab_id),
   })
 
 const statusChangedAt =
@@ -57,6 +74,7 @@ const toAgentRow =
       pane: PaneId.make(info.pane_id),
       workspace: WorkspaceId.make(info.workspace_id),
       tab: TabId.make(info.tab_id),
+      terminal: TerminalId.make(info.terminal_id),
       status: info.agent_status,
       title: Option.firstSomeOf([info.terminal_title_stripped, info.title, info.name]).pipe(
         Option.getOrElse(() => ''),
@@ -70,32 +88,37 @@ const toAgentRow =
 
 const herdContents = (
   previousAgents: readonly AgentRow[],
+  connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
 ) => ({
   herdrVersion: reading.herdrVersion,
+  herdr: new HerdrLink({ connection, lostAt: Option.none() }),
   workspaces: reading.workspaces.map(toWorkspace),
   tabs: reading.tabs.map(toTab),
+  panes: reading.panes.map(toPane),
   agents: reading.agents.map(toAgentRow(statusChangedAt(previousAgents, now))),
 })
 
 export const initialMachineState = (
   machine: MachineId,
+  connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
 ): MachineState =>
   new MachineState({
     machine,
     version: MachineStateVersion.make(0),
-    ...herdContents([], reading, now),
+    ...herdContents([], connection, reading, now),
   })
 
 export const nextMachineState = (
   previous: MachineState,
+  connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
 ): Option.Option<MachineState> => {
-  const contents = herdContents(previous.agents, reading, now)
+  const contents = herdContents(previous.agents, connection, reading, now)
 
   return Option.liftPredicate(
     new MachineState({ machine: previous.machine, version: previous.version, ...contents }),
@@ -111,3 +134,23 @@ export const nextMachineState = (
     ),
   )
 }
+
+export const herdrLostState = (
+  previous: MachineState,
+  now: DateTime.Utc,
+): Option.Option<MachineState> =>
+  Option.liftPredicate(previous, (state) => Option.isNone(state.herdr.lostAt)).pipe(
+    Option.map(
+      (state) =>
+        new MachineState({
+          machine: state.machine,
+          version: MachineStateVersion.make(state.version + 1),
+          herdrVersion: state.herdrVersion,
+          herdr: new HerdrLink({ connection: state.herdr.connection, lostAt: Option.some(now) }),
+          workspaces: state.workspaces,
+          tabs: state.tabs,
+          panes: state.panes,
+          agents: state.agents,
+        }),
+    ),
+  )
