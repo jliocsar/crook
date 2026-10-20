@@ -46,7 +46,7 @@ export function StatusPill({
       ? 'text-muted-foreground'
       : 'border-border bg-card text-muted-foreground min-h-8 rounded-full border px-2.5',
     href !== undefined &&
-      'hover:text-foreground transition-colors duration-150 no-underline motion-reduce:transition-none',
+      'hit-area hover:text-foreground relative transition-colors duration-150 no-underline motion-reduce:transition-none',
     className,
   )
 

@@ -37,6 +37,8 @@ export const pointer = (type: string, target: EventTarget, clientX: number): voi
 export const wait = (milliseconds: number) =>
   Effect.promise(() => act(() => Effect.runPromise(Effect.sleep(Duration.millis(milliseconds)))))
 
+export const springSettles = wait(SPRING_SETTLED_MS)
+
 export const dragX = Effect.fn('dragX')(function* (target: Element, path: readonly number[]) {
   const [start = 0, ...moves] = path
 

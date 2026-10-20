@@ -1,4 +1,6 @@
-import { useLocation, useParentMatches, useRouter } from '@tanstack/react-router'
+import type { ParsedHistoryState } from '@tanstack/history'
+import { useParentMatches, useRouter, useRouterState } from '@tanstack/react-router'
+import type { AnyRouter } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
@@ -11,7 +13,7 @@ import { GLIDE } from '@crook/web/motion/Springs'
 import { commitsBack } from '@crook/web/navigation/BackGesture'
 import { COLUMN_STYLE, useColumnWidth } from '@crook/web/navigation/Column'
 import { focusScreenTitle, restoreFocus } from '@crook/web/navigation/Focus'
-import { findOpener, forgetOpener } from '@crook/web/navigation/Opener'
+import { findOpener } from '@crook/web/navigation/Opener'
 import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 import { useShellReady } from '@crook/web/navigation/ShellReady'
 
@@ -19,6 +21,8 @@ type EdgeHandlers = Pick<
   React.DOMAttributes<HTMLDivElement>,
   'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'
 >
+
+type HistoryEntry = { readonly state: ParsedHistoryState }
 
 type PushedScreenControls = {
   readonly back: () => void
@@ -39,22 +43,36 @@ const useParentPathname = (): string =>
       ),
   })
 
-const useOpener = (): Element | null => {
-  const openerKey = useLocation({ select: (location) => location.state.openerKey })
+const useOpener = (): void => {
+  const router = useRouter()
   const [opener] = React.useState(() =>
-    Option.getOrElse(findOpener(openerKey), () => document.activeElement),
+    Option.getOrElse(
+      findOpener(router.state.location.state.openerKey),
+      () => document.activeElement,
+    ),
   )
 
   React.useEffect(
     () => () => {
-      forgetOpener(openerKey)
       restoreFocus(opener)
     },
-    [openerKey, opener],
+    [opener],
+  )
+}
+
+const historyIndex = ({ state: { __TSR_index: index } }: HistoryEntry): number => index
+
+const arrivedByGoingBack = (router: AnyRouter): boolean =>
+  Option.exists(
+    Option.fromUndefinedOr(router.state.resolvedLocation),
+    (previous) => historyIndex(previous) > historyIndex(router.state.location),
   )
 
-  return opener
-}
+const useLandedIndex = (): number | undefined =>
+  useRouterState({
+    select: (state) =>
+      state.resolvedLocation === undefined ? undefined : historyIndex(state.resolvedLocation),
+  })
 
 export const usePushedScreen = (): PushedScreenControls =>
   Option.getOrThrowWith(
@@ -69,32 +87,46 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
   const width = useColumnWidth()
   const reduce = useReducedMotion() ?? false
   const shellReady = useShellReady()
-  const [slidesIn] = React.useState(() => shellReady.current && !reduce)
-  const [leaving, setLeaving] = React.useState(false)
+  const landedIndex = useLandedIndex()
+  const [slidesIn] = React.useState(
+    () => shellReady.current && !reduce && !arrivedByGoingBack(router),
+  )
+  const [leftFrom, setLeftFrom] = React.useState<Option.Option<number>>(Option.none())
   const offsetX = useMotionValue(slidesIn ? width : 0)
   const screen = React.useRef<HTMLDivElement>(null)
+  const arrived = React.useRef(false)
   const dragOrigin = React.useRef<Option.Option<number>>(Option.none())
+  const landedOnAnotherEntry = Option.exists(leftFrom, (index) => index !== landedIndex)
+  const leaving = Option.isSome(leftFrom) && !landedOnAnotherEntry
 
   useOpener()
 
+  const arrive = () => {
+    arrived.current = true
+    focusScreenTitle(screen.current)
+  }
+
   React.useEffect(() => {
     if (!slidesIn) {
-      focusScreenTitle(screen.current)
+      arrive()
 
       return undefined
     }
 
-    const controls = animate(offsetX, 0, {
-      ...GLIDE,
-      onComplete: () => {
-        focusScreenTitle(screen.current)
-      },
-    })
+    const controls = animate(offsetX, 0, { ...GLIDE, onComplete: arrive })
 
     return () => {
       controls.stop()
     }
   }, [slidesIn, offsetX])
+
+  React.useEffect(() => {
+    if (landedOnAnotherEntry) {
+      setLeftFrom(Option.none())
+      offsetX.jump(0)
+      arrive()
+    }
+  }, [landedOnAnotherEntry, offsetX])
 
   const leave = () => {
     if (router.history.canGoBack()) {
@@ -111,7 +143,7 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
       return
     }
 
-    setLeaving(true)
+    setLeftFrom(Option.some(historyIndex(router.state.location)))
 
     if (reduce) {
       leave()
@@ -146,6 +178,12 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
 
   const edge: EdgeHandlers = {
     onPointerDown: (event) => {
+      offsetX.stop()
+
+      if (!arrived.current) {
+        arrive()
+      }
+
       event.currentTarget.setPointerCapture(event.pointerId)
       dragOrigin.current = Option.some(event.clientX - offsetX.get())
     },
