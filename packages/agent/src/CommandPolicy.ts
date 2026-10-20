@@ -7,12 +7,7 @@ import * as Match from 'effect/Match'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { Command } from '@crook/domain/Command'
-import type { PaneId } from '@crook/domain/Ids'
-import type { MachineState } from '@crook/domain/MachineState'
 import { PaneNotAgent } from '@crook/protocol/Commands'
-
-export const agentHosting = (state: MachineState, pane: PaneId) =>
-  Arr.findFirst(state.agents, (row) => row.pane === pane)
 
 const targetPane = (command: Command) =>
   Match.value(command).pipe(
@@ -29,7 +24,7 @@ const make = Effect.gen(function* () {
     const pane = targetPane(command)
 
     return yield* Effect.fromOption(
-      agentHosting(yield* sync.current, pane),
+      Arr.findFirst((yield* sync.current).agents, (row) => row.pane === pane),
       () => new PaneNotAgent({ pane }),
     )
   })

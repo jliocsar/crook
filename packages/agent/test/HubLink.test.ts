@@ -23,8 +23,6 @@ import * as RpcServer from 'effect/rpc/RpcServer'
 import * as RpcTest from 'effect/rpc/RpcTest'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { CommandExecutor } from '@crook/agent/CommandExecutor'
-import { CommandPolicy } from '@crook/agent/CommandPolicy'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
@@ -47,7 +45,7 @@ import {
 } from '@crook/protocol/Commands'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
-import { agentRow } from './Fixtures'
+import { LAPTOP, agentRow, executorWith } from './Fixtures'
 
 interface HubScript {
   readonly attachLifetime: Option.Option<Duration.Duration>
@@ -71,7 +69,6 @@ interface RealHub {
 }
 
 const HUB_PATH = '/rpc/agent'
-const LAPTOP = MachineId.make('laptop')
 const TICK = Duration.millis(1)
 const AGENT_PANE = PaneId.make('w1:p1')
 const SHELL_PANE = PaneId.make('w1:p2')
@@ -99,7 +96,6 @@ const agentWith = (
   sent: Queue.Queue<SentRequest>,
 ) =>
   Effect.map(Queue.unbounded<HerdrEvent, HerdrSubscriptionError>(), (events) => {
-    const sync = MachineStateSync.layerTest(state)
     const herdr = HerdrClient.layerTest({
       responses: [
         scriptedResult(AgentPromptMethod, { type: 'agent_prompted' }),
@@ -108,12 +104,8 @@ const agentWith = (
       events,
       sent,
     })
-    const executor = Layer.provide(CommandExecutor.layer, [
-      Layer.provide(CommandPolicy.layer, sync),
-      herdr,
-    ])
 
-    return Layer.merge(sync, executor)
+    return Layer.merge(MachineStateSync.layerTest(state), executorWith(herdr, state))
   })
 
 const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> = {}) {

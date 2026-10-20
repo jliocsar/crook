@@ -1,6 +1,6 @@
 import * as Schema from 'effect/Schema'
 
-import type { AgentRow } from '@crook/domain/AgentRow'
+import { AgentRow } from '@crook/domain/AgentRow'
 import { PaneId } from '@crook/domain/Ids'
 
 export const INTERRUPT_KEY = 'esc'
@@ -20,7 +20,7 @@ export type Command = typeof Command.Type
 
 export class InputDelivered extends Schema.TaggedClass<InputDelivered>()('InputDelivered', {
   pane: PaneId,
-  stateChangeSeq: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  stateChangeSeq: AgentRow.fields.stateChangeSeq,
 }) {}
 
 export const CommandReceipt = Schema.Union([InputDelivered])

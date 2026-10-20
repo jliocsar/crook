@@ -1,9 +1,15 @@
 import * as DateTime from 'effect/DateTime'
+import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import type * as SubscriptionRef from 'effect/SubscriptionRef'
+
+import { CommandExecutor } from '@crook/agent/CommandExecutor'
+import { MachineStateSync } from '@crook/agent/MachineStateSync'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import type { HerdrClient } from '@crook/herdr/HerdrClient'
 import { AgentInfo, SessionSnapshot, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
 
 export const workspaceInfo = new WorkspaceInfo({
@@ -87,3 +93,8 @@ export const machineStateWith = (agents: readonly AgentRow[]) =>
     tabs: [],
     agents,
   })
+
+export const executorWith = (
+  herdr: Layer.Layer<HerdrClient>,
+  state: SubscriptionRef.SubscriptionRef<MachineState>,
+) => Layer.provide(CommandExecutor.layer, [MachineStateSync.layerTest(state), herdr])

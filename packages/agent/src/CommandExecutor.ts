@@ -26,7 +26,10 @@ interface Execution {
   readonly command: Command
 }
 
+const SLOWEST_MEASURED_PROMPT = Duration.millis(403)
+
 export const COMMAND_REPLAY_CAPACITY = 1024
+export const HERDR_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_PROMPT, 10)
 
 const receiptFor = (row: AgentRow): CommandReceipt =>
   new InputDelivered({ pane: row.pane, stateChangeSeq: row.stateChangeSeq })
@@ -50,11 +53,16 @@ const make = Effect.gen(function* () {
 
     return yield* deliver(command).pipe(
       Effect.as(Result.succeed(receiptFor(row))),
+      Effect.timeoutOrElse({
+        duration: HERDR_DELIVERY_TIMEOUT,
+        orElse: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
+      }),
       Effect.catchTags({
         HerdrConnectionClosed: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrResponseInvalid: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrUnreachable: () => Effect.fail(new HerdrUnavailable()),
         HerdrPaneNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
+        HerdrAgentNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
         HerdrRequestRejected: (rejected) =>
           Effect.fail(new HerdrRefusedCommand({ code: rejected.code, detail: rejected.detail })),
         HerdrRequestInvalid: (invalid) => Effect.die(invalid),
@@ -88,5 +96,5 @@ export class CommandExecutor extends Context.Service<
     ) => Effect.Effect<CommandReceipt, AgentCommandFailure>
   }
 >()('@crook/agent/CommandExecutor') {
-  static readonly layer = Layer.effect(this, make)
+  static readonly layer = Layer.effect(this, make).pipe(Layer.provide(CommandPolicy.layer))
 }

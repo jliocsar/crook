@@ -1,16 +1,18 @@
 import { expect, it } from '@effect/vitest'
 import * as Context from 'effect/Context'
 import * as Deferred from 'effect/Deferred'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
+import * as TestClock from 'effect/testing/TestClock'
 
-import { CommandExecutor } from '@crook/agent/CommandExecutor'
-import { CommandPolicy } from '@crook/agent/CommandPolicy'
-import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { CommandExecutor, HERDR_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
+import { HUB_RECONNECT_BASE } from '@crook/agent/HubLink'
 import { InputDelivered, Prompt, SendKeys, interrupt } from '@crook/domain/Command'
 import { IdempotencyKey, PaneId } from '@crook/domain/Ids'
 import type { HerdrEvent } from '@crook/herdr/Events'
@@ -23,6 +25,7 @@ import {
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { AgentPromptMethod, AgentSendKeysMethod } from '@crook/herdr/Methods'
+import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
 import {
   CommandDeliveryUnknown,
   HerdrRefusedCommand,
@@ -30,7 +33,7 @@ import {
   PaneNotAgent,
 } from '@crook/protocol/Commands'
 
-import { agentRow, machineStateWith } from './Fixtures'
+import { agentRow, executorWith, machineStateWith } from './Fixtures'
 
 const AGENT_PANE = PaneId.make('w1:p1')
 const SHELL_PANE = PaneId.make('w1:p2')
@@ -49,15 +52,6 @@ const SentLine = Schema.fromJsonString(
 const sentRequests = (requests: readonly SentRequest[]) =>
   requests.map((request) => Schema.decodeSync(SentLine)(request.line))
 
-const executorWith = (
-  herdr: Layer.Layer<HerdrClient>,
-  state: SubscriptionRef.SubscriptionRef<ReturnType<typeof machineStateWith>>,
-) => {
-  const policy = Layer.provide(CommandPolicy.layer, MachineStateSync.layerTest(state))
-
-  return Layer.provide(CommandExecutor.layer, [policy, herdr])
-}
-
 const startExecutor = Effect.fn('startExecutor')(function* (
   responses: readonly ScriptedResponse[],
 ) {
@@ -69,6 +63,17 @@ const startExecutor = Effect.fn('startExecutor')(function* (
   )
 
   return { executor: Context.get(context, CommandExecutor), sent: Queue.clear(sent), state }
+})
+
+const startStuckExecutor = Effect.fn('startStuckExecutor')(function* () {
+  const state = yield* SubscriptionRef.make(machineStateWith([agentRow()]))
+  const requests = yield* Queue.unbounded<string>()
+  const stuckHerdr = Layer.mock(HerdrClient, {
+    request: (method) => Queue.offer(requests, method.name).pipe(Effect.andThen(Effect.never)),
+  })
+  const context = yield* Layer.build(executorWith(stuckHerdr, state))
+
+  return { executor: Context.get(context, CommandExecutor), requests }
 })
 
 it.effect('sends a prompt to the agent pane through agent.prompt', () =>
@@ -243,3 +248,58 @@ it.effect('finishes a delivery that has started even when its caller is interrup
     expect(yield* Queue.clear(sent)).toHaveLength(1)
   }),
 )
+
+it.effect(
+  'answers PaneNotAgent when herdr finds no agent in the pane, and sends again on retry',
+  () =>
+    Effect.gen(function* () {
+      const exited = scriptedRejection(
+        AgentPromptMethod,
+        'agent_not_found',
+        'no agent in pane w1:p1',
+      )
+      const { executor, sent } = yield* startExecutor([exited])
+      const first = yield* executor.execute(FIRST_ACTION, continuePrompt).pipe(Effect.flip)
+      const retried = yield* executor.execute(FIRST_ACTION, continuePrompt).pipe(Effect.flip)
+
+      expect(first).toEqual(new PaneNotAgent({ pane: AGENT_PANE }))
+      expect(retried).toEqual(first)
+      expect(yield* sent).toHaveLength(2)
+    }),
+)
+
+it.effect('gives up on a herdr that never answers, and remembers the delivery as unknown', () =>
+  Effect.gen(function* () {
+    const { executor, requests } = yield* startStuckExecutor()
+    const caller = yield* Effect.forkChild(executor.execute(FIRST_ACTION, continuePrompt))
+
+    yield* Queue.take(requests)
+    yield* TestClock.adjust(HERDR_DELIVERY_TIMEOUT)
+    const failure = yield* Fiber.join(caller).pipe(Effect.flip)
+    const retried = yield* executor.execute(FIRST_ACTION, continuePrompt).pipe(Effect.flip)
+
+    expect(failure).toEqual(new CommandDeliveryUnknown())
+    expect(retried).toEqual(failure)
+    expect(yield* Queue.size(requests)).toBe(0)
+  }),
+)
+
+it.effect('lets an interrupted caller go once a stuck delivery has run out of time', () =>
+  Effect.gen(function* () {
+    const { executor, requests } = yield* startStuckExecutor()
+    const caller = yield* Effect.forkChild(executor.execute(FIRST_ACTION, continuePrompt))
+
+    yield* Queue.take(requests)
+    const interrupting = yield* Effect.forkChild(Fiber.interrupt(caller))
+    yield* TestClock.adjust(HERDR_DELIVERY_TIMEOUT)
+    yield* Fiber.join(interrupting)
+
+    expect(Exit.hasInterrupts(yield* Fiber.await(caller))).toBe(true)
+  }),
+)
+
+it('gives up on herdr early enough for its answer to reach the hub before the hub stops waiting', () => {
+  expect(
+    Duration.isLessThan(Duration.sum(HERDR_DELIVERY_TIMEOUT, HUB_RECONNECT_BASE), COMMAND_TIMEOUT),
+  ).toBe(true)
+})
