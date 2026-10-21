@@ -10,8 +10,11 @@ import type * as HttpServerError from 'effect/http/HttpServerError'
 import * as HttpServerRequest from 'effect/http/HttpServerRequest'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import * as HttpStaticServer from 'effect/http/HttpStaticServer'
+import * as Match from 'effect/Match'
+import * as Str from 'effect/String'
 
 import { SERVICE_WORKER_PATH } from '@crook/protocol/HubRoutes'
+import { WEB_ASSETS_DIRECTORY, WEB_BUILD_DIRECTORY } from '@crook/web/build/WebBuild'
 import { CONTENT_SECURITY_POLICY } from '@crook/web/csp/ContentSecurityPolicy'
 
 export interface HubBundle {
@@ -21,8 +24,8 @@ export interface HubBundle {
 
 const INDEX_FILE = 'index.html'
 const REVALIDATE_EVERY_TIME = 'no-cache'
-
-export const EMBEDDED_WEB_DIRECTORY = 'dist'
+const KEEP_FOR_A_YEAR_UNCHANGED = 'private, max-age=31536000, immutable'
+const HASHED_ASSETS_PREFIX = `/${WEB_ASSETS_DIRECTORY}/`
 
 const CONDITIONAL_REQUEST_HEADERS: readonly string[] = [
   'if-none-match',
@@ -51,10 +54,19 @@ export class WebBuildMissing extends Schema.TaggedError<WebBuildMissing>()('WebB
   }
 }
 
-export const shellHeaders = (pathname: string): Record<string, string> =>
-  pathname === SERVICE_WORKER_PATH
-    ? { 'Content-Security-Policy': CONTENT_SECURITY_POLICY, 'Cache-Control': REVALIDATE_EVERY_TIME }
-    : { 'Content-Security-Policy': CONTENT_SECURITY_POLICY }
+const cachingOf = (pathname: string): Record<string, string> =>
+  Match.value(pathname).pipe(
+    Match.when(SERVICE_WORKER_PATH, () => ({ 'Cache-Control': REVALIDATE_EVERY_TIME })),
+    Match.when(Str.startsWith(HASHED_ASSETS_PREFIX), () => ({
+      'Cache-Control': KEEP_FOR_A_YEAR_UNCHANGED,
+    })),
+    Match.orElse(() => ({})),
+  )
+
+export const shellHeaders = (pathname: string) => ({
+  'Content-Security-Policy': CONTENT_SECURITY_POLICY,
+  ...cachingOf(pathname),
+})
 
 const pathnameOf = (request: HttpServerRequest.HttpServerRequest) =>
   pipe(
@@ -78,9 +90,9 @@ export const resolveWebRoot = Effect.fn('StaticWeb.resolveWebRoot')(function* (b
   const root = yield* pipe(
     configured,
     Option.orElse(() =>
-      Option.liftPredicate(
-        path.join(bundle.directory, EMBEDDED_WEB_DIRECTORY),
-        () => bundle.embedsFiles,
+      pipe(
+        Option.liftPredicate(bundle, (candidate) => candidate.embedsFiles),
+        Option.map((embedding) => path.join(embedding.directory, WEB_BUILD_DIRECTORY)),
       ),
     ),
     Option.match({

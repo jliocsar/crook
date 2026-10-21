@@ -7,20 +7,16 @@ import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as HttpClient from 'effect/http/HttpClient'
 
-import {
-  EMBEDDED_WEB_DIRECTORY,
-  type HubBundle,
-  WebBuildMissing,
-  WebRootUnset,
-  resolveWebRoot,
-} from '@crook/hub/StaticWeb'
+import { type HubBundle, WebBuildMissing, WebRootUnset, resolveWebRoot } from '@crook/hub/StaticWeb'
 import { SERVICE_WORKER_PATH } from '@crook/protocol/HubRoutes'
+import { WEB_BUILD_DIRECTORY } from '@crook/web/build/WebBuild'
 import { CONTENT_SECURITY_POLICY } from '@crook/web/csp/ContentSecurityPolicy'
 
 import { ownerLogin, testHub } from './Fixtures'
 
 const FIXTURE_WEB_ROOT = `${import.meta.dirname}/web`
 const LATER_THAN_ANY_BUILD = 'Fri, 31 Dec 9999 23:59:59 GMT'
+const HASHED_ASSET_PATH = '/assets/index-Fixture1.js'
 
 const NOT_EMBEDDING: HubBundle = {
   embedsFiles: false,
@@ -44,9 +40,9 @@ const embeddingBundle = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const directory = yield* fileSystem.makeTempDirectoryScoped()
 
-  yield* fileSystem.makeDirectory(`${directory}/${EMBEDDED_WEB_DIRECTORY}`)
+  yield* fileSystem.makeDirectory(`${directory}/${WEB_BUILD_DIRECTORY}`)
   yield* fileSystem.writeFileString(
-    `${directory}/${EMBEDDED_WEB_DIRECTORY}/index.html`,
+    `${directory}/${WEB_BUILD_DIRECTORY}/index.html`,
     '<title>crook</title>',
   )
 
@@ -97,6 +93,17 @@ layer(testHub, { excludeTestServices: true })('StaticWeb over HTTP', (live) => {
       })
     }),
   )
+
+  live.effect('lets the browser keep a hashed asset unchanged, since a new build renames it', () =>
+    Effect.gen(function* () {
+      expect(yield* headersOf(HASHED_ASSET_PATH, ownerLogin)).toEqual({
+        status: 200,
+        contentSecurityPolicy: CONTENT_SECURITY_POLICY,
+        cacheControl: 'private, max-age=31536000, immutable',
+        contentType: 'text/javascript; charset=utf-8',
+      })
+    }),
+  )
 })
 
 layer(Layer.mergeAll(BunFileSystem.layer, Path.layer))('StaticWeb.resolveWebRoot', (it) => {
@@ -117,9 +124,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer))('StaticWeb.resolveWebRoot
     Effect.gen(function* () {
       const embedding = yield* embeddingBundle
 
-      expect(yield* rootUnder({}, embedding)).toBe(
-        `${embedding.directory}/${EMBEDDED_WEB_DIRECTORY}`,
-      )
+      expect(yield* rootUnder({}, embedding)).toBe(`${embedding.directory}/${WEB_BUILD_DIRECTORY}`)
     }),
   )
 

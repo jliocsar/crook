@@ -13,6 +13,7 @@ import { CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 
 import { LIGHT_GROUND } from './brand/Brand.ts'
 import { scopeLightSplashLinks } from './brand/SplashLinks.ts'
+import { WEB_ASSETS_DIRECTORY, WEB_BUILD_DIRECTORY } from './src/build/WebBuild.ts'
 import { CONTENT_SECURITY_POLICY } from './src/csp/ContentSecurityPolicy.ts'
 
 const DEV_ENV_PREFIX = 'CROOK_'
@@ -98,6 +99,7 @@ export default defineConfig(({ mode }) => {
       },
     ],
     resolve: { tsconfigPaths: true },
+    build: { outDir: WEB_BUILD_DIRECTORY, assetsDir: WEB_ASSETS_DIRECTORY },
     server: { proxy },
     preview: {
       headers: { 'Content-Security-Policy': CONTENT_SECURITY_POLICY },
