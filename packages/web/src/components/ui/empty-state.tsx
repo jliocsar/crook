@@ -10,6 +10,17 @@ export type EmptyStateProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'title'
   size?: 'sm' | 'md'
 }
 
+export function EmptyStateIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="border-border bg-muted/60 text-muted-foreground mb-1 flex size-11 items-center justify-center rounded-full border"
+    >
+      {children}
+    </span>
+  )
+}
+
 export function EmptyState({
   title,
   description,
@@ -30,14 +41,7 @@ export function EmptyState({
       )}
       {...rootProps}
     >
-      {icon === undefined ? null : (
-        <span
-          aria-hidden="true"
-          className="border-border bg-muted/60 text-muted-foreground mb-1 flex size-11 items-center justify-center rounded-full border"
-        >
-          {icon}
-        </span>
-      )}
+      {icon === undefined ? null : <EmptyStateIcon>{icon}</EmptyStateIcon>}
 
       <p className="text-foreground text-sm font-medium">{title}</p>
 

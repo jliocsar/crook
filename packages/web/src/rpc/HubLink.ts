@@ -3,37 +3,36 @@ import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
-import * as Schedule from 'effect/Schedule'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import type { HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
-import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
+import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
-import type { HubCalls, HubConnectionLost, MarkSeenRefused } from '@crook/web/rpc/HubConnection'
+import type { HubCallFailed, HubCalls, MarkSeenRefused } from '@crook/web/rpc/HubConnection'
 import {
   announce,
   beginAttempt,
+  COLD_START,
   goLive,
   HubLinkState,
   isRecovering,
   LinkStatus,
-  QUIET_DIALING,
   settledSince,
   settleRecovered,
 } from '@crook/web/rpc/HubLinkState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
 
-type SessionFailure = HubConnectionLost | HubWatchEnded
+type SessionFailure = HubCallFailed | HubWatchEnded
 
-export const HUB_RECONNECT_BASE = Duration.millis(77)
 export const SYNC_NOTICE_DELAY = Duration.seconds(1)
 export const RECOVERED_NOTICE_DURATION = Duration.millis(1500)
 
@@ -55,7 +54,7 @@ const make = Effect.gen(function* () {
   const page = yield* PageSignals
   const sessionCheck = yield* SessionCheck
   const state = yield* SubscriptionRef.make(
-    new HubLinkState({ status: QUIET_DIALING, herd: yield* cache.load }),
+    new HubLinkState({ status: COLD_START, herd: yield* cache.load }),
   )
   const connected = yield* Ref.make(Option.none<HubCalls>())
   const resyncRequests = yield* SubscriptionRef.make(0)
@@ -66,15 +65,18 @@ const make = Effect.gen(function* () {
       (current) => new HubLinkState({ status: step(current.status), herd: current.herd }),
     )
 
-  const stayedHealthy = (liveSince: Ref.Ref<Option.Option<number>>) =>
-    Effect.zipWith(Ref.get(liveSince), Clock.currentTimeMillis, (since, now) =>
-      Option.exists(since, (first) => now - first >= Duration.toMillis(AGENT_PING_INTERVAL)),
-    )
-
   const receive = Effect.fn('HubLink.receive')(function* (
     view: HerdView,
+    hub: HubCalls,
     liveSince: Ref.Ref<Option.Option<number>>,
   ) {
+    const firstOfSession = Option.isNone(yield* Ref.get(liveSince))
+
+    if (firstOfSession) {
+      yield* Ref.set(liveSince, Option.some(yield* Clock.currentTimeMillis))
+      yield* Ref.set(connected, Option.some(hub))
+    }
+
     const snapshot = new HerdSnapshot({ view, syncedAt: yield* DateTime.now })
     const next = yield* SubscriptionRef.modify(state, (current) => {
       const updated = new HubLinkState({
@@ -84,11 +86,6 @@ const make = Effect.gen(function* () {
 
       return [updated, updated]
     })
-    const firstOfSession = Option.isNone(yield* Ref.get(liveSince))
-
-    if (firstOfSession) {
-      yield* Ref.set(liveSince, Option.some(yield* Clock.currentTimeMillis))
-    }
 
     if (firstOfSession && isRecovering(next.status)) {
       yield* Effect.sleep(RECOVERED_NOTICE_DURATION).pipe(
@@ -111,10 +108,8 @@ const make = Effect.gen(function* () {
 
     const hub = yield* connection.open
 
-    yield* Effect.acquireRelease(Ref.set(connected, Option.some(hub)), () =>
-      Ref.set(connected, Option.none()),
-    )
-    yield* hub.watchHerd.pipe(Stream.runForEach((view) => receive(view, liveSince)))
+    yield* Effect.addFinalizer(() => Ref.set(connected, Option.none()))
+    yield* hub.watchHerd.pipe(Stream.runForEach((view) => receive(view, hub, liveSince)))
 
     return yield* new HubWatchEnded()
   }, Effect.scoped)
@@ -135,23 +130,19 @@ const make = Effect.gen(function* () {
 
   const session = Effect.gen(function* () {
     const liveSince = yield* Ref.make(Option.none<number>())
+    const healthy = Effect.zipWith(Ref.get(liveSince), Clock.currentTimeMillis, stayedHealthy)
 
     yield* attempt(liveSince).pipe(
       Effect.catch((error) =>
-        Effect.flatMap(stayedHealthy(liveSince), (healthy) =>
-          healthy ? Effect.logWarning(error.message) : refuse(error),
+        Effect.flatMap(healthy, (stayed) =>
+          stayed ? Effect.logWarning(error.message) : refuse(error),
         ),
       ),
     )
   })
 
   const stayConnected = session.pipe(
-    Effect.retry(
-      Schedule.min([
-        Schedule.exponential(HUB_RECONNECT_BASE),
-        Schedule.spaced(AGENT_PING_INTERVAL),
-      ]),
-    ),
+    Effect.retry(hubReconnectSchedule),
     Effect.orDie,
     Effect.forever,
   )
@@ -171,7 +162,7 @@ const make = Effect.gen(function* () {
     return stayConnected
   }
 
-  yield* Stream.zipLatestAll(
+  const follower = yield* Stream.zipLatestAll(
     page.visible,
     page.online,
     SubscriptionRef.changes(resyncRequests),
@@ -201,7 +192,14 @@ const make = Effect.gen(function* () {
     })
   })
 
-  return HubLink.of({ changes: SubscriptionRef.changes(state), resync, markSeen })
+  return HubLink.of({
+    changes: Stream.merge(
+      SubscriptionRef.changes(state),
+      Stream.fromEffectDrain(Fiber.join(follower)),
+    ),
+    resync,
+    markSeen,
+  })
 })
 
 export class HubLink extends Context.Service<
@@ -212,7 +210,7 @@ export class HubLink extends Context.Service<
     readonly markSeen: (
       machine: MachineId,
       pane: PaneId,
-    ) => Effect.Effect<void, MarkSeenRefused | HubConnectionLost | HubNotConnected>
+    ) => Effect.Effect<void, MarkSeenRefused | HubCallFailed | HubNotConnected>
   }
 >()('@crook/web/HubLink') {
   static readonly layerWithoutBrowser = Layer.effect(this, make)

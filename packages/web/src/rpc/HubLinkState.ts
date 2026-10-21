@@ -5,7 +5,11 @@ import * as Option from 'effect/Option'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 
 export type LinkStatus = Data.TaggedEnum<{
-  Dialing: { readonly announced: boolean; readonly afterFailure: boolean }
+  Dialing: {
+    readonly announced: boolean
+    readonly afterFailure: boolean
+    readonly coldStart: boolean
+  }
   Live: { readonly recovered: boolean }
   Unreachable: Record<never, never>
   Offline: Record<never, never>
@@ -19,18 +23,29 @@ export class HubLinkState extends Data.Class<{
   readonly herd: Option.Option<HerdSnapshot>
 }> {}
 
-export const QUIET_DIALING = LinkStatus.Dialing({ announced: false, afterFailure: false })
+export const COLD_START = LinkStatus.Dialing({
+  announced: false,
+  afterFailure: false,
+  coldStart: true,
+})
+export const QUIET_DIALING = LinkStatus.Dialing({
+  announced: false,
+  afterFailure: false,
+  coldStart: false,
+})
 
 export const beginAttempt = LinkStatus.$match({
   Dialing: (dialing): LinkStatus => dialing,
   Live: (): LinkStatus => QUIET_DIALING,
   Unreachable: (unreachable): LinkStatus => unreachable,
-  Offline: (): LinkStatus => LinkStatus.Dialing({ announced: true, afterFailure: true }),
+  Offline: (): LinkStatus =>
+    LinkStatus.Dialing({ announced: true, afterFailure: true, coldStart: false }),
   Expired: (expired): LinkStatus => expired,
 })
 
 export const announce = LinkStatus.$match({
-  Dialing: ({ afterFailure }): LinkStatus => LinkStatus.Dialing({ announced: true, afterFailure }),
+  Dialing: ({ afterFailure, coldStart }): LinkStatus =>
+    LinkStatus.Dialing({ announced: true, afterFailure, coldStart }),
   Live: (live): LinkStatus => live,
   Unreachable: (unreachable): LinkStatus => unreachable,
   Offline: (offline): LinkStatus => offline,

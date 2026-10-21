@@ -1,9 +1,11 @@
-import { expect, layer } from '@effect/vitest'
+import { describe, expect, it, layer } from '@effect/vitest'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
-import * as Schema from 'effect/Schema'
+import * as Ref from 'effect/Ref'
 
-import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
+import { HerdCache, HerdCacheUnavailable, HerdSnapshot } from '@crook/web/cache/HerdCache'
 
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 
@@ -12,17 +14,58 @@ const snapshot = new HerdSnapshot({
   syncedAt: START,
 })
 
-layer(HerdCache.layer)('HerdCache', (it) => {
-  it.effect('stores a snapshot as plain data that decodes back to the same herd', () =>
-    Effect.gen(function* () {
-      const stored: unknown = structuredClone(yield* Schema.encodeEffect(HerdSnapshot)(snapshot))
-      const restored = yield* Schema.decodeUnknownEffect(HerdSnapshot)(stored)
-
-      expect(restored).toEqual(snapshot)
+const cacheOverMemory = Effect.fn('cacheOverMemory')(function* (initial: Option.Option<unknown>) {
+  const stored = yield* Ref.make(initial)
+  const context = yield* Layer.build(
+    HerdCache.layerOver({
+      read: Effect.map(Ref.get(stored), Option.getOrUndefined),
+      write: (value) => Ref.set(stored, Option.some(structuredClone(value))),
     }),
   )
 
-  it.effect('opens with no snapshot when the browser has no IndexedDB', () =>
+  return { cache: Context.get(context, HerdCache), stored }
+})
+
+describe('HerdCache', () => {
+  it.effect('saves a snapshot as plain data that loads back as the same herd', () =>
+    Effect.gen(function* () {
+      const { cache } = yield* cacheOverMemory(Option.none())
+
+      expect(yield* cache.load).toEqual(Option.none())
+
+      yield* cache.save(snapshot)
+
+      expect(yield* cache.load).toEqual(Option.some(snapshot))
+    }),
+  )
+
+  it.effect('ignores a cached herd from an older build', () =>
+    Effect.gen(function* () {
+      const { cache } = yield* cacheOverMemory(Option.some({ machines: [], syncedAt: 0 }))
+
+      expect(yield* cache.load).toEqual(Option.none())
+    }),
+  )
+
+  it.effect(
+    'opens with no snapshot and keeps saving quietly when the browser refuses storage',
+    () =>
+      Effect.gen(function* () {
+        const refused = new HerdCacheUnavailable({ cause: 'quota exceeded' })
+        const context = yield* Layer.build(
+          HerdCache.layerOver({ read: Effect.fail(refused), write: () => Effect.fail(refused) }),
+        )
+        const cache = Context.get(context, HerdCache)
+
+        expect(yield* cache.load).toEqual(Option.none())
+
+        yield* cache.save(snapshot)
+      }),
+  )
+})
+
+layer(HerdCache.layer)('HerdCache over IndexedDB', (overIndexedDb) => {
+  overIndexedDb.effect('opens with no snapshot when the browser has no IndexedDB', () =>
     Effect.gen(function* () {
       const cache = yield* HerdCache
 

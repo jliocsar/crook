@@ -6,10 +6,10 @@ import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 
 export function NothingRunning({
-  canAct,
+  controlsEnabled,
   onNewAgent,
 }: {
-  canAct: boolean
+  controlsEnabled: boolean
   onNewAgent: (opener: HTMLElement) => void
 }) {
   return (
@@ -22,7 +22,7 @@ export function NothingRunning({
           <Button
             size="touch"
             className="text-base"
-            disabled={!canAct}
+            disabled={!controlsEnabled}
             onClick={(event) => {
               onNewAgent(event.currentTarget)
             }}

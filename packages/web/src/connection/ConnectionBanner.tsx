@@ -3,6 +3,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
 import { Check, ServerOff, WifiOff } from 'lucide-react'
+import type * as React from 'react'
 
 import { Collapse } from '@crook/web/components/Collapse'
 import { Swap } from '@crook/web/components/Swap'
@@ -25,21 +26,13 @@ const TONE = {
   recovered: 'bg-accent text-accent-foreground',
 } satisfies Record<ConnectionNotice, string>
 
-function NoticeIcon({ notice }: { notice: ConnectionNotice }) {
-  if (notice === 'syncing' || notice === 'connecting') {
-    return <Spinner size={NOTICE_SPINNER_SIZE} />
-  }
-
-  if (notice === 'unreachable') {
-    return <ServerOff aria-hidden="true" className="size-3.5 shrink-0" />
-  }
-
-  if (notice === 'offline') {
-    return <WifiOff aria-hidden="true" className="size-3.5 shrink-0" />
-  }
-
-  return <Check aria-hidden="true" className="size-3.5 shrink-0" />
-}
+const NOTICE_ICON = {
+  syncing: <Spinner size={NOTICE_SPINNER_SIZE} />,
+  connecting: <Spinner size={NOTICE_SPINNER_SIZE} />,
+  unreachable: <ServerOff aria-hidden="true" className="size-3.5 shrink-0" />,
+  offline: <WifiOff aria-hidden="true" className="size-3.5 shrink-0" />,
+  recovered: <Check aria-hidden="true" className="size-3.5 shrink-0" />,
+} satisfies Record<ConnectionNotice, React.ReactNode>
 
 function LastSynced({ at }: { at: DateTime.Utc }) {
   const now = useNow()
@@ -68,7 +61,7 @@ export function ConnectionBanner({
               TONE[shown],
             )}
           >
-            <NoticeIcon notice={shown} />
+            {NOTICE_ICON[shown]}
             <Swap id={shown}>{NOTICE_COPY[shown].line}</Swap>
             {failedNotice(shown)
               ? Option.match(syncedAt, {

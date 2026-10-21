@@ -4,8 +4,8 @@ import * as React from 'react'
 
 import { useLongPress } from '@crook/web/components/press/LongPress'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
+import { INSTANT } from '@crook/web/motion/Springs'
 
-const INSTANT = { duration: 0 } as const
 const HOVER_HIGHLIGHT = 0.5
 
 const highlightOpacity = ({

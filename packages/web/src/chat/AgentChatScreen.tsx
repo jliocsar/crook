@@ -5,7 +5,7 @@ import * as Option from 'effect/Option'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { herdAtom, OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import { StatusWord } from '@crook/web/components/StatusWord'
-import { findAgent } from '@crook/web/herd/HerdLayout'
+import { agentTitle, findAgent } from '@crook/web/herd/HerdLayout'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
 
 export function AgentChatScreen({ machine, pane }: { machine: MachineId; pane: PaneId }) {
@@ -23,7 +23,7 @@ export function AgentChatScreen({ machine, pane }: { machine: MachineId; pane: P
         onNone: () => <PushedHeader title={pane} backLabel="Back to Agents" />,
         onSome: ({ herdMachine, row }) => (
           <PushedHeader
-            title={row.title === '' ? row.pane : row.title}
+            title={agentTitle(row)}
             subtitle={
               <>
                 <StatusWord status={row.status} className="font-semibold" />

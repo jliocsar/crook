@@ -3,6 +3,7 @@ import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 
 import { StatusWord } from '@crook/web/components/StatusWord'
+import { agentTitle } from '@crook/web/herd/HerdLayout'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 
@@ -20,7 +21,7 @@ export function AgentCard({ card, now }: { card: AgentCardModel; now: DateTime.U
             needsYou ? 'font-semibold' : 'font-medium',
           )}
         >
-          {row.title === '' ? row.pane : row.title}
+          {agentTitle(row)}
         </span>
         <span className={cn('shrink-0 font-mono text-xs tabular-nums', emphasis)}>
           {shortElapsed(now, row.statusChangedAt)}

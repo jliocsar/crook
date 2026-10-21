@@ -6,10 +6,9 @@ import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { connectionAtom } from '@crook/web/atoms/Connection'
-import { herdAtom, resyncAtom } from '@crook/web/atoms/Herd'
+import { herdLayoutAtom, resyncAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { Button } from '@crook/web/components/ui/button'
-import { herdLayout } from '@crook/web/herd/HerdLayout'
 import { HerdList } from '@crook/web/herd/HerdList'
 import type { OpenAgent } from '@crook/web/herd/HerdList'
 import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
@@ -61,7 +60,7 @@ function NewAgentButton({
 
 export function HerdScreen() {
   const connection = useAtomValue(connectionAtom)
-  const herd = useAtomValue(herdAtom)
+  const layout = useAtomValue(herdLayoutAtom)
   const resync = useAtomSet(resyncAtom, { mode: 'promise' })
   const navigate = useNavigate()
   const now = useNow()
@@ -82,17 +81,17 @@ export function HerdScreen() {
   return (
     <TabScreen
       title="crook"
-      action={<NewAgentButton disabled={!connection.canAct} onOpen={openNewAgent} />}
+      action={<NewAgentButton disabled={!connection.controlsEnabled} onOpen={openNewAgent} />}
     >
-      {Option.match(herd, {
+      {Option.match(layout, {
         onNone: () => (connection.ready ? <HerdSkeleton label="Loading your agents" /> : null),
-        onSome: (snapshot) => (
-          <PullToResync enabled={connection.canAct} onResync={() => resync(undefined)}>
+        onSome: (herdLayout) => (
+          <PullToResync enabled={connection.controlsEnabled} onResync={() => resync(undefined)}>
             <Dimmed dimmed={connection.stale}>
               <HerdList
-                layout={herdLayout(snapshot.view)}
+                layout={herdLayout}
                 now={now}
-                canAct={connection.canAct}
+                controlsEnabled={connection.controlsEnabled}
                 isOpen={sections.isOpen}
                 onToggle={sections.toggle}
                 onOpenAgent={openAgent}

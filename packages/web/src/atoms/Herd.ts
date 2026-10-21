@@ -9,7 +9,7 @@ import { herdNeedsYouCount, isSeen } from '@crook/domain/AgentPriority'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { hubRuntime, linkStateAtom } from '@crook/web/atoms/Hub'
-import { findAgent } from '@crook/web/herd/HerdLayout'
+import { findAgent, herdLayout } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
 export class OpenedAgent extends Data.Class<{
@@ -19,6 +19,10 @@ export class OpenedAgent extends Data.Class<{
 
 export const herdAtom = Atom.make((get) =>
   Option.flatMap(AsyncResult.value(get(linkStateAtom)), (state) => state.herd),
+)
+
+export const herdLayoutAtom = Atom.make((get) =>
+  Option.map(get(herdAtom), (snapshot) => herdLayout(snapshot.view)),
 )
 
 export const needsYouAtom = Atom.make((get) =>

@@ -5,10 +5,11 @@ import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpClient from 'effect/http/HttpClient'
 
 import { AGENT_SOCKET_OPEN_TIMEOUT } from '@crook/protocol/AgentLink'
+import { HEALTH_PATH } from '@crook/protocol/HubRoutes'
 
 const OPAQUE_REDIRECT_STATUS = 0
 
-export const HEALTH_PATH = '/health'
+export const SESSION_CHECK_TIMEOUT = AGENT_SOCKET_OPEN_TIMEOUT
 
 const checkThroughProxy = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient
@@ -18,7 +19,7 @@ const checkThroughProxy = Effect.gen(function* () {
     Effect.map((response) => response.status === OPAQUE_REDIRECT_STATUS),
     Effect.provideService(FetchHttpClient.RequestInit, { redirect: 'manual', cache: 'no-store' }),
     Effect.timeoutOrElse({
-      duration: AGENT_SOCKET_OPEN_TIMEOUT,
+      duration: SESSION_CHECK_TIMEOUT,
       orElse: () => Effect.succeed(false),
     }),
     Effect.catchTag('HttpClientError', (error) =>

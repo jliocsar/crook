@@ -3,7 +3,7 @@ import * as Option from 'effect/Option'
 
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { connectionView } from '@crook/web/connection/ConnectionView'
-import { HubLinkState, LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { COLD_START, HubLinkState, LinkStatus, QUIET_DIALING } from '@crook/web/rpc/HubLinkState'
 
 import { herd, START } from '../HerdFixtures.ts'
 
@@ -13,25 +13,36 @@ const viewOf = (status: LinkStatus, withHerd = true) =>
   connectionView(new HubLinkState({ status, herd: withHerd ? cached : Option.none() }))
 
 describe('connectionView', () => {
-  it('keeps a quick resync silent and readable', () => {
-    const view = viewOf(LinkStatus.Dialing({ announced: false, afterFailure: false }))
+  it('keeps a quick resync silent, readable and looking the same, yet refuses hub calls', () => {
+    const view = viewOf(QUIET_DIALING)
 
     expect(view.notice).toEqual(Option.none())
     expect(view.stale).toBe(false)
+    expect(view.controlsEnabled).toBe(true)
     expect(view.canAct).toBe(false)
   })
 
+  it('dims a cached herd on a cold start at once, and waits the second to say so', () => {
+    const view = viewOf(COLD_START)
+
+    expect(view.stale).toBe(true)
+    expect(view.notice).toEqual(Option.none())
+    expect(view.controlsEnabled).toBe(false)
+  })
+
   it('says syncing over a cached herd and connecting without one', () => {
-    const announced = LinkStatus.Dialing({ announced: true, afterFailure: false })
+    const announced = LinkStatus.Dialing({ announced: true, afterFailure: false, coldStart: false })
 
     expect(viewOf(announced).notice).toEqual(Option.some('syncing'))
     expect(viewOf(announced, false).notice).toEqual(Option.some('connecting'))
     expect(viewOf(announced).stale).toBe(true)
+    expect(viewOf(announced).controlsEnabled).toBe(false)
   })
 
   it('lets hub actions through only while live', () => {
     expect(viewOf(LinkStatus.Live({ recovered: false })).canAct).toBe(true)
     expect(viewOf(LinkStatus.Unreachable()).canAct).toBe(false)
+    expect(viewOf(LinkStatus.Unreachable()).controlsEnabled).toBe(false)
     expect(viewOf(LinkStatus.Offline()).canAct).toBe(false)
   })
 

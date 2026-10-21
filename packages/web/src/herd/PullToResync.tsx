@@ -51,9 +51,10 @@ export function PullToResync({
   }
 
   const stopSettling = () => {
-    Option.map(settling.current, (controls) => {
-      controls.stop()
-    })
+    if (Option.isSome(settling.current)) {
+      settling.current.value.stop()
+    }
+
     settling.current = Option.none()
   }
 
@@ -112,9 +113,13 @@ export function PullToResync({
         start.current = firstTouchY(event)
       }}
       onTouchMove={(event) => {
-        Option.map(Option.all([start.current, firstTouchY(event)]), ([origin, touchY]) => {
+        const pull = Option.all([start.current, firstTouchY(event)])
+
+        if (Option.isSome(pull)) {
+          const [origin, touchY] = pull.value
+
           show(pullOffset(touchY - origin))
-        })
+        }
       }}
       onTouchEnd={release}
       onTouchCancel={release}

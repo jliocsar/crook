@@ -1,6 +1,7 @@
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import { AnimatePresence, motion } from 'motion/react'
+import type * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { Pressable } from '@crook/web/components/press/Pressable'
@@ -20,25 +21,18 @@ import { SPRING } from '@crook/web/motion/Springs'
 
 export type OpenAgent = (machine: MachineId, card: AgentCardModel, opener: HTMLElement) => void
 
-function HerdNoticeView({
-  notice,
-  canAct,
-  onNewAgent,
-}: {
-  notice: HerdNotice
-  canAct: boolean
-  onNewAgent: (opener: HTMLElement) => void
-}) {
-  if (notice === 'noMachines') {
-    return <NoMachines />
-  }
-
-  if (notice === 'allOffline') {
-    return <AllOffline />
-  }
-
-  return <NothingRunning canAct={canAct} onNewAgent={onNewAgent} />
+interface HerdNoticeActions {
+  readonly controlsEnabled: boolean
+  readonly onNewAgent: (opener: HTMLElement) => void
 }
+
+const HERD_NOTICE = {
+  noMachines: () => <NoMachines />,
+  allOffline: () => <AllOffline />,
+  nothingRunning: ({ controlsEnabled, onNewAgent }) => (
+    <NothingRunning controlsEnabled={controlsEnabled} onNewAgent={onNewAgent} />
+  ),
+} satisfies Record<HerdNotice, (actions: HerdNoticeActions) => React.ReactNode>
 
 function AgentCards({
   machine,
@@ -82,7 +76,7 @@ function AgentCards({
 export function HerdList({
   layout,
   now,
-  canAct,
+  controlsEnabled,
   isOpen,
   onToggle,
   onOpenAgent,
@@ -90,7 +84,7 @@ export function HerdList({
 }: {
   layout: HerdLayout
   now: DateTime.Utc
-  canAct: boolean
+  controlsEnabled: boolean
   isOpen: (machine: MachineId) => boolean
   onToggle: (machine: MachineId) => void
   onOpenAgent: OpenAgent
@@ -100,9 +94,7 @@ export function HerdList({
     <div data-slot="herd-list" className="grid grid-cols-1 gap-5 pt-2">
       {Option.match(layout.notice, {
         onNone: () => null,
-        onSome: (notice) => (
-          <HerdNoticeView notice={notice} canAct={canAct} onNewAgent={onNewAgent} />
-        ),
+        onSome: (notice) => HERD_NOTICE[notice]({ controlsEnabled, onNewAgent }),
       })}
       {layout.sections.map((section) => (
         <MachineSection

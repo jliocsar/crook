@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Option from 'effect/Option'
 
-import { findAgent, herdLayout, SectionBody } from '@crook/web/herd/HerdLayout'
+import { agentTitle, findAgent, herdLayout, SectionBody } from '@crook/web/herd/HerdLayout'
 import type { MachineSectionModel } from '@crook/web/herd/HerdLayout'
 
 import { agent, DESK, herd, LAPTOP, machine } from '../HerdFixtures.ts'
@@ -96,11 +96,17 @@ describe('herdLayout', () => {
   })
 
   it('finds one agent by machine and pane', () => {
-    const view = herd([machine(LAPTOP, [agent('w1:p1', 'idle')])])
+    const idle = agent('w1:p1', 'idle')
+    const view = herd([machine(LAPTOP, [idle])])
 
-    expect(Option.map(findAgent(view, LAPTOP, 'w1:p1'), ({ row }) => row.pane)).toEqual(
-      Option.some('w1:p1'),
+    expect(Option.map(findAgent(view, LAPTOP, idle.pane), ({ row }) => row.pane)).toEqual(
+      Option.some(idle.pane),
     )
-    expect(findAgent(view, DESK, 'w1:p1')).toEqual(Option.none())
+    expect(findAgent(view, DESK, idle.pane)).toEqual(Option.none())
+  })
+
+  it('titles an agent herdr knows no title for by its pane id', () => {
+    expect(agentTitle(agent('w1:p1', 'idle', { title: 'Port the herd' }))).toBe('Port the herd')
+    expect(agentTitle(agent('w1:p2', 'idle', { title: '' }))).toBe('w1:p2')
   })
 })

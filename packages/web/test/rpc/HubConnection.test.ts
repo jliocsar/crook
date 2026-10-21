@@ -4,7 +4,7 @@ import * as Stream from 'effect/Stream'
 import * as RpcTest from 'effect/rpc/RpcTest'
 
 import { ClientApi, PaneNotInHerd } from '@crook/protocol/ClientApi'
-import { callsFrom, hubSocketUrl } from '@crook/web/rpc/HubConnection'
+import { callsFrom, HubCallDefected, hubSocketUrl } from '@crook/web/rpc/HubConnection'
 
 import { agent, herd, LAPTOP, machine } from '../HerdFixtures.ts'
 
@@ -19,6 +19,13 @@ const handlers = ClientApi.toLayer({
     pane === missingPane
       ? Effect.fail(new PaneNotInHerd({ machine: machineId, pane }))
       : Effect.void,
+  SendCommand: () => Effect.die('SendCommand is not part of this test.'),
+})
+
+const dyingHandlers = ClientApi.toLayer({
+  WatchHerd: () => Stream.die('a WatchHerd handler crashed'),
+  ForgetMachine: () => Effect.void,
+  MarkSeen: () => Effect.die('a MarkSeen handler crashed'),
   SendCommand: () => Effect.die('SendCommand is not part of this test.'),
 })
 
@@ -44,6 +51,19 @@ layer(handlers)('callsFrom', (withHandlers) => {
 
       expect(views).toEqual([view])
       expect(refusal).toBeInstanceOf(PaneNotInHerd)
+    }),
+  )
+})
+
+layer(dyingHandlers)('callsFrom over a hub that dies', (withHandlers) => {
+  withHandlers.effect('turns a call that died into a typed failure the link retries', () =>
+    Effect.gen(function* () {
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+      const watchFailure = yield* Effect.flip(Stream.runDrain(calls.watchHerd))
+      const markSeenFailure = yield* Effect.flip(calls.markSeen(LAPTOP, missingPane))
+
+      expect(watchFailure).toBeInstanceOf(HubCallDefected)
+      expect(markSeenFailure).toBeInstanceOf(HubCallDefected)
     }),
   )
 })

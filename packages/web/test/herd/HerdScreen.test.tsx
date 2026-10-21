@@ -71,7 +71,10 @@ describe('HerdScreen', () => {
     Effect.gen(function* () {
       yield* renderApp(
         '/',
-        stateWith(LinkStatus.Dialing({ announced: true, afterFailure: false }), Option.none()),
+        stateWith(
+          LinkStatus.Dialing({ announced: true, afterFailure: false, coldStart: true }),
+          Option.none(),
+        ),
       )
 
       const loading = yield* Effect.promise(() => screen.findByText('Loading your agents'))

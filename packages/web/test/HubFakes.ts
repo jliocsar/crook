@@ -12,14 +12,14 @@ import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
-import type { HubConnectionLost } from '@crook/web/rpc/HubConnection'
+import type { HubCallFailed } from '@crook/web/rpc/HubConnection'
 import { HubLink } from '@crook/web/rpc/HubLink'
 import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
 
 export interface FakeSession {
-  readonly views: Queue.Queue<HerdView, HubConnectionLost | Cause.Done>
+  readonly views: Queue.Queue<HerdView, HubCallFailed | Cause.Done>
 }
 
 export interface SeenCall {
@@ -40,7 +40,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const expired = yield* Ref.make(false)
 
   const open = Effect.gen(function* () {
-    const views = yield* Queue.unbounded<HerdView, HubConnectionLost | Cause.Done>()
+    const views = yield* Queue.unbounded<HerdView, HubCallFailed | Cause.Done>()
 
     yield* Ref.update(opened, (count) => count + 1)
     yield* Effect.addFinalizer(() => Ref.update(closed, (count) => count + 1))
@@ -92,5 +92,5 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   return { layer, state, seen, resyncs }
 })
 
-export const dropSession = (session: FakeSession, error: HubConnectionLost) =>
+export const dropSession = (session: FakeSession, error: HubCallFailed) =>
   Queue.fail(session.views, error)

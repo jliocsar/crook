@@ -6,6 +6,7 @@ import * as Option from 'effect/Option'
 import { needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
+import type { MachineId, PaneId } from '@crook/domain/Ids'
 import type { Machine } from '@crook/domain/Machine'
 import { agentsIn } from '@crook/domain/MachineState'
 
@@ -76,9 +77,7 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
     return Option.some('allOffline')
   }
 
-  const nothingRunning: HerdNotice = 'nothingRunning'
-
-  return Option.liftPredicate(nothingRunning, () => Arr.every(view.machines, hasNoAgents))
+  return Arr.every(view.machines, hasNoAgents) ? Option.some('nothingRunning') : Option.none()
 }
 
 const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
@@ -107,10 +106,12 @@ export const herdLayout = (view: HerdView): HerdLayout => {
   }
 }
 
+export const agentTitle = (row: AgentRow): string => (row.title === '' ? row.pane : row.title)
+
 export const findAgent = (
   view: HerdView,
-  machine: string,
-  pane: string,
+  machine: MachineId,
+  pane: PaneId,
 ): Option.Option<{ readonly herdMachine: HerdMachine; readonly row: AgentRow }> =>
   pipe(
     Arr.findFirst(view.machines, (herdMachine) => herdMachine.machine.id === machine),

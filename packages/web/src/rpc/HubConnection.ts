@@ -14,25 +14,26 @@ import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import type { HubStorageFailed, MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
+import { CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 export type ClientApiClient = RpcClient.FromGroup<typeof ClientApi, RpcClientError>
 
 export type MarkSeenRefused = MachineNotInHerd | PaneNotInHerd | HubStorageFailed
 
+export type HubCallFailed = HubConnectionLost | HubCallDefected
+
 export interface HubCalls {
-  readonly watchHerd: Stream.Stream<HerdView, HubConnectionLost>
+  readonly watchHerd: Stream.Stream<HerdView, HubCallFailed>
   readonly markSeen: (
     machine: MachineId,
     pane: PaneId,
-  ) => Effect.Effect<void, MarkSeenRefused | HubConnectionLost>
+  ) => Effect.Effect<void, MarkSeenRefused | HubCallFailed>
 }
 
 const SECURE_PAGE_PROTOCOL = 'https:'
 const SECURE_SOCKET_PROTOCOL = 'wss:'
 const PLAIN_SOCKET_PROTOCOL = 'ws:'
-
-export const HUB_CLIENT_PATH = '/rpc/client'
 
 export class HubConnectionLost extends Schema.TaggedError<HubConnectionLost>()(
   'HubConnectionLost',
@@ -43,8 +44,16 @@ export class HubConnectionLost extends Schema.TaggedError<HubConnectionLost>()(
   }
 }
 
+export class HubCallDefected extends Schema.TaggedError<HubCallDefected>()('HubCallDefected', {
+  cause: Schema.Defect(),
+}) {
+  override get message(): string {
+    return 'A call to the hub died instead of failing: the hub sent something this build of crook cannot read, or a hub handler crashed. crook keeps retrying; if it keeps happening, reload crook to pick up the build the hub serves, and read the hub logs.'
+  }
+}
+
 export const hubSocketUrl = (page: URL): URL => {
-  const socket = new URL(HUB_CLIENT_PATH, page)
+  const socket = new URL(CLIENT_PATH, page)
 
   socket.protocol =
     page.protocol === SECURE_PAGE_PROTOCOL ? SECURE_SOCKET_PROTOCOL : PLAIN_SOCKET_PROTOCOL
@@ -54,12 +63,18 @@ export const hubSocketUrl = (page: URL): URL => {
 
 const connectionLost = (error: RpcClientError) => new HubConnectionLost({ detail: error.message })
 
+const callDefected = (cause: unknown) => new HubCallDefected({ cause })
+
 export const callsFrom = (client: ClientApiClient): HubCalls => ({
-  watchHerd: client.WatchHerd().pipe(Stream.mapError(connectionLost)),
+  watchHerd: client.WatchHerd().pipe(
+    Stream.mapError(connectionLost),
+    Stream.catchDefect((cause) => Stream.fail(callDefected(cause))),
+  ),
   markSeen: (machine, pane) =>
-    client
-      .MarkSeen({ machine, pane })
-      .pipe(Effect.catchTag('RpcClientError', (error) => Effect.fail(connectionLost(error)))),
+    client.MarkSeen({ machine, pane }).pipe(
+      Effect.catchTag('RpcClientError', (error) => Effect.fail(connectionLost(error))),
+      Effect.catchDefect((cause) => Effect.fail(callDefected(cause))),
+    ),
 })
 
 export const connectTo = (url: URL): Effect.Effect<HubCalls, never, Scope.Scope> =>

@@ -1,7 +1,9 @@
 import { describe, expect, it } from '@effect/vitest'
+import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
@@ -10,17 +12,18 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
+import { AGENT_PING_INTERVAL, HUB_RECONNECT_BASE } from '@crook/protocol/AgentLink'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
-import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
+import { connectionView } from '@crook/web/connection/ConnectionView'
+import { HubCallDefected, HubConnectionLost } from '@crook/web/rpc/HubConnection'
 import {
-  HUB_RECONNECT_BASE,
   HubLink,
+  HubNotConnected,
   RECOVERED_NOTICE_DURATION,
   SYNC_NOTICE_DELAY,
 } from '@crook/web/rpc/HubLink'
-import { LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { COLD_START, LinkStatus, QUIET_DIALING } from '@crook/web/rpc/HubLinkState'
 import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
-import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
 
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { dropSession, makeFakeBrowser } from '../HubFakes.ts'
@@ -62,14 +65,15 @@ const start = Effect.fn('start')(function* (cached: Option.Option<HerdSnapshot> 
 })
 
 describe('HubLink', () => {
-  it.effect('paints the cached herd quietly before the hub answers', () =>
+  it.effect('paints the cached herd at once, dimmed, before the hub answers', () =>
     Effect.gen(function* () {
       const cached = new HerdSnapshot({ view: cachedView, syncedAt: START })
       const { current } = yield* start(Option.some(cached))
       const state = yield* current
 
       expect(Option.getOrThrow(state.herd).view).toBe(cachedView)
-      expect(state.status).toEqual(LinkStatus.Dialing({ announced: false, afterFailure: false }))
+      expect(state.status).toEqual(COLD_START)
+      expect(connectionView(state).stale).toBe(true)
     }),
   )
 
@@ -96,14 +100,12 @@ describe('HubLink', () => {
       yield* nextSession
       yield* TestClock.adjust(Duration.subtract(SYNC_NOTICE_DELAY, Duration.millis(1)))
 
-      expect((yield* current).status).toEqual(
-        LinkStatus.Dialing({ announced: false, afterFailure: false }),
-      )
+      expect((yield* current).status).toEqual(COLD_START)
 
       yield* TestClock.adjust(Duration.millis(1))
 
       expect((yield* current).status).toEqual(
-        LinkStatus.Dialing({ announced: true, afterFailure: false }),
+        LinkStatus.Dialing({ announced: true, afterFailure: false, coldStart: true }),
       )
     }),
   )
@@ -126,9 +128,7 @@ describe('HubLink', () => {
       yield* SubscriptionRef.set(browser.visible, true)
       const second = yield* nextSession
 
-      expect((yield* current).status).toEqual(
-        LinkStatus.Dialing({ announced: false, afterFailure: false }),
-      )
+      expect((yield* current).status).toEqual(QUIET_DIALING)
 
       yield* Queue.offer(second.views, liveView)
       yield* TestClock.adjust(SYNC_NOTICE_DELAY)
@@ -221,7 +221,7 @@ describe('HubLink', () => {
       const second = yield* nextSession
 
       expect((yield* current).status).toEqual(
-        LinkStatus.Dialing({ announced: true, afterFailure: true }),
+        LinkStatus.Dialing({ announced: true, afterFailure: true, coldStart: false }),
       )
 
       yield* Queue.offer(second.views, liveView)
@@ -249,6 +249,54 @@ describe('HubLink', () => {
       yield* link.markSeen(LAPTOP, pane)
 
       expect(yield* Ref.get(browser.seen)).toEqual([{ machine: LAPTOP, pane }])
+    }),
+  )
+
+  it.effect('refuses hub calls until the herd has arrived over the socket', () =>
+    Effect.gen(function* () {
+      const { browser, link, nextSession, settle } = yield* start()
+      const pane = agent('w1:p1', 'done').pane
+      const session = yield* nextSession
+      const beforeTheHerd = yield* Effect.flip(link.markSeen(LAPTOP, pane))
+
+      expect(beforeTheHerd).toBeInstanceOf(HubNotConnected)
+      expect(yield* Ref.get(browser.seen)).toEqual([])
+
+      yield* Queue.offer(session.views, liveView)
+      yield* settle
+      yield* link.markSeen(LAPTOP, pane)
+
+      expect(yield* Ref.get(browser.seen)).toEqual([{ machine: LAPTOP, pane }])
+    }),
+  )
+
+  it.effect('treats a hub call that died as a failed dial and dials again', () =>
+    Effect.gen(function* () {
+      const { browser, current, nextSession } = yield* start()
+      const first = yield* nextSession
+
+      yield* dropSession(first, new HubCallDefected({ cause: 'undecodable chunk' }))
+
+      expect((yield* current).status).toEqual(LinkStatus.Unreachable())
+
+      yield* TestClock.adjust(HUB_RECONNECT_BASE)
+      yield* nextSession
+
+      expect(yield* Ref.get(browser.opened)).toBe(2)
+    }),
+  )
+
+  it.effect('surfaces a defect that kills the link instead of freezing on it', () =>
+    Effect.gen(function* () {
+      const { link, nextSession, settle } = yield* start()
+      const watching = yield* Effect.forkChild(Stream.runDrain(link.changes))
+      const first = yield* nextSession
+
+      yield* Queue.failCause(first.views, Cause.die('a bug in the link'))
+      yield* settle
+      const exit = watching.pollUnsafe()
+
+      expect(exit !== undefined && Exit.hasDies(exit)).toBe(true)
     }),
   )
 

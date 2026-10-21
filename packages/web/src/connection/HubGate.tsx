@@ -20,7 +20,7 @@ export function HubGate() {
   }
 
   if (connection.expired) {
-    return <LoggedOutScreen reason="expired" onLogIn={logInAgain} />
+    return <LoggedOutScreen onLogIn={logInAgain} />
   }
 
   return (

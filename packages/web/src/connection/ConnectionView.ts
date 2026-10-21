@@ -11,6 +11,7 @@ export interface ConnectionView {
   readonly notice: Option.Option<ConnectionNotice>
   readonly stale: boolean
   readonly canAct: boolean
+  readonly controlsEnabled: boolean
   readonly expired: boolean
   readonly syncedAt: Option.Option<DateTime.Utc>
 }
@@ -20,16 +21,9 @@ export const STARTING_VIEW: ConnectionView = {
   notice: Option.none(),
   stale: false,
   canAct: false,
+  controlsEnabled: false,
   expired: false,
   syncedAt: Option.none(),
-}
-
-const RECOVERED: ConnectionNotice = 'recovered'
-
-const dialingNotice = (announced: boolean, hasHerd: boolean): Option.Option<ConnectionNotice> => {
-  const notice: ConnectionNotice = hasHerd ? 'syncing' : 'connecting'
-
-  return Option.liftPredicate(notice, () => announced)
 }
 
 export const connectionView = (state: HubLinkState): ConnectionView => {
@@ -37,15 +31,19 @@ export const connectionView = (state: HubLinkState): ConnectionView => {
   const base = { ...STARTING_VIEW, ready: true, syncedAt }
 
   return LinkStatus.$match(state.status, {
-    Dialing: ({ announced }): ConnectionView => ({
+    Dialing: ({ announced, coldStart }): ConnectionView => ({
       ...base,
-      notice: dialingNotice(announced, Option.isSome(state.herd)),
-      stale: announced,
+      notice: announced
+        ? Option.some(Option.isSome(state.herd) ? 'syncing' : 'connecting')
+        : Option.none(),
+      stale: announced || coldStart,
+      controlsEnabled: !announced && !coldStart,
     }),
     Live: ({ recovered }): ConnectionView => ({
       ...base,
-      notice: Option.liftPredicate(RECOVERED, () => recovered),
+      notice: recovered ? Option.some('recovered') : Option.none(),
       canAct: true,
+      controlsEnabled: true,
     }),
     Unreachable: (): ConnectionView => ({
       ...base,
