@@ -1,10 +1,11 @@
 import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
+import * as Equivalence from 'effect/Equivalence'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
-import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Record from 'effect/Record'
 import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
 
@@ -56,25 +57,18 @@ export const NotificationStep = Data.taggedEnum<NotificationStep>()
 
 const DANGLING_HIGH_SURROGATE = /[\uD800-\uDBFF]$/u
 
-const statusOfEvent = (event: PlainNotificationEvent): AgentStatus =>
-  Match.value(event).pipe(
-    Match.when('questions', () => 'blocked' as const),
-    Match.when('finished', () => 'done' as const),
-    Match.exhaustive,
-  )
-
-const verbOfEvent = (event: PlainNotificationEvent): string =>
-  Match.value(event).pipe(
-    Match.when('questions', () => 'Has a question'),
-    Match.when('finished', () => 'Finished'),
-    Match.exhaustive,
-  )
+const PLAIN_EVENTS = {
+  questions: { status: 'blocked', verb: 'Has a question' },
+  finished: { status: 'done', verb: 'Finished' },
+} satisfies Record.ReadonlyRecord<
+  PlainNotificationEvent,
+  { readonly status: AgentStatus; readonly verb: string }
+>
 
 const eventOfStatus = (status: AgentStatus): Option.Option<PlainNotificationEvent> =>
-  Match.value(status).pipe(
-    Match.when('blocked', () => Option.some<PlainNotificationEvent>('questions')),
-    Match.when('done', () => Option.some<PlainNotificationEvent>('finished')),
-    Match.orElse(() => Option.none()),
+  Option.map(
+    Record.findFirst(PLAIN_EVENTS, (plain) => plain.status === status),
+    ([event]) => event,
   )
 
 const settledStatus = (row: AgentRow): AgentStatus =>
@@ -101,12 +95,13 @@ export const notificationKey = (notification: {
   readonly pane: PaneId
 }) => toGlobalPaneId(notification.machine, notification.pane)
 
-export const isSameNotification = (wanted: WantedNotification, sent: WantedNotification): boolean =>
-  wanted.machine === sent.machine &&
-  wanted.pane === sent.pane &&
-  wanted.event === sent.event &&
-  wanted.terminal === sent.terminal &&
-  wanted.stateChangeSeq === sent.stateChangeSeq
+export const isSameNotification: Equivalence.Equivalence<WantedNotification> = Equivalence.Struct({
+  machine: Equivalence.String,
+  pane: Equivalence.String,
+  event: Equivalence.String,
+  terminal: Equivalence.String,
+  stateChangeSeq: Equivalence.Number,
+})
 
 export const identityOf = (notification: WantedNotification): string =>
   [
@@ -136,7 +131,7 @@ const wantedFor = (
     terminal: mark.terminal,
     stateChangeSeq: mark.stateChangeSeq,
     title: harkTitleOf(agentTitleOrPane(row)),
-    body: `${verbOfEvent(event)} · ${machineLabel} / ${workspaceLabelOf(state, row)}`,
+    body: `${PLAIN_EVENTS[event].verb} · ${machineLabel} / ${workspaceLabelOf(state, row)}`,
   })
 }
 
@@ -195,7 +190,9 @@ export const isStillWanted = (
         return true
       }
 
-      return row.status === statusOfEvent(wanted.event) && isSameSeenMark(seenMarkOf(row), wanted)
+      return (
+        row.status === PLAIN_EVENTS[wanted.event].status && isSameSeenMark(seenMarkOf(row), wanted)
+      )
     },
   })
 }

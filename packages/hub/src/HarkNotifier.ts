@@ -48,7 +48,7 @@ import { type SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 const HARK_OUTAGE_PAUSE = Duration.seconds(60)
 const PAUSE_AFTER_HUB_BUG = HARK_REQUEST_SPACING
 
-export const TEST_NOTIFICATION = new HarkNotification({
+const TEST_NOTIFICATION = new HarkNotification({
   title: 'crook',
   body: 'Test · notifications from crook arrive like this',
   idempotencyKey: Option.none(),
@@ -94,14 +94,14 @@ const make = Effect.gen(function* () {
   const prefs = yield* SubscriptionRef.make(yield* store.prefs)
   const sentAtStart = yield* store.sent
   const isSeenAtStart = isSeenIn(yield* seenTracker.all)
-  const stillInHerd = yield* Effect.filter(sentAtStart, (notification) =>
+  const stillWantedAtStart = yield* Effect.filter(sentAtStart, (notification) =>
     isSeenAtStart(notification)
       ? Effect.succeed(false)
       : Effect.isSuccess(herd.requireMachine(notification.machine)),
   )
   const sent = yield* Ref.make(byPane(sentAtStart))
   const wanted = yield* SubscriptionRef.make<NotificationsByPane<WantedNotification>>(
-    byPane(stillInHerd),
+    byPane(stillWantedAtStart),
   )
   const abandoned = yield* Ref.make(HashSet.empty<string>())
 
