@@ -38,7 +38,10 @@ const handlers = ClientApi.toLayer({
     pane === missingPane
       ? Effect.fail(new PaneNotInHerd({ machine: machineId, pane }))
       : Effect.void,
-  SetPinned: () => Effect.die('SetPinned is not part of this test.'),
+  SetPinned: ({ machine: machineId, pane }) =>
+    pane === missingPane
+      ? Effect.fail(new PaneNotInHerd({ machine: machineId, pane }))
+      : Effect.void,
   SendCommand: ({ command }) =>
     Match.value(command).pipe(
       Match.tag('StartAgent', (start) =>
@@ -127,6 +130,23 @@ layer(handlers)('callsFrom', (withHandlers) => {
       expect(receipt).toEqual(new AgentStarted({ pane: startedPane }))
       expect(refusal).toBeInstanceOf(FolderNotFound)
     }),
+  )
+})
+
+layer(handlers)('callsFrom for pane actions', (withHandlers) => {
+  const pane = agent('w1:p1', 'done').pane
+
+  withHandlers.effect(
+    'pins a pane and passes the refusal for one the hub does not know through',
+    () =>
+      Effect.gen(function* () {
+        const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+
+        yield* calls.setPinned(LAPTOP, pane, true)
+        const refusal = yield* Effect.flip(calls.setPinned(LAPTOP, missingPane, false))
+
+        expect(refusal).toBeInstanceOf(PaneNotInHerd)
+      }),
   )
 })
 

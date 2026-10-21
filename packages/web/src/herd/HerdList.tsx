@@ -3,9 +3,16 @@ import * as Option from 'effect/Option'
 import { AnimatePresence, motion } from 'motion/react'
 import type * as React from 'react'
 
-import type { MachineId } from '@crook/domain/Ids'
-import { Pressable } from '@crook/web/components/press/Pressable'
+import { Pin, PinOff, X } from 'lucide-react'
+
+import { toGlobalPaneId } from '@crook/domain/Ids'
+import type { MachineId, PaneId } from '@crook/domain/Ids'
+import { usePinAgent } from '@crook/web/actions/PinAgent'
+import { PaneAddress } from '@crook/web/atoms/AgentActions'
+import { SwipeRow, useOpenRow } from '@crook/web/components/swipe/SwipeRow'
+import type { OpenRow, SwipeAction } from '@crook/web/components/swipe/SwipeRow'
 import { AgentCard } from '@crook/web/herd/AgentCard'
+import { useHeldOrder } from '@crook/web/herd/HeldOrder'
 import { SectionBody } from '@crook/web/herd/HerdLayout'
 import type { AgentCardModel, HerdLayout, HerdNotice } from '@crook/web/herd/HerdLayout'
 import { AllOffline, NoAgentsLine, NothingRunning, OfflineLine } from '@crook/web/herd/HerdNotices'
@@ -15,6 +22,8 @@ import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { SPRING } from '@crook/web/motion/Springs'
 
 export type OpenAgent = (machine: MachineId, card: AgentCardModel, opener: HTMLElement) => void
+
+export type OpenCardActions = (machine: MachineId, pane: PaneId) => void
 
 interface HerdNoticeActions {
   readonly controlsEnabled: boolean
@@ -30,39 +39,119 @@ const HERD_NOTICE = {
   ),
 } satisfies Record<HerdNotice, (actions: HerdNoticeActions) => React.ReactNode>
 
+const pinAction = (pinned: boolean, run: () => void, disabled: boolean): SwipeAction => ({
+  label: pinned ? 'Unpin' : 'Pin',
+  icon: pinned ? (
+    <PinOff aria-hidden="true" className="size-4" />
+  ) : (
+    <Pin aria-hidden="true" className="size-4" />
+  ),
+  tone: 'secondary',
+  run,
+  disabled,
+})
+
+const closeAction = (run: () => void, disabled: boolean): SwipeAction => ({
+  label: 'Close',
+  icon: <X aria-hidden="true" className="size-4" />,
+  tone: 'destructive',
+  run,
+  disabled,
+})
+
+function AgentCardRow({
+  machine,
+  card,
+  now,
+  row,
+  controlsEnabled,
+  onOpenAgent,
+  onOpenActions,
+}: {
+  machine: MachineId
+  card: AgentCardModel
+  now: DateTime.Utc
+  row: OpenRow
+  controlsEnabled: boolean
+  onOpenAgent: OpenAgent
+  onOpenActions: OpenCardActions
+}) {
+  const { pane } = card.row
+  const pin = usePinAgent(new PaneAddress({ machine, pane }), {
+    pinned: card.pinned,
+    controlsEnabled,
+  })
+
+  const openActions = () => {
+    onOpenActions(machine, pane)
+  }
+
+  return (
+    <motion.li
+      layout="position"
+      transition={SPRING}
+      exit={motionTokens().exit}
+      className="grid gap-2"
+    >
+      <SwipeRow
+        id={toGlobalPaneId(machine, pane)}
+        row={row}
+        actions={[
+          pinAction(card.pinned, pin.toggle, !controlsEnabled || pin.pending),
+          closeAction(openActions, !controlsEnabled),
+        ]}
+        onTap={(opener) => {
+          onOpenAgent(machine, card, opener)
+        }}
+        onLongPress={openActions}
+      >
+        <AgentCard card={card} now={now} />
+      </SwipeRow>
+      {Option.match(pin.failure, {
+        onNone: () => null,
+        onSome: (message) => (
+          <p role="alert" className="text-destructive text-sm leading-5">
+            {message}
+          </p>
+        ),
+      })}
+    </motion.li>
+  )
+}
+
 export function AgentCards({
   machine,
   agents,
   now,
+  row,
+  controlsEnabled,
   onOpenAgent,
+  onOpenActions,
 }: {
   machine: MachineId
   agents: readonly AgentCardModel[]
   now: DateTime.Utc
+  row: OpenRow
+  controlsEnabled: boolean
   onOpenAgent: OpenAgent
+  onOpenActions: OpenCardActions
 }) {
+  const ordered = useHeldOrder(agents, row.holding)
+
   return (
     <ul className="grid grid-cols-1 gap-2 px-4 pt-1">
       <AnimatePresence initial={false}>
-        {agents.map((card) => (
-          <motion.li
+        {ordered.map((card) => (
+          <AgentCardRow
             key={card.row.pane}
-            layout="position"
-            transition={SPRING}
-            exit={motionTokens().exit}
-          >
-            <div className="bg-card border-border rounded-xl border">
-              <Pressable
-                frameClassName="rounded-xl"
-                className="p-3"
-                onTap={(opener) => {
-                  onOpenAgent(machine, card, opener)
-                }}
-              >
-                <AgentCard card={card} now={now} />
-              </Pressable>
-            </div>
-          </motion.li>
+            machine={machine}
+            card={card}
+            now={now}
+            row={row}
+            controlsEnabled={controlsEnabled}
+            onOpenAgent={onOpenAgent}
+            onOpenActions={onOpenActions}
+          />
         ))}
       </AnimatePresence>
     </ul>
@@ -76,6 +165,7 @@ export function HerdList({
   isOpen,
   onToggle,
   onOpenAgent,
+  onOpenActions,
   onNewAgent,
   onAddMachine,
 }: {
@@ -85,9 +175,12 @@ export function HerdList({
   isOpen: (machine: MachineId) => boolean
   onToggle: (machine: MachineId) => void
   onOpenAgent: OpenAgent
+  onOpenActions: OpenCardActions
   onNewAgent: (opener: HTMLElement) => void
   onAddMachine: () => void
 }) {
+  const row = useOpenRow()
+
   return (
     <div data-slot="herd-list" className="grid grid-cols-1 gap-5 pt-2">
       {Option.match(layout.notice, {
@@ -110,7 +203,10 @@ export function HerdList({
                 machine={section.machine.id}
                 agents={agents}
                 now={now}
+                row={row}
+                controlsEnabled={controlsEnabled}
                 onOpenAgent={onOpenAgent}
+                onOpenActions={onOpenActions}
               />
             ),
             NoAgents: () => <NoAgentsLine />,

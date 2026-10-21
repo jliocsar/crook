@@ -5,12 +5,13 @@ import { Plus } from 'lucide-react'
 import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
+import { useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdLayoutAtom, resyncAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { Button } from '@crook/web/components/ui/button'
 import { HerdList } from '@crook/web/herd/HerdList'
-import type { OpenAgent } from '@crook/web/herd/HerdList'
+import type { OpenAgent, OpenCardActions } from '@crook/web/herd/HerdList'
 import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
 import { PullToResync } from '@crook/web/herd/PullToResync'
 import { AddMachineSheet } from '@crook/web/machines/AddMachineSheet'
@@ -67,6 +68,11 @@ export function HerdScreen() {
   const now = useNow()
   const sections = useCollapsedMachines()
   const [addingMachine, setAddingMachine] = React.useState(false)
+  const openActions = useOpenAgentActions()
+
+  const openCardActions: OpenCardActions = (machine, pane) => {
+    openActions(machine, pane, 'card')
+  }
 
   const openNewAgent = (opener: HTMLElement) => {
     void navigate({ to: '/new', state: openedFrom(opener) })
@@ -97,6 +103,7 @@ export function HerdScreen() {
                 isOpen={sections.isOpen}
                 onToggle={sections.toggle}
                 onOpenAgent={openAgent}
+                onOpenActions={openCardActions}
                 onNewAgent={openNewAgent}
                 onAddMachine={() => {
                   setAddingMachine(true)

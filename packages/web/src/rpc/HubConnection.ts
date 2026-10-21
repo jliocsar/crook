@@ -30,6 +30,8 @@ export type MarkSeenRefused = MachineNotInHerd | PaneNotInHerd | HubStorageFaile
 
 export type ForgetMachineRefused = MachineNotInHerd | MachineStillConnected | HubStorageFailed
 
+export type SetPinnedRefused = MachineNotInHerd | PaneNotInHerd | HubStorageFailed
+
 export type HubCallFailed = HubConnectionLost | HubCallDefected
 
 export interface HubCalls {
@@ -41,6 +43,11 @@ export interface HubCalls {
   readonly forgetMachine: (
     machine: MachineId,
   ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed>
+  readonly setPinned: (
+    machine: MachineId,
+    pane: PaneId,
+    pinned: boolean,
+  ) => Effect.Effect<void, SetPinnedRefused | HubCallFailed>
   readonly sendCommand: (
     machine: MachineId,
     key: IdempotencyKey,
@@ -99,6 +106,7 @@ export const callsFrom = (client: ClientApiClient): HubCalls => ({
   ),
   markSeen: (machine, pane) => hubCall(client.MarkSeen({ machine, pane })),
   forgetMachine: (machine) => hubCall(client.ForgetMachine({ machine })),
+  setPinned: (machine, pane, pinned) => hubCall(client.SetPinned({ machine, pane, pinned })),
   sendCommand: (machine, key, command) => hubCall(client.SendCommand({ machine, key, command })),
 })
 
