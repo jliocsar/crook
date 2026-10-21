@@ -318,7 +318,8 @@ that adds one.
   - **Hold to forget** shows only while the machine is offline, with "It comes back on its own if
     its agent connects again" beneath. It is disabled while the forget is in flight, and reads
     "Forgetting…" once held, since the hub has not answered yet. Once forgotten, the screen goes
-    back to the list; a refusal shows beneath the button.
+    back to the list; a refusal shows beneath the button, until the machine's connection or the
+    link's state changes.
   - A machine that leaves the herd while its screen is open, forgotten elsewhere, keeps its label
     as the title and reads "crook doesn't know this machine. A forgotten machine comes back once
     its agent connects again."

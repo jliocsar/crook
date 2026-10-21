@@ -43,45 +43,31 @@ function MachineCardBody({ card, now }: { card: MachineCardModel; now: DateTime.
   )
 }
 
-function MachineCard({
+function OnlineMachineRow({
   card,
   now,
-  row,
-  forgetDisabled,
   onOpen,
-  onForget,
 }: {
   card: MachineCardModel
   now: DateTime.Utc
-  row: OpenRow
-  forgetDisabled: boolean
   onOpen: OpenMachine
-  onForget: () => void
 }) {
-  const { id } = card.machine
-
   const open = (opener: HTMLElement) => {
-    onOpen(id, opener)
+    onOpen(card.machine.id, opener)
   }
 
-  if (!isOffline(card.machine)) {
-    return (
+  return (
+    <li>
       <div className="bg-card border-border rounded-xl border">
         <Pressable frameClassName="rounded-xl" className="p-3" onTap={open}>
           <MachineCardBody card={card} now={now} />
         </Pressable>
       </div>
-    )
-  }
-
-  return (
-    <SwipeRow id={id} row={row} actions={[forgetAction(onForget, forgetDisabled)]} onTap={open}>
-      <MachineCardBody card={card} now={now} />
-    </SwipeRow>
+    </li>
   )
 }
 
-function MachineRow({
+function OfflineMachineRow({
   card,
   now,
   row,
@@ -94,21 +80,23 @@ function MachineRow({
   controlsEnabled: boolean
   onOpen: OpenMachine
 }) {
-  const forgetting = useForgetMachine(
-    card.machine.id,
-    `${card.machine.connection} ${String(controlsEnabled)}`,
-  )
+  const { id, connection } = card.machine
+  const forgetting = useForgetMachine(id, { connection, controlsEnabled })
+
+  const open = (opener: HTMLElement) => {
+    onOpen(id, opener)
+  }
 
   return (
     <li className="grid gap-2">
-      <MachineCard
-        card={card}
-        now={now}
+      <SwipeRow
+        id={id}
         row={row}
-        forgetDisabled={!controlsEnabled || forgetting.pending}
-        onOpen={onOpen}
-        onForget={forgetting.forget}
-      />
+        actions={[forgetAction(forgetting.forget, !controlsEnabled || forgetting.pending)]}
+        onTap={open}
+      >
+        <MachineCardBody card={card} now={now} />
+      </SwipeRow>
       {Option.match(forgetting.failure, {
         onNone: () => null,
         onSome: (message) => <ForgetFailure message={message} />,
@@ -132,16 +120,20 @@ export function MachineList({
 
   return (
     <ul data-slot="machine-list" className="grid grid-cols-1 gap-2 px-4 pt-2">
-      {layout.machines.map((card) => (
-        <MachineRow
-          key={card.machine.id}
-          card={card}
-          now={now}
-          row={row}
-          controlsEnabled={controlsEnabled}
-          onOpen={onOpen}
-        />
-      ))}
+      {layout.machines.map((card) =>
+        isOffline(card.machine) ? (
+          <OfflineMachineRow
+            key={card.machine.id}
+            card={card}
+            now={now}
+            row={row}
+            controlsEnabled={controlsEnabled}
+            onOpen={onOpen}
+          />
+        ) : (
+          <OnlineMachineRow key={card.machine.id} card={card} now={now} onOpen={onOpen} />
+        ),
+      )}
     </ul>
   )
 }

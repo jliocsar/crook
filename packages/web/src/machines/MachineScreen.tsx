@@ -100,7 +100,10 @@ function MachineDetail({
   const now = useNow()
   const { back } = usePushedScreen()
   const { card } = model.detail
-  const forgetting = useForgetMachine(card.machine.id, String(connection.controlsEnabled))
+  const forgetting = useForgetMachine(card.machine.id, {
+    connection: card.machine.connection,
+    controlsEnabled: connection.controlsEnabled,
+  })
 
   React.useEffect(() => {
     if (forgetting.forgotten) {

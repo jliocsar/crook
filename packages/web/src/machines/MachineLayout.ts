@@ -46,7 +46,7 @@ export interface InfoRow {
 
 const UNKNOWN_VERSION = 'unknown'
 
-export const agentBehindHub = (machine: Machine, hubVersion: CrookVersion): boolean =>
+const agentBehindHub = (machine: Machine, hubVersion: CrookVersion): boolean =>
   Option.exists(machine.agentVersion, (version) => isBehind(version, hubVersion))
 
 const machineCard = (herdMachine: HerdMachine, hubVersion: CrookVersion): MachineCardModel => ({

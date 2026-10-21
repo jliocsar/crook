@@ -50,7 +50,7 @@ const labelOf = <Id extends string>(
     Option.getOrElse(() => id),
   )
 
-export const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
+const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
   const loud = needsYou(herdMachine)
   const workspaces = Option.match(herdMachine.state, {
     onNone: () => [],

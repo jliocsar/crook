@@ -11,7 +11,7 @@ import { afterEach, beforeEach, vi } from 'vitest'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import type { HerdMachine } from '@crook/domain/HerdView'
-import { HubStorageFailed } from '@crook/protocol/ClientApi'
+import { HubStorageFailed, MachineStillConnected } from '@crook/protocol/ClientApi'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
 import { click, eventually, findByRole, present, springSettles } from '../Dom.ts'
@@ -138,6 +138,32 @@ describe('MachineScreen', () => {
         refusal.message,
       )
       expect(router.state.location.pathname).toBe('/machines/desk')
+    }),
+  )
+
+  it.effect('drops a refusal once the machine has come back and gone again', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/machines/desk', liveWith(viewOf([laptop, desk])))
+      const refusal = new MachineStillConnected({ machine: DESK, connection: 'reconnecting' })
+
+      yield* Ref.set(link.forgetRefusal, Option.some(refusal))
+      fireEvent.click(yield* findByRole('button', 'Hold to forget desk'))
+
+      expect((yield* Effect.promise(() => screen.findByRole('alert'))).textContent).toBe(
+        refusal.message,
+      )
+
+      yield* SubscriptionRef.set(
+        link.state,
+        liveWith(viewOf([laptop, machine(DESK, [], { connection: 'online' })])),
+      )
+      yield* eventually(() => {
+        expect(screen.queryByRole('button', { name: /Hold to forget/u })).toBeNull()
+      })
+      yield* SubscriptionRef.set(link.state, liveWith(viewOf([laptop, desk])))
+
+      expect(yield* findByRole('button', 'Hold to forget desk')).toBeDefined()
+      expect(screen.queryByRole('alert')).toBeNull()
     }),
   )
 

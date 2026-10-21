@@ -6,20 +6,31 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
+import type { MachineConnection } from '@crook/domain/Machine'
 import { forgetMachineAtom } from '@crook/web/atoms/Machines'
 
-export const useForgetMachine = (machine: MachineId, clearsWhenChanged: string) => {
+export interface ForgetClearsWhen {
+  readonly connection: MachineConnection
+  readonly controlsEnabled: boolean
+}
+
+export const useForgetMachine = (
+  machine: MachineId,
+  { connection, controlsEnabled }: ForgetClearsWhen,
+) => {
   const [result, request] = useAtom(forgetMachineAtom(machine), { mode: 'promiseExit' })
   const [requested, setRequested] = React.useState(false)
-  const outcome = Option.liftPredicate(result, () => requested)
-  const settled = Option.filter(outcome, (current) => !AsyncResult.isWaiting(current))
+  const settled = Option.filter(
+    Option.liftPredicate(result, () => requested),
+    (current) => !AsyncResult.isWaiting(current),
+  )
 
   React.useEffect(() => {
     setRequested(false)
-  }, [clearsWhenChanged])
+  }, [connection, controlsEnabled])
 
   return {
-    pending: Option.exists(outcome, AsyncResult.isWaiting),
+    pending: AsyncResult.isWaiting(result),
     forgotten: Option.exists(settled, AsyncResult.isSuccess),
     failure: pipe(
       settled,
