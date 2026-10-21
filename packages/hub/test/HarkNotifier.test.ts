@@ -1,11 +1,13 @@
 import { expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Result from 'effect/Result'
 import * as Stream from 'effect/Stream'
 import type * as HttpClient from 'effect/http/HttpClient'
 import type * as SqlClient from 'effect/sql/SqlClient'
@@ -14,7 +16,7 @@ import * as TestClock from 'effect/testing/TestClock'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { HerdrLink } from '@crook/domain/HerdrLink'
-import { AnswerAsk, Approve } from '@crook/domain/Command'
+import { AnswerAsk, Approve, Decline } from '@crook/domain/Command'
 import {
   AskId,
   HerdrConnectionId,
@@ -35,6 +37,7 @@ import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
 import { SentNotification } from '@crook/hub/NotificationPlan'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
+import { AskNotPending, type RoutedCommand } from '@crook/protocol/Commands'
 import { HarkNotConfigured, HarkReachedNoDevice } from '@crook/protocol/Hark'
 
 import { BASH_COMMAND, PANE, agentRow, bashAsk, encodeJson, hello } from './Fixtures'
@@ -591,5 +594,60 @@ it.effect('does not cancel an approval answered on the lock screen once the agen
     yield* herd.publish(LAPTOP, stateAt(3, 'working', 8))
 
     expect(yield* callsWithin(calls, 3)).toEqual([])
+  }).pipe(Effect.scoped),
+)
+
+const attachedAgent = Effect.fn('attachedAgent')(function* (router: CommandRouter['Service']) {
+  const inbox = yield* Queue.unbounded<RoutedCommand>()
+
+  yield* Effect.forkScoped(
+    router.attach(LAPTOP).pipe(Stream.runForEach((routed) => Queue.offer(inbox, routed))),
+    { startImmediately: true },
+  )
+
+  return inbox
+})
+
+it.effect('routes a denial on the lock screen as a Decline without a message', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier(approvingHark('denied'))
+    const { herd, router } = yield* start
+    const inbox = yield* attachedAgent(router)
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    yield* nextCallWhere(calls, isWait)
+    const routed = yield* advancingClock(Queue.take(inbox))
+
+    expect(routed.key).toBe(INTERACTION_ID)
+    expect(routed.command).toEqual(
+      new AnswerAsk({
+        pane: PANE,
+        ask: AskId.make('toolu_1'),
+        answer: new Decline({ message: Option.none() }),
+      }),
+    )
+  }).pipe(Effect.scoped),
+)
+
+it.effect('sends a lock-screen answer once when the agent says the ask is no longer pending', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier(approvingHark('approved'))
+    const { herd, router } = yield* start
+    const inbox = yield* attachedAgent(router)
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    yield* nextCallWhere(calls, isWait)
+    const routed = yield* advancingClock(Queue.take(inbox))
+
+    yield* router.complete(
+      LAPTOP,
+      routed.id,
+      Result.fail(new AskNotPending({ pane: PANE, ask: AskId.make('toolu_1') })),
+    )
+    yield* TestClock.adjust(Duration.times(RECONNECT_GRACE, 2))
+
+    expect(yield* Queue.clear(inbox)).toEqual([])
   }).pipe(Effect.scoped),
 )

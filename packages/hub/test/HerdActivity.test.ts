@@ -12,25 +12,32 @@ import * as TestClock from 'effect/testing/TestClock'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrLink } from '@crook/domain/HerdrLink'
-import { HerdrConnectionId, MachineId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrConnectionId, MachineId, PaneId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { Workspace } from '@crook/domain/Workspace'
-import { ACTIVITY_RESTART_MARGIN, ACTIVITY_START_SPACING } from '@crook/hub/ActivityPlan'
+import {
+  ACTIVITY_RESTART_MARGIN,
+  ACTIVITY_START_SPACING,
+  ALL_DONE_LINGER,
+} from '@crook/hub/ActivityPlan'
 import { AuditTrail } from '@crook/hub/AuditTrail'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
 import { HARK_ACTIVITY_LIFETIME, HarkClient } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import * as HerdActivity from '@crook/hub/HerdActivity'
-import { Herd } from '@crook/hub/Herd'
+import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { SeenTracker } from '@crook/hub/SeenTracker'
 
 import { agentRow, bashAsk } from './Fixtures'
 import {
   HARK_TOKEN,
+  type HarkCall,
+  type HarkReply,
   type HarkScript,
   activityChanged,
+  answeringFirst,
   callsWithin,
   created,
   fakeHark,
@@ -71,7 +78,7 @@ const blockedOnBashAt = (version: number) =>
   ])
 
 const harkWith =
-  (activity: (method: string) => ReturnType<HarkScript>): HarkScript =>
+  (activity: (method: string) => HarkReply): HarkScript =>
   (call) => {
     if (isActivityCall(call)) {
       return activity(call.method)
@@ -85,6 +92,30 @@ const harkWith =
   }
 
 const acceptingActivities = harkWith(() => activityChanged)
+
+const twoWorkingAt = (version: number) =>
+  stateWith(version, [
+    agentRow({ status: 'working', stateChangeSeq: 6 }),
+    agentRow({
+      pane: PaneId.make('w1:p2'),
+      terminal: TerminalId.make('term_2'),
+      status: 'working',
+      stateChangeSeq: 3,
+    }),
+  ])
+
+const UNAVAILABLE: HarkReply = { status: 503, body: { error: 'Service unavailable' } }
+
+const isStart = (call: HarkCall) => call.method === 'POST' && call.url === ACTIVITIES_URL
+
+const isUpdate = (call: HarkCall) => call.method === 'PATCH'
+
+const isEnd = (call: HarkCall) => call.url === `${ACTIVITY_URL}/end`
+
+const failingOnce = (isFailing: (call: HarkCall) => boolean, failure: HarkReply) =>
+  answeringFirst(isFailing, [failure], acceptingActivities)
+
+const endpointOf = (call: HarkCall) => [call.method, call.url]
 
 const activityOver = (
   http: Layer.Layer<HttpClient.HttpClient>,
@@ -315,5 +346,178 @@ it.effect('starts without a token and drives no Live Activity', () =>
     yield* herd.publish(LAPTOP, stateAt(2, 'working', 6))
 
     expect(yield* callsWithin(calls, 5)).toEqual([])
+  }).pipe(Effect.scoped),
+)
+
+const startTriedAfter = Effect.fn('startTriedAfter')(function* (failure: HarkReply) {
+  const { calls, start } = yield* withActivity(failingOnce(isStart, failure))
+  const { herd } = yield* start
+
+  yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+  const failed = yield* nextCallWhere(calls, isActivityCall)
+  const retried = yield* nextCallWhere(calls, isActivityCall)
+
+  yield* herd.publish(LAPTOP, twoWorkingAt(2))
+  const updated = yield* nextCallWhere(calls, isActivityCall)
+
+  return Arr.map([failed, retried, updated], endpointOf)
+})
+
+const STARTED_THEN_UPDATED = [
+  ['POST', ACTIVITIES_URL],
+  ['POST', ACTIVITIES_URL],
+  ['PATCH', ACTIVITY_URL],
+]
+
+it.effect(
+  'tries a start again after Hark fails on its side, and counts it as live once it lands',
+  () =>
+    Effect.gen(function* () {
+      expect(yield* startTriedAfter(UNAVAILABLE)).toEqual(STARTED_THEN_UPDATED)
+    }).pipe(Effect.scoped),
+)
+
+it.effect(
+  'tries a start again after Hark was unreachable, and counts it as live once it lands',
+  () =>
+    Effect.gen(function* () {
+      expect(yield* startTriedAfter('unreachable')).toEqual(STARTED_THEN_UPDATED)
+    }).pipe(Effect.scoped),
+)
+
+it.effect('tries a rate-limited start again once the wait Hark names has passed', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withActivity(
+      failingOnce(isStart, {
+        status: 429,
+        body: { error: 'Rate limited' },
+        headers: { 'retry-after': '30' },
+      }),
+    )
+    const { herd } = yield* start
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* nextCallWhere(calls, isActivityCall)
+    const limitedAt = yield* Clock.currentTimeMillis
+    const retried = yield* nextCallWhere(calls, isActivityCall)
+    const retriedAt = yield* Clock.currentTimeMillis
+
+    expect(endpointOf(retried)).toEqual(['POST', ACTIVITIES_URL])
+    expect(retriedAt - limitedAt).toBeGreaterThanOrEqual(Duration.toMillis(Duration.seconds(30)))
+  }).pipe(Effect.scoped),
+)
+
+it.effect('tries an update again after an outage with the same content', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withActivity(failingOnce(isUpdate, UNAVAILABLE))
+    const { herd } = yield* start
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* nextCallWhere(calls, isActivityCall)
+    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    const failed = yield* nextCallWhere(calls, isActivityCall)
+    const retried = yield* nextCallWhere(calls, isActivityCall)
+
+    expect(endpointOf(failed)).toEqual(['PATCH', ACTIVITY_URL])
+    expect(endpointOf(retried)).toEqual(['PATCH', ACTIVITY_URL])
+    expect(retried.body).toEqual(failed.body)
+  }).pipe(Effect.scoped),
+)
+
+it.effect('keeps a card whose end failed, and ends it once Hark is back', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withActivity(failingOnce(isEnd, UNAVAILABLE))
+    const { herd } = yield* start
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* nextCallWhere(calls, isActivityCall)
+    yield* herd.publish(LAPTOP, stateAt(2, 'done', 7))
+    const failed = yield* nextCallWhere(calls, isActivityCall)
+    const retried = yield* nextCallWhere(calls, isActivityCall)
+
+    yield* herd.publish(LAPTOP, stateAt(3, 'working', 8))
+    const restarted = yield* nextCallWhere(calls, isActivityCall)
+
+    expect(Arr.map([failed, retried, restarted], endpointOf)).toEqual([
+      ['POST', `${ACTIVITY_URL}/end`],
+      ['POST', `${ACTIVITY_URL}/end`],
+      ['POST', ACTIVITIES_URL],
+    ])
+  }).pipe(Effect.scoped),
+)
+
+it.effect('tries a refused start once per busy spell', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withActivity(
+      harkWith((method) =>
+        method === 'POST'
+          ? { status: 402, body: { error: 'Live Activities need Hark Pro' } }
+          : activityChanged,
+      ),
+    )
+    const { herd } = yield* start
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    const refused = yield* nextCallWhere(calls, isActivityCall)
+
+    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    const whileBusy = Arr.filter(yield* callsWithin(calls, 70), isActivityCall)
+
+    yield* herd.publish(LAPTOP, stateAt(3, 'done', 8))
+    const whileIdle = Arr.filter(yield* callsWithin(calls, 1), isActivityCall)
+
+    yield* herd.publish(LAPTOP, stateAt(4, 'working', 9))
+    const nextSpell = yield* nextCallWhere(calls, isActivityCall)
+
+    expect(endpointOf(refused)).toEqual(['POST', ACTIVITIES_URL])
+    expect(whileBusy).toEqual([])
+    expect(whileIdle).toEqual([])
+    expect(endpointOf(nextSpell)).toEqual(['POST', ACTIVITIES_URL])
+  }).pipe(Effect.scoped),
+)
+
+it.effect('ends the card a grace after a herdr resync empties the herd for good', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withActivity(acceptingActivities)
+    const { herd } = yield* start
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* nextCallWhere(calls, isActivityCall)
+    yield* TestClock.adjust(RECONNECT_GRACE)
+    yield* herd.publish(LAPTOP, stateWith(2, [], 2))
+    const resyncAt = yield* Clock.currentTimeMillis
+    const ended = yield* nextCallWhere(calls, isActivityCall)
+    const endedAt = yield* Clock.currentTimeMillis
+
+    expect(endpointOf(ended)).toEqual(['POST', `${ACTIVITY_URL}/end`])
+    expect(ended.body).toEqual(
+      Option.some({
+        status: 'All done',
+        detail: null,
+        symbol: 'success',
+        accentColor: '#EEEBE4',
+        dismissAfterSeconds: Duration.toSeconds(ALL_DONE_LINGER),
+      }),
+    )
+    expect(endedAt - resyncAt).toBeGreaterThanOrEqual(Duration.toMillis(RECONNECT_GRACE))
+  }).pipe(Effect.scoped),
+)
+
+it.effect('starts no card when only a herdr resync turned the herd busy', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withActivity(acceptingActivities)
+    const { herd } = yield* start
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'idle', 5))
+    yield* herd.publish(
+      LAPTOP,
+      stateWith(
+        2,
+        [agentRow({ status: 'working', stateChangeSeq: 1, terminal: TerminalId.make('term_9') })],
+        2,
+      ),
+    )
+
+    expect(Arr.filter(yield* callsWithin(calls, 70), isActivityCall)).toEqual([])
   }).pipe(Effect.scoped),
 )

@@ -1,6 +1,5 @@
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
-import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
@@ -29,7 +28,9 @@ import {
   type HarkId,
   HarkNotification,
   PAUSE_AFTER_HUB_BUG,
-  pauseFor,
+  gaveUpOnBug,
+  pauseOrGiveUp,
+  pausedOnBug,
 } from '@crook/hub/HarkClient'
 import { type HerdChange, Herd } from '@crook/hub/Herd'
 import {
@@ -73,8 +74,6 @@ const isSeenIn = (marks: readonly SeenRecord[]) => (notification: WantedNotifica
       mark.pane === notification.pane &&
       isSameSeenMark(mark, notification),
   )
-
-const gaveUpOnBug = (what: string) => `The hub gave up on ${what} because of a bug in the hub.`
 
 const approvalOf = (notification: WantedNotification) =>
   new HarkApproval({
@@ -124,16 +123,9 @@ const make = Effect.gen(function* () {
     )
 
   const pauseOrAbandon = (what: string, failure: HarkFailure, abandon: Effect.Effect<void>) =>
-    Option.match(pauseFor(failure), {
-      onNone: () =>
-        Effect.logError(`The hub gave up on ${what}: ${failure.message}`).pipe(
-          Effect.andThen(abandon),
-        ),
-      onSome: (pause) =>
-        Effect.logWarning(
-          `The hub retries ${what} in ${Duration.format(pause)}: ${failure.message}`,
-        ).pipe(Effect.andThen(Effect.sleep(pause))),
-    })
+    Effect.flatMap(pauseOrGiveUp(what, failure), (outcome) =>
+      outcome === 'gaveUp' ? abandon : Effect.void,
+    )
 
   const rememberSent = (notification: WantedNotification, harkId: HarkId) => {
     const record = new SentNotification({
@@ -246,10 +238,10 @@ const make = Effect.gen(function* () {
     return Option.isSome(step)
   }).pipe(
     Effect.catchDefect((defect) =>
-      Effect.logError(
-        `The hub's notifier hit a bug and pauses ${Duration.format(PAUSE_AFTER_HUB_BUG)} before its next step.`,
-        defect,
-      ).pipe(Effect.andThen(Effect.sleep(PAUSE_AFTER_HUB_BUG)), Effect.as(true)),
+      Effect.logError(pausedOnBug('notifier'), defect).pipe(
+        Effect.andThen(Effect.sleep(PAUSE_AFTER_HUB_BUG)),
+        Effect.as(true),
+      ),
     ),
   )
 

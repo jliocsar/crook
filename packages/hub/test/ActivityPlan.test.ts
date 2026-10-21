@@ -14,8 +14,8 @@ import {
   ACTIVITY_START_SPACING,
   ALL_DONE,
   ALL_DONE_LINGER,
-  type ActivityHerd,
   ActivityStep,
+  FollowedHerd,
   LiveActivityRecord,
   WAIT_FOR_A_CHANGE,
   activityAfterPublish,
@@ -23,6 +23,7 @@ import {
   nextActivityStep,
 } from '@crook/hub/ActivityPlan'
 import { HARK_ACTIVITY_LIFETIME, HarkActivityContent } from '@crook/hub/HarkClient'
+import { RECONNECT_GRACE } from '@crook/hub/Herd'
 
 import { agentRow, bashAsk } from './Fixtures'
 
@@ -66,32 +67,41 @@ const agentAt = (
     ...fields,
   })
 
-const emptyHerd: ActivityHerd = HashMap.empty()
+const emptyHerd = new FollowedHerd({
+  agents: HashMap.empty(),
+  busyThroughResync: false,
+  endsFrom: STARTED_AT,
+})
 
-const herdOf = (...states: readonly MachineState[]): ActivityHerd =>
-  Arr.reduce(states, emptyHerd, (herd, next) =>
-    activityAfterPublish(herd, { machineLabel: next.machine, previous: Option.none(), next }),
+const herdOf = (...states: readonly MachineState[]): FollowedHerd =>
+  Arr.reduce(states, emptyHerd, (followed, next) =>
+    activityAfterPublish(
+      followed,
+      { machineLabel: next.machine, previous: Option.none(), next },
+      STARTED_AT,
+    ),
   )
+
+const contentOf = (followed: FollowedHerd) => herdContent(followed.agents)
 
 const busyHerd = herdOf(stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'working', 5)]))
 
-const WORKING = herdContent(busyHerd)
+const WORKING = contentOf(busyHerd)
 
 const liveSince = (startedAt: DateTime.Utc, shown: HarkActivityContent) =>
   Option.some(new LiveActivityRecord({ lastStartAt: startedAt, shown: Option.some(shown) }))
 
 const stepAt = (
-  herd: ActivityHerd,
+  followed: FollowedHerd,
   record: Option.Option<LiveActivityRecord>,
   elapsed: Duration.Duration,
   enabled = true,
 ) =>
   nextActivityStep({
-    herd,
+    followed,
     enabled,
     record,
     now: DateTime.addDuration(STARTED_AT, elapsed),
-    endsFrom: STARTED_AT,
   })
 
 describe('herdContent', () => {
@@ -110,14 +120,14 @@ describe('herdContent', () => {
       ]),
     )
 
-    expect(herdContent(herd)).toEqual(
+    expect(contentOf(herd)).toEqual(
       new HarkActivityContent({
         status: '2 need you · 2 working',
         detail: Option.some('Prototype the herd screen wants Bash · laptop'),
         symbol: 'warning',
       }),
     )
-    expect(herdContent(herdOf(stateOf(DESK, [agentAt('w1:p1', 'Notes', 'blocked', 30)])))).toEqual(
+    expect(contentOf(herdOf(stateOf(DESK, [agentAt('w1:p1', 'Notes', 'blocked', 30)])))).toEqual(
       new HarkActivityContent({
         status: '1 needs you',
         detail: Option.some('Notes has a question · desk'),
@@ -135,14 +145,14 @@ describe('herdContent', () => {
       ]),
     )
 
-    expect(herdContent(working)).toEqual(
+    expect(contentOf(working)).toEqual(
       new HarkActivityContent({
         status: '3 working',
         detail: Option.some('Latest · laptop'),
         symbol: 'terminal',
       }),
     )
-    expect(herdContent(herdOf(stateOf(LAPTOP, [agentAt('w1:p1', 'Done', 'done', 1)])))).toEqual(
+    expect(contentOf(herdOf(stateOf(LAPTOP, [agentAt('w1:p1', 'Done', 'done', 1)])))).toEqual(
       ALL_DONE,
     )
   })
@@ -150,40 +160,91 @@ describe('herdContent', () => {
   it('cuts the detail to Hark limit', () => {
     const herd = herdOf(stateOf(LAPTOP, [agentAt('w1:p1', 'x'.repeat(300), 'working', 1)]))
 
-    expect(Option.map(herdContent(herd).detail, (detail) => detail.length)).toEqual(
-      Option.some(240),
-    )
+    expect(Option.map(contentOf(herd).detail, (detail) => detail.length)).toEqual(Option.some(240))
   })
 })
 
 describe('activityAfterPublish', () => {
-  it('ignores a resync diff and a lost herdr, and keeps an agent not known yet as it was', () => {
-    const known = herdOf(stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'working', 5)]))
+  it('ignores a lost herdr, and keeps an agent not known yet as it was', () => {
     const previous = Option.some(stateOf(LAPTOP, []))
+    const lost = activityAfterPublish(
+      busyHerd,
+      { machineLabel: 'laptop', previous, next: stateOf(LAPTOP, [], { lost: true }) },
+      STARTED_AT,
+    )
+    const notKnownYet = activityAfterPublish(
+      busyHerd,
+      {
+        machineLabel: 'laptop',
+        previous,
+        next: stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'unknown', 9)]),
+      },
+      STARTED_AT,
+    )
 
-    expect(
-      activityAfterPublish(known, {
+    expect(lost).toEqual(busyHerd)
+    expect(contentOf(notKnownYet)).toEqual(WORKING)
+  })
+
+  it('follows a resync that empties the herd, and ends the card only a grace after it', () => {
+    const resyncAt = Duration.seconds(30)
+    const emptied = activityAfterPublish(
+      busyHerd,
+      {
         machineLabel: 'laptop',
-        previous,
+        previous: Option.some(stateOf(LAPTOP, [])),
         next: stateOf(LAPTOP, [], { connection: 2 }),
-      }),
-    ).toEqual(known)
-    expect(
-      activityAfterPublish(known, {
+      },
+      DateTime.addDuration(STARTED_AT, resyncAt),
+    )
+    const live = liveSince(STARTED_AT, WORKING)
+
+    expect(contentOf(emptied)).toEqual(ALL_DONE)
+    expect(stepAt(emptied, live, resyncAt)).toEqual(
+      ActivityStep.Wait({ atMost: Option.some(RECONNECT_GRACE) }),
+    )
+    expect(stepAt(emptied, live, Duration.sum(resyncAt, RECONNECT_GRACE))).toEqual(
+      ActivityStep.End({ content: ALL_DONE, linger: ALL_DONE_LINGER }),
+    )
+  })
+
+  it('starts no card for a herd a resync turned busy, until an agent really turns busy', () => {
+    const idle = herdOf(stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'done', 5)]))
+    const resynced = stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'working', 6)], {
+      connection: 2,
+    })
+    const busyThroughResync = activityAfterPublish(
+      idle,
+      { machineLabel: 'laptop', previous: Option.some(stateOf(LAPTOP, [])), next: resynced },
+      STARTED_AT,
+    )
+    const stillTheSame = activityAfterPublish(
+      busyThroughResync,
+      { machineLabel: 'laptop', previous: Option.some(resynced), next: resynced },
+      STARTED_AT,
+    )
+    const turnedBusy = activityAfterPublish(
+      stillTheSame,
+      {
         machineLabel: 'laptop',
-        previous,
-        next: stateOf(LAPTOP, [], { lost: true }),
-      }),
-    ).toEqual(known)
-    expect(
-      herdContent(
-        activityAfterPublish(known, {
-          machineLabel: 'laptop',
-          previous,
-          next: stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'unknown', 9)]),
-        }),
-      ),
-    ).toEqual(WORKING)
+        previous: Option.some(resynced),
+        next: stateOf(
+          LAPTOP,
+          [
+            agentAt('w1:p1', 'Port the herd', 'working', 6),
+            agentAt('w1:p2', 'Notes', 'working', 9),
+          ],
+          { connection: 2 },
+        ),
+      },
+      STARTED_AT,
+    )
+
+    expect(stepAt(busyThroughResync, Option.none(), Duration.zero)).toEqual(WAIT_FOR_A_CHANGE)
+    expect(stepAt(stillTheSame, Option.none(), Duration.zero)).toEqual(WAIT_FOR_A_CHANGE)
+    expect(stepAt(turnedBusy, Option.none(), Duration.zero)).toEqual(
+      ActivityStep.Start({ content: contentOf(turnedBusy) }),
+    )
   })
 })
 

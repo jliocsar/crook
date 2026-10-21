@@ -30,7 +30,9 @@ export interface HarkAnswer {
   readonly headers?: Record<string, string>
 }
 
-export type HarkScript = (call: HarkCall) => HarkAnswer | 'unreachable' | 'silent' | 'broken'
+export type HarkReply = HarkAnswer | 'unreachable' | 'silent' | 'broken'
+
+export type HarkScript = (call: HarkCall) => HarkReply
 
 const NOT_IN_HARK_ID = /[^A-Za-z0-9_-]/gu
 
@@ -56,10 +58,7 @@ const callOf = (request: HttpClientRequest.HttpClientRequest): HarkCall => ({
   body: bodyOf(request),
 })
 
-const responseTo = (
-  request: HttpClientRequest.HttpClientRequest,
-  answer: ReturnType<HarkScript>,
-) => {
+const responseTo = (request: HttpClientRequest.HttpClientRequest, answer: HarkReply) => {
   if (answer === 'silent') {
     return Effect.never
   }
@@ -133,6 +132,19 @@ export const harkIdFor = (title: string) => `anot_${title.replaceAll(NOT_IN_HARK
 
 export const acceptingHark: HarkScript = (call) =>
   isWithdrawal(call) ? withdrawn('anot_withdrawn') : created(harkIdFor(titleOf(call)))
+
+export const answeringFirst = (
+  isWanted: (call: HarkCall) => boolean,
+  first: readonly HarkReply[],
+  then: HarkScript,
+): HarkScript => {
+  const remaining = [...first]
+
+  return (call) =>
+    isWanted(call)
+      ? Option.getOrElse(Option.fromNullishOr(remaining.shift()), () => then(call))
+      : then(call)
+}
 
 export const tokenConfig = (token: Option.Option<string>) =>
   ConfigProvider.layer(

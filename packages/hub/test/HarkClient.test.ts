@@ -1,11 +1,14 @@
 import { expect, it } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as TestClock from 'effect/testing/TestClock'
 
 import {
@@ -17,6 +20,7 @@ import {
   HarkClient,
   HarkId,
   HarkNotification,
+  makeTurns,
 } from '@crook/hub/HarkClient'
 import {
   HarkAnswerUnreadable,
@@ -316,5 +320,48 @@ it.effect('lets other requests through while a long poll waits on Hark', () =>
     yield* Fiber.interrupt(waiting)
 
     expect(sent.id).toBe('anot_1')
+  }).pipe(Effect.scoped),
+)
+
+const turnsHeldOpen = Effect.gen(function* () {
+  const inTurn = yield* makeTurns
+  const holding = yield* Deferred.make<void>()
+  const order = yield* Ref.make<readonly string[]>([])
+  const holder = yield* Effect.forkScoped(inTurn(Deferred.await(holding)), {
+    startImmediately: true,
+  })
+  const queueUp = (name: string) =>
+    Effect.forkScoped(inTurn(Ref.update(order, Arr.append(name))), { startImmediately: true })
+  const releaseHolder = Deferred.succeed(holding, undefined).pipe(
+    Effect.andThen(Fiber.join(holder)),
+  )
+
+  return { inTurn, order, queueUp, releaseHolder }
+})
+
+it.effect('hands the turn to callers in the order they asked for it', () =>
+  Effect.gen(function* () {
+    const { order, queueUp, releaseHolder } = yield* turnsHeldOpen
+    const waiting = yield* Effect.forEach(['first', 'second', 'third'], queueUp)
+
+    yield* releaseHolder
+    yield* Effect.forEach(waiting, Fiber.join)
+
+    expect(yield* Ref.get(order)).toEqual(['first', 'second', 'third'])
+  }).pipe(Effect.scoped),
+)
+
+it.effect('lets a caller interrupted in line leave it without holding up the others', () =>
+  Effect.gen(function* () {
+    const { inTurn, order, queueUp, releaseHolder } = yield* turnsHeldOpen
+    const leaving = yield* queueUp('leaving')
+    const staying = yield* queueUp('staying')
+
+    yield* Fiber.interrupt(leaving)
+    yield* releaseHolder
+    yield* Fiber.join(staying)
+    yield* inTurn(Ref.update(order, Arr.append('later')))
+
+    expect(yield* Ref.get(order)).toEqual(['staying', 'later'])
   }).pipe(Effect.scoped),
 )

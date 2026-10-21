@@ -36,6 +36,8 @@ import {
 
 export type HarkApprovalState = 'pending' | 'approved' | 'denied' | 'closed'
 
+export type AfterHarkFailure = 'retry' | 'gaveUp'
+
 interface Turns {
   readonly busy: boolean
   readonly waiting: readonly Deferred.Deferred<void>[]
@@ -109,7 +111,7 @@ export class HarkActivityGone extends Schema.TaggedError<HarkActivityGone>()('Ha
   }
 }
 
-export const pauseFor = (failure: HarkFailure): Option.Option<Duration.Duration> =>
+const pauseFor = (failure: HarkFailure): Option.Option<Duration.Duration> =>
   Match.value(failure).pipe(
     Match.tagsExhaustive({
       HarkUnreachable: () => Option.some(HARK_OUTAGE_PAUSE),
@@ -122,6 +124,27 @@ export const pauseFor = (failure: HarkFailure): Option.Option<Duration.Duration>
       HarkNotConfigured: () => Option.none(),
     }),
   )
+
+export const pauseOrGiveUp = (
+  what: string,
+  failure: HarkFailure,
+): Effect.Effect<AfterHarkFailure> =>
+  Option.match(pauseFor(failure), {
+    onNone: () =>
+      Effect.logError(`The hub gave up on ${what}: ${failure.message}`).pipe(
+        Effect.as<AfterHarkFailure>('gaveUp'),
+      ),
+    onSome: (pause) =>
+      Effect.logWarning(
+        `The hub retries ${what} in ${Duration.format(pause)}: ${failure.message}`,
+      ).pipe(Effect.andThen(Effect.sleep(pause)), Effect.as<AfterHarkFailure>('retry')),
+  })
+
+export const gaveUpOnBug = (what: string) =>
+  `The hub gave up on ${what} because of a bug in the hub.`
+
+export const pausedOnBug = (what: string) =>
+  `The hub's ${what} hit a bug and pauses ${Duration.format(PAUSE_AFTER_HUB_BUG)} before its next step.`
 
 const CrookHubHarkToken = Config.option(Config.Redacted('CROOK_HUB_HARK_TOKEN'))
 
@@ -161,9 +184,6 @@ const APPROVAL_STATES = {
   canceled: 'closed',
   expired: 'closed',
 } satisfies Record<typeof InteractionStatus.Type, HarkApprovalState>
-
-const NOT_CONFIGURED_WARNING =
-  'Hark notifications are off: CROOK_HUB_HARK_TOKEN is not set, so the hub sends no notifications, approvals or Live Activity, and the settings screen says so. Set it to a Hark agent token with the notifications:send, interactions:create, interactions:read and activities:write scopes, then restart the hub.'
 
 const secondsOfRetryAfter = (value: string, now: DateTime.Utc) =>
   pipe(
@@ -307,7 +327,7 @@ const unreachableAfter = (timeout: Duration.Duration) => () =>
     new HarkUnreachable({ detail: `Hark did not answer within ${Duration.format(timeout)}` }),
   )
 
-const makeTurns = Effect.gen(function* () {
+export const makeTurns = Effect.gen(function* () {
   const turns = yield* Ref.make<Turns>({ busy: false, waiting: [] })
 
   const release = Ref.modify(turns, (state): [Option.Option<Deferred.Deferred<void>>, Turns] =>
@@ -557,9 +577,11 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
 })
 
 const notConfigured = Effect.gen(function* () {
-  yield* Effect.logWarning(NOT_CONFIGURED_WARNING)
+  const failure = new HarkNotConfigured()
 
-  const fail = () => Effect.fail(new HarkNotConfigured())
+  yield* Effect.logWarning(failure.message)
+
+  const fail = () => Effect.fail(failure)
 
   return HarkClient.of({
     delivery: 'noToken',

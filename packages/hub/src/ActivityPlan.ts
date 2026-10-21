@@ -2,7 +2,6 @@ import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
-import * as Equivalence from 'effect/Equivalence'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
@@ -10,7 +9,7 @@ import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
-import { type AgentRow, agentTitleOrPane } from '@crook/domain/AgentRow'
+import { type AgentRow, agentTitleOrPane, settledStatusOf } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { type MachineState, isHerdrLost, isResync } from '@crook/domain/MachineState'
@@ -22,9 +21,12 @@ import {
   HARK_RATE_WINDOW,
   HarkActivityContent,
 } from '@crook/hub/HarkClient'
+import { RECONNECT_GRACE } from '@crook/hub/Herd'
 import { cutForHark, permissionOf } from '@crook/hub/NotificationPlan'
 
-export type ActivityHerd = HashMap.HashMap<MachineId, HashMap.HashMap<PaneId, ActivityAgent>>
+export type MachineAgents = HashMap.HashMap<PaneId, ActivityAgent>
+
+export type ActivityHerd = HashMap.HashMap<MachineId, MachineAgents>
 
 export type ActivityStep = Data.TaggedEnum<{
   Start: { readonly content: HarkActivityContent }
@@ -41,6 +43,12 @@ export class ActivityAgent extends Data.Class<{
   readonly status: AgentStatus
   readonly since: DateTime.Utc
   readonly tool: Option.Option<string>
+}> {}
+
+export class FollowedHerd extends Data.Class<{
+  readonly agents: ActivityHerd
+  readonly busyThroughResync: boolean
+  readonly endsFrom: DateTime.Utc
 }> {}
 
 export class LiveActivityRecord extends Schema.Class<LiveActivityRecord>('LiveActivityRecord')({
@@ -61,27 +69,20 @@ export const ALL_DONE = new HarkActivityContent({
   symbol: 'success',
 })
 
+export const isSameContent = Schema.toEquivalence(HarkActivityContent)
+
 const waitAtMost = (duration: Duration.Duration) =>
   ActivityStep.Wait({ atMost: Option.some(duration) })
 
 const bySince = Order.mapInput(DateTime.Order, (agent: ActivityAgent) => agent.since)
 
-export const isSameContent: Equivalence.Equivalence<HarkActivityContent> = Equivalence.Struct({
-  status: Equivalence.String,
-  detail: Option.makeEquivalence(Equivalence.String),
-  symbol: Equivalence.String,
-})
-
-const settledOf = (row: AgentRow) =>
-  Option.match(row.beforeHandoff, {
-    onNone: () => ({ status: row.status, since: row.statusChangedAt }),
-    onSome: (before) => ({ status: before.status, since: before.statusChangedAt }),
-  })
+const isBusyAgent = (agent: ActivityAgent) =>
+  agent.status === 'blocked' || agent.status === 'working'
 
 const activityAgentOf =
-  (machineLabel: string, before: HashMap.HashMap<PaneId, ActivityAgent>) =>
+  (machineLabel: string, before: MachineAgents) =>
   (row: AgentRow): Option.Option<ActivityAgent> => {
-    const settled = settledOf(row)
+    const settled = settledStatusOf(row)
 
     if (settled.status === 'unknown') {
       return HashMap.get(before, row.pane)
@@ -92,53 +93,98 @@ const activityAgentOf =
         machineLabel,
         title: agentTitleOrPane(row),
         status: settled.status,
-        since: settled.since,
+        since: settled.statusChangedAt,
         tool: Option.map(permissionOf(row), (permission) => permission.tool),
       }),
     )
   }
 
+const machineAgentsIn = (agents: ActivityHerd, machine: MachineId): MachineAgents =>
+  Option.getOrElse(HashMap.get(agents, machine), () => HashMap.empty<PaneId, ActivityAgent>())
+
+const machineAgentsAfter = (
+  before: MachineAgents,
+  machineLabel: string,
+  next: MachineState,
+): MachineAgents => {
+  const agentOf = activityAgentOf(machineLabel, before)
+
+  return pipe(
+    next.agents,
+    Arr.map((row) =>
+      Option.map(agentOf(row), (agent): [PaneId, ActivityAgent] => [row.pane, agent]),
+    ),
+    Arr.getSomes,
+    HashMap.fromIterable,
+  )
+}
+
+const hasTurnedBusy = (before: MachineAgents, after: MachineAgents) =>
+  Arr.some(
+    HashMap.toEntries(after),
+    ([pane, agent]) =>
+      isBusyAgent(agent) &&
+      !Option.exists(HashMap.get(before, pane), (previous) => previous.status === agent.status),
+  )
+
+const allAgents = (herd: ActivityHerd) =>
+  Arr.flatMap(HashMap.toValues(herd), (agents) => HashMap.toValues(agents))
+
+export const isBusy = (herd: ActivityHerd): boolean => Arr.some(allAgents(herd), isBusyAgent)
+
+export const followedHerdFrom = (hubStartedAt: DateTime.Utc) =>
+  new FollowedHerd({
+    agents: HashMap.empty(),
+    busyThroughResync: false,
+    endsFrom: DateTime.addDuration(hubStartedAt, RECONNECT_GRACE),
+  })
+
 export const activityAfterPublish = (
-  herd: ActivityHerd,
+  followed: FollowedHerd,
   change: {
     readonly machineLabel: string
     readonly previous: Option.Option<MachineState>
     readonly next: MachineState
   },
-): ActivityHerd => {
-  if (
-    isHerdrLost(change.next) ||
-    Option.exists(change.previous, (previous) => isResync(previous, change.next))
-  ) {
-    return herd
+  now: DateTime.Utc,
+): FollowedHerd => {
+  if (isHerdrLost(change.next)) {
+    return followed
   }
 
-  const before = Option.getOrElse(HashMap.get(herd, change.next.machine), () =>
-    HashMap.empty<PaneId, ActivityAgent>(),
-  )
-  const agentOf = activityAgentOf(change.machineLabel, before)
+  const resync = Option.exists(change.previous, (previous) => isResync(previous, change.next))
+  const before = machineAgentsIn(followed.agents, change.next.machine)
+  const after = machineAgentsAfter(before, change.machineLabel, change.next)
+  const agents = HashMap.set(followed.agents, change.next.machine, after)
+  const held = resync
+    ? followed.busyThroughResync || !isBusy(followed.agents)
+    : followed.busyThroughResync && !hasTurnedBusy(before, after)
 
-  return HashMap.set(
-    herd,
-    change.next.machine,
-    pipe(
-      change.next.agents,
-      Arr.map((row) =>
-        Option.map(agentOf(row), (agent): [PaneId, ActivityAgent] => [row.pane, agent]),
-      ),
-      Arr.getSomes,
-      HashMap.fromIterable,
-    ),
-  )
+  return new FollowedHerd({
+    agents,
+    busyThroughResync: held && isBusy(agents),
+    endsFrom: resync
+      ? DateTime.max(followed.endsFrom, DateTime.addDuration(now, RECONNECT_GRACE))
+      : followed.endsFrom,
+  })
 }
 
-export const activityAfterForgotten = (herd: ActivityHerd, machine: MachineId): ActivityHerd =>
-  HashMap.remove(herd, machine)
+export const activityAfterForgotten = (
+  followed: FollowedHerd,
+  machine: MachineId,
+): FollowedHerd => {
+  const agents = HashMap.remove(followed.agents, machine)
+
+  return new FollowedHerd({
+    agents,
+    busyThroughResync: followed.busyThroughResync && isBusy(agents),
+    endsFrom: followed.endsFrom,
+  })
+}
 
 const agentsWith = (herd: ActivityHerd, status: AgentStatus) =>
   pipe(
-    HashMap.toValues(herd),
-    Arr.flatMap((agents) => HashMap.toValues(agents)),
+    allAgents(herd),
     Arr.filter((agent) => agent.status === status),
     Arr.sort(bySince),
   )
@@ -159,10 +205,6 @@ const cutContent = (status: string, detail: string, symbol: HarkActivityContent[
     detail: Option.some(cutForHark(detail, HARK_ACTIVITY_DETAIL_LIMIT)),
     symbol,
   })
-
-export const isBusy = (herd: ActivityHerd): boolean =>
-  Arr.isReadonlyArrayNonEmpty(agentsWith(herd, 'blocked')) ||
-  Arr.isReadonlyArrayNonEmpty(agentsWith(herd, 'working'))
 
 export const herdContent = (herd: ActivityHerd): HarkActivityContent => {
   const blocked = agentsWith(herd, 'blocked')
@@ -192,10 +234,10 @@ export const herdContent = (herd: ActivityHerd): HarkActivityContent => {
 }
 
 const untilThen = (now: DateTime.Utc, then: DateTime.Utc) =>
-  Duration.millis(Math.max(0, DateTime.toEpochMillis(then) - DateTime.toEpochMillis(now)))
+  Duration.max(Duration.zero, DateTime.distance(now, then))
 
 const isReached = (now: DateTime.Utc, then: DateTime.Utc) =>
-  DateTime.toEpochMillis(now) >= DateTime.toEpochMillis(then)
+  DateTime.isGreaterThanOrEqualTo(now, then)
 
 const restartAtOf = (record: LiveActivityRecord) =>
   DateTime.addDuration(
@@ -244,13 +286,13 @@ export const shownIn = (record: Option.Option<LiveActivityRecord>) =>
   Option.flatMap(record, (live) => live.shown)
 
 export const nextActivityStep = (input: {
-  readonly herd: ActivityHerd
+  readonly followed: FollowedHerd
   readonly enabled: boolean
   readonly record: Option.Option<LiveActivityRecord>
   readonly now: DateTime.Utc
-  readonly endsFrom: DateTime.Utc
 }): ActivityStep => {
   const shown = shownIn(input.record)
+  const herd = input.followed.agents
 
   if (!input.enabled) {
     return Option.match(shown, {
@@ -259,17 +301,20 @@ export const nextActivityStep = (input: {
     })
   }
 
-  if (!isBusy(input.herd)) {
+  if (!isBusy(herd)) {
     return Option.match(shown, {
       onNone: () => WAIT_FOR_A_CHANGE,
-      onSome: () => endWhenAllowed(input.now, input.endsFrom),
+      onSome: () => endWhenAllowed(input.now, input.followed.endsFrom),
     })
   }
 
-  const content = herdContent(input.herd)
+  const content = herdContent(herd)
 
   return Option.match(Option.all({ record: input.record, shown }), {
-    onNone: () => startWhenSpaced(input.now, input.record, content),
+    onNone: () =>
+      input.followed.busyThroughResync
+        ? WAIT_FOR_A_CHANGE
+        : startWhenSpaced(input.now, input.record, content),
     onSome: (live) => keepLive(input.now, live.record, live.shown, content),
   })
 }

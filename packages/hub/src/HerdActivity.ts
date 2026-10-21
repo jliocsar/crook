@@ -1,7 +1,5 @@
 import * as DateTime from 'effect/DateTime'
-import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -13,12 +11,12 @@ import type { HarkFailure } from '@crook/protocol/Hark'
 
 import {
   type ActivityAttempt,
-  type ActivityHerd,
   type ActivityStep,
   type LiveActivityRecord,
   activityAfterForgotten,
   activityAfterPublish,
   attemptOf,
+  followedHerdFrom,
   nextActivityStep,
   recordAfter,
   recordWithoutActivity,
@@ -28,27 +26,20 @@ import {
   type HarkActivityGone,
   HarkClient,
   PAUSE_AFTER_HUB_BUG,
-  pauseFor,
+  gaveUpOnBug,
+  pauseOrGiveUp,
+  pausedOnBug,
 } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
-import { type HerdChange, Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
+import { type HerdChange, Herd } from '@crook/hub/Herd'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 
-type ActivityOutcome = 'done' | 'gone' | 'abandoned'
+type ActivityOutcome = 'done' | 'gone' | 'retry' | 'abandoned'
 
 const outcomeAfter = (what: string, failure: HarkFailure): Effect.Effect<ActivityOutcome> =>
-  Option.match(pauseFor(failure), {
-    onNone: () =>
-      Effect.logError(`The hub gave up on ${what}: ${failure.message}`).pipe(
-        Effect.as<ActivityOutcome>('abandoned'),
-      ),
-    onSome: (pause) =>
-      Effect.logWarning(
-        `The hub retries ${what} in ${Duration.format(pause)}: ${failure.message}`,
-      ).pipe(Effect.andThen(Effect.sleep(pause)), Effect.as<ActivityOutcome>('done')),
-  })
-
-const gaveUpOnBug = (what: string) => `The hub gave up on ${what} because of a bug in the hub.`
+  Effect.map(pauseOrGiveUp(what, failure), (outcome): ActivityOutcome =>
+    outcome === 'retry' ? 'retry' : 'abandoned',
+  )
 
 const make = Effect.gen(function* () {
   const hark = yield* HarkClient
@@ -60,24 +51,26 @@ const make = Effect.gen(function* () {
     return
   }
 
-  const endsFrom = DateTime.addDuration(yield* DateTime.now, RECONNECT_GRACE)
   const record = yield* Ref.make(yield* store.liveActivity)
-  const activityHerd = yield* Ref.make<ActivityHerd>(HashMap.empty())
+  const followed = yield* Ref.make(followedHerdFrom(yield* DateTime.now))
   const enabled = yield* Ref.make((yield* store.prefs).liveActivity)
   const abandonedAttempt = yield* Ref.make(Option.none<ActivityAttempt>())
   const wake = yield* Queue.sliding<void>(1)
   const changes = yield* herd.subscribeChanges
 
   const followHerd = (change: HerdChange) =>
-    Ref.update(activityHerd, (current) =>
-      Match.value(change).pipe(
-        Match.tagsExhaustive({
-          MachinePublished: (published) => activityAfterPublish(current, published),
-          PaneSeen: () => current,
-          MachineForgotten: (forgotten) => activityAfterForgotten(current, forgotten.machine),
-        }),
+    DateTime.now.pipe(
+      Effect.flatMap((now) =>
+        Ref.update(followed, (current) =>
+          Match.value(change).pipe(
+            Match.tagsExhaustive({
+              MachinePublished: (published) => activityAfterPublish(current, published, now),
+              PaneSeen: () => current,
+              MachineForgotten: (forgotten) => activityAfterForgotten(current, forgotten.machine),
+            }),
+          ),
+        ),
       ),
-    ).pipe(
       Effect.andThen(Queue.offer(wake, undefined)),
       Effect.catchDefect((defect) =>
         Effect.logError(gaveUpOnBug('a change in the herd for the Live Activity'), defect),
@@ -122,6 +115,7 @@ const make = Effect.gen(function* () {
           ),
         ),
         Match.when('gone', () => remember(recordWithoutActivity(current))),
+        Match.when('retry', () => Effect.void),
         Match.when('abandoned', () => Ref.set(abandonedAttempt, Option.some(attempt))),
         Match.exhaustive,
       )
@@ -144,11 +138,10 @@ const make = Effect.gen(function* () {
 
   const stepOnce = Effect.gen(function* () {
     const step = nextActivityStep({
-      herd: yield* Ref.get(activityHerd),
+      followed: yield* Ref.get(followed),
       enabled: yield* Ref.get(enabled),
       record: yield* Ref.get(record),
       now: yield* DateTime.now,
-      endsFrom,
     })
     const abandoned = yield* Ref.get(abandonedAttempt)
     const isAbandoned = Option.exists(attemptOf(step), (attempt) =>
@@ -158,10 +151,9 @@ const make = Effect.gen(function* () {
     yield* isAbandoned ? Queue.take(wake) : take(step)
   }).pipe(
     Effect.catchDefect((defect) =>
-      Effect.logError(
-        `The hub's Live Activity hit a bug and pauses ${Duration.format(PAUSE_AFTER_HUB_BUG)} before its next step.`,
-        defect,
-      ).pipe(Effect.andThen(Effect.sleep(PAUSE_AFTER_HUB_BUG))),
+      Effect.logError(pausedOnBug('Live Activity'), defect).pipe(
+        Effect.andThen(Effect.sleep(PAUSE_AFTER_HUB_BUG)),
+      ),
     ),
   )
 
@@ -178,7 +170,3 @@ const make = Effect.gen(function* () {
 })
 
 export const layerWithoutDependencies = Layer.effectDiscard(make)
-
-export const layer = layerWithoutDependencies.pipe(
-  Layer.provide([HarkClient.layer, NotificationStore.layer]),
-)

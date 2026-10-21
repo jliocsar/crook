@@ -15,8 +15,8 @@ import {
   agentTitleOrPane,
   isSameSeenMark,
   seenMarkOf,
+  settledStatusOf,
 } from '@crook/domain/AgentRow'
-import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { PermissionAsk } from '@crook/domain/Ask'
 import {
   AskId,
@@ -96,12 +96,6 @@ export const raisedEventOf = (row: AgentRow): Option.Option<RaisedEvent> =>
     Match.orElse(() => Option.none()),
   )
 
-const settledStatus = (row: AgentRow): AgentStatus =>
-  Option.match(row.beforeHandoff, {
-    onNone: () => row.status,
-    onSome: (before) => before.status,
-  })
-
 const rowIn = (state: MachineState, pane: PaneId) =>
   Arr.findFirst(state.agents, (row) => row.pane === pane)
 
@@ -169,7 +163,7 @@ const wantedFor = (
 }
 
 const hasMovedOn = (before: AgentRow, row: AgentRow) => {
-  const status = settledStatus(before)
+  const status = settledStatusOf(before).status
   const askedSomethingElse =
     Option.isNone(before.beforeHandoff) && !isSameRaised(raisedEventOf(before), raisedEventOf(row))
 
@@ -274,11 +268,7 @@ export const afterSeen = (
   machine: MachineId,
   pane: PaneId,
 ): NotificationsByPane<WantedNotification> =>
-  Option.match(HashMap.get(wanted, toGlobalPaneId(machine, pane)), {
-    onNone: () => wanted,
-    onSome: (notification) =>
-      isApproval(notification) ? wanted : HashMap.remove(wanted, notificationKey(notification)),
-  })
+  HashMap.modifyAt(wanted, toGlobalPaneId(machine, pane), Option.filter(isApproval))
 
 export const afterForgotten = (
   wanted: NotificationsByPane<WantedNotification>,

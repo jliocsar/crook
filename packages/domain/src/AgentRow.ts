@@ -10,6 +10,8 @@ import { ClaudeSessionId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/
 
 export type SeenMark = Pick<AgentRow, 'terminal' | 'stateChangeSeq'>
 
+export type SettledStatus = Pick<AgentRow, 'status' | 'statusChangedAt'>
+
 export const StateChangeSeq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
 export class StatusBeforeHandoff extends Schema.Class<StatusBeforeHandoff>('StatusBeforeHandoff')({
@@ -42,6 +44,9 @@ export const seenMarkOf = (row: AgentRow): SeenMark =>
     onNone: () => ({ terminal: row.terminal, stateChangeSeq: row.stateChangeSeq }),
     onSome: (before) => ({ terminal: before.terminal, stateChangeSeq: before.stateChangeSeq }),
   })
+
+export const settledStatusOf = (row: AgentRow): SettledStatus =>
+  Option.getOrElse(row.beforeHandoff, (): SettledStatus => row)
 
 export const isSameSeenMark: Equivalence.Equivalence<SeenMark> = Equivalence.Struct({
   terminal: Equivalence.String,
