@@ -8,7 +8,7 @@ import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
 
 import { relativeToFolder } from '@crook/domain/Ask'
-import type { SubagentId } from '@crook/domain/Ids'
+import type { ClaudeSessionId, SubagentId } from '@crook/domain/Ids'
 import type { Subagent } from '@crook/domain/Subagent'
 import type {
   AssistantMessage,
@@ -120,6 +120,7 @@ export class ToolCallModel extends Data.Class<{
 
 export class SubagentRun extends Data.Class<{
   readonly toolUseId: string
+  readonly session: ClaudeSessionId
   readonly subagent: Option.Option<SubagentId>
   readonly description: string
   readonly agentType: string
@@ -391,6 +392,7 @@ const runStatus = (options: {
   )
 
 const subagentRun = (
+  session: ClaudeSessionId,
   use: ToolUseBlock,
   at: Option.Option<DateTime.Utc>,
   turn: number,
@@ -417,6 +419,7 @@ const subagentRun = (
 
   return new SubagentRun({
     toolUseId: use.id,
+    session,
     subagent: Option.orElse(
       Option.map(launch, (found) => found.subagent),
       () => Option.map(roster, (subagent) => subagent.id),
@@ -452,6 +455,7 @@ const subagentRun = (
 }
 
 const toolDraft = (
+  session: ClaudeSessionId,
   use: ToolUseBlock,
   key: string,
   at: Option.Option<DateTime.Utc>,
@@ -460,7 +464,7 @@ const toolDraft = (
 ): Draft => {
   if (use.name === AGENT_TOOL) {
     return grouped(
-      ChatItem.Subagents({ key, runs: [subagentRun(use, at, turn, evidence)] }),
+      ChatItem.Subagents({ key, runs: [subagentRun(session, use, at, turn, evidence)] }),
       `subagents ${turn}`,
     )
   }
@@ -492,6 +496,7 @@ const toolDraft = (
 }
 
 const assistantDrafts = (
+  session: ClaudeSessionId,
   message: AssistantMessage,
   keyAt: (index: number) => string,
   turn: number,
@@ -513,7 +518,9 @@ const assistantDrafts = (
               ]
             : [],
         Thinking: () => [],
-        ToolUse: (use) => [toolDraft(use, keyAt(index), message.timestamp, turn, evidence)],
+        ToolUse: (use) => [
+          toolDraft(session, use, keyAt(index), message.timestamp, turn, evidence),
+        ],
         Unrecognized: () => [],
       }),
     ),
@@ -628,11 +635,12 @@ const draftsOf = (placed: Placed, evidence: Evidence): readonly Draft[] => {
 
   return TranscriptLine.$match(placed.line, {
     SessionCleared: () => [draft(ChatItem.Cleared({ key: keyAt(0) }))],
-    Message: ({ message }) =>
+    Message: ({ session, message }) =>
       Match.value(message).pipe(
         Match.tagsExhaustive({
           User: (user) => userDrafts(user, keyAt, placed.boundary),
-          Assistant: (assistant) => assistantDrafts(assistant, keyAt, placed.turn, evidence),
+          Assistant: (assistant) =>
+            assistantDrafts(session, assistant, keyAt, placed.turn, evidence),
           System: (system) => systemDrafts(system, keyAt, boundaryKey(placed.line)),
           UnrecognizedEntry: () => [],
           Malformed: (malformed) => [

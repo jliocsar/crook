@@ -6,6 +6,7 @@ import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
+import { openedFromMachine } from '@crook/web/chat/ChatOrigin'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { machineScreenAtom } from '@crook/web/atoms/Machines'
@@ -22,7 +23,6 @@ import { MachineStatus } from '@crook/web/machines/MachineHeading'
 import { agentsHeading } from '@crook/web/machines/MachineLayout'
 import type { MachineScreenModel } from '@crook/web/machines/MachineLayout'
 import { SectionLabel } from '@crook/web/machines/SectionLabel'
-import { openedFrom } from '@crook/web/navigation/Opener'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
 import { useNow } from '@crook/web/time/Now'
 
@@ -155,7 +155,7 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
     void navigate({
       to: '/m/$machine/p/$pane',
       params: { machine: agentMachine, pane: card.row.pane },
-      state: openedFrom(opener),
+      state: openedFromMachine(opener),
     })
   }
 

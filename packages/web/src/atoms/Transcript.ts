@@ -17,8 +17,10 @@ import {
   applyTranscriptEvent,
   EMPTY_TRANSCRIPT,
   failedWith,
+  isOpened,
   resumeOf,
 } from '@crook/web/chat/TranscriptState'
+import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
 export const CHAT_OPEN_TAIL = TranscriptTailBytes.make(512 * 1024)
@@ -26,17 +28,18 @@ export const CHAT_OPEN_TAIL = TranscriptTailBytes.make(512 * 1024)
 export class PaneTranscriptKey extends Data.Class<{
   readonly machine: MachineId
   readonly pane: PaneId
-  readonly whole: boolean
 }> {}
 
 export class SubagentTranscriptKey extends Data.Class<{
   readonly machine: MachineId
   readonly session: ClaudeSessionId
   readonly subagent: SubagentId
-  readonly whole: boolean
 }> {}
 
 const tailFor = (whole: boolean) => (whole ? Option.none() : Option.some(CHAT_OPEN_TAIL))
+
+const isWorthShowing = (view: TranscriptView): boolean =>
+  isOpened(view) || Option.isSome(view.failure)
 
 export const transcriptViews = (machine: MachineId, source: TranscriptSource, whole: boolean) =>
   Stream.unwrap(
@@ -60,20 +63,34 @@ export const transcriptViews = (machine: MachineId, source: TranscriptSource, wh
           Effect.forkScoped,
         )
 
-      return SubscriptionRef.changes(view)
+      return SubscriptionRef.changes(view).pipe(Stream.filter(isWorthShowing))
     }),
   )
 
+export const paneTranscriptWholeAtom = Atom.family((key: PaneTranscriptKey) =>
+  Atom.make(false).pipe(Atom.withLabel(`whole transcript of ${key.pane}`)),
+)
+
+export const subagentTranscriptWholeAtom = Atom.family((key: SubagentTranscriptKey) =>
+  Atom.make(false).pipe(Atom.withLabel(`whole transcript of ${key.subagent}`)),
+)
+
 export const paneTranscriptAtom = Atom.family((key: PaneTranscriptKey) =>
-  hubRuntime.atom(transcriptViews(key.machine, new PaneTranscript({ pane: key.pane }), key.whole)),
+  hubRuntime.atom((get) =>
+    transcriptViews(
+      key.machine,
+      new PaneTranscript({ pane: key.pane }),
+      get(paneTranscriptWholeAtom(key)),
+    ),
+  ),
 )
 
 export const subagentTranscriptAtom = Atom.family((key: SubagentTranscriptKey) =>
-  hubRuntime.atom(
+  hubRuntime.atom((get) =>
     transcriptViews(
       key.machine,
       new SubagentTranscript({ session: key.session, subagent: key.subagent }),
-      key.whole,
+      get(subagentTranscriptWholeAtom(key)),
     ),
   ),
 )
