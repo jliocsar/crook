@@ -11,16 +11,26 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import type {
+  TranscriptEvent,
+  TranscriptPosition,
+  TranscriptSource,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
+import type { CommandFailure } from '@crook/protocol/Commands'
 import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
 import type {
   ForgetMachineRefused,
+  HubCallDefected,
   HubCallFailed,
   HubCalls,
   MarkSeenRefused,
+  WatchTranscriptRefused,
 } from '@crook/web/rpc/HubConnection'
 import {
   announce,
@@ -37,6 +47,11 @@ import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
 
 type SessionFailure = HubCallFailed | HubWatchEnded
+
+export interface TranscriptResume {
+  readonly from: Option.Option<TranscriptPosition>
+  readonly tail: Option.Option<TranscriptTailBytes>
+}
 
 export const SYNC_NOTICE_DELAY = Duration.seconds(1)
 export const RECOVERED_NOTICE_DURATION = Duration.millis(1500)
@@ -61,7 +76,7 @@ const make = Effect.gen(function* () {
   const state = yield* SubscriptionRef.make(
     new HubLinkState({ status: COLD_START, herd: yield* cache.load }),
   )
-  const connected = yield* Ref.make(Option.none<HubCalls>())
+  const connected = yield* SubscriptionRef.make(Option.none<HubCalls>())
   const resyncRequests = yield* SubscriptionRef.make(0)
 
   const updateStatus = (step: (status: LinkStatus) => LinkStatus) =>
@@ -79,7 +94,7 @@ const make = Effect.gen(function* () {
 
     if (firstOfSession) {
       yield* Ref.set(liveSince, Option.some(yield* Clock.currentTimeMillis))
-      yield* Ref.set(connected, Option.some(hub))
+      yield* SubscriptionRef.set(connected, Option.some(hub))
     }
 
     const snapshot = new HerdSnapshot({ view, syncedAt: yield* DateTime.now })
@@ -104,7 +119,7 @@ const make = Effect.gen(function* () {
   ) {
     const hub = yield* connection.open
 
-    yield* Effect.addFinalizer(() => Ref.set(connected, Option.none()))
+    yield* Effect.addFinalizer(() => SubscriptionRef.set(connected, Option.none()))
     yield* hub.watchHerd.pipe(Stream.runForEach((view) => receive(view, hub, liveSince)))
 
     return yield* new HubWatchEnded()
@@ -187,11 +202,13 @@ const make = Effect.gen(function* () {
   const whenConnected = <Success, Failure>(
     call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
   ) =>
-    Effect.flatMap(Ref.get(connected), (hub): Effect.Effect<Success, Failure | HubNotConnected> =>
-      Option.match(hub, {
-        onNone: () => Effect.fail(new HubNotConnected()),
-        onSome: call,
-      }),
+    Effect.flatMap(
+      SubscriptionRef.get(connected),
+      (hub): Effect.Effect<Success, Failure | HubNotConnected> =>
+        Option.match(hub, {
+          onNone: () => Effect.fail(new HubNotConnected()),
+          onSome: call,
+        }),
     )
 
   const markSeen = Effect.fn('HubLink.markSeen')(function* (machine: MachineId, pane: PaneId) {
@@ -202,6 +219,33 @@ const make = Effect.gen(function* () {
     return yield* whenConnected((calls) => calls.forgetMachine(machine))
   })
 
+  const sendCommand = Effect.fn('HubLink.sendCommand')(function* (
+    machine: MachineId,
+    key: IdempotencyKey,
+    command: Command,
+  ) {
+    return yield* whenConnected((calls) => calls.sendCommand(machine, key, command))
+  })
+
+  const watchTranscript = (
+    machine: MachineId,
+    source: TranscriptSource,
+    resume: Effect.Effect<TranscriptResume>,
+  ): Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallDefected> =>
+    SubscriptionRef.changes(connected).pipe(
+      Stream.switchMap(
+        Option.match({
+          onNone: () => Stream.empty,
+          onSome: (calls: HubCalls) =>
+            Stream.unwrap(
+              Effect.map(resume, ({ from, tail }) =>
+                calls.watchTranscript({ machine, source, from, tail }),
+              ),
+            ).pipe(Stream.catchTag('HubConnectionLost', () => Stream.empty)),
+        }),
+      ),
+    )
+
   return HubLink.of({
     changes: Stream.merge(
       SubscriptionRef.changes(state),
@@ -210,6 +254,8 @@ const make = Effect.gen(function* () {
     resync,
     markSeen,
     forgetMachine,
+    sendCommand,
+    watchTranscript,
   })
 })
 
@@ -225,6 +271,16 @@ export class HubLink extends Context.Service<
     readonly forgetMachine: (
       machine: MachineId,
     ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed | HubNotConnected>
+    readonly sendCommand: (
+      machine: MachineId,
+      key: IdempotencyKey,
+      command: Command,
+    ) => Effect.Effect<CommandReceipt, CommandFailure | HubCallFailed | HubNotConnected>
+    readonly watchTranscript: (
+      machine: MachineId,
+      source: TranscriptSource,
+      resume: Effect.Effect<TranscriptResume>,
+    ) => Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallDefected>
   }
 >()('@crook/web/HubLink') {
   static readonly layerWithoutBrowser = Layer.effect(this, make)

@@ -1,6 +1,7 @@
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import type * as Option from 'effect/Option'
 import * as Schedule from 'effect/Schedule'
 import * as Schema from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
@@ -9,8 +10,15 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import { RpcClientError } from 'effect/rpc/RpcClientError'
 import * as Socket from 'effect/socket/Socket'
 
+import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import type {
+  TranscriptEvent,
+  TranscriptPosition,
+  TranscriptSource,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
 import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import type {
@@ -19,8 +27,10 @@ import type {
   MachineStillConnected,
   PaneNotInHerd,
 } from '@crook/protocol/ClientApi'
+import type { CommandFailure } from '@crook/protocol/Commands'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
+import type { TranscriptFailure } from '@crook/protocol/Transcripts'
 
 export type ClientApiClient = RpcClient.FromGroup<typeof ClientApi, RpcClientError>
 
@@ -28,7 +38,16 @@ export type MarkSeenRefused = MachineNotInHerd | PaneNotInHerd | HubStorageFaile
 
 export type ForgetMachineRefused = MachineNotInHerd | MachineStillConnected | HubStorageFailed
 
+export type WatchTranscriptRefused = MachineNotInHerd | PaneNotInHerd | TranscriptFailure
+
 export type HubCallFailed = HubConnectionLost | HubCallDefected
+
+export interface TranscriptRequest {
+  readonly machine: MachineId
+  readonly source: TranscriptSource
+  readonly from: Option.Option<TranscriptPosition>
+  readonly tail: Option.Option<TranscriptTailBytes>
+}
 
 export interface HubCalls {
   readonly watchHerd: Stream.Stream<HerdView, HubCallFailed>
@@ -39,6 +58,14 @@ export interface HubCalls {
   readonly forgetMachine: (
     machine: MachineId,
   ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed>
+  readonly watchTranscript: (
+    request: TranscriptRequest,
+  ) => Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallFailed>
+  readonly sendCommand: (
+    machine: MachineId,
+    key: IdempotencyKey,
+    command: Command,
+  ) => Effect.Effect<CommandReceipt, CommandFailure | HubCallFailed>
 }
 
 const SECURE_PAGE_PROTOCOL = 'https:'
@@ -85,6 +112,12 @@ const hubCall = <Success, Failure>(call: Effect.Effect<Success, Failure | RpcCli
     Effect.catchDefect((cause) => Effect.fail(callDefected(cause))),
   )
 
+const hubStream = <Success, Failure>(stream: Stream.Stream<Success, Failure | RpcClientError>) =>
+  stream.pipe(
+    Stream.catchIf(Schema.is(RpcClientError), (error) => Stream.fail(connectionLost(error))),
+    Stream.catchDefect((cause) => Stream.fail(callDefected(cause))),
+  )
+
 export const callsFrom = (client: ClientApiClient): HubCalls => ({
   watchHerd: client.WatchHerd().pipe(
     Stream.mapError(connectionLost),
@@ -92,6 +125,8 @@ export const callsFrom = (client: ClientApiClient): HubCalls => ({
   ),
   markSeen: (machine, pane) => hubCall(client.MarkSeen({ machine, pane })),
   forgetMachine: (machine) => hubCall(client.ForgetMachine({ machine })),
+  watchTranscript: (request) => hubStream(client.WatchTranscript(request)),
+  sendCommand: (machine, key, command) => hubCall(client.SendCommand({ machine, key, command })),
 })
 
 export const connectTo = (url: URL): Effect.Effect<HubCalls, never, Scope.Scope> =>

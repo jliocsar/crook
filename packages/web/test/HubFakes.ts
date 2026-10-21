@@ -9,26 +9,93 @@ import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import * as Match from 'effect/Match'
+
+import {
+  AgentStarted,
+  InputDelivered,
+  PaneClosed,
+  PaneRenamed,
+  targetPane,
+} from '@crook/domain/Command'
+import type { Command, CommandReceipt, PaneCommand } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import { PaneId, TerminalId } from '@crook/domain/Ids'
+import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
+import type { TranscriptEvent, TranscriptSource } from '@crook/domain/Transcript'
+import type { CommandFailure } from '@crook/protocol/Commands'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
-import type { ForgetMachineRefused, HubCallFailed } from '@crook/web/rpc/HubConnection'
+import type {
+  ForgetMachineRefused,
+  HubCallDefected,
+  HubCallFailed,
+  TranscriptRequest,
+  WatchTranscriptRefused,
+} from '@crook/web/rpc/HubConnection'
 import { HubLink } from '@crook/web/rpc/HubLink'
-import type { HubNotConnected } from '@crook/web/rpc/HubLink'
+import type { HubNotConnected, TranscriptResume } from '@crook/web/rpc/HubLink'
 import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
 
+export type FakeTranscript = Queue.Queue<
+  TranscriptEvent,
+  WatchTranscriptRefused | HubCallFailed | Cause.Done
+>
+
+export type LinkTranscript = Queue.Queue<
+  TranscriptEvent,
+  WatchTranscriptRefused | HubCallDefected | Cause.Done
+>
+
 export interface FakeSession {
   readonly views: Queue.Queue<HerdView, HubCallFailed | Cause.Done>
+  readonly transcripts: Queue.Queue<FakeTranscript>
+  readonly transcriptRequests: Ref.Ref<readonly TranscriptRequest[]>
+}
+
+export interface SentCommand {
+  readonly machine: MachineId
+  readonly key: IdempotencyKey
+  readonly command: Command
 }
 
 export interface SeenCall {
   readonly machine: MachineId
   readonly pane: PaneId
 }
+
+export const STARTED_PANE = PaneId.make('w1:p9')
+
+export const sourceKey = (source: TranscriptSource): string =>
+  Match.value(source).pipe(
+    Match.tagsExhaustive({
+      PaneTranscript: ({ pane }) => `pane ${pane}`,
+      SubagentTranscript: ({ session, subagent }) => `subagent ${session} ${subagent}`,
+    }),
+  )
+
+export const inputDelivered = (command: PaneCommand, stateChangeSeq = 1) =>
+  new InputDelivered({
+    pane: targetPane(command),
+    terminal: TerminalId.make(`term_${targetPane(command)}`),
+    stateChangeSeq,
+  })
+
+export const fakeReceipt = (command: Command): CommandReceipt =>
+  Match.value(command).pipe(
+    Match.tagsExhaustive({
+      Prompt: (prompt) => inputDelivered(prompt),
+      SendKeys: (keys) => inputDelivered(keys),
+      AnswerAsk: (answer) => inputDelivered(answer),
+      RenameAgent: (rename) => new PaneRenamed({ pane: rename.pane, label: rename.label }),
+      ClosePane: (close) => new PaneClosed({ pane: close.pane }),
+      StartAgent: () => new AgentStarted({ pane: STARTED_PANE }),
+      CreateWorktree: () => new AgentStarted({ pane: STARTED_PANE }),
+    }),
+  )
 
 export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   cached: Option.Option<HerdSnapshot>,
@@ -46,10 +113,12 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
 
   const open = Effect.gen(function* () {
     const views = yield* Queue.unbounded<HerdView, HubCallFailed | Cause.Done>()
+    const transcripts = yield* Queue.unbounded<FakeTranscript>()
+    const transcriptRequests = yield* Ref.make<readonly TranscriptRequest[]>([])
 
     yield* Ref.update(opened, (count) => count + 1)
     yield* Effect.addFinalizer(() => Ref.update(closed, (count) => count + 1))
-    yield* Queue.offer(sessions, { views })
+    yield* Queue.offer(sessions, { views, transcripts, transcriptRequests })
 
     return {
       watchHerd: Stream.fromQueue(views),
@@ -57,6 +126,22 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
         Ref.update(seen, (calls) => [...calls, { machine, pane }]),
       forgetMachine: (machine: MachineId) =>
         Ref.update(forgotten, (machines) => [...machines, machine]),
+      watchTranscript: (request: TranscriptRequest) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const transcript = yield* Queue.unbounded<
+              TranscriptEvent,
+              WatchTranscriptRefused | HubCallFailed | Cause.Done
+            >()
+
+            yield* Ref.update(transcriptRequests, (requests) => [...requests, request])
+            yield* Queue.offer(transcripts, transcript)
+
+            return Stream.fromQueue(transcript)
+          }),
+        ),
+      sendCommand: (_machine: MachineId, _key: IdempotencyKey, command: Command) =>
+        Effect.succeed(fakeReceipt(command)),
     }
   })
 
@@ -114,6 +199,30 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     Option.none<ForgetMachineRefused | HubCallFailed | HubNotConnected>(),
   )
   const forgetAnswers = yield* Latch.make(true)
+  const transcripts = yield* Ref.make<ReadonlyMap<string, LinkTranscript>>(new Map())
+  const resumes = yield* Ref.make<readonly TranscriptResume[]>([])
+  const sent = yield* Ref.make<readonly SentCommand[]>([])
+  const commandRefusal = yield* Ref.make(
+    Option.none<CommandFailure | HubCallFailed | HubNotConnected>(),
+  )
+  const commandAnswers = yield* Latch.make(true)
+
+  const transcriptFor = Effect.fn('transcriptFor')(function* (source: TranscriptSource) {
+    const known = (yield* Ref.get(transcripts)).get(sourceKey(source))
+
+    if (known !== undefined) {
+      return known
+    }
+
+    const created = yield* Queue.unbounded<
+      TranscriptEvent,
+      WatchTranscriptRefused | HubCallDefected | Cause.Done
+    >()
+
+    yield* Ref.update(transcripts, (current) => new Map([...current, [sourceKey(source), created]]))
+
+    return created
+  })
 
   const layer = Layer.succeed(
     HubLink,
@@ -132,10 +241,47 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
             }),
           ),
         ),
+      sendCommand: (machine, key, command) =>
+        Effect.andThen(
+          Effect.andThen(
+            Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
+            commandAnswers.await,
+          ),
+          Effect.flatMap(
+            Ref.get(commandRefusal),
+            Option.match({
+              onNone: () => Effect.succeed(fakeReceipt(command)),
+              onSome: Effect.fail,
+            }),
+          ),
+        ),
+      watchTranscript: (_machine, source, resume) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const from = yield* resume
+
+            yield* Ref.update(resumes, (current) => [...current, from])
+
+            return Stream.fromQueue(yield* transcriptFor(source))
+          }),
+        ),
     }),
   )
 
-  return { layer, state, seen, resyncs, forgotten, forgetRefusal, forgetAnswers }
+  return {
+    layer,
+    state,
+    seen,
+    resyncs,
+    forgotten,
+    forgetRefusal,
+    forgetAnswers,
+    transcriptFor,
+    resumes,
+    sent,
+    commandRefusal,
+    commandAnswers,
+  }
 })
 
 export const dropSession = (session: FakeSession, error: HubCallFailed) =>
