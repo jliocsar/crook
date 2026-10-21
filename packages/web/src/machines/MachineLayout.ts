@@ -7,6 +7,7 @@ import * as Option from 'effect/Option'
 import { needsYouCount } from '@crook/domain/AgentPriority'
 import { isBehind } from '@crook/domain/CrookVersion'
 import type { CrookVersion } from '@crook/domain/CrookVersion'
+import { findMachine } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId } from '@crook/domain/Ids'
 import type { Machine } from '@crook/domain/Machine'
@@ -66,7 +67,7 @@ export const machineDetail = (
   machine: MachineId,
 ): Option.Option<MachineDetailModel> =>
   pipe(
-    Arr.findFirst(view.machines, (herdMachine) => herdMachine.machine.id === machine),
+    findMachine(view, machine),
     Option.map((herdMachine) => ({
       card: machineCard(herdMachine, view.hubVersion),
       hubVersion: view.hubVersion,

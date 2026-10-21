@@ -232,11 +232,10 @@ const fromSocketError = (socketPath: string, method: string) => (error: Socket.S
     }),
   )
 
-const exchange = (socketPath: string, method: string, outgoing: Stream.Stream<string>) =>
+const exchange = (socketPath: string, method: string, line: string) =>
   Stream.unwrap(
     Effect.map(BunSocket.makeNet({ path: socketPath }), (socket) =>
-      outgoing.pipe(
-        Stream.map((line) => `${line}\n`),
+      Stream.concat(Stream.make(`${line}\n`), Stream.never).pipe(
         Stream.pipeThroughChannel(Socket.toChannelString(socket)),
         Stream.splitLines,
       ),
@@ -254,11 +253,7 @@ const makeLive = (socketPath: string) => {
     params: Params,
   ) {
     const line = yield* encodeRequest(method, params)
-    const reply = yield* exchange(
-      socketPath,
-      method.name,
-      Stream.concat(Stream.make(line), Stream.never),
-    ).pipe(Stream.runHead)
+    const reply = yield* exchange(socketPath, method.name, line).pipe(Stream.runHead)
     const replyLine = yield* Option.match(reply, {
       onNone: () => Effect.fail(new HerdrConnectionClosed({ method: method.name })),
       onSome: Effect.succeed,
@@ -294,11 +289,7 @@ const makeLive = (socketPath: string) => {
       return Queue.offer(events, decoded)
     }
 
-    yield* exchange(
-      socketPath,
-      SUBSCRIBE_METHOD,
-      Stream.concat(Stream.make(line), Stream.never),
-    ).pipe(
+    yield* exchange(socketPath, SUBSCRIBE_METHOD, line).pipe(
       Stream.mapEffect((text) =>
         Schema.decodeEffect(SubscriptionLine)(text).pipe(
           Effect.mapError(

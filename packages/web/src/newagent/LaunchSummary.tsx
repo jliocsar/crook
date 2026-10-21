@@ -18,6 +18,7 @@ function StartsOnText({ on }: { on: Option.Option<StartsOn> }) {
             , in a new worktree on <span className="font-mono text-xs">{name}</span>
           </>
         ),
+        UnnamedWorktree: () => <>, in a new worktree once its branch has a name</>,
         Branch: ({ branch: name }) => (
           <>
             , on <span className="font-mono text-xs">{name}</span>

@@ -107,6 +107,15 @@ describe('typedFolder', () => {
     )
     expect(typedFolder(view, LAPTOP, '~/Projects/crook')).toEqual(Option.none())
   })
+
+  it('drops trailing separators, so a typed path still finds its place', () => {
+    const view = herd([laptop])
+
+    expect(typedFolder(view, LAPTOP, `${CROOK}//`)).toEqual(
+      Option.some(FolderChoice.Recent({ place: crook })),
+    )
+    expect(typedFolder(view, LAPTOP, '/')).toEqual(Option.some(FolderChoice.Typed({ folder: '/' })))
+  })
 })
 
 describe('branch names', () => {
@@ -115,6 +124,11 @@ describe('branch names', () => {
       'fix-the-herd-s-banner-again',
     )
     expect(slugBranch('')).toBe('')
+  })
+
+  it('never suggests a name that starts with a dash or repeats one', () => {
+    expect(slugBranch('- Fix the banner')).toBe('fix-the-banner')
+    expect(slugBranch('fix -- the -banner-')).toBe('fix-the-banner')
   })
 
   it('turns typed spaces into dashes and refuses an empty name', () => {
@@ -132,20 +146,23 @@ describe('branch names', () => {
 
 describe('launchCommand', () => {
   it('starts Claude in the folder, with the trimmed task or none', () => {
-    expect(launchCommand(inCrook, '  Fix the banner \n')).toEqual(
+    expect(launchCommand(inCrook, '', '  Fix the banner \n')).toEqual(
       Option.some(
         new StartAgent({ kind: 'claude', folder: CROOK, task: Option.some('Fix the banner') }),
       ),
     )
-    expect(launchCommand(inCrook, '   ')).toEqual(
+    expect(launchCommand(inCrook, '', '   ')).toEqual(
       Option.some(new StartAgent({ kind: 'claude', folder: CROOK, task: Option.none() })),
     )
   })
 
   it('makes a worktree when one is asked for in a checkout', () => {
-    const worktree = { ...inCrook, branch: BranchChoice.Worktree({ branch: 'fix banner' }) }
+    const worktree = {
+      ...inCrook,
+      branch: BranchChoice.Worktree({ typed: Option.some('fix banner') }),
+    }
 
-    expect(launchCommand(worktree, 'Fix the banner')).toEqual(
+    expect(launchCommand(worktree, 'Fix the banner', 'Fix the banner')).toEqual(
       Option.some(
         new CreateWorktree({
           kind: 'claude',
@@ -156,12 +173,34 @@ describe('launchCommand', () => {
       ),
     )
     expect(
-      launchCommand({ ...worktree, branch: BranchChoice.Worktree({ branch: ' ' }) }, ''),
+      launchCommand(
+        { ...worktree, branch: BranchChoice.Worktree({ typed: Option.some(' ') }) },
+        'Fix the banner',
+        '',
+      ),
     ).toEqual(Option.none())
   })
 
+  it('names an untyped worktree branch after the draft, even when the task is not sent', () => {
+    const suggested = { ...inCrook, branch: BranchChoice.Worktree({ typed: Option.none() }) }
+
+    expect(launchCommand(suggested, 'Fix the banner', '')).toEqual(
+      Option.some(
+        new CreateWorktree({
+          kind: 'claude',
+          folder: CROOK,
+          branch: 'fix-the-banner',
+          task: Option.none(),
+        }),
+      ),
+    )
+    expect(launchCommand(suggested, '', '')).toEqual(Option.none())
+  })
+
   it('starts nothing without a folder', () => {
-    expect(launchCommand({ ...inCrook, folder: Option.none() }, 'Fix it')).toEqual(Option.none())
+    expect(launchCommand({ ...inCrook, folder: Option.none() }, '', 'Fix it')).toEqual(
+      Option.none(),
+    )
   })
 })
 
@@ -169,7 +208,7 @@ describe('newAgentBody', () => {
   it('says where Claude starts', () => {
     const view = herd([laptop])
 
-    expect(newAgentBody(Option.some(view), Option.some(inCrook))).toEqual(
+    expect(newAgentBody(Option.some(view), Option.some(inCrook), '')).toEqual(
       NewAgentBody.Starts({
         folder: CROOK,
         folderName: 'crook',
@@ -180,7 +219,11 @@ describe('newAgentBody', () => {
     expect(
       newAgentBody(
         Option.some(view),
-        Option.some({ ...inCrook, branch: BranchChoice.Worktree({ branch: 'fix-x' }) }),
+        Option.some({
+          ...inCrook,
+          branch: BranchChoice.Worktree({ typed: Option.some('fix-x') }),
+        }),
+        '',
       ),
     ).toEqual(
       NewAgentBody.Starts({
@@ -192,19 +235,48 @@ describe('newAgentBody', () => {
     )
   })
 
+  it('asks for a branch name while the new worktree has none', () => {
+    const unnamed = { ...inCrook, branch: BranchChoice.Worktree({ typed: Option.none() }) }
+    const view = Option.some(herd([laptop]))
+
+    expect(newAgentBody(view, Option.some(unnamed), '')).toEqual(
+      NewAgentBody.Starts({
+        folder: CROOK,
+        folderName: 'crook',
+        machine: 'laptop',
+        on: Option.some(StartsOn.UnnamedWorktree()),
+      }),
+    )
+    expect(newAgentBody(view, Option.some(unnamed), 'Fix the banner')).toEqual(
+      NewAgentBody.Starts({
+        folder: CROOK,
+        folderName: 'crook',
+        machine: 'laptop',
+        on: Option.some(StartsOn.NewWorktree({ branch: 'fix-the-banner' })),
+      }),
+    )
+  })
+
   it('covers the empty cases', () => {
-    expect(newAgentBody(Option.none(), Option.none())).toEqual(NewAgentBody.Loading())
-    expect(newAgentBody(Option.some(herd([])), Option.none())).toEqual(NewAgentBody.NoMachines())
-    expect(newAgentBody(Option.some(herd([offlineDesk])), Option.none())).toEqual(
+    expect(newAgentBody(Option.none(), Option.none(), '')).toEqual(NewAgentBody.Loading())
+    expect(newAgentBody(Option.some(herd([])), Option.none(), '')).toEqual(
+      NewAgentBody.NoMachines(),
+    )
+    expect(newAgentBody(Option.some(herd([offlineDesk])), Option.none(), '')).toEqual(
       NewAgentBody.AllOffline(),
     )
     expect(
-      newAgentBody(Option.some(herd([offlineDesk])), Option.some(selectionOn(herd([desk]), DESK))),
+      newAgentBody(
+        Option.some(herd([offlineDesk])),
+        Option.some(selectionOn(herd([desk]), DESK)),
+        '',
+      ),
     ).toEqual(NewAgentBody.MachineOffline({ machine: 'desk' }))
     expect(
       newAgentBody(
         Option.some(herd([machine(LAPTOP, [])])),
         Option.some({ ...inCrook, folder: Option.none() }),
+        '',
       ),
     ).toEqual(NewAgentBody.PickFolder({ machine: 'laptop' }))
   })
@@ -222,7 +294,7 @@ describe('newAgentChips', () => {
       folder: Option.some(FolderChoice.Typed({ folder: '/srv/hub' })),
     }
 
-    expect(newAgentChips(view, inCrook)).toEqual(
+    expect(newAgentChips(view, inCrook, '')).toEqual(
       Option.some({
         machine: 'laptop',
         folder: Option.some('crook'),
@@ -230,7 +302,11 @@ describe('newAgentChips', () => {
       }),
     )
     expect(
-      newAgentChips(view, { ...inCrook, branch: BranchChoice.Worktree({ branch: 'fix x' }) }),
+      newAgentChips(
+        view,
+        { ...inCrook, branch: BranchChoice.Worktree({ typed: Option.some('fix x') }) },
+        '',
+      ),
     ).toEqual(
       Option.some({
         machine: 'laptop',
@@ -238,10 +314,20 @@ describe('newAgentChips', () => {
         branch: Option.some({ label: 'new: fix-x', isNew: true }),
       }),
     )
-    expect(Option.map(newAgentChips(view, inScratch), (chips) => chips.branch)).toEqual(
+    expect(
+      Option.map(
+        newAgentChips(
+          view,
+          { ...inCrook, branch: BranchChoice.Worktree({ typed: Option.none() }) },
+          '',
+        ),
+        (chips) => chips.branch,
+      ),
+    ).toEqual(Option.some(Option.some({ label: 'new: name the branch', isNew: true })))
+    expect(Option.map(newAgentChips(view, inScratch, ''), (chips) => chips.branch)).toEqual(
       Option.some(Option.none()),
     )
-    expect(Option.map(newAgentChips(view, typed), (chips) => chips.branch)).toEqual(
+    expect(Option.map(newAgentChips(view, typed, ''), (chips) => chips.branch)).toEqual(
       Option.some(Option.some({ label: 'Checkout', isNew: false })),
     )
   })

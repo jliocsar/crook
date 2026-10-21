@@ -13,7 +13,7 @@ import {
   WorktreeBranch,
 } from '@crook/domain/Command'
 import type { AgentStarted, LaunchCommand } from '@crook/domain/Command'
-import { mostRecentPlace } from '@crook/domain/HerdView'
+import { findMachine, isOnline, mostRecentPlace } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
@@ -27,7 +27,7 @@ export type FolderChoice = Data.TaggedEnum<{
 
 export type BranchChoice = Data.TaggedEnum<{
   Checkout: Record<never, never>
-  Worktree: { readonly branch: string }
+  Worktree: { readonly typed: Option.Option<string> }
 }>
 
 export interface Selection {
@@ -38,6 +38,7 @@ export interface Selection {
 
 export type StartsOn = Data.TaggedEnum<{
   NewWorktree: { readonly branch: string }
+  UnnamedWorktree: Record<never, never>
   Branch: { readonly branch: string }
 }>
 
@@ -81,19 +82,17 @@ const PATH_SEPARATOR = '/'
 const BRANCH_WORD_SEPARATOR = '-'
 const DETACHED_HEAD_LABEL = 'detached HEAD'
 const UNKNOWN_CHECKOUT_LABEL = 'Checkout'
-const TRAILING_SEPARATORS = /\/+$/u
-const WHITESPACE_RUN = /\s+/u
+const UNNAMED_BRANCH_LABEL = 'new: name the branch'
+const TRAILING_SEPARATORS = /(?<=[^/])\/+$/u
 const WHITESPACE_RUNS = /\s+/gu
+const SLUG_SEPARATOR_RUN = /[\s-]+/u
 const NOT_IN_A_SLUG = /[^a-z0-9\s-]/gu
-
-const isOnline = (entry: HerdMachine) => entry.machine.connection === 'online'
 
 const isFolderPath = Schema.is(FolderPath)
 
 const isWorktreeBranch = Schema.is(WorktreeBranch)
 
-export const findMachine = (view: HerdView, machine: MachineId): Option.Option<HerdMachine> =>
-  Arr.findFirst(view.machines, (entry) => entry.machine.id === machine)
+const withoutTrailingSeparators = (path: string): string => path.replace(TRAILING_SEPARATORS, '')
 
 export const placesOn = (view: HerdView, machine: MachineId): readonly Place[] =>
   pipe(
@@ -113,7 +112,7 @@ export const folderOf = (choice: FolderChoice): string =>
 
 export const folderName = (folder: string): string =>
   pipe(
-    folder.replace(TRAILING_SEPARATORS, ''),
+    withoutTrailingSeparators(folder),
     Str.split(PATH_SEPARATOR),
     Arr.last,
     Option.filter(Str.isNonEmpty),
@@ -144,7 +143,7 @@ export const slugBranch = (task: string): string =>
     Option.getOrElse(() => ''),
     Str.toLowerCase,
     (line) => line.replace(NOT_IN_A_SLUG, ' '),
-    Str.split(WHITESPACE_RUN),
+    Str.split(SLUG_SEPARATOR_RUN),
     Arr.filter(Str.isNonEmpty),
     Arr.join(BRANCH_WORD_SEPARATOR),
   )
@@ -208,7 +207,7 @@ export const typedFolder = (
   typed: string,
 ): Option.Option<FolderChoice> =>
   pipe(
-    Option.liftPredicate(typed.trim(), isFolderPath),
+    Option.liftPredicate(withoutTrailingSeparators(typed.trim()), isFolderPath),
     Option.map((folder) => refreshedFolder(view, machine, FolderChoice.Typed({ folder }))),
   )
 
@@ -218,20 +217,31 @@ export const isOnlineMachine = (view: HerdView, machine: MachineId): boolean =>
 const taskOf = (task: string): Option.Option<string> =>
   Option.liftPredicate(task.trim(), Str.isNonEmpty)
 
-const worktreeBranchOf = (selection: Selection, choice: FolderChoice): Option.Option<string> =>
-  hasCheckout(choice)
-    ? BranchChoice.$match(selection.branch, {
-        Checkout: () => Option.none(),
-        Worktree: ({ branch }) => Option.some(branch),
-      })
-    : Option.none()
+const namedBranch = (branch: string): Option.Option<string> =>
+  Option.liftPredicate(cleanBranch(branch), Str.isNonEmpty)
 
-export const launchCommand = (selection: Selection, task: string): Option.Option<LaunchCommand> =>
+export const worktreeBranch = (selection: Selection, draft: string): Option.Option<string> =>
+  pipe(
+    selection.folder,
+    Option.filter(hasCheckout),
+    Option.flatMap(() =>
+      BranchChoice.$match(selection.branch, {
+        Checkout: () => Option.none(),
+        Worktree: ({ typed }) => Option.some(Option.getOrElse(typed, () => slugBranch(draft))),
+      }),
+    ),
+  )
+
+export const launchCommand = (
+  selection: Selection,
+  draft: string,
+  task: string,
+): Option.Option<LaunchCommand> =>
   Option.flatMap(selection.folder, (choice) =>
     pipe(
       Option.liftPredicate(folderOf(choice), isFolderPath),
       Option.flatMap((folder) =>
-        Option.match(worktreeBranchOf(selection, choice), {
+        Option.match(worktreeBranch(selection, draft), {
           onNone: () =>
             Option.some<LaunchCommand>(
               new StartAgent({ kind: AGENT_KIND, folder, task: taskOf(task) }),
@@ -247,8 +257,12 @@ export const launchCommand = (selection: Selection, task: string): Option.Option
     ),
   )
 
-const startsOn = (selection: Selection, choice: FolderChoice): Option.Option<StartsOn> =>
-  Option.match(worktreeBranchOf(selection, choice), {
+const startsOn = (
+  selection: Selection,
+  choice: FolderChoice,
+  draft: string,
+): Option.Option<StartsOn> =>
+  Option.match(worktreeBranch(selection, draft), {
     onNone: () =>
       FolderChoice.$match(choice, {
         Recent: ({ place }) =>
@@ -259,10 +273,16 @@ const startsOn = (selection: Selection, choice: FolderChoice): Option.Option<Sta
           ),
         Typed: () => Option.none(),
       }),
-    onSome: (typed) => Option.some(StartsOn.NewWorktree({ branch: cleanBranch(typed) })),
+    onSome: (typed) =>
+      Option.some(
+        Option.match(namedBranch(typed), {
+          onNone: () => StartsOn.UnnamedWorktree(),
+          onSome: (branch) => StartsOn.NewWorktree({ branch }),
+        }),
+      ),
   })
 
-const bodyOn = (entry: HerdMachine, selection: Selection): NewAgentBody => {
+const bodyOn = (entry: HerdMachine, selection: Selection, draft: string): NewAgentBody => {
   const machine = entry.machine.label
 
   if (!isOnline(entry)) {
@@ -276,7 +296,7 @@ const bodyOn = (entry: HerdMachine, selection: Selection): NewAgentBody => {
         folder: folderOf(choice),
         folderName: folderName(folderOf(choice)),
         machine,
-        on: startsOn(selection, choice),
+        on: startsOn(selection, choice, draft),
       }),
   })
 }
@@ -284,6 +304,7 @@ const bodyOn = (entry: HerdMachine, selection: Selection): NewAgentBody => {
 export const newAgentBody = (
   view: Option.Option<HerdView>,
   selection: Option.Option<Selection>,
+  draft: string,
 ): NewAgentBody =>
   Option.match(view, {
     onNone: () => NewAgentBody.Loading(),
@@ -291,7 +312,7 @@ export const newAgentBody = (
       pipe(
         selection,
         Option.flatMap((chosen) =>
-          Option.map(findMachine(herd, chosen.machine), (entry) => bodyOn(entry, chosen)),
+          Option.map(findMachine(herd, chosen.machine), (entry) => bodyOn(entry, chosen, draft)),
         ),
         Option.getOrElse(() =>
           Arr.isReadonlyArrayEmpty(herd.machines)
@@ -301,20 +322,36 @@ export const newAgentBody = (
       ),
   })
 
-const branchChip = (selection: Selection, choice: FolderChoice): Option.Option<BranchChip> =>
-  Option.liftPredicate(
-    Option.match(worktreeBranchOf(selection, choice), {
-      onNone: () => ({ label: checkoutLabel(choice), isNew: false }),
-      onSome: (typed) => ({ label: `new: ${cleanBranch(typed)}`, isNew: true }),
-    }),
-    () => hasCheckout(choice),
+const branchChip = (
+  selection: Selection,
+  choice: FolderChoice,
+  draft: string,
+): Option.Option<BranchChip> =>
+  pipe(
+    Option.liftPredicate(choice, hasCheckout),
+    Option.map((): BranchChip =>
+      Option.match(worktreeBranch(selection, draft), {
+        onNone: () => ({ label: checkoutLabel(choice), isNew: false }),
+        onSome: (typed) => ({
+          label: Option.match(namedBranch(typed), {
+            onNone: () => UNNAMED_BRANCH_LABEL,
+            onSome: (branch) => `new: ${branch}`,
+          }),
+          isNew: true,
+        }),
+      }),
+    ),
   )
 
-export const newAgentChips = (view: HerdView, selection: Selection): Option.Option<NewAgentChips> =>
+export const newAgentChips = (
+  view: HerdView,
+  selection: Selection,
+  draft: string,
+): Option.Option<NewAgentChips> =>
   Option.map(findMachine(view, selection.machine), (entry) => ({
     machine: entry.machine.label,
     folder: Option.map(selection.folder, (choice) => folderName(folderOf(choice))),
-    branch: Option.flatMap(selection.folder, (choice) => branchChip(selection, choice)),
+    branch: Option.flatMap(selection.folder, (choice) => branchChip(selection, choice, draft)),
   }))
 
 export const startedAgent = (

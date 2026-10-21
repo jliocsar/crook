@@ -61,7 +61,7 @@ export function TaskComposer({
           value={task}
           disabled={disabled}
           placeholder="What should Claude work on?"
-          className="placeholder:text-muted-foreground block max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-base leading-6 outline-none disabled:opacity-60"
+          className="placeholder:text-muted-foreground block max-h-[calc(6lh_+_1.25rem)] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-base leading-6 outline-none disabled:opacity-60"
           onChange={(event) => {
             onTaskChange(event.target.value)
           }}

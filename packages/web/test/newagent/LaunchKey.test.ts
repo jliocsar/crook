@@ -13,7 +13,7 @@ import {
 } from '@crook/protocol/Commands'
 import { LaunchAttempt } from '@crook/web/atoms/Launch'
 import type { LaunchFailure } from '@crook/web/atoms/Launch'
-import { mintIdempotencyKey, retryKey } from '@crook/web/newagent/LaunchKey'
+import { retryKey } from '@crook/web/newagent/LaunchKey'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
 
 import { DESK, LAPTOP } from '../HerdFixtures.ts'
@@ -73,14 +73,5 @@ describe('retryKey', () => {
     expect(retryKey(sent, timedOut, DESK, startIn(CROOK))).toEqual(Option.none())
     expect(retryKey(Option.none(), timedOut, LAPTOP, startIn(CROOK))).toEqual(Option.none())
     expect(retryKey(sent, Option.none(), LAPTOP, startIn(CROOK))).toEqual(Option.none())
-  })
-})
-
-describe('mintIdempotencyKey', () => {
-  it('mints a fresh 128-bit hex key each time', () => {
-    const first = mintIdempotencyKey()
-
-    expect(first).toMatch(/^[0-9a-f]{32}$/u)
-    expect(mintIdempotencyKey()).not.toBe(first)
   })
 })

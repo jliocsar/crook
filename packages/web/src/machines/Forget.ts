@@ -1,12 +1,11 @@
 import { useAtom } from '@effect/atom-react/Hooks'
-import * as Cause from 'effect/Cause'
-import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import type { MachineConnection } from '@crook/domain/Machine'
+import { failureMessage } from '@crook/web/atoms/ActionFailure'
 import { forgetMachineAtom } from '@crook/web/atoms/Machines'
 
 export interface ForgetClearsWhen {
@@ -32,12 +31,7 @@ export const useForgetMachine = (
   return {
     pending: AsyncResult.isWaiting(result),
     forgotten: Option.exists(settled, AsyncResult.isSuccess),
-    failure: pipe(
-      settled,
-      Option.flatMap(AsyncResult.cause),
-      Option.flatMap(Cause.findErrorOption),
-      Option.map((error) => error.message),
-    ),
+    failure: Option.flatMap(settled, failureMessage),
     forget: () => {
       setRequested(true)
       void request()

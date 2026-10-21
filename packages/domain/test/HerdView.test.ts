@@ -6,7 +6,13 @@ import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
-import { HerdMachine, HerdView, mostRecentPlace } from '@crook/domain/HerdView'
+import {
+  findMachine,
+  HerdMachine,
+  HerdView,
+  isOnline,
+  mostRecentPlace,
+} from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
   ClaudeSessionId,
@@ -121,7 +127,7 @@ describe('HerdView', () => {
   })
 })
 
-describe('mostRecentPlace', () => {
+describe('machines in the herd', () => {
   const placeAt = (folder: string, usedAt: string) =>
     new Place({ folder, checkout: Option.none(), usedAt: DateTime.makeUnsafe(usedAt) })
 
@@ -168,6 +174,19 @@ describe('mostRecentPlace', () => {
     expect(mostRecentPlace(view)).toEqual(
       Option.some({ machine: MachineId.make('desktop'), place: latest }),
     )
+  })
+
+  it('finds a machine by id and says whether it is online', () => {
+    const offline = machineWith(MachineId.make('work-vm'), 'offline', [])
+    const view = new HerdView({
+      hubVersion: CrookVersion.make('0.1.0'),
+      machines: [machineWith(laptop, 'online', []), offline],
+    })
+
+    expect(Option.map(findMachine(view, laptop), isOnline)).toEqual(Option.some(true))
+    expect(findMachine(view, MachineId.make('work-vm'))).toEqual(Option.some(offline))
+    expect(isOnline(offline)).toBe(false)
+    expect(findMachine(view, MachineId.make('desktop'))).toEqual(Option.none())
   })
 
   it('has no default when no online machine reported a folder', () => {

@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 
 import { needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
 import { type AgentRow, pendingAskSummary } from '@crook/domain/AgentRow'
+import { findMachine } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
@@ -113,7 +114,7 @@ export const findAgent = (
   pane: PaneId,
 ): Option.Option<{ readonly herdMachine: HerdMachine; readonly row: AgentRow }> =>
   pipe(
-    Arr.findFirst(view.machines, (herdMachine) => herdMachine.machine.id === machine),
+    findMachine(view, machine),
     Option.flatMap((herdMachine) =>
       pipe(
         Arr.findFirst(agentsIn(herdMachine.state), (row) => row.pane === pane),

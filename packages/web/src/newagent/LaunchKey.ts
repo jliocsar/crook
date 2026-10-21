@@ -4,23 +4,35 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 
 import type { LaunchCommand } from '@crook/domain/Command'
-import { IdempotencyKey } from '@crook/domain/Ids'
-import type { MachineId } from '@crook/domain/Ids'
+import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import type { LaunchAttempt, LaunchFailure } from '@crook/web/atoms/Launch'
-
-const KEY_BYTES = 16
-const HEX_RADIX = 16
-const HEX_DIGITS_PER_BYTE = 2
 
 const remembersOutcome = (failure: LaunchFailure): boolean =>
   Match.value(failure).pipe(
-    Match.tags({
+    Match.tagsExhaustive({
       AgentNotStarted: () => true,
       TaskNotDelivered: () => true,
       CommandDeliveryUnknown: () => true,
       LaunchAnsweredWithoutPane: () => true,
+      FolderNotFound: () => false,
+      FolderUnreadable: () => false,
+      FolderNotCheckout: () => false,
+      HerdrRefusedCommand: () => false,
+      HerdrUnavailable: () => false,
+      HerdrAnswerUnreadable: () => false,
+      PaneNotAgent: () => false,
+      PaneNotCreatedByCrook: () => false,
+      AskNotPending: () => false,
+      AskDialogUnreadable: () => false,
+      AskOptionUnavailable: () => false,
+      QuestionnaireUnsupported: () => false,
+      DeclineMessageUndelivered: () => false,
+      MachineOffline: () => false,
+      CommandTimedOut: () => false,
+      HubConnectionLost: () => false,
+      HubCallDefected: () => false,
+      HubNotConnected: () => false,
     }),
-    Match.orElse(() => false),
   )
 
 export const retryKey = (
@@ -38,11 +50,4 @@ export const retryKey = (
         Option.exists(failure, (reason) => !remembersOutcome(reason)),
     ),
     Option.map((attempt) => attempt.key),
-  )
-
-export const mintIdempotencyKey = (): IdempotencyKey =>
-  IdempotencyKey.make(
-    Array.from(crypto.getRandomValues(new Uint8Array(KEY_BYTES)), (byte) =>
-      byte.toString(HEX_RADIX).padStart(HEX_DIGITS_PER_BYTE, '0'),
-    ).join(''),
   )

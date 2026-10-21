@@ -15,7 +15,9 @@ import { MachineId, PaneId } from '@crook/domain/Ids'
 import { Checkout, Place } from '@crook/domain/Place'
 import { CommandTimedOut, FolderNotFound, TaskNotDelivered } from '@crook/protocol/Commands'
 
-import { liveWith, renderApp } from '../AppRender.tsx'
+import { COLD_START } from '@crook/web/rpc/HubLinkState'
+
+import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
 import { click, eventually, findByRole } from '../Dom.ts'
 import { agent, DESK, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
@@ -164,7 +166,85 @@ describe('NewAgentScreen', () => {
     }),
   )
 
-  it.effect('moves to the most recent folder of the machine picked, never an offline one', () =>
+  it.effect('names the new worktree after the task until a name is typed', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/new', liveWith(herd([laptop])))
+
+      yield* click(yield* findByRole('button', 'Branch, main'))
+      yield* click(sheet().getByRole('button', { name: /New worktree/u }))
+
+      expect(sheet().getByRole('textbox', { name: 'Branch name' })).toHaveProperty('value', '')
+      expect(sheet().getByRole('button', { name: 'Done' })).toHaveProperty('disabled', true)
+
+      yield* Effect.promise(() => userEvent.keyboard('{Escape}'))
+      yield* eventually(() => {
+        expect(screen.queryByRole('dialog')).toBeNull()
+      })
+
+      expect(screen.getByRole('button', { name: 'Branch, new: name the branch' })).toBeDefined()
+      expect(screen.getByText(/in a new worktree once its branch has a name/u)).toBeDefined()
+      expect(withoutTask()).toHaveProperty('disabled', true)
+
+      yield* typeTask(TASK)
+
+      expect(screen.getByRole('button', { name: 'Branch, new: fix-the-banner' })).toBeDefined()
+
+      yield* Ref.set(link.commandAnswer, started)
+      yield* click(withoutTask())
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent).map((sent) => sent.command)).toEqual([
+          new CreateWorktree({
+            kind: 'claude',
+            folder: CROOK,
+            branch: 'fix-the-banner',
+            task: Option.none(),
+          }),
+        ])
+      })
+    }),
+  )
+
+  it.effect('keeps following the most recent place until the herd is live', () =>
+    Effect.gen(function* () {
+      const deskNow = machine(DESK, [], { places: [place(DOTFILES, 1, 'master')] })
+      const laptopNow = machine(LAPTOP, running, { places: [place(CROOK, 0, 'main')] })
+      const deskMoved = machine(DESK, [], { places: [place(DOTFILES, 1, 'trunk')] })
+      const { link } = yield* renderApp(
+        '/new',
+        stateWith(COLD_START, Option.some(herd([laptop, desk]))),
+      )
+
+      expect(yield* Effect.promise(() => screen.findByText('Claude starts in crook'))).toBeDefined()
+
+      yield* SubscriptionRef.set(link.state, liveWith(herd([laptop, deskNow])))
+      yield* eventually(() => {
+        expect(screen.getByText('Claude starts in dotfiles')).toBeDefined()
+      })
+      yield* SubscriptionRef.set(link.state, liveWith(herd([laptopNow, deskMoved])))
+      yield* eventually(() => {
+        expect(screen.getByRole('button', { name: 'Branch, trunk' })).toBeDefined()
+      })
+
+      expect(screen.getByText('Claude starts in dotfiles')).toBeDefined()
+    }),
+  )
+
+  it.effect('offers the chat while the new pane has not reached the herd', () =>
+    Effect.gen(function* () {
+      const { router, link } = yield* renderApp('/new', liveWith(herd([laptop])))
+
+      yield* Ref.set(link.commandAnswer, started)
+      yield* typeTask(TASK)
+      yield* click(startButton())
+      yield* Effect.promise(() => screen.findByText('Opening the chat…'))
+      yield* click(screen.getByRole('button', { name: 'Open the chat' }))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap9')
+      })
+    }),
+  )
+
+  it.effect('disables offline machines in the machine sheet and marks the selected one', () =>
     Effect.gen(function* () {
       const server = machine(MachineId.make('server'), [], {
         connection: 'offline',

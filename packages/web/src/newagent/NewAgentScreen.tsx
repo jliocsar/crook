@@ -1,24 +1,17 @@
-import { useAtom, useAtomValue } from '@effect/atom-react/Hooks'
-import { useNavigate } from '@tanstack/react-router'
-import * as Cause from 'effect/Cause'
-import { pipe } from 'effect/Function'
+import { useAtomValue } from '@effect/atom-react/Hooks'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
 import type { HerdView } from '@crook/domain/HerdView'
-import type { PaneId } from '@crook/domain/Ids'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdAtom } from '@crook/web/atoms/Herd'
-import { LaunchAttempt, launchAtom } from '@crook/web/atoms/Launch'
-import type { LaunchFailure } from '@crook/web/atoms/Launch'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { Sheet } from '@crook/web/components/Sheet'
 import { Button } from '@crook/web/components/ui/button'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
-import { mintIdempotencyKey, retryKey } from '@crook/web/newagent/LaunchKey'
+import { useLaunch } from '@crook/web/newagent/Launch'
 import { LaunchSummary } from '@crook/web/newagent/LaunchSummary'
 import {
   BranchChoice,
@@ -32,18 +25,15 @@ import {
   newAgentChips,
   placesOn,
   selectionOn,
-  slugBranch,
-  startedAgent,
   typedFolder,
+  worktreeBranch,
 } from '@crook/web/newagent/NewAgentLayout'
-import type { Selection, StartedAgent } from '@crook/web/newagent/NewAgentLayout'
+import type { Selection } from '@crook/web/newagent/NewAgentLayout'
 import { BranchChoices, FolderChoices, MachineChoices } from '@crook/web/newagent/Pickers'
 import { PlaceChips } from '@crook/web/newagent/PlaceChips'
 import type { Picker } from '@crook/web/newagent/PlaceChips'
 import { TaskComposer } from '@crook/web/newagent/TaskComposer'
 import { useNow } from '@crook/web/time/Now'
-
-type LaunchResult = AsyncResult.AsyncResult<unknown, LaunchFailure>
 
 const PICKER_TITLE = {
   machine: 'Machine',
@@ -52,36 +42,6 @@ const PICKER_TITLE = {
 } satisfies Record<Picker, string>
 
 const STATUS_SPINNER_SIZE = 14
-
-const settledCause = (result: LaunchResult) =>
-  pipe(
-    Option.liftPredicate(result, (current) => !AsyncResult.isWaiting(current)),
-    Option.flatMap(AsyncResult.cause),
-    Option.filter((cause) => !Cause.hasInterruptsOnly(cause)),
-  )
-
-const failureOf = (result: LaunchResult): Option.Option<LaunchFailure> =>
-  Option.flatMap(settledCause(result), Cause.findErrorOption)
-
-const failureMessage = (result: LaunchResult): Option.Option<string> =>
-  Option.map(settledCause(result), (cause) =>
-    Option.match(Cause.findErrorOption(cause), {
-      onNone: () => Cause.pretty(cause),
-      onSome: (error) => error.message,
-    }),
-  )
-
-const paneLeftRunning = (failure: LaunchFailure): Option.Option<PaneId> =>
-  Match.value(failure).pipe(
-    Match.tag('TaskNotDelivered', (refusal) => Option.some(refusal.pane)),
-    Match.orElse(() => Option.none()),
-  )
-
-const worktreeOf = (selection: Selection): Option.Option<string> =>
-  BranchChoice.$match(selection.branch, {
-    Checkout: () => Option.none(),
-    Worktree: ({ branch }) => Option.some(branch),
-  })
 
 function LaunchStatus({ text }: { text: string }) {
   return (
@@ -92,6 +52,14 @@ function LaunchStatus({ text }: { text: string }) {
       <Spinner size={STATUS_SPINNER_SIZE} />
       {text}
     </p>
+  )
+}
+
+function OpenChatButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Button variant="secondary" size="touch" onClick={onOpen}>
+      Open the chat
+    </Button>
   )
 }
 
@@ -109,11 +77,7 @@ function LaunchFailureNotice({
       </p>
       {Option.match(onOpenChat, {
         onNone: () => null,
-        onSome: (open) => (
-          <Button variant="secondary" size="touch" onClick={open}>
-            Open the chat
-          </Button>
-        ),
+        onSome: (open) => <OpenChatButton onOpen={open} />,
       })}
     </div>
   )
@@ -135,7 +99,7 @@ function PickerContent({
   onChange: (next: Selection, close: boolean) => void
 }) {
   const now = useNow()
-  const worktree = worktreeOf(selection)
+  const worktree = worktreeBranch(selection, task)
 
   return Match.value(picker).pipe(
     Match.when('machine', () => (
@@ -187,17 +151,21 @@ function PickerContent({
             }}
             onWorktree={() => {
               onChange(
-                {
-                  ...selection,
-                  branch: BranchChoice.Worktree({
-                    branch: Option.getOrElse(worktree, () => slugBranch(task)),
+                BranchChoice.$match(selection.branch, {
+                  Checkout: () => ({
+                    ...selection,
+                    branch: BranchChoice.Worktree({ typed: Option.none() }),
                   }),
-                },
+                  Worktree: () => selection,
+                }),
                 false,
               )
             }}
             onWorktreeChange={(branch) => {
-              onChange({ ...selection, branch: BranchChoice.Worktree({ branch }) }, false)
+              onChange(
+                { ...selection, branch: BranchChoice.Worktree({ typed: Option.some(branch) }) },
+                false,
+              )
             }}
             onDone={onClose}
           />
@@ -208,84 +176,43 @@ function PickerContent({
   )
 }
 
-function useOpenChat() {
-  const navigate = useNavigate()
-
-  return ({ machine, pane }: StartedAgent) => {
-    void navigate({
-      to: '/m/$machine/p/$pane',
-      params: { machine, pane },
-      replace: true,
-      state: ({ openerKey }) => (openerKey === undefined ? {} : { openerKey }),
-    })
-  }
-}
-
 function NewAgentFlow() {
   const connection = useAtomValue(connectionAtom)
   const herd = useAtomValue(herdAtom)
-  const [result, launch] = useAtom(launchAtom)
-  const openChat = useOpenChat()
   const [chosen, setChosen] = React.useState(Option.none<Selection>())
   const [task, setTask] = React.useState('')
   const [picker, setPicker] = React.useState<Picker>('machine')
   const [pickerOpen, setPickerOpen] = React.useState(false)
-  const [attempt, setAttempt] = React.useState(Option.none<LaunchAttempt>())
-  const opened = React.useRef(false)
 
   const view = Option.map(herd, (snapshot) => snapshot.view)
+  const launch = useLaunch(view)
   const selection = Option.flatMap(view, (herdView) => currentSelection(herdView, chosen))
   const shown = Option.all({ herdView: view, current: selection })
-  const pending = AsyncResult.isWaiting(result)
-  const receipt = AsyncResult.isSuccess(result) ? Option.some(result.value) : Option.none()
-  const started = pipe(
-    Option.all({ herdView: view, sent: attempt, answer: receipt }),
-    Option.flatMap(({ herdView, sent, answer }) => startedAgent(herdView, sent.machine, answer)),
-  )
-  const busy = pending || Option.isSome(receipt)
+  const busy = launch.pending || Option.isSome(launch.opening)
   const online = Option.exists(shown, ({ herdView, current }) =>
     isOnlineMachine(herdView, current.machine),
   )
   const commandFor = (text: string) =>
     Option.flatMap(selection, (current) =>
-      Option.map(launchCommand(current, text), (command) => ({
+      Option.map(launchCommand(current, task, text), (command) => ({
         machine: current.machine,
         command,
       })),
     )
   const ready = connection.controlsEnabled && online && !busy && Option.isSome(commandFor(''))
-  const taskLeftUndelivered = pipe(
-    failureOf(result),
-    Option.flatMap(paneLeftRunning),
-    Option.flatMap((pane) =>
-      Option.map(attempt, (sent): StartedAgent => ({ machine: sent.machine, pane })),
-    ),
-  )
 
   React.useEffect(() => {
-    if (Option.isNone(chosen) && Option.isSome(selection)) {
+    if (Option.isNone(chosen) && Option.isSome(selection) && !connection.stale) {
       setChosen(selection)
     }
-  }, [chosen, selection])
-
-  React.useEffect(() => {
-    if (Option.isSome(started) && !opened.current) {
-      opened.current = true
-      openChat(started.value)
-    }
-  }, [started, openChat])
+  }, [chosen, selection, connection.stale])
 
   const start = (text: string) => {
-    Option.map(commandFor(text), ({ machine, command }) => {
-      const key = Option.getOrElse(
-        retryKey(attempt, failureOf(result), machine, command),
-        mintIdempotencyKey,
-      )
-      const next = new LaunchAttempt({ key, machine, command })
+    const next = commandFor(text)
 
-      setAttempt(Option.some(next))
-      launch(next)
-    })
+    if (Option.isSome(next)) {
+      launch.start(next.value.machine, next.value.command)
+    }
   }
 
   return (
@@ -294,7 +221,7 @@ function NewAgentFlow() {
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="no-scrollbar flex h-full flex-col justify-center overflow-y-auto px-4 pb-4">
           <Dimmed dimmed={connection.stale}>
-            <LaunchSummary body={newAgentBody(view, selection)} />
+            <LaunchSummary body={newAgentBody(view, selection, task)} />
           </Dimmed>
         </div>
       </div>
@@ -303,7 +230,7 @@ function NewAgentFlow() {
         className="border-border bg-card relative z-30 grid grid-cols-1 gap-2 border-t px-4 pt-3 pb-[max(0.75rem,var(--safe-bottom))]"
       >
         {Option.match(
-          Option.flatMap(shown, ({ herdView, current }) => newAgentChips(herdView, current)),
+          Option.flatMap(shown, ({ herdView, current }) => newAgentChips(herdView, current, task)),
           {
             onNone: () => null,
             onSome: (chips) => (
@@ -319,24 +246,27 @@ function NewAgentFlow() {
             ),
           },
         )}
-        {pending ? <LaunchStatus text="Starting Claude…" /> : null}
-        {Option.isSome(receipt) ? <LaunchStatus text="Opening the chat…" /> : null}
-        {Option.match(failureMessage(result), {
+        {launch.pending ? <LaunchStatus text="Starting Claude…" /> : null}
+        {Option.match(launch.opening, {
+          onNone: () => null,
+          onSome: (open) => (
+            <div className="grid gap-1">
+              <LaunchStatus text="Opening the chat…" />
+              <OpenChatButton onOpen={open} />
+            </div>
+          ),
+        })}
+        {Option.match(launch.failure, {
           onNone: () => null,
           onSome: (message) => (
-            <LaunchFailureNotice
-              message={message}
-              onOpenChat={Option.map(taskLeftUndelivered, (agent) => () => {
-                openChat(agent)
-              })}
-            />
+            <LaunchFailureNotice message={message} onOpenChat={launch.openChatAfterFailure} />
           ),
         })}
         <TaskComposer
           task={task}
           disabled={busy}
           canSend={ready}
-          sending={pending}
+          sending={launch.pending}
           onTaskChange={setTask}
           onSend={() => {
             start(task)

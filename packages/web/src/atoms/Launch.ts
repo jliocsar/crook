@@ -1,9 +1,9 @@
 import * as Data from 'effect/Data'
 import * as Effect from 'effect/Effect'
-import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 
-import type { AgentStarted, LaunchCommand } from '@crook/domain/Command'
+import { AgentStarted } from '@crook/domain/Command'
+import type { LaunchCommand } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import { hubRuntime } from '@crook/web/atoms/Hub'
@@ -32,14 +32,14 @@ export class LaunchAnsweredWithoutPane extends Schema.TaggedError<LaunchAnswered
   }
 }
 
+const isAgentStarted = Schema.is(AgentStarted)
+
 export const launchAtom = hubRuntime.fn((attempt: LaunchAttempt) =>
   Effect.gen(function* () {
     const link = yield* HubLink
-    const receipt = yield* link.sendCommand(attempt.machine, attempt.key, attempt.command)
 
-    return yield* Match.value(receipt).pipe(
-      Match.tag('AgentStarted', (started): Effect.Effect<AgentStarted> => Effect.succeed(started)),
-      Match.orElse(() => Effect.fail(new LaunchAnsweredWithoutPane())),
-    )
+    return yield* link
+      .sendCommand(attempt.machine, attempt.key, attempt.command)
+      .pipe(Effect.filterOrFail(isAgentStarted, () => new LaunchAnsweredWithoutPane()))
   }),
 )

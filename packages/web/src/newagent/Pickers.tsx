@@ -4,7 +4,9 @@ import * as Option from 'effect/Option'
 import { Check, GitBranch } from 'lucide-react'
 import * as React from 'react'
 
+import { isOnline } from '@crook/domain/HerdView'
 import type { HerdMachine } from '@crook/domain/HerdView'
+import type { MachineId } from '@crook/domain/Ids'
 import type { Place } from '@crook/domain/Place'
 import { MachineBadge } from '@crook/web/components/MachineBadge'
 import { Button } from '@crook/web/components/ui/button'
@@ -36,7 +38,7 @@ function Trailing({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function ChoiceRow({
+function ChoiceRow({
   title,
   detail,
   mono = false,
@@ -91,7 +93,7 @@ export function MachineChoices({
 }: {
   machines: readonly HerdMachine[]
   now: DateTime.Utc
-  selected: string
+  selected: MachineId
   onPick: (machine: HerdMachine) => void
 }) {
   return (
@@ -101,7 +103,7 @@ export function MachineChoices({
           key={entry.machine.id}
           title={entry.machine.label}
           selected={entry.machine.id === selected}
-          disabled={entry.machine.connection !== 'online'}
+          disabled={!isOnline(entry)}
           trailing={<MachineBadge machine={entry.machine} now={now} plain />}
           onClick={() => {
             onPick(entry)
