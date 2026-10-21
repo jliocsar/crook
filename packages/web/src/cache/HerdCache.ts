@@ -75,8 +75,6 @@ const saveTo = (store: HerdStore) =>
       .pipe(Effect.catchTag('HerdCacheUnavailable', (error) => Effect.logWarning(error.message)))
   })
 
-const cacheOver = (store: HerdStore) => ({ load: loadFrom(store), save: saveTo(store) })
-
 export class HerdCache extends Context.Service<
   HerdCache,
   {
@@ -84,7 +82,8 @@ export class HerdCache extends Context.Service<
     readonly save: (snapshot: HerdSnapshot) => Effect.Effect<void>
   }
 >()('@crook/web/HerdCache') {
-  static readonly layer = Layer.succeed(this, cacheOver(indexedDbStore))
+  static readonly layerOver = (store: HerdStore) =>
+    Layer.succeed(this, HerdCache.of({ load: loadFrom(store), save: saveTo(store) }))
 
-  static readonly layerOver = (store: HerdStore) => Layer.succeed(this, cacheOver(store))
+  static readonly layer = HerdCache.layerOver(indexedDbStore)
 }

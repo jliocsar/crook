@@ -7,6 +7,7 @@ import { needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriorit
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
+import { isOffline } from '@crook/domain/Machine'
 import type { Machine } from '@crook/domain/Machine'
 import { agentsIn } from '@crook/domain/MachineState'
 
@@ -48,7 +49,7 @@ const labelOf = <Id extends string>(
     Option.getOrElse(() => id),
   )
 
-export const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
+const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
   const loud = needsYou(herdMachine)
   const workspaces = Option.match(herdMachine.state, {
     onNone: () => [],
@@ -64,7 +65,7 @@ export const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
   }))
 }
 
-const isOffline = (herdMachine: HerdMachine) => herdMachine.machine.connection === 'offline'
+const machineOffline = (herdMachine: HerdMachine) => isOffline(herdMachine.machine)
 
 const hasNoAgents = (herdMachine: HerdMachine) => agentsIn(herdMachine.state).length === 0
 
@@ -73,7 +74,7 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
     return Option.some('noMachines')
   }
 
-  if (Arr.every(view.machines, isOffline)) {
+  if (Arr.every(view.machines, machineOffline)) {
     return Option.some('allOffline')
   }
 
@@ -81,7 +82,7 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
 }
 
 const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
-  if (isOffline(herdMachine)) {
+  if (machineOffline(herdMachine)) {
     return SectionBody.Offline()
   }
 

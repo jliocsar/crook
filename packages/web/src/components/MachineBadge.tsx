@@ -1,5 +1,6 @@
 import type * as DateTime from 'effect/DateTime'
 
+import { isOffline } from '@crook/domain/Machine'
 import type { Machine, MachineConnection } from '@crook/domain/Machine'
 import { Swap } from '@crook/web/components/Swap'
 import { Spinner } from '@crook/web/components/ui/spinner'
@@ -27,7 +28,7 @@ export function MachineBadge({
   return (
     <StatusPill tone={MACHINE_CONNECTION_TONE[machine.connection]} plain={plain}>
       <Swap id={machine.connection}>
-        {machine.connection === 'offline'
+        {isOffline(machine)
           ? `offline · ${shortElapsed(now, machine.lastSeenAt)} ago`
           : machine.connection}
         {machine.connection === 'reconnecting' ? (

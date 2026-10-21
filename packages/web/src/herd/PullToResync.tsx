@@ -9,12 +9,12 @@ import { SPRING } from '@crook/web/motion/Springs'
 import { translate } from '@crook/web/motion/TransformString'
 import { TAB_SCROLLER_SELECTOR } from '@crook/web/navigation/TabScreen'
 
-export const PULL_ARMS_AT = 48
-export const PULL_RESTS_AT = 40
-export const PULL_STOPS_AT = 96
-export const PULL_RESISTANCE = 0.5
+const PULL_ARMS_AT = 48
+const PULL_RESTS_AT = 40
+const PULL_STOPS_AT = 96
+const PULL_RESISTANCE = 0.5
 
-export const pullOffset = (dragged: number): number =>
+const pullOffset = (dragged: number): number =>
   dragged <= 0 ? 0 : Math.min(PULL_STOPS_AT, dragged * PULL_RESISTANCE)
 
 const firstTouchY = (event: React.TouchEvent): Option.Option<number> =>

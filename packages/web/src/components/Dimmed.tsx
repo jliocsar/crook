@@ -3,7 +3,7 @@ import type * as React from 'react'
 
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 
-export const STALE_OPACITY = 0.6
+const STALE_OPACITY = 0.6
 
 export function Dimmed({
   dimmed,

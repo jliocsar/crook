@@ -23,7 +23,7 @@ import { click, eventually, findByRole } from '../Dom.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 
 const makeRouter = (initialPath: string) => {
-  const root = createRootRoute({ component: Shell })
+  const root = createRootRoute({ component: () => <Shell needsYou={0} /> })
   const agents = createRoute({ getParentRoute: () => root, id: 'agents', component: Agents })
   const agentsIndex = createRoute({ getParentRoute: () => agents, path: '/' })
   const detail = createRoute({
