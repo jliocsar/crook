@@ -32,8 +32,7 @@ export type TailError =
   | TranscriptOffsetMidLine
   | TranscriptShrank
 
-const NEWLINE = 0x0a
-
+export const NEWLINE = 0x0a
 export const TAIL_READ_SIZE = 64 * 1024
 
 export class TranscriptUnreadable extends Schema.TaggedError<TranscriptUnreadable>()(
@@ -150,15 +149,22 @@ const make = Effect.gen(function* () {
   const unreadableFile = (file: TranscriptFile) => (cause: PlatformError) =>
     new TranscriptUnreadable({ path: file.path, cause })
 
+  const openWithSize = Effect.fn('TranscriptTail.openWithSize')(function* (file: TranscriptFile) {
+    const unreadable = unreadableFile(file)
+    const handle = yield* fileSystem
+      .open(file.path, { flag: 'r' })
+      .pipe(Effect.mapError(unreadable))
+    const info = yield* handle.stat.pipe(Effect.mapError(unreadable))
+
+    return { handle, size: Number(info.size) }
+  })
+
   const open = Effect.fn('TranscriptTail.open')(function* (
     file: TranscriptFile,
     from: TranscriptOffset,
   ) {
     const unreadable = unreadableFile(file)
-    const handle = yield* fileSystem
-      .open(file.path, { flag: 'r' })
-      .pipe(Effect.mapError(unreadable))
-    const sizeAtOpen = Number((yield* handle.stat.pipe(Effect.mapError(unreadable))).size)
+    const { handle, size: sizeAtOpen } = yield* openWithSize(file)
 
     if (from > sizeAtOpen) {
       return yield* new TranscriptOffsetBeyondEnd({
@@ -250,15 +256,11 @@ const make = Effect.gen(function* () {
     file: TranscriptFile,
     bytes: TranscriptTailBytes,
   ) {
-    const unreadable = unreadableFile(file)
-    const handle = yield* fileSystem
-      .open(file.path, { flag: 'r' })
-      .pipe(Effect.mapError(unreadable))
-    const size = Number((yield* handle.stat.pipe(Effect.mapError(unreadable))).size)
+    const { handle, size } = yield* openWithSize(file)
     const start =
       size <= bytes
         ? 0
-        : yield* lineStartBefore(handle, size - bytes).pipe(Effect.mapError(unreadable))
+        : yield* lineStartBefore(handle, size - bytes).pipe(Effect.mapError(unreadableFile(file)))
 
     return TranscriptOffset.make(start)
   }, Effect.scoped)

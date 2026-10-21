@@ -9,6 +9,7 @@ import * as Stream from 'effect/Stream'
 
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import {
+  NEWLINE,
   TranscriptOffsetBeyondEnd,
   TranscriptOffsetMidLine,
   TAIL_READ_SIZE,
@@ -86,7 +87,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
     Effect.gen(function* () {
       const whole = yield* fixtureBytes('plain-turn.jsonl')
       const expected = messagesIn(yield* drained(fixtureFile('plain-turn.jsonl')))
-      const lastNewlineInPage = whole.subarray(0, PAGE).lastIndexOf(0x0a) + 1
+      const lastNewlineInPage = whole.subarray(0, PAGE).lastIndexOf(NEWLINE) + 1
       const file = yield* scratchFile(whole.subarray(0, PAGE))
       const chunks = yield* following(file, START)
       const first = yield* takeUntilOffset(chunks, lastNewlineInPage)
@@ -124,7 +125,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
           (chunk, index) => index === 0 || received[index - 1]?.nextOffset === chunk.offset,
         ),
       ).toBe(true)
-      expect(Arr.every(received, (chunk) => appended[chunk.nextOffset - 1] === 0x0a)).toBe(true)
+      expect(Arr.every(received, (chunk) => appended[chunk.nextOffset - 1] === NEWLINE)).toBe(true)
     }),
   )
 
@@ -163,8 +164,8 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
 
       expect(start).toBeGreaterThan(0)
       expect(start).toBeLessThanOrEqual(whole.length - bytes)
-      expect(whole[start - 1]).toBe(0x0a)
-      expect(whole.subarray(start, whole.length - bytes).includes(0x0a)).toBe(false)
+      expect(whole[start - 1]).toBe(NEWLINE)
+      expect(whole.subarray(start, whole.length - bytes).includes(NEWLINE)).toBe(false)
       expect(messagesIn(resumed)).toEqual(expected)
       expect(everything).toBe(START)
     }),

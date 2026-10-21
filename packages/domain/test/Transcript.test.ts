@@ -140,6 +140,21 @@ describe('remainderAfter', () => {
     )
   })
 
+  it('keeps the part of an Omitted note the position has not passed yet', () => {
+    expect(
+      remainderAfter(Option.some(at(FIRST, 500)), omittedUpTo(FIRST, TranscriptOffset.make(800))),
+    ).toEqual(
+      Option.some(
+        new TranscriptChunk({
+          session: FIRST,
+          offset: TranscriptOffset.make(500),
+          nextOffset: TranscriptOffset.make(800),
+          messages: [new OmittedLines({ offset: TranscriptOffset.make(500), byteLength: 300 })],
+        }),
+      ),
+    )
+  })
+
   it('opens only a session the position is not in, and lists subagents only of its own', () => {
     const position = Option.some(at(FIRST, 100))
     const subagents = new SubagentsChanged({ session: FIRST, subagents: [] })

@@ -89,6 +89,25 @@ export const positionAfter = (
 const inSession = (position: Option.Option<TranscriptPosition>, session: ClaudeSessionId) =>
   Option.exists(position, (current) => current.session === session)
 
+const messageAfter = (
+  message: TranscriptMessage,
+  from: TranscriptOffset,
+): Option.Option<TranscriptMessage> =>
+  Match.value(message).pipe(
+    Match.tag('Omitted', (omitted) =>
+      omitted.offset >= from
+        ? Option.some(omitted)
+        : pipe(
+            Option.liftPredicate(
+              omitted.offset + omitted.byteLength - from,
+              (byteLength) => byteLength > 0,
+            ),
+            Option.map((byteLength) => new OmittedLines({ offset: from, byteLength })),
+          ),
+    ),
+    Match.orElse((other) => Option.liftPredicate(other, ({ offset }) => offset >= from)),
+  )
+
 const chunkRemainder = (
   position: Option.Option<TranscriptPosition>,
   chunk: TranscriptChunk,
@@ -108,7 +127,11 @@ const chunkRemainder = (
             session: chunk.session,
             offset: current.offset,
             nextOffset: chunk.nextOffset,
-            messages: Arr.filter(chunk.messages, (message) => message.offset >= current.offset),
+            messages: pipe(
+              chunk.messages,
+              Arr.map((message) => messageAfter(message, current.offset)),
+              Arr.getSomes,
+            ),
           }),
     ),
   )

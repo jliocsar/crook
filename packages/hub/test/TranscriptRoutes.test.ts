@@ -13,7 +13,12 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { ClaudeSessionId, MachineId, PaneId, TranscriptOffset } from '@crook/domain/Ids'
-import { PaneTranscript, type TranscriptEvent, TranscriptPosition } from '@crook/domain/Transcript'
+import {
+  PaneTranscript,
+  type TranscriptEvent,
+  TranscriptPosition,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -113,6 +118,7 @@ const startAgent = Effect.fn('startAgent')(function* (
 const watchOnPhone = Effect.fn('watchOnPhone')(function* (
   machine: MachineId,
   from: Option.Option<TranscriptPosition>,
+  tail: Option.Option<TranscriptTailBytes>,
 ) {
   const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
   const events = yield* Queue.unbounded<string>()
@@ -122,7 +128,7 @@ const watchOnPhone = Effect.fn('watchOnPhone')(function* (
       machine,
       source: new PaneTranscript({ pane: PANE }),
       from,
-      tail: Option.none(),
+      tail,
     })
     .pipe(
       Stream.runForEach((event) => Queue.offer(events, describeEvent(event))),
@@ -154,7 +160,7 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       const state = yield* SubscriptionRef.make(stateOn(machine, 1, FIRST_SESSION))
 
       yield* startAgent(machine, root, state)
-      const events = yield* watchOnPhone(machine, Option.none())
+      const events = yield* watchOnPhone(machine, Option.none(), Option.none())
 
       expect(yield* takeAll(events, 2)).toEqual([
         `opened ${FIRST_SESSION}`,
@@ -172,6 +178,32 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       expect(yield* takeAll(events, 2)).toEqual([
         `opened ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,
+      ])
+    }),
+  )
+
+  live.effect('opens a phone watch near the end of the file when it asks for a tail', () =>
+    Effect.gen(function* () {
+      const machine = MachineId.make('transcript-tail')
+      const root = yield* claudeRoot()
+      const skipped = userLine('skipped')
+      const recent = userLine('recent')
+
+      yield* append(root, FIRST_SESSION, skipped + recent)
+
+      const state = yield* SubscriptionRef.make(stateOn(machine, 1, FIRST_SESSION))
+
+      yield* startAgent(machine, root, state)
+      const events = yield* watchOnPhone(
+        machine,
+        Option.none(),
+        Option.some(TranscriptTailBytes.make(bytesOf(recent))),
+      )
+
+      expect(yield* takeAll(events, 3)).toEqual([
+        `opened ${FIRST_SESSION}`,
+        `chunk ${FIRST_SESSION} 0-${bytesOf(skipped)} 1`,
+        `chunk ${FIRST_SESSION} ${bytesOf(skipped)}-${bytesOf(skipped + recent)} 1`,
       ])
     }),
   )
@@ -198,6 +230,7 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
             offset: TranscriptOffset.make(bytesOf(seen)),
           }),
         ),
+        Option.none(),
       )
 
       expect(yield* takeAll(events, 3)).toEqual([
@@ -219,7 +252,7 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
 
       const state = yield* SubscriptionRef.make(stateOn(machine, 1, FIRST_SESSION))
       const agent = yield* startAgent(machine, root, state)
-      const events = yield* watchOnPhone(machine, Option.none())
+      const events = yield* watchOnPhone(machine, Option.none(), Option.none())
 
       expect(yield* takeAll(events, 2)).toEqual([
         `opened ${FIRST_SESSION}`,

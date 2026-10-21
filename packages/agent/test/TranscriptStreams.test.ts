@@ -345,6 +345,95 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
       }),
     )
 
+    it.effect('opens the session a /clear makes near its end when the watch has a tail', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const before = userLine('before')
+        const skipped = userLine('skipped')
+        const recent = userLine('recent')
+
+        yield* append(transcriptPath(root, FIRST_SESSION), before)
+        yield* append(transcriptPath(root, CLEARED_SESSION), skipped + recent)
+
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(
+            new PaneTranscript({ pane: PANE }),
+            Option.none(),
+            Option.some(TranscriptTailBytes.make(bytesOf(recent))),
+          ),
+        )
+
+        expect(yield* takeAll(events, 2)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
+        ])
+
+        yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
+
+        expect(yield* takeAll(events, 3)).toEqual([
+          `opened ${CLEARED_SESSION}`,
+          `chunk ${CLEARED_SESSION} 0-${bytesOf(skipped)} 1`,
+          `chunk ${CLEARED_SESSION} ${bytesOf(skipped)}-${bytesOf(skipped + recent)} 1`,
+        ])
+      }),
+    )
+
+    it.effect('follows a subagent transcript from near its end when the watch has a tail', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const root = yield* claudeRoot()
+        const skipped = userLine('skipped')
+        const recent = userLine('recent')
+        const subagentFile = `${subagentsPath(root, FIRST_SESSION)}/agent-${SUBAGENT}.jsonl`
+
+        yield* append(transcriptPath(root, FIRST_SESSION), userLine('spawn'))
+        yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
+        yield* append(subagentFile, skipped + recent)
+
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(
+            new SubagentTranscript({ session: FIRST_SESSION, subagent: SUBAGENT }),
+            Option.none(),
+            Option.some(TranscriptTailBytes.make(bytesOf(recent))),
+          ),
+        )
+
+        expect(yield* takeAll(events, 3)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} 0-${bytesOf(skipped)} 1`,
+          `chunk ${FIRST_SESSION} ${bytesOf(skipped)}-${bytesOf(skipped + recent)} 1`,
+        ])
+      }),
+    )
+
+    it.effect('reads a file no larger than the tail whole, with nothing left out', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const whole = userLine('first') + userLine('second')
+
+        yield* append(transcriptPath(root, FIRST_SESSION), whole)
+
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(
+            new PaneTranscript({ pane: PANE }),
+            Option.none(),
+            Option.some(TranscriptTailBytes.make(bytesOf(whole))),
+          ),
+        )
+
+        expect(yield* takeAll(events, 2)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} 0-${bytesOf(whole)} 2`,
+        ])
+      }),
+    )
+
     it.effect('finishes the session a resume names before opening the one cleared into', () =>
       Effect.gen(function* () {
         const root = yield* claudeRoot()
