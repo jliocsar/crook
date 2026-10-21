@@ -290,6 +290,7 @@ The Agents tab: every agent on every machine, one section per machine.
   off while the hub can't act, since crook is already retrying.
 - **Live updates** re-sort each list; a card moves to its new place on the reorder spring.
 - **The needs-you badge** on the Agents tab counts the same agents as the sections, and ignores
+  offline machines, whose agents are hidden. It is hidden on first load.
 
 ## Machines
 
@@ -302,7 +303,8 @@ that adds one.
   a version the hub never heard. A chevron on the right. Tap pushes the machine.
 - **An offline card** reads "Swipe to forget, or wait for it to reconnect" in place of its counts,
   and swiping it reveals Forget (D15), on the swipe row's knobs. Forget is disabled while the hub
-  can't act. A refused forget shows the hub's sentence above the list.
+  can't act and while that machine's forget is in flight. A refused forget shows the hub's
+  sentence beneath its card, until the machine's connection or the link's state changes.
 - **The list dims** when stale, shows skeleton sections on a first load, and shows "No machines
   yet" with Add a machine when the hub knows none.
 - **The machine screen** is pushed, "Back to machines". Its header is the label over the badge and
@@ -314,8 +316,12 @@ that adds one.
     connection change), crook agent (a warn pill reading "0.0.9, hub has 0.1.0" when behind),
     Herdr ("unknown" when the hub never heard) and Machine id.
   - **Hold to forget** shows only while the machine is offline, with "It comes back on its own if
-    its agent connects again" beneath. Once forgotten, the screen goes back to the list; a refusal
-    shows beneath the button.
+    its agent connects again" beneath. It is disabled while the forget is in flight, and reads
+    "Forgetting…" once held, since the hub has not answered yet. Once forgotten, the screen goes
+    back to the list; a refusal shows beneath the button.
+  - A machine that leaves the herd while its screen is open, forgotten elsewhere, keeps its label
+    as the title and reads "crook doesn't know this machine. A forgotten machine comes back once
+    its agent connects again."
 - **Add a machine** is a bottom sheet opened by `+` (and by the Empty State on both tabs): three
   numbered steps, each with a Code Block, then "It shows up under Machines as soon as it
   connects."

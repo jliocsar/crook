@@ -454,6 +454,13 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   `index.css` spells: `180ms` comes back as `.18s` and `cubic-bezier(0.22, …)` as
   `cubic-bezier(.22, …)` (measured). The dev server and the tests serve the source, so only
   `vite preview` shows it; a parser for a token accepts every form CSS allows.
+- A screen never hands a callback to a hub call it starts. The call can outlive the screen, and
+  the callback then acts on a screen that is gone: a forget's "go back" that lands after the user
+  already went back pops a second history entry. The screen reads the call's result atom and acts
+  on it from an effect, which runs only while it is mounted. A setter from `useAtom` or
+  `useAtomSet` in `promiseExit` mode keeps the call running after the screen unmounts, because
+  it holds a subscription until the result settles (read in its source, and a test that leaves
+  mid-forget sees the forget land).
 - Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
   with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
   renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
