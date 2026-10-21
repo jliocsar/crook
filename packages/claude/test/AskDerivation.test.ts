@@ -146,6 +146,26 @@ layer(platform)('the permission dialog on the screen', (it) => {
     }),
   )
 
+  it.effect('joins an option the terminal wrapped back into one label', () =>
+    Effect.gen(function* () {
+      const screen = (yield* spikeScreen('12-native-bash-t20')).replace(
+        ' from this project',
+        ' from this\n     project',
+      )
+      const options = Match.value(deriveAsk(noEvidence(screen))).pipe(
+        Match.tag('PermissionAsk', (permission) =>
+          permission.options.map((option) => [option.label, option.choice]),
+        ),
+        Match.orElse(() => []),
+      )
+
+      expect(options).toContainEqual([
+        'Yes, and always allow access to /home/jliocsar/Projects/crook/tmp/spikes/scratch-80/sandbox from this project',
+        'always',
+      ])
+    }),
+  )
+
   it.effect('reads an Edit and a Write dialog with the file they name', () =>
     Effect.gen(function* () {
       const edit = Option.getOrThrow(parseDialog(yield* spikeScreen('20-edit-blocked')))
