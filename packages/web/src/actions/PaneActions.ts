@@ -1,4 +1,3 @@
-import * as Cause from 'effect/Cause'
 import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
@@ -15,11 +14,10 @@ import type { HerdMachine } from '@crook/domain/HerdView'
 import type { PaneId } from '@crook/domain/Ids'
 import { panePresence } from '@crook/domain/MachineState'
 import type { PanePresence } from '@crook/domain/MachineState'
-import type { CommandFailure } from '@crook/protocol/Commands'
+import { failureMessage, remembersOutcome, settledError } from '@crook/web/atoms/ActionFailure'
+import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
 import type { HubCallFailed, SetPinnedRefused } from '@crook/web/rpc/HubConnection'
 import type { HubNotConnected } from '@crook/web/rpc/HubLink'
-
-export type SendCommandFailure = CommandFailure | HubCallFailed | HubNotConnected
 
 export type SetPinnedFailure = SetPinnedRefused | HubCallFailed | HubNotConnected
 
@@ -44,9 +42,6 @@ export type SheetOutcome = Data.TaggedEnum<{
 export const PANE_CLOSED_NOTICE = 'Pane closed'
 export const CLAUDE_EXITED_NOTICE = 'Claude exited'
 
-export const UNEXPLAINED_FAILURE =
-  'The action stopped without saying why, so crook cannot tell whether it reached the machine. Look at the agent, then try again.'
-
 export const ActionProgress = Data.taggedEnum<ActionProgress>()
 
 export const SheetOutcome = Data.taggedEnum<SheetOutcome>()
@@ -65,41 +60,11 @@ const SENDING = ActionProgress.Sending()
 const SENT = ActionProgress.Sent()
 const DONE = ActionProgress.Done()
 
-const keepsKey = (error: SendCommandFailure | SetPinnedFailure): boolean =>
-  Match.value(error).pipe(
-    Match.tags({
-      CommandTimedOut: () => true,
-      HubConnectionLost: () => true,
-      HubCallDefected: () => true,
-    }),
-    Match.orElse(() => false),
-  )
-
 const asksConfirmation = (error: SendCommandFailure | SetPinnedFailure): boolean =>
   Match.value(error).pipe(
     Match.tag('PaneNotCreatedByCrook', () => true),
     Match.orElse(() => false),
   )
-
-const keepsKeyAfter = <Failure extends SendCommandFailure | SetPinnedFailure>(
-  cause: Cause.Cause<Failure>,
-): boolean =>
-  Option.match(Cause.findErrorOption(cause), {
-    onNone: () => !Cause.hasInterruptsOnly(cause),
-    onSome: keepsKey,
-  })
-
-const failed = <Failure extends SendCommandFailure | SetPinnedFailure>(
-  cause: Cause.Cause<Failure>,
-): ActionProgress =>
-  Option.match(Cause.findErrorOption(cause), {
-    onNone: () =>
-      Cause.hasInterruptsOnly(cause)
-        ? IDLE
-        : ActionProgress.Failed({ message: UNEXPLAINED_FAILURE, asksConfirmation: false }),
-    onSome: (error) =>
-      ActionProgress.Failed({ message: error.message, asksConfirmation: asksConfirmation(error) }),
-  })
 
 const progressOf = <Success, Failure extends SendCommandFailure | SetPinnedFailure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
@@ -109,10 +74,19 @@ const progressOf = <Success, Failure extends SendCommandFailure | SetPinnedFailu
     return SENDING
   }
 
-  return AsyncResult.match(result, {
-    onInitial: () => IDLE,
-    onFailure: ({ cause }) => failed(cause),
-    onSuccess: ({ value }) => (shown(value) ? DONE : SENT),
+  return Option.match(failureMessage(result), {
+    onSome: (message) =>
+      ActionProgress.Failed({
+        message,
+        asksConfirmation: Option.exists(settledError(result), asksConfirmation),
+      }),
+    onNone: () => {
+      if (!AsyncResult.isSuccess(result)) {
+        return IDLE
+      }
+
+      return shown(result.value) ? DONE : SENT
+    },
   })
 }
 
@@ -170,8 +144,7 @@ export const closeNeedsConfirmation = (
 
 export const isRetriableFailure = <Success, Failure extends SendCommandFailure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
-): boolean =>
-  !AsyncResult.isWaiting(result) && AsyncResult.isFailure(result) && keepsKeyAfter(result.cause)
+): boolean => Option.exists(settledError(result), (error) => !remembersOutcome(error))
 
 export const isCommandUnderway = <Success, Failure extends SendCommandFailure>(
   result: AsyncResult.AsyncResult<Success, Failure>,

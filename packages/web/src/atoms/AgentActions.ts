@@ -21,7 +21,8 @@ import {
   pinProgress,
   sheetOutcome,
 } from '@crook/web/actions/PaneActions'
-import type { SendCommandFailure, SheetOutcome } from '@crook/web/actions/PaneActions'
+import type { SheetOutcome } from '@crook/web/actions/PaneActions'
+import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import { cardFor } from '@crook/web/herd/HerdLayout'

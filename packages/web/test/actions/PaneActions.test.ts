@@ -13,6 +13,7 @@ import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import {
   CommandDeliveryUnknown,
   CommandTimedOut,
+  MachineOffline,
   PaneNotCreatedByCrook,
 } from '@crook/protocol/Commands'
 import {
@@ -31,9 +32,10 @@ import {
   pinProgress,
   SheetOutcome,
   sheetOutcome,
-  UNEXPLAINED_FAILURE,
 } from '@crook/web/actions/PaneActions'
-import type { SendCommandFailure, SetPinnedFailure } from '@crook/web/actions/PaneActions'
+import type { SetPinnedFailure } from '@crook/web/actions/PaneActions'
+import { UNEXPECTED_FAILURE_MESSAGE } from '@crook/web/atoms/ActionFailure'
+import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
 
 import { agent, LAPTOP, machine } from '../HerdFixtures.ts'
@@ -91,21 +93,22 @@ describe('commandProgress', () => {
     ).toEqual(ActionProgress.Idle())
   })
 
-  it('retries under the same key only after a failure that may have reached the machine', () => {
+  it('retries under the same key unless the agent remembers how the command ended', () => {
     expect(isRetriableFailure(refused(new HubConnectionLost({ detail: 'socket closed' })))).toBe(
       true,
     )
+    expect(isRetriableFailure(refused(new MachineOffline({ machine: LAPTOP })))).toBe(true)
     expect(isRetriableFailure(refused(new CommandDeliveryUnknown()))).toBe(false)
     expect(isRetriableFailure(acked(renamed))).toBe(false)
   })
 
-  it('keeps the key after a failure that says nothing, which it reports as unexplained', () => {
+  it('takes a new key after a failure that says nothing, and reports it in one sentence', () => {
     const died = AsyncResult.failure<CommandReceipt, SendCommandFailure>(
       Cause.die(new Error('handler crashed')),
     )
 
-    expect(isRetriableFailure(died)).toBe(true)
-    expect(failureOf(commandProgress(died, []))).toEqual(Option.some(UNEXPLAINED_FAILURE))
+    expect(isRetriableFailure(died)).toBe(false)
+    expect(failureOf(commandProgress(died, []))).toEqual(Option.some(UNEXPECTED_FAILURE_MESSAGE))
     expect(
       isRetriableFailure(
         AsyncResult.failure<CommandReceipt, SendCommandFailure>(Cause.interrupt()),

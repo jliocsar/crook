@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
+import { RegistryContext } from '@effect/atom-react/RegistryContext'
 import { useRouter } from '@tanstack/react-router'
 import { cn } from 'cn'
 import * as Effect from 'effect/Effect'
@@ -36,6 +37,7 @@ import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Sheet } from '@crook/web/components/Sheet'
 import { Button } from '@crook/web/components/ui/button'
 import { HoldButton } from '@crook/web/components/ui/hold-button'
+import { Input } from '@crook/web/components/ui/input'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { restoreFocus } from '@crook/web/navigation/Focus'
 import { leaveForHerd } from '@crook/web/navigation/LeaveForHerd'
@@ -48,9 +50,6 @@ interface ShownAgent {
   readonly view: AgentActionsView
   readonly card: AgentCardModel
 }
-
-const FIELD =
-  'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/35 placeholder:text-muted-foreground h-11 w-full min-w-0 rounded-lg border px-3 text-base outline-none focus-visible:ring-3'
 
 const SHEET_ACTION = 'w-full justify-start text-base'
 const CLOSING_LABEL = 'Closing…'
@@ -178,12 +177,11 @@ function RenameField({
       }}
     >
       <div className="flex gap-2">
-        <input
+        <Input
           ref={field}
           value={draft}
           aria-label="Agent name"
           placeholder={row.title}
-          className={FIELD}
           onChange={(event) => {
             setDraft(event.target.value)
           }}
@@ -301,17 +299,32 @@ export function AgentActions() {
   const dispatch = useAtomSet(agentActionsAtom)
   const toast = useAtomSet(toastAtom)
   const connection = useAtomValue(connectionAtom)
+  const registry = React.useContext(RegistryContext)
   const router = useRouter()
   const shown = useShownAgent(view)
   const machineOnline = Option.exists(view, (current) => current.machineOnline)
+
+  const showPaneClosed = () => {
+    toast(ToastIntent.Show({ text: PANE_CLOSED_NOTICE }))
+  }
+
+  const isOnChatOf = (agent: PaneAddress) =>
+    router.state.location.pathname ===
+    router.buildLocation({
+      to: '/m/$machine/p/$pane',
+      params: { machine: agent.machine, pane: agent.pane },
+    }).pathname
 
   const goToHerd = () =>
     Effect.runCallback(
       leaveForHerd(router).pipe(
         Effect.andThen(
           Effect.sync(() => {
-            toast(ToastIntent.Show({ text: PANE_CLOSED_NOTICE }))
-            restoreFocus(null)
+            showPaneClosed()
+
+            if (Option.isNone(registry.get(agentActionsViewAtom))) {
+              restoreFocus(null)
+            }
           }),
         ),
       ),
@@ -329,8 +342,14 @@ export function AgentActions() {
         Closed: () => {
           finish()
 
-          if (current.session.origin === 'chat') {
+          if (current.session.origin !== 'chat') {
+            return
+          }
+
+          if (isOnChatOf(current.session.agent)) {
             goToHerd()
+          } else {
+            showPaneClosed()
           }
         },
         Ended: ({ notice }) => {

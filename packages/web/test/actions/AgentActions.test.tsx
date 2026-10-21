@@ -2,13 +2,15 @@ import { describe, expect, it } from '@effect/vitest'
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
+import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import type * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
-import { ClosePane, RenameAgent } from '@crook/domain/Command'
+import { ClosePane, PaneClosed, PaneRenamed, RenameAgent } from '@crook/domain/Command'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import {
@@ -16,7 +18,12 @@ import {
   CommandTimedOut,
   PaneNotCreatedByCrook,
 } from '@crook/protocol/Commands'
-import { ActionsIntent, agentActionsAtom, PaneAddress } from '@crook/web/atoms/AgentActions'
+import {
+  ActionsIntent,
+  agentActionsAtom,
+  PaneAddress,
+  sendCommandAtom,
+} from '@crook/web/atoms/AgentActions'
 import { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
@@ -84,8 +91,13 @@ const openFromChat = (registry: AtomRegistry.AtomRegistry) => {
   )
 }
 
-const sentCommands = (link: { readonly commands: Ref.Ref<readonly SentCommand[]> }) =>
-  Ref.getUnsafe(link.commands).map((sent) => sent.command)
+const sentCommands = (link: { readonly sent: Ref.Ref<readonly SentCommand[]> }) =>
+  Ref.getUnsafe(link.sent).map((sent) => sent.command)
+
+const closedPane = (row: AgentRow) => Exit.succeed(new PaneClosed({ pane: row.pane }))
+
+const renamedTo = (row: AgentRow, label: string) =>
+  Exit.succeed(new PaneRenamed({ pane: row.pane, label: Option.some(label) }))
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -147,6 +159,8 @@ describe('the action sheet', () => {
   it.effect('renames inline and closes once the herd carries the new name', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* Ref.set(link.commandAnswer, renamedTo(porting, 'Herd port'))
       const sheet = yield* openSheetOn('Port the herd screen')
 
       fireEvent.click(within(sheet).getByRole('button', { name: 'Rename' }))
@@ -224,6 +238,8 @@ describe('the action sheet', () => {
   it.effect('closes a pane crook created with a hold, and the card just goes', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
       const sheet = yield* openSheetOn('Port the herd screen')
 
       expect(within(sheet).queryByText(/crook didn't open this pane/u)).toBeNull()
@@ -247,6 +263,8 @@ describe('the action sheet', () => {
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
 
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
+
       yield* Effect.promise(() => screen.findAllByText('Port the herd screen'))
       cardButton('Port the herd screen').focus()
       const sheet = yield* openSheetOn('Port the herd screen')
@@ -267,6 +285,8 @@ describe('the action sheet', () => {
   it.effect('words the hold as the confirmation on a pane crook did not create', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* Ref.set(link.commandAnswer, closedPane(wiring))
       const sheet = yield* openSheetOn('Wire the hub link')
 
       expect(within(sheet).getByText(/crook didn't open this pane/u)).toBeDefined()
@@ -283,7 +303,10 @@ describe('the action sheet', () => {
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
 
-      yield* Ref.set(link.commandRefusals, [new PaneNotCreatedByCrook({ pane: porting.pane })])
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.fail(new PaneNotCreatedByCrook({ pane: porting.pane })),
+      )
       const sheet = yield* openSheetOn('Port the herd screen')
 
       fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
@@ -295,6 +318,7 @@ describe('the action sheet', () => {
       expect(within(sheet).getByText(/crook didn't open this pane/u)).toBeDefined()
       expect(within(sheet).queryByRole('alert')).toBeNull()
 
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
       fireEvent.click(anyway)
 
       yield* eventually(() => {
@@ -303,7 +327,7 @@ describe('the action sheet', () => {
           new ClosePane({ pane: porting.pane, confirmed: true }),
         ])
       })
-      const [first, second] = Ref.getUnsafe(link.commands)
+      const [first, second] = Ref.getUnsafe(link.sent)
 
       expect(second?.key).not.toBe(first?.key)
     }),
@@ -314,7 +338,7 @@ describe('the action sheet', () => {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
       const timedOut = new CommandTimedOut({ machine: LAPTOP, timeout: Duration.seconds(10) })
 
-      yield* Ref.set(link.commandRefusals, [timedOut])
+      yield* Ref.set(link.commandAnswer, Exit.fail(timedOut))
       const sheet = yield* openSheetOn('Port the herd screen')
 
       fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
@@ -329,9 +353,9 @@ describe('the action sheet', () => {
       fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
 
       yield* eventually(() => {
-        expect(Ref.getUnsafe(link.commands)).toHaveLength(2)
+        expect(Ref.getUnsafe(link.sent)).toHaveLength(2)
       })
-      const [first, second] = Ref.getUnsafe(link.commands)
+      const [first, second] = Ref.getUnsafe(link.sent)
 
       expect(second?.key).toBe(first?.key)
     }),
@@ -413,6 +437,8 @@ describe('the action sheet', () => {
         '/m/laptop/p/w1%3Ap1',
         liveWith(herd([everyone])),
       )
+
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
 
       yield* findByRole('heading', 'Port the herd screen')
       openFromChat(registry)
@@ -523,16 +549,17 @@ describe('the action sheet, while an action is out', () => {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
       const timedOut = new CommandTimedOut({ machine: LAPTOP, timeout: Duration.seconds(10) })
 
-      yield* Ref.set(link.commandRefusals, [
-        new PaneNotCreatedByCrook({ pane: porting.pane }),
-        timedOut,
-      ])
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.fail(new PaneNotCreatedByCrook({ pane: porting.pane })),
+      )
       const sheet = yield* openSheetOn('Port the herd screen')
 
       fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
       yield* afterSpring(() => {
         expect(within(sheet).getByRole('button', { name: 'Hold to close anyway' })).toBeDefined()
       })
+      yield* Ref.set(link.commandAnswer, Exit.fail(timedOut))
       fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close anyway' }))
 
       expect((yield* Effect.promise(() => within(sheet).findByRole('alert'))).textContent).toBe(
@@ -545,9 +572,9 @@ describe('the action sheet, while an action is out', () => {
       fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close anyway' }))
 
       yield* eventually(() => {
-        expect(Ref.getUnsafe(link.commands)).toHaveLength(3)
+        expect(Ref.getUnsafe(link.sent)).toHaveLength(3)
       })
-      const [, second, third] = Ref.getUnsafe(link.commands)
+      const [, second, third] = Ref.getUnsafe(link.sent)
 
       expect(third?.command).toEqual(new ClosePane({ pane: porting.pane, confirmed: true }))
       expect(third?.key).toBe(second?.key)
@@ -558,7 +585,7 @@ describe('the action sheet, while an action is out', () => {
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
 
-      yield* Ref.set(link.commandRefusals, [new CommandDeliveryUnknown()])
+      yield* Ref.set(link.commandAnswer, Exit.fail(new CommandDeliveryUnknown()))
       yield* link.commandAnswers.close
       const sheet = yield* openSheetOn('Port the herd screen')
 
@@ -581,9 +608,9 @@ describe('the action sheet, while an action is out', () => {
     "keeps a dismissed close through another agent's sheet and brings its failure back",
     () =>
       Effect.gen(function* () {
-        const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+        const { link, registry } = yield* renderApp('/', liveWith(herd([everyone])))
 
-        yield* Ref.set(link.commandRefusals, [new CommandDeliveryUnknown()])
+        yield* Ref.set(link.commandAnswer, Exit.fail(new CommandDeliveryUnknown()))
         yield* link.commandAnswers.close
         const sheet = yield* openSheetOn('Port the herd screen')
 
@@ -594,10 +621,11 @@ describe('the action sheet, while an action is out', () => {
         dismissSheet(sheet)
         yield* sheetGone
         const other = yield* openSheetOn('Write the banner')
+        const closeKey = present(Ref.getUnsafe(link.sent)[0], 'The close').key
 
         yield* link.commandAnswers.open
         yield* eventually(() => {
-          expect(Ref.getUnsafe(link.commandRefusals)).toEqual([])
+          expect(AsyncResult.isFailure(registry.get(sendCommandAtom(closeKey)))).toBe(true)
         })
 
         expect(within(other).getByRole('heading', { name: 'Write the banner' })).toBeDefined()
@@ -617,6 +645,8 @@ describe('the action sheet, while an action is out', () => {
   it.effect('shows a close still out when the sheet it was dismissed from opens again', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
 
       yield* link.commandAnswers.close
       const sheet = yield* openSheetOn('Port the herd screen')
@@ -649,6 +679,8 @@ describe('the action sheet, while an action is out', () => {
         liveWith(herd([everyone])),
       )
 
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
+
       yield* findByRole('heading', 'Port the herd screen')
       yield* link.commandAnswers.close
       openFromChat(registry)
@@ -671,9 +703,45 @@ describe('the action sheet, while an action is out', () => {
     }),
   )
 
+  it.effect("stays on another agent's chat when a close dismissed from the chat lands there", () =>
+    Effect.gen(function* () {
+      const { router, link, registry } = yield* renderApp(
+        '/m/laptop/p/w1%3Ap1',
+        liveWith(herd([everyone])),
+      )
+
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
+      yield* findByRole('heading', 'Port the herd screen')
+      yield* link.commandAnswers.close
+      openFromChat(registry)
+      const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* eventually(() => {
+        expect(sentCommands(link)).toHaveLength(1)
+      })
+      dismissSheet(sheet)
+      yield* sheetGone
+      yield* Effect.promise(() =>
+        router.navigate({
+          to: '/m/$machine/p/$pane',
+          params: { machine: LAPTOP, pane: banner.pane },
+        }),
+      )
+      yield* findByRole('heading', 'Write the banner')
+      yield* link.commandAnswers.open
+      yield* SubscriptionRef.set(link.state, liveWith(herd([laptopWith([wiring, banner])])))
+
+      expect(yield* Effect.promise(() => screen.findByText('Pane closed'))).toBeDefined()
+      expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap3')
+    }),
+  )
+
   it.effect('goes back through history to the herd the chat was opened from', () =>
     Effect.gen(function* () {
       const { router, link, registry } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
 
       yield* click(yield* Effect.promise(() => screen.findByText('Port the herd screen')))
       yield* eventually(() => {

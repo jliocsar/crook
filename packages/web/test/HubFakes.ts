@@ -4,14 +4,12 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
-import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { PaneClosed, PaneRenamed } from '@crook/domain/Command'
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
@@ -51,21 +49,9 @@ export interface SentCommand {
   readonly command: Command
 }
 
-export type FakeCommandRefusal = CommandFailure | HubCallFailed | HubNotConnected
-
 const NO_COMMAND_ANSWER = Exit.die(
   new Error('This test sent a command without setting its answer.'),
 )
-
-const receiptFor = (command: Command): Option.Option<CommandReceipt> =>
-  Match.value(command).pipe(
-    Match.tags({
-      RenameAgent: (rename) =>
-        Option.some<CommandReceipt>(new PaneRenamed({ pane: rename.pane, label: rename.label })),
-      ClosePane: (close) => Option.some<CommandReceipt>(new PaneClosed({ pane: close.pane })),
-    }),
-    Match.orElse(() => Option.none()),
-  )
 
 export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   cached: Option.Option<HerdSnapshot>,
@@ -171,16 +157,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     yield* Ref.make<Exit.Exit<CommandReceipt, CommandFailure | HubCallFailed | HubNotConnected>>(
       NO_COMMAND_ANSWER,
     )
-  const commandRefusals = yield* Ref.make<readonly FakeCommandRefusal[]>([])
   const commandAnswers = yield* Latch.make(true)
-
-  const nextRefusal = Ref.modify(
-    commandRefusals,
-    (refusals): [Option.Option<FakeCommandRefusal>, readonly FakeCommandRefusal[]] => [
-      Option.fromUndefinedOr(refusals[0]),
-      refusals.slice(1),
-    ],
-  )
 
   const layer = Layer.succeed(
     HubLink,
@@ -210,20 +187,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
       sendCommand: (machine, key, command) =>
         Effect.andThen(
           Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
-          Effect.andThen(
-            commandAnswers.await,
-            Effect.flatMap(
-              nextRefusal,
-              Option.match({
-                onNone: () =>
-                  Option.match(receiptFor(command), {
-                    onNone: () => Effect.flatten(Ref.get(commandAnswer)),
-                    onSome: Effect.succeed,
-                  }),
-                onSome: Effect.fail,
-              }),
-            ),
-          ),
+          Effect.andThen(commandAnswers.await, Effect.flatten(Ref.get(commandAnswer))),
         ),
     }),
   )
@@ -239,9 +203,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     pins,
     pinRefusal,
     sent,
-    commands: sent,
     commandAnswer,
-    commandRefusals,
     commandAnswers,
   }
 })
