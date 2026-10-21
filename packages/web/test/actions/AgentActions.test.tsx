@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
@@ -59,6 +59,8 @@ const openSheetOn = Effect.fn('openSheetOn')(function* (title: string) {
   return yield* Effect.promise(() => screen.findByRole('dialog'))
 })
 
+const currentTab = () => document.querySelector('nav[aria-label="Sections"] [aria-current="page"]')
+
 const sheetGone = eventually(() => {
   expect(screen.queryByRole('dialog')).toBeNull()
 })
@@ -66,6 +68,11 @@ const sheetGone = eventually(() => {
 const dismissSheet = (sheet: HTMLElement) => {
   fireEvent.keyDown(sheet, { key: 'Escape' })
 }
+
+const swipeCardOf = (title: string): HTMLElement =>
+  present(cardButton(title).closest<HTMLElement>('[data-slot="swipe-card"]'), 'The swipe card')
+
+const SWIPE_OPEN_PATH = [200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100]
 
 const openFromChat = (registry: AtomRegistry.AtomRegistry) => {
   registry.set(
@@ -236,6 +243,27 @@ describe('the action sheet', () => {
     }),
   )
 
+  it.effect('hands focus to the tab once the card it was opened from has closed', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* Effect.promise(() => screen.findAllByText('Port the herd screen'))
+      cardButton('Port the herd screen').focus()
+      const sheet = yield* openSheetOn('Port the herd screen')
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* eventually(() => {
+        expect(sentCommands(link)).toHaveLength(1)
+      })
+      yield* SubscriptionRef.set(link.state, liveWith(herd([laptopWith([wiring, banner])])))
+      yield* sheetGone
+
+      yield* eventually(() => {
+        expect(document.activeElement).toBe(currentTab())
+      })
+    }),
+  )
+
   it.effect('words the hold as the confirmation on a pane crook did not create', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
@@ -351,6 +379,25 @@ describe('the action sheet', () => {
     }),
   )
 
+  it.effect('opens only once the herd holds the agent, never as an empty sheet', () =>
+    Effect.gen(function* () {
+      const { link, registry } = yield* renderApp(
+        '/m/laptop/p/w1%3Ap1',
+        stateWith(LinkStatus.Live({ recovered: false }), Option.none()),
+      )
+
+      openFromChat(registry)
+      yield* Effect.promise(() => act(() => Promise.resolve()))
+
+      expect(screen.queryByRole('dialog')).toBeNull()
+
+      yield* SubscriptionRef.set(link.state, liveWith(herd([everyone])))
+      const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
+
+      expect(within(sheet).getByRole('heading', { name: 'Port the herd screen' })).toBeDefined()
+    }),
+  )
+
   it.effect("opens on a machine's agents too", () =>
     Effect.gen(function* () {
       yield* renderApp('/machines/laptop', liveWith(herd([everyone])))
@@ -384,7 +431,7 @@ describe('the action sheet', () => {
       expect(yield* Effect.promise(() => screen.findByText('Pane closed'))).toBeDefined()
 
       yield* eventually(() => {
-        expect(document.activeElement?.textContent).toContain('Agents')
+        expect(document.activeElement).toBe(currentTab())
       })
     }),
   )
@@ -530,6 +577,43 @@ describe('the action sheet, while an action is out', () => {
     }),
   )
 
+  it.effect(
+    "keeps a dismissed close through another agent's sheet and brings its failure back",
+    () =>
+      Effect.gen(function* () {
+        const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+        yield* Ref.set(link.commandRefusals, [new CommandDeliveryUnknown()])
+        yield* link.commandAnswers.close
+        const sheet = yield* openSheetOn('Port the herd screen')
+
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+        yield* eventually(() => {
+          expect(sentCommands(link)).toHaveLength(1)
+        })
+        dismissSheet(sheet)
+        yield* sheetGone
+        const other = yield* openSheetOn('Write the banner')
+
+        yield* link.commandAnswers.open
+        yield* eventually(() => {
+          expect(Ref.getUnsafe(link.commandRefusals)).toEqual([])
+        })
+
+        expect(within(other).getByRole('heading', { name: 'Write the banner' })).toBeDefined()
+
+        dismissSheet(other)
+        yield* eventually(() => {
+          const back = screen.getByRole('dialog')
+
+          expect(within(back).getByRole('heading', { name: 'Port the herd screen' })).toBeDefined()
+          expect(within(back).getByRole('alert').textContent).toBe(
+            new CommandDeliveryUnknown().message,
+          )
+        })
+      }),
+  )
+
   it.effect('shows a close still out when the sheet it was dismissed from opens again', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
@@ -651,10 +735,52 @@ describe('swiping a card', () => {
 
       yield* dragX(swipeCard, [200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100])
       yield* opened('Close')
+      actionOf('Close').focus()
       fireEvent.click(actionOf('Close'))
       const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
 
       expect(within(sheet).getByRole('button', { name: 'Hold to close agent' })).toBeDefined()
+
+      dismissSheet(sheet)
+      yield* sheetGone
+      yield* eventually(() => {
+        expect(document.activeElement).toBe(currentTab())
+      })
+    }),
+  )
+
+  it.effect('holds the card order while a row is open, and takes the new one once it closes', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* Effect.promise(() => screen.findByText('Write the banner'))
+      const before = cardTitles()
+      const swipeRow = present(swipeCardOf('Write the banner').parentElement, 'The swipe row')
+
+      yield* dragX(swipeCardOf('Write the banner'), SWIPE_OPEN_PATH)
+      yield* eventually(() => {
+        expect(
+          within(swipeRow).getByRole('button', { name: 'Pin', hidden: true }).parentElement,
+        ).toHaveProperty('inert', false)
+      })
+      yield* SubscriptionRef.set(
+        link.state,
+        liveWith(herd([laptopWith([porting, wiring, banner], { pinned: ['w1:p3'] })])),
+      )
+      yield* findByRole('img', 'Pinned')
+
+      expect(cardTitles()).toEqual(before)
+
+      fireEvent.pointerDown(swipeCardOf('Wire the hub link'))
+      fireEvent.pointerUp(window)
+
+      yield* eventually(() => {
+        expect(cardTitles()).toEqual([
+          'Write the banner',
+          'Wire the hub link',
+          'Port the herd screen',
+        ])
+      })
     }),
   )
 

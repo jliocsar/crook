@@ -1,5 +1,6 @@
 import { useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
 import { useRouter } from '@tanstack/react-router'
+import { cn } from 'cn'
 import * as Effect from 'effect/Effect'
 import * as Equal from 'effect/Equal'
 import { pipe } from 'effect/Function'
@@ -13,19 +14,19 @@ import { toGlobalPaneId } from '@crook/domain/Ids'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import {
   type ActionProgress,
+  closeNeedsConfirmation,
   failureOf,
-  isConfirmationAsked,
-  isUnderway,
+  isInFlightOrDone,
   keepsName,
   labelFromInput,
   PANE_CLOSED_NOTICE,
   SheetOutcome,
-  sheetOutcome,
 } from '@crook/web/actions/PaneActions'
 import {
   ActionsIntent,
   agentActionsAtom,
   agentActionsViewAtom,
+  agentActionsViewsAtom,
   PaneAddress,
 } from '@crook/web/atoms/AgentActions'
 import type { ActionsOrigin, AgentActionsView } from '@crook/web/atoms/AgentActions'
@@ -36,11 +37,12 @@ import { Sheet } from '@crook/web/components/Sheet'
 import { Button } from '@crook/web/components/ui/button'
 import { HoldButton } from '@crook/web/components/ui/hold-button'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
-import type { OpenCardActions } from '@crook/web/herd/HerdList'
 import { restoreFocus } from '@crook/web/navigation/Focus'
 import { leaveForHerd } from '@crook/web/navigation/LeaveForHerd'
 
-export type OpenAgentActions = (machine: MachineId, pane: PaneId, origin: ActionsOrigin) => void
+export type OpenCardActions = (machine: MachineId, pane: PaneId) => void
+
+type OpenAgentActions = (machine: MachineId, pane: PaneId, origin: ActionsOrigin) => void
 
 interface ShownAgent {
   readonly view: AgentActionsView
@@ -51,10 +53,11 @@ const FIELD =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/35 placeholder:text-muted-foreground h-11 w-full min-w-0 rounded-lg border px-3 text-base outline-none focus-visible:ring-3'
 
 const SHEET_ACTION = 'w-full justify-start text-base'
+const CLOSING_LABEL = 'Closing…'
 
 const holdLabel = ({ closing, confirming }: { closing: boolean; confirming: boolean }) => {
   if (closing) {
-    return 'Closing…'
+    return CLOSING_LABEL
   }
 
   return confirming ? 'Hold to close anyway' : 'Hold to close agent'
@@ -127,7 +130,7 @@ function RenameField({
   const [draft, setDraft] = React.useState(() => agentTitle(row))
   const [invalid, setInvalid] = React.useState(Option.none<string>())
   const field = React.useRef<HTMLInputElement>(null)
-  const saving = isUnderway(progress)
+  const saving = isInFlightOrDone(progress)
 
   React.useEffect(() => {
     if (editing) {
@@ -194,7 +197,7 @@ function RenameField({
   )
 }
 
-export function AgentActionsSheet({
+function AgentActionsSheet({
   open,
   shown,
   canAct,
@@ -217,6 +220,7 @@ export function AgentActionsSheet({
     <Sheet
       open={open}
       onClose={onDismiss}
+      openerGone={Option.exists(shown, ({ view }) => Option.isNone(view.card))}
       title={Option.match(shown, {
         onNone: () => '',
         onSome: ({ card }) => agentTitleOrPane(card.row),
@@ -237,11 +241,8 @@ export function AgentActionsSheet({
       {Option.match(shown, {
         onNone: () => null,
         onSome: ({ view, card }) => {
-          const confirming =
-            !card.row.createdByCrook ||
-            isConfirmationAsked(view.close) ||
-            Option.exists(view.session.close, (attempt) => attempt.confirmed)
-          const closing = isUnderway(view.close)
+          const confirming = closeNeedsConfirmation(card.row, view.close, view.session.close)
+          const closing = isInFlightOrDone(view.close)
 
           return (
             <div
@@ -258,7 +259,7 @@ export function AgentActionsSheet({
                 variant="secondary"
                 size="touch"
                 className={SHEET_ACTION}
-                disabled={!canPin || isUnderway(view.pin)}
+                disabled={!canPin || isInFlightOrDone(view.pin)}
                 onClick={() => {
                   onPin(!card.pinned)
                 }}
@@ -277,8 +278,8 @@ export function AgentActionsSheet({
               ) : null}
               <HoldButton
                 disabled={!canAct || closing}
-                className={confirming ? 'w-full text-base' : 'mt-2 w-full text-base'}
-                completeLabel="Closing…"
+                className={cn('w-full text-base', !confirming && 'mt-2')}
+                completeLabel={CLOSING_LABEL}
                 onComplete={() => {
                   onClose(confirming)
                 }}
@@ -296,6 +297,7 @@ export function AgentActionsSheet({
 
 export function AgentActions() {
   const view = useAtomValue(agentActionsViewAtom)
+  const views = useAtomValue(agentActionsViewsAtom)
   const dispatch = useAtomSet(agentActionsAtom)
   const toast = useAtomSet(toastAtom)
   const connection = useAtomValue(connectionAtom)
@@ -316,43 +318,32 @@ export function AgentActions() {
     )
 
   React.useEffect(() => {
-    if (Option.isNone(view)) {
-      return
-    }
+    for (const current of views) {
+      const finish = () => {
+        dispatch(ActionsIntent.Finish({ agent: current.session.agent }))
+      }
 
-    const current = view.value
-
-    SheetOutcome.$match(
-      sheetOutcome({
-        herdMachine: current.herdMachine,
-        pane: current.session.agent.pane,
-        rename: current.rename,
-        close: current.close,
-        pin: current.pin,
-      }),
-      {
+      SheetOutcome.$match(current.outcome, {
         Stay: () => undefined,
-        Finished: () => {
-          dispatch(ActionsIntent.Finish())
-        },
+        Finished: finish,
         Closed: () => {
-          dispatch(ActionsIntent.Finish())
+          finish()
 
           if (current.session.origin === 'chat') {
             goToHerd()
           }
         },
         Ended: ({ notice }) => {
-          dispatch(ActionsIntent.Finish())
+          finish()
           toast(ToastIntent.Show({ text: notice }))
         },
-      },
-    )
-  }, [view])
+      })
+    }
+  }, [views])
 
   return (
     <AgentActionsSheet
-      open={Option.exists(view, (current) => current.open)}
+      open={Option.isSome(view) && Option.isSome(shown)}
       shown={shown}
       canAct={connection.controlsEnabled && machineOnline}
       canPin={connection.controlsEnabled}

@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from 'motion/react'
 import type * as React from 'react'
 
 import { toGlobalPaneId } from '@crook/domain/Ids'
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { MachineId } from '@crook/domain/Ids'
+import type { OpenCardActions } from '@crook/web/actions/AgentActions'
 import { usePinAgent } from '@crook/web/actions/PinAgent'
 import { PaneAddress } from '@crook/web/atoms/AgentActions'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
@@ -22,8 +23,6 @@ import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { SPRING } from '@crook/web/motion/Springs'
 
 export type OpenAgent = (machine: MachineId, card: AgentCardModel, opener: HTMLElement) => void
-
-export type OpenCardActions = (machine: MachineId, pane: PaneId) => void
 
 interface HerdNoticeActions {
   readonly controlsEnabled: boolean

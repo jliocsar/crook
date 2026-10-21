@@ -18,6 +18,7 @@ import {
 import {
   ActionProgress,
   CLAUDE_EXITED_NOTICE,
+  closeNeedsConfirmation,
   commandProgress,
   endedNotice,
   failureOf,
@@ -187,6 +188,26 @@ describe('sheetOutcome', () => {
     )
   })
 
+  it('stays open after a rename or pin while the other one is still out or failed', () => {
+    const refusedRename = ActionProgress.Failed({ message: 'Refused.', asksConfirmation: false })
+
+    expect(
+      sheetOutcome({ ...sheet, pin: ActionProgress.Done(), rename: ActionProgress.Sending() }),
+    ).toEqual(SheetOutcome.Stay())
+    expect(
+      sheetOutcome({ ...sheet, pin: ActionProgress.Done(), rename: ActionProgress.Sent() }),
+    ).toEqual(SheetOutcome.Stay())
+    expect(sheetOutcome({ ...sheet, pin: ActionProgress.Done(), rename: refusedRename })).toEqual(
+      SheetOutcome.Stay(),
+    )
+    expect(
+      sheetOutcome({ ...sheet, rename: ActionProgress.Done(), pin: ActionProgress.Sending() }),
+    ).toEqual(SheetOutcome.Stay())
+    expect(
+      sheetOutcome({ ...sheet, rename: ActionProgress.Done(), pin: ActionProgress.Done() }),
+    ).toEqual(SheetOutcome.Finished())
+  })
+
   it('stays open while the machine state is unknown, as it is after a hub restart', () => {
     const unknown = new HerdMachine(Struct.evolve(laptop, { state: () => Option.none() }))
 
@@ -207,5 +228,29 @@ describe('sheetOutcome', () => {
     expect(
       sheetOutcome({ ...sheet, herdMachine: Option.some(emptied), close: ActionProgress.Done() }),
     ).toEqual(SheetOutcome.Closed())
+  })
+})
+
+describe('closeNeedsConfirmation', () => {
+  const created = agent('w1:p1', 'idle', { createdByCrook: true })
+  const foreign = agent('w1:p1', 'idle')
+  const confirmed = Option.some({ confirmed: true })
+  const unconfirmed = Option.some({ confirmed: false })
+  const askedToConfirm = ActionProgress.Failed({ message: 'Not ours.', asksConfirmation: true })
+
+  it('asks before the first close of a pane crook did not create', () => {
+    expect(closeNeedsConfirmation(foreign, ActionProgress.Idle(), Option.none())).toBe(true)
+    expect(closeNeedsConfirmation(created, ActionProgress.Idle(), Option.none())).toBe(false)
+    expect(closeNeedsConfirmation(created, ActionProgress.Sending(), unconfirmed)).toBe(false)
+  })
+
+  it('asks once the agent says crook did not create the pane', () => {
+    expect(closeNeedsConfirmation(created, askedToConfirm, unconfirmed)).toBe(true)
+  })
+
+  it('keeps asking after a confirmed attempt, so its retry stays confirmed', () => {
+    const timedOut = ActionProgress.Failed({ message: 'Timed out.', asksConfirmation: false })
+
+    expect(closeNeedsConfirmation(created, timedOut, confirmed)).toBe(true)
   })
 })

@@ -12,10 +12,9 @@ import { translate, useTransformString } from '@crook/web/motion/TransformString
 import { COLUMN_STYLE } from '@crook/web/navigation/Column'
 
 const TOAST_RISE_PX = 8
+const TOAST_DURATION = Duration.seconds(3)
 
-export const TOAST_DURATION = Duration.seconds(3)
-
-export function ToastLine({ toast }: { toast: Option.Option<Toast> }) {
+function ToastLine({ toast }: { toast: Option.Option<Toast> }) {
   const transform = useTransformString()
 
   return (

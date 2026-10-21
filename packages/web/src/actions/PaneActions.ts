@@ -41,14 +41,6 @@ export type SheetOutcome = Data.TaggedEnum<{
   Ended: { readonly notice: string }
 }>
 
-export interface SheetProgress {
-  readonly herdMachine: Option.Option<HerdMachine>
-  readonly pane: PaneId
-  readonly rename: ActionProgress
-  readonly close: ActionProgress
-  readonly pin: ActionProgress
-}
-
 export const PANE_CLOSED_NOTICE = 'Pane closed'
 export const CLAUDE_EXITED_NOTICE = 'Claude exited'
 
@@ -73,7 +65,7 @@ const SENDING = ActionProgress.Sending()
 const SENT = ActionProgress.Sent()
 const DONE = ActionProgress.Done()
 
-export const keepsKey = (error: SendCommandFailure | SetPinnedFailure): boolean =>
+const keepsKey = (error: SendCommandFailure | SetPinnedFailure): boolean =>
   Match.value(error).pipe(
     Match.tags({
       CommandTimedOut: () => true,
@@ -83,7 +75,7 @@ export const keepsKey = (error: SendCommandFailure | SetPinnedFailure): boolean 
     Match.orElse(() => false),
   )
 
-export const asksConfirmation = (error: SendCommandFailure | SetPinnedFailure): boolean =>
+const asksConfirmation = (error: SendCommandFailure | SetPinnedFailure): boolean =>
   Match.value(error).pipe(
     Match.tag('PaneNotCreatedByCrook', () => true),
     Match.orElse(() => false),
@@ -134,7 +126,7 @@ export const pinProgress = (
   pinnedNow: boolean,
 ): ActionProgress => progressOf(result, (pinned) => pinned === pinnedNow)
 
-export const isUnderway = ActionProgress.$match({
+export const isInFlightOrDone = ActionProgress.$match({
   Idle: () => false,
   Sending: () => true,
   Sent: () => true,
@@ -142,9 +134,11 @@ export const isUnderway = ActionProgress.$match({
   Failed: () => false,
 })
 
-export const isDone = ActionProgress.$is('Done')
+const isDone = ActionProgress.$is('Done')
 
-export const isIdle = ActionProgress.$is('Idle')
+const isIdle = ActionProgress.$is('Idle')
+
+const isSettled = (progress: ActionProgress): boolean => isIdle(progress) || isDone(progress)
 
 export const failureOf = (progress: ActionProgress): Option.Option<string> =>
   ActionProgress.$match(progress, {
@@ -164,6 +158,15 @@ export const isConfirmationAsked = (progress: ActionProgress): boolean =>
     Done: () => false,
     Failed: ({ asksConfirmation: confirming }) => confirming,
   })
+
+export const closeNeedsConfirmation = (
+  row: AgentRow,
+  close: ActionProgress,
+  lastClose: Option.Option<{ readonly confirmed: boolean }>,
+): boolean =>
+  !row.createdByCrook ||
+  isConfirmationAsked(close) ||
+  Option.exists(lastClose, (attempt) => attempt.confirmed)
 
 export const isRetriableFailure = <Success, Failure extends SendCommandFailure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
@@ -208,18 +211,27 @@ export const endedNotice = (herdMachine: Option.Option<HerdMachine>, pane: PaneI
     Option.flatMap((state) => ENDED_NOTICE[panePresence(state, pane)]),
   )
 
-export const sheetOutcome = (sheet: SheetProgress): SheetOutcome => {
+export const sheetOutcome = (sheet: {
+  readonly herdMachine: Option.Option<HerdMachine>
+  readonly pane: PaneId
+  readonly rename: ActionProgress
+  readonly close: ActionProgress
+  readonly pin: ActionProgress
+}): SheetOutcome => {
   if (isDone(sheet.close)) {
     return SheetOutcome.Closed()
   }
 
   return pipe(
     endedNotice(sheet.herdMachine, sheet.pane),
-    Option.filter(() => !isUnderway(sheet.close)),
+    Option.filter(() => !isInFlightOrDone(sheet.close)),
     Option.match({
       onSome: (notice) => SheetOutcome.Ended({ notice }),
       onNone: () =>
-        isIdle(sheet.close) && (isDone(sheet.rename) || isDone(sheet.pin))
+        isIdle(sheet.close) &&
+        isSettled(sheet.rename) &&
+        isSettled(sheet.pin) &&
+        (isDone(sheet.rename) || isDone(sheet.pin))
           ? SheetOutcome.Finished()
           : SheetOutcome.Stay(),
     }),

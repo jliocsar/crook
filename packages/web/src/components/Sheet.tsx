@@ -6,6 +6,7 @@ import * as React from 'react'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { GLIDE } from '@crook/web/motion/Springs'
 import { COLUMN_STYLE } from '@crook/web/navigation/Column'
+import { focusTarget } from '@crook/web/navigation/Focus'
 
 export const SHEET_DISMISS_DISTANCE = 96
 export const SHEET_DISMISS_VELOCITY = 500
@@ -13,11 +14,13 @@ export const SHEET_ELASTIC_ABOVE = 0.05
 
 function SheetLayer({
   onClose,
+  openerGone,
   title,
   description,
   children,
 }: {
   onClose: () => void
+  openerGone: boolean
   title: React.ReactNode
   description?: React.ReactNode
   children: React.ReactNode
@@ -25,6 +28,7 @@ function SheetLayer({
   const drag = useDragControls()
   const handle = React.useRef<HTMLDivElement>(null)
   const present = useIsPresent()
+  const [opener] = React.useState(() => document.activeElement)
 
   return (
     <Dialog.Portal keepMounted>
@@ -42,6 +46,7 @@ function SheetLayer({
       />
       <Dialog.Popup
         initialFocus={handle}
+        finalFocus={() => focusTarget(openerGone ? null : opener)}
         render={
           <motion.div
             data-slot="sheet"
@@ -102,12 +107,14 @@ function SheetLayer({
 export function Sheet({
   open,
   onClose,
+  openerGone = false,
   title,
   description,
   children,
 }: {
   open: boolean
   onClose: () => void
+  openerGone?: boolean
   title: React.ReactNode
   description?: React.ReactNode
   children: React.ReactNode
@@ -123,7 +130,13 @@ export function Sheet({
     >
       <AnimatePresence>
         {open ? (
-          <SheetLayer key="sheet" onClose={onClose} title={title} description={description}>
+          <SheetLayer
+            key="sheet"
+            onClose={onClose}
+            openerGone={openerGone}
+            title={title}
+            description={description}
+          >
             {children}
           </SheetLayer>
         ) : null}
