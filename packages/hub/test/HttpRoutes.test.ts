@@ -1,10 +1,5 @@
-import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
-import * as BunHttpServer from '@effect/platform-bun/BunHttpServer'
-import * as BunSocket from '@effect/platform-bun/BunSocket'
 import { expect, layer } from '@effect/vitest'
-import * as Arr from 'effect/Array'
 import * as Clock from 'effect/Clock'
-import * as ConfigProvider from 'effect/ConfigProvider'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -13,27 +8,13 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
-import * as Schedule from 'effect/Schedule'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
-import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpClient from 'effect/http/HttpClient'
-import * as HttpRouter from 'effect/http/HttpRouter'
-import * as HttpServer from 'effect/http/HttpServer'
 import * as RpcClient from 'effect/rpc/RpcClient'
-import type * as RpcGroup from 'effect/rpc/RpcGroup'
-import type * as Rpc from 'effect/rpc/Rpc'
 
-import { CommandExecutor } from '@crook/agent/CommandExecutor'
-import * as HubLink from '@crook/agent/HubLink'
-import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
-import { AgentRow } from '@crook/domain/AgentRow'
 import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
-import type { HerdView } from '@crook/domain/HerdView'
-import { IdempotencyKey, MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
-import type { MachineConnection } from '@crook/domain/Machine'
-import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import {
   BrowserLoginRequired,
   ExeDevIdentity,
@@ -42,7 +23,6 @@ import {
   OwnerEmailRejected,
   UpgradeOriginRejected,
 } from '@crook/hub/ExeDevIdentity'
-import * as Database from '@crook/hub/Database'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -52,7 +32,7 @@ import {
 } from '@crook/herdr/HerdrClient'
 import { AgentPromptMethod } from '@crook/herdr/Methods'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
-import { AGENT_PING_INTERVAL, AgentLink, Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { ClientApi, MachineStillConnected } from '@crook/protocol/ClientApi'
 import {
   type CommandResult,
@@ -60,92 +40,31 @@ import {
   PaneNotAgent,
   type RoutedCommand,
 } from '@crook/protocol/Commands'
-import { protocolSerialization } from '@crook/protocol/Serialization'
 
-const OWNER = 'owner@example.com'
-const HUB_ORIGIN = 'https://my-hub.exe.xyz'
+import {
+  HUB_ORIGIN,
+  OWNER,
+  PANE,
+  agentRow,
+  agentToken,
+  configFor,
+  connect,
+  hello,
+  herdWhere,
+  machineIn,
+  machineShows,
+  machineStateWith,
+  ownerLogin,
+  realAgent,
+  testHub,
+  tokenContextOf,
+} from './Fixtures'
+
 const EVIL_ORIGIN = 'https://evil.example'
 const STRANGER = 'someone@example.com'
-const IN_MEMORY = ':memory:'
-const PANE = PaneId.make('w1:p1')
-
-const hello = new Hello({ agentVersion: '0.0.9', label: Option.none() })
-
-const agentAt = (pane: PaneId) =>
-  new AgentRow({
-    pane,
-    workspace: WorkspaceId.make('w1'),
-    tab: TabId.make('w1:t1'),
-    status: 'done',
-    title: 'EX-253 Example feature',
-    cwd: '/home/jliocsar/Projects/crook',
-    branch: Option.none(),
-    claudeSession: Option.none(),
-    stateChangeSeq: 7,
-    statusChangedAt: DateTime.makeUnsafe(0),
-  })
-
-const ownerLogin = { 'X-ExeDev-Email': OWNER, Origin: HUB_ORIGIN }
-const tokenContextOf = (machine: string) => ({
-  'X-ExeDev-Token-Ctx': JSON.stringify({ machine }),
-})
-const agentToken = (machine: string) => ({ 'X-ExeDev-Email': OWNER, ...tokenContextOf(machine) })
 
 const stateOf = (machine: MachineId, version: number) =>
-  new MachineState({
-    machine,
-    version: MachineStateVersion.make(version),
-    herdrVersion: '0.9.1',
-    workspaces: [],
-    tabs: [],
-    agents: [agentAt(PANE)],
-  })
-
-const configFor = (origin: string) =>
-  ConfigProvider.layer(
-    ConfigProvider.fromUnknown({
-      CROOK_OWNER_EMAIL: OWNER,
-      CROOK_HUB_ORIGIN: origin,
-      CROOK_WEB_ROOT: `${import.meta.dirname}/web`,
-    }),
-  )
-
-const testServer = BunHttpServer.layer({
-  hostname: '127.0.0.1',
-  port: 0,
-  gracefulShutdownTimeout: Duration.zero,
-  websocket: HttpRoutes.socketOptions,
-})
-
-const testClient = HttpServer.layerTestClient.pipe(Layer.provide(FetchHttpClient.layer))
-
-const servedHub = Layer.mergeAll(
-  HttpRouter.serve(HttpRoutes.layer, { disableLogger: true }),
-  testClient,
-).pipe(Layer.provideMerge(testServer))
-
-const testHub = Layer.provide(servedHub, [configFor(HUB_ORIGIN), Database.layerAt(IN_MEMORY)])
-
-const socketUrl = (path: string) =>
-  HttpServer.addressFormattedWith((address) =>
-    Effect.succeed(`${address.replace(/^http/u, 'ws')}${path}`),
-  )
-
-const connect = Effect.fn('connect')(function* <Rpcs extends Rpc.Any>(
-  group: RpcGroup.RpcGroup<Rpcs>,
-  path: string,
-  headers: Record<string, string>,
-  pingInterval: Duration.Duration = AGENT_PING_INTERVAL,
-) {
-  const url = yield* socketUrl(path)
-  const protocol = yield* Layer.build(
-    RpcClient.layerProtocolSocket({ pingInterval, retryPolicy: Schedule.recurs(0) }).pipe(
-      Layer.provide([BunSocket.layerWebSocket(url, { headers }), protocolSerialization]),
-    ),
-  )
-
-  return yield* RpcClient.make(group).pipe(Effect.provide(protocol))
-})
+  machineStateWith(machine, version, [agentRow()])
 
 const attachAs = Effect.fn('attachAs')(function* (
   machine: MachineId,
@@ -171,17 +90,6 @@ const rejectedWith = (rejection: { readonly message: string }) => ({
   body: rejection.message,
 })
 
-const machineIn = (view: HerdView, id: MachineId) =>
-  Arr.findFirst(view.machines, (entry) => entry.machine.id === id)
-
-const herdWhere = Effect.fn('herdWhere')(function* (predicate: (view: HerdView) => boolean) {
-  const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
-
-  return yield* phone
-    .WatchHerd()
-    .pipe(Stream.filter(predicate), Stream.runHead, Effect.flatMap(Effect.fromOption))
-}, Effect.scoped)
-
 const answeringAgent = Effect.fn('answeringAgent')(function* (
   machine: MachineId,
   answer: (routed: RoutedCommand) => CommandResult,
@@ -195,11 +103,6 @@ const answeringAgent = Effect.fn('answeringAgent')(function* (
   )
   yield* agent.PublishState({ state: stateOf(machine, 1) })
 })
-
-const machineShows = (id: MachineId, connection: MachineConnection) =>
-  herdWhere((view) =>
-    Option.exists(machineIn(view, id), (entry) => entry.machine.connection === connection),
-  )
 
 layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
   live.effect('answers the health check without any exe.dev headers', () =>
@@ -376,29 +279,15 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
     () =>
       Effect.gen(function* () {
         const machine = MachineId.make('command-agent')
-        const server = yield* HttpServer.HttpServer
         const state = yield* SubscriptionRef.make(
-          new MachineState({
-            machine,
-            version: MachineStateVersion.make(1),
-            herdrVersion: '0.9.1',
-            workspaces: [],
-            tabs: [],
-            agents: [
-              new AgentRow({
-                pane,
-                workspace: WorkspaceId.make('w1'),
-                tab: TabId.make('w1:t1'),
-                status: 'idle',
-                title: 'EX-253 Example feature',
-                cwd: '/home/jliocsar/Projects/crook',
-                branch: Option.none(),
-                claudeSession: Option.none(),
-                stateChangeSeq: 4,
-                statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
-              }),
-            ],
-          }),
+          machineStateWith(machine, 1, [
+            agentRow({
+              pane,
+              status: 'idle',
+              stateChangeSeq: 4,
+              statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+            }),
+          ]),
         )
         const sent = yield* Queue.unbounded<SentRequest>()
         const herdr = HerdrClient.layerTest({
@@ -406,19 +295,8 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
           events: yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>(),
           sent,
         })
-        const dialHub = connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(machine)).pipe(
-          Effect.provideService(HttpServer.HttpServer, server),
-        )
 
-        yield* Layer.build(
-          Layer.provide(
-            HubLink.layerWith(dialHub, hello),
-            Layer.provideMerge(
-              Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt([])),
-              [MachineStateSync.layerTest(state), herdr, BunFileSystem.layer],
-            ),
-          ),
-        )
+        yield* Layer.build(yield* realAgent(machine, state, herdr, []))
         yield* machineShows(machine, 'online')
         const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
         const command = new Prompt({ pane, text: 'continue' })

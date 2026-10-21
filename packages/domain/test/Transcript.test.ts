@@ -2,8 +2,7 @@ import { describe, expect, it } from '@effect/vitest'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
-import { ClaudeSessionId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
-import { Subagent, runningCount } from '@crook/domain/Subagent'
+import { ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
 import {
   SubagentsChanged,
   TranscriptChunk,
@@ -12,8 +11,14 @@ import {
   TranscriptPosition,
   continuesFrom,
   positionAfter,
+  remainderAfter,
 } from '@crook/domain/Transcript'
-import { AssistantMessage, ImageBlock, TextBlock } from '@crook/domain/TranscriptMessage'
+import {
+  AssistantMessage,
+  ImageBlock,
+  TextBlock,
+  UnrecognizedEntry,
+} from '@crook/domain/TranscriptMessage'
 
 const FIRST = ClaudeSessionId.make('309f44d5-235f-4550-a0c7-1691715aad75')
 const CLEARED = ClaudeSessionId.make('ff0f77be-1e98-4bb2-8b24-38d673361867')
@@ -29,18 +34,15 @@ const chunk = (session: ClaudeSessionId, offset: number, nextOffset: number) =>
     messages: [],
   })
 
-const subagent = (id: string, finished: boolean) =>
-  new Subagent({
-    id: SubagentId.make(id),
-    agentType: 'general-purpose',
-    description: 'Read hello.txt',
-    model: Option.none(),
-    toolUseId: Option.none(),
-    parent: Option.none(),
-    spawnDepth: 1,
-    background: true,
-    finished,
-    stoppedByUser: false,
+const entryAt = (offset: number) =>
+  new UnrecognizedEntry({ offset: TranscriptOffset.make(offset), entryType: 'future' })
+
+const chunkOf = (session: ClaudeSessionId, offsets: readonly number[], nextOffset: number) =>
+  new TranscriptChunk({
+    session,
+    offset: TranscriptOffset.make(offsets[0] ?? nextOffset),
+    nextOffset: TranscriptOffset.make(nextOffset),
+    messages: offsets.map(entryAt),
   })
 
 describe('positionAfter', () => {
@@ -83,7 +85,7 @@ describe('TranscriptEvent', () => {
       nextOffset: TranscriptOffset.make(2011),
       messages: [
         new AssistantMessage({
-          line: TranscriptOffset.make(0),
+          offset: TranscriptOffset.make(0),
           uuid: Option.some('4cd4a376-c169-47ed-9d9d-c56a4111bb9e'),
           timestamp: Option.none(),
           apiMessageId: Option.some('msg_011CgDvMg76yHnSs5ApMVRpE'),
@@ -105,10 +107,37 @@ describe('TranscriptEvent', () => {
   })
 })
 
-describe('runningCount', () => {
-  it('counts subagents that have not finished', () => {
+describe('remainderAfter', () => {
+  it('passes on what continues the position, and nothing already behind it', () => {
+    const position = Option.some(at(FIRST, 100))
+
+    expect(remainderAfter(position, chunkOf(FIRST, [100, 150], 200))).toEqual(
+      Option.some(chunkOf(FIRST, [100, 150], 200)),
+    )
+    expect(remainderAfter(position, chunkOf(FIRST, [0, 50], 100))).toEqual(Option.none())
+    expect(remainderAfter(position, chunkOf(CLEARED, [100], 200))).toEqual(Option.none())
+    expect(remainderAfter(Option.none(), chunkOf(FIRST, [0], 100))).toEqual(Option.none())
+  })
+
+  it('cuts a chunk that overlaps the position down to the lines after it', () => {
+    expect(remainderAfter(Option.some(at(FIRST, 100)), chunkOf(FIRST, [0, 50, 100], 200))).toEqual(
+      Option.some(chunkOf(FIRST, [100], 200)),
+    )
+  })
+
+  it('opens only a session the position is not in, and lists subagents only of its own', () => {
+    const position = Option.some(at(FIRST, 100))
+    const subagents = new SubagentsChanged({ session: FIRST, subagents: [] })
+
+    expect(remainderAfter(position, new TranscriptOpened({ session: FIRST }))).toEqual(
+      Option.none(),
+    )
+    expect(remainderAfter(position, new TranscriptOpened({ session: CLEARED }))).toEqual(
+      Option.some(new TranscriptOpened({ session: CLEARED })),
+    )
+    expect(remainderAfter(position, subagents)).toEqual(Option.some(subagents))
     expect(
-      runningCount([subagent('a370777a87a436836', true), subagent('aa5c894dc268d33c7', false)]),
-    ).toBe(1)
+      remainderAfter(position, new SubagentsChanged({ session: CLEARED, subagents: [] })),
+    ).toEqual(Option.none())
   })
 })

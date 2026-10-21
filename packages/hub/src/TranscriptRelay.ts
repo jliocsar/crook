@@ -9,23 +9,20 @@ import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
-import * as Result from 'effect/Result'
 import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import type { HerdView } from '@crook/domain/HerdView'
 import type { MachineId } from '@crook/domain/Ids'
 import {
   type TranscriptChunk,
   type TranscriptEvent,
-  type TranscriptOpened,
   type TranscriptPosition,
   type TranscriptSource,
   continuesFrom,
   positionAfter,
+  remainderAfter,
 } from '@crook/domain/Transcript'
-import { MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
 import {
   TranscriptDemand,
   type TranscriptFailure,
@@ -47,32 +44,14 @@ type Watchers = HashMap.HashMap<TranscriptWatchId, Watcher>
 
 const PHONE_INBOX_CAPACITY = 1
 
-export const admitWatch = (
-  view: HerdView,
-  machine: MachineId,
-  source: TranscriptSource,
-): Result.Result<void, MachineNotInHerd | PaneNotInHerd> =>
-  pipe(
-    Arr.findFirst(view.machines, (entry) => entry.machine.id === machine),
-    Option.match({
-      onNone: () => Result.fail(new MachineNotInHerd({ machine })),
-      onSome: (entry) =>
-        Match.value(source).pipe(
-          Match.tagsExhaustive({
-            PaneTranscript: ({ pane }) =>
-              pipe(
-                entry.state,
-                Option.flatMap((state) => Arr.findFirst(state.agents, (row) => row.pane === pane)),
-                Option.match({
-                  onNone: () => Result.fail(new PaneNotInHerd({ machine, pane })),
-                  onSome: () => Result.void,
-                }),
-              ),
-            SubagentTranscript: () => Result.void,
-          }),
-        ),
-    }),
-  )
+const unseenOnly = (
+  delivered: Option.Option<TranscriptPosition>,
+  event: TranscriptEvent,
+): readonly [Option.Option<TranscriptPosition>, readonly TranscriptEvent[]] =>
+  Option.match(remainderAfter(delivered, event), {
+    onNone: () => [delivered, []],
+    onSome: (unseen) => [positionAfter(delivered, unseen), [unseen]],
+  })
 
 const demandOf = (watchers: Watchers, machine: MachineId) =>
   new TranscriptDemand({
@@ -120,7 +99,7 @@ const make = Effect.gen(function* () {
             ),
         )
 
-        return Stream.fromQueue(inbox)
+        return Stream.fromQueue(inbox).pipe(Stream.mapAccum(() => from, unseenOnly))
       }),
     )
 
@@ -142,11 +121,6 @@ const make = Effect.gen(function* () {
   const forward = (id: TranscriptWatchId, watcher: Watcher, event: TranscriptEvent) =>
     Effect.andThen(Queue.offer(watcher.inbox, event), advance(id, event))
 
-  const open = (id: TranscriptWatchId, watcher: Watcher, opened: TranscriptOpened) =>
-    Option.exists(watcher.position, (position) => position.session === opened.session)
-      ? Effect.void
-      : forward(id, watcher, opened)
-
   const append = (id: TranscriptWatchId, watcher: Watcher, chunk: TranscriptChunk) =>
     continuesFrom(watcher.position, chunk)
       ? forward(id, watcher, chunk)
@@ -154,8 +128,8 @@ const make = Effect.gen(function* () {
 
   const fail = (id: TranscriptWatchId, watcher: Watcher, failure: TranscriptFailure) =>
     Effect.andThen(
-      SubscriptionRef.update(watchers, HashMap.remove(id)),
       Queue.fail(watcher.inbox, failure),
+      SubscriptionRef.update(watchers, HashMap.remove(id)),
     )
 
   const deliver = (id: TranscriptWatchId, update: TranscriptUpdate) =>
@@ -165,12 +139,11 @@ const make = Effect.gen(function* () {
         onSome: (watcher) =>
           Match.value(update).pipe(
             Match.tagsExhaustive({
-              TranscriptOpened: (opened) => open(id, watcher, opened),
+              TranscriptOpened: (opened) => forward(id, watcher, opened),
               TranscriptChunk: (chunk) => append(id, watcher, chunk),
-              SubagentsChanged: (changed) => Queue.offer(watcher.inbox, changed),
+              SubagentsChanged: (changed) => forward(id, watcher, changed),
               TranscriptWatchFailed: (failed) => fail(id, watcher, failed.failure),
             }),
-            Effect.andThen(Effect.void),
           ),
       }),
     )

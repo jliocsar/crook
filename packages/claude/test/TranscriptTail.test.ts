@@ -141,7 +141,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
         .pipe(Stream.runCollect, Effect.flip)
 
       expect(messagesIn(resumed)).toEqual(
-        messagesIn(whole).filter((message) => message.line >= resumeAt),
+        messagesIn(whole).filter((message) => message.offset >= resumeAt),
       )
       expect(midLine).toEqual(new TranscriptOffsetMidLine({ path: file.path, offset: 20017 }))
       expect(beyond).toBeInstanceOf(TranscriptOffsetBeyondEnd)
@@ -157,7 +157,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
         Option.some(2652),
       )
       expect(size).toBeGreaterThan(2652)
-      expect(messagesIn(chunks)).toMatchObject([{ _tag: 'Assistant', line: 641 }])
+      expect(messagesIn(chunks)).toMatchObject([{ _tag: 'Assistant', offset: 641 }])
     }),
   )
 

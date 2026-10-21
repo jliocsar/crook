@@ -246,6 +246,15 @@ const make = Effect.gen(function* () {
       Effect.mapError(() => new MachineNotInHerd({ machine: id })),
     )
 
+  const paneIn = (id: MachineId, pane: PaneId, found: MachineEntry) =>
+    Arr.findFirst(agentsIn(found.state), (agent) => agent.pane === pane).pipe(
+      Effect.fromOption,
+      Effect.mapError(() => new PaneNotInHerd({ machine: id, pane })),
+    )
+
+  const visibleNow = (id: MachineId) =>
+    Effect.flatMap(SubscriptionRef.get(entries), (current) => visible(id, HashMap.get(current, id)))
+
   const expireAfterGrace = (id: MachineId, entry: MachineEntry) =>
     entry.connection === 'reconnecting'
       ? Effect.sleep(RECONNECT_GRACE).pipe(
@@ -318,13 +327,7 @@ const make = Effect.gen(function* () {
     yield* change(id, (entry) =>
       Effect.gen(function* () {
         const found = yield* visible(id, entry)
-        const row = yield* Arr.findFirst(
-          agentsIn(found.state),
-          (agent) => agent.pane === pane,
-        ).pipe(
-          Effect.fromOption,
-          Effect.mapError(() => new PaneNotInHerd({ machine: id, pane })),
-        )
+        const row = yield* paneIn(id, pane, found)
 
         if (HashMap.has(found.seen, pane)) {
           return Option.none()
@@ -339,11 +342,21 @@ const make = Effect.gen(function* () {
     )
   })
 
+  const requireMachine = Effect.fn('Herd.requireMachine')(function* (id: MachineId) {
+    yield* visibleNow(id)
+  })
+
+  const requirePane = Effect.fn('Herd.requirePane')(function* (id: MachineId, pane: PaneId) {
+    yield* paneIn(id, pane, yield* visibleNow(id))
+  })
+
   return Herd.of({
     hold,
     publish,
     forget,
     markSeen,
+    requireMachine,
+    requirePane,
     view: SubscriptionRef.changes(entries).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
       Stream.map(toView),
@@ -363,6 +376,11 @@ export class Herd extends Context.Service<
       id: MachineId,
       pane: PaneId,
     ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd | SqlError>
+    readonly requireMachine: (id: MachineId) => Effect.Effect<void, MachineNotInHerd>
+    readonly requirePane: (
+      id: MachineId,
+      pane: PaneId,
+    ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd>
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {

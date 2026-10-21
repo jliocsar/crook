@@ -8,6 +8,7 @@ import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
@@ -16,6 +17,9 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
+import { SubagentRoster } from '@crook/claude/SubagentRoster'
+import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
+import { TranscriptTail } from '@crook/claude/TranscriptTail'
 import { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import {
@@ -29,6 +33,7 @@ import {
 import {
   TranscriptDemand,
   TranscriptOutOfStep,
+  TranscriptReadFailed,
   TranscriptSessionRejected,
   type TranscriptUpdate,
   TranscriptWatch,
@@ -46,6 +51,7 @@ const WATCH = TranscriptWatchId.make(0)
 const REPLACEMENT_WATCH = TranscriptWatchId.make(1)
 const SLOWEST_MEASURED_WATCH_INSTALL = Duration.millis(8)
 const WATCHERS_SETTLED = Duration.times(SLOWEST_MEASURED_WATCH_INSTALL, 10)
+const LOCATOR_BUG = 'the locator broke'
 
 const userLine = (text: string) =>
   `${encodeJson({
@@ -100,6 +106,30 @@ const streamsAt = Effect.fn('streamsAt')(function* (
 ) {
   const context = yield* Layer.build(
     Layer.provide(TranscriptStreams.layerAt([root]), MachineStateSync.layerTest(state)),
+  )
+
+  return Context.get(context, TranscriptStreams)
+})
+
+const defectiveStreams = Effect.fn('defectiveStreams')(function* (
+  state: SubscriptionRef.SubscriptionRef<MachineState>,
+) {
+  const brokenLocator = Layer.succeed(
+    TranscriptLocator,
+    TranscriptLocator.of({
+      roots: [],
+      locate: () => Effect.die(new Error(LOCATOR_BUG)),
+      await: () => Effect.die(new Error(LOCATOR_BUG)),
+      awaitSubagent: () => Effect.die(new Error(LOCATOR_BUG)),
+    }),
+  )
+  const context = yield* Layer.build(
+    Layer.provide(TranscriptStreams.layerWithoutDependencies, [
+      brokenLocator,
+      TranscriptTail.layer,
+      SubagentRoster.layer,
+      MachineStateSync.layerTest(state),
+    ]),
   )
 
   return Context.get(context, TranscriptStreams)
@@ -171,298 +201,342 @@ const fakeHub = Effect.fn('fakeHub')(function* (
   return { accepted, link }
 })
 
-layer(BunFileSystem.layer, { excludeTestServices: true })('TranscriptStreams', (it) => {
-  it.effect('opens the pane session, waits for its first prompt, then follows appends', () =>
-    Effect.gen(function* () {
-      const root = yield* claudeRoot()
-      const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
-      const streams = yield* streamsAt(root, state)
-      const events = yield* collect(
-        streams.follow(new PaneTranscript({ pane: PANE }), Option.none()),
-      )
+layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: true })(
+  'TranscriptStreams',
+  (it) => {
+    it.effect('opens the pane session, waits for its first prompt, then follows appends', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(new PaneTranscript({ pane: PANE }), Option.none()),
+        )
 
-      expect(yield* Queue.take(events)).toBe(`opened ${FIRST_SESSION}`)
+        expect(yield* Queue.take(events)).toBe(`opened ${FIRST_SESSION}`)
 
-      const first = userLine('first')
+        const first = userLine('first')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), first)
+        yield* append(transcriptPath(root, FIRST_SESSION), first)
 
-      expect(yield* Queue.take(events)).toBe(`chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`)
+        expect(yield* Queue.take(events)).toBe(`chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`)
 
-      const second = userLine('second')
+        const second = userLine('second')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), second)
+        yield* append(transcriptPath(root, FIRST_SESSION), second)
 
-      expect(yield* Queue.take(events)).toBe(
-        `chunk ${FIRST_SESSION} ${bytesOf(first)}-${bytesOf(first + second)} 1`,
-      )
-    }),
-  )
+        expect(yield* Queue.take(events)).toBe(
+          `chunk ${FIRST_SESSION} ${bytesOf(first)}-${bytesOf(first + second)} 1`,
+        )
+      }),
+    )
 
-  it.effect('waits for a pane that has no Claude session yet', () =>
-    Effect.gen(function* () {
-      const root = yield* claudeRoot()
-      const line = userLine('hello')
+    it.effect('waits for a pane that has no Claude session yet', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const line = userLine('hello')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), line)
+        yield* append(transcriptPath(root, FIRST_SESSION), line)
 
-      const state = yield* SubscriptionRef.make(stateOn(Option.none()))
-      const streams = yield* streamsAt(root, state)
-      const events = yield* collect(
-        streams.follow(new PaneTranscript({ pane: PANE }), Option.none()),
-      )
+        const state = yield* SubscriptionRef.make(stateOn(Option.none()))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(new PaneTranscript({ pane: PANE }), Option.none()),
+        )
 
-      yield* SubscriptionRef.set(state, stateOn(Option.some(FIRST_SESSION)))
+        yield* SubscriptionRef.set(state, stateOn(Option.some(FIRST_SESSION)))
 
-      expect(yield* takeAll(events, 2)).toEqual([
-        `opened ${FIRST_SESSION}`,
-        `chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`,
-      ])
-    }),
-  )
+        expect(yield* takeAll(events, 2)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`,
+        ])
+      }),
+    )
 
-  it.effect('signals /clear by opening the new session and following it from its start', () =>
-    Effect.gen(function* () {
-      const root = yield* claudeRoot()
-      const before = userLine('before')
-      const after = userLine('after')
+    it.effect('signals /clear by opening the new session and following it from its start', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const before = userLine('before')
+        const after = userLine('after')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), before)
-      yield* append(transcriptPath(root, CLEARED_SESSION), after)
+        yield* append(transcriptPath(root, FIRST_SESSION), before)
+        yield* append(transcriptPath(root, CLEARED_SESSION), after)
 
-      const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
-      const streams = yield* streamsAt(root, state)
-      const events = yield* collect(
-        streams.follow(new PaneTranscript({ pane: PANE }), Option.none()),
-      )
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(new PaneTranscript({ pane: PANE }), Option.none()),
+        )
 
-      expect(yield* takeAll(events, 2)).toEqual([
-        `opened ${FIRST_SESSION}`,
-        `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
-      ])
+        expect(yield* takeAll(events, 2)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
+        ])
 
-      yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
+        yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
 
-      expect(yield* takeAll(events, 2)).toEqual([
-        `opened ${CLEARED_SESSION}`,
-        `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
-      ])
-    }),
-  )
+        expect(yield* takeAll(events, 2)).toEqual([
+          `opened ${CLEARED_SESSION}`,
+          `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
+        ])
+      }),
+    )
 
-  it.effect('resumes from a byte offset in the current session', () =>
-    Effect.gen(function* () {
-      const root = yield* claudeRoot()
-      const seen = userLine('seen')
-      const missed = userLine('missed')
+    it.effect('resumes from a byte offset in the current session', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const seen = userLine('seen')
+        const missed = userLine('missed')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), seen + missed)
+        yield* append(transcriptPath(root, FIRST_SESSION), seen + missed)
 
-      const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
-      const streams = yield* streamsAt(root, state)
-      const events = yield* collect(
-        streams.follow(
-          new PaneTranscript({ pane: PANE }),
-          positionAt(FIRST_SESSION, bytesOf(seen)),
-        ),
-      )
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(
+            new PaneTranscript({ pane: PANE }),
+            positionAt(FIRST_SESSION, bytesOf(seen)),
+          ),
+        )
 
-      expect(yield* takeAll(events, 2)).toEqual([
-        `opened ${FIRST_SESSION}`,
-        `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
-      ])
-    }),
-  )
+        expect(yield* takeAll(events, 2)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
+        ])
+      }),
+    )
 
-  it.effect('finishes the session a resume names before opening the one cleared into', () =>
-    Effect.gen(function* () {
-      const root = yield* claudeRoot()
-      const seen = userLine('seen')
-      const missed = userLine('missed')
-      const after = userLine('after')
+    it.effect('finishes the session a resume names before opening the one cleared into', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const seen = userLine('seen')
+        const missed = userLine('missed')
+        const after = userLine('after')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), seen + missed)
-      yield* append(transcriptPath(root, CLEARED_SESSION), after)
+        yield* append(transcriptPath(root, FIRST_SESSION), seen + missed)
+        yield* append(transcriptPath(root, CLEARED_SESSION), after)
 
-      const state = yield* SubscriptionRef.make(stateOn(Option.some(CLEARED_SESSION)))
-      const streams = yield* streamsAt(root, state)
-      const events = yield* collect(
-        streams.follow(
-          new PaneTranscript({ pane: PANE }),
-          positionAt(FIRST_SESSION, bytesOf(seen)),
-        ),
-      )
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(CLEARED_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(
+            new PaneTranscript({ pane: PANE }),
+            positionAt(FIRST_SESSION, bytesOf(seen)),
+          ),
+        )
 
-      expect(yield* takeAll(events, 3)).toEqual([
-        `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
-        `opened ${CLEARED_SESSION}`,
-        `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
-      ])
-    }),
-  )
+        expect(yield* takeAll(events, 3)).toEqual([
+          `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
+          `opened ${CLEARED_SESSION}`,
+          `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
+        ])
+      }),
+    )
 
-  it.effect('lists the subagents of the pane session as their meta files appear', () =>
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem
-      const root = yield* claudeRoot()
-      const line = userLine('spawn')
+    it.effect('lists the subagents of the pane session as their meta files appear', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const root = yield* claudeRoot()
+        const line = userLine('spawn')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), line)
+        yield* append(transcriptPath(root, FIRST_SESSION), line)
 
-      const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
-      const streams = yield* streamsAt(root, state)
-      const events = yield* collect(
-        streams.follow(new PaneTranscript({ pane: PANE }), Option.none()),
-      )
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(new PaneTranscript({ pane: PANE }), Option.none()),
+        )
 
-      expect(yield* takeAll(events, 2)).toEqual([
-        `opened ${FIRST_SESSION}`,
-        `chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`,
-      ])
+        expect(yield* takeAll(events, 2)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`,
+        ])
 
-      yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
-      yield* fileSystem.writeFileString(
-        `${subagentsPath(root, FIRST_SESSION)}/agent-${SUBAGENT}.meta.json`,
-        encodeJson({ agentType: 'general-purpose', description: 'Read hello.txt' }),
-      )
+        yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
+        yield* fileSystem.writeFileString(
+          `${subagentsPath(root, FIRST_SESSION)}/agent-${SUBAGENT}.meta.json`,
+          encodeJson({
+            agentType: 'general-purpose',
+            description: 'Read hello.txt',
+            spawnDepth: 1,
+          }),
+        )
 
-      expect(yield* Queue.take(events)).toBe(`subagents ${FIRST_SESSION} ${SUBAGENT}`)
-    }),
-  )
+        expect(yield* Queue.take(events)).toBe(`subagents ${FIRST_SESSION} ${SUBAGENT}`)
+      }),
+    )
 
-  it.effect('follows a subagent transcript once it exists', () =>
-    Effect.gen(function* () {
-      const fileSystem = yield* FileSystem.FileSystem
-      const root = yield* claudeRoot()
+    it.effect('follows a subagent transcript once it exists', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const root = yield* claudeRoot()
 
-      yield* append(transcriptPath(root, FIRST_SESSION), userLine('spawn'))
+        yield* append(transcriptPath(root, FIRST_SESSION), userLine('spawn'))
 
-      const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
-      const streams = yield* streamsAt(root, state)
-      const events = yield* collect(
-        streams.follow(
-          new SubagentTranscript({ session: FIRST_SESSION, subagent: SUBAGENT }),
-          Option.none(),
-        ),
-      )
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const events = yield* collect(
+          streams.follow(
+            new SubagentTranscript({ session: FIRST_SESSION, subagent: SUBAGENT }),
+            Option.none(),
+          ),
+        )
 
-      expect(yield* Queue.take(events)).toBe(`opened ${FIRST_SESSION}`)
+        expect(yield* Queue.take(events)).toBe(`opened ${FIRST_SESSION}`)
 
-      const line = userLine('subagent prompt')
+        const line = userLine('subagent prompt')
 
-      yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
-      yield* append(`${subagentsPath(root, FIRST_SESSION)}/agent-${SUBAGENT}.jsonl`, line)
+        yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
+        yield* append(`${subagentsPath(root, FIRST_SESSION)}/agent-${SUBAGENT}.jsonl`, line)
 
-      expect(yield* Queue.take(events)).toBe(`chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`)
-    }),
-  )
+        expect(yield* Queue.take(events)).toBe(`chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`)
+      }),
+    )
 
-  it.effect('restarts a watch from where the hub says the last chunk ended', () =>
-    Effect.gen(function* () {
-      const root = yield* claudeRoot()
-      const seen = userLine('seen')
-      const missed = userLine('missed')
+    it.effect('restarts a watch from where the hub says the last chunk ended', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const seen = userLine('seen')
+        const missed = userLine('missed')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), seen + missed)
+        yield* append(transcriptPath(root, FIRST_SESSION), seen + missed)
 
-      const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
-      const streams = yield* streamsAt(root, state)
-      const demands = yield* Queue.unbounded<TranscriptDemand>()
-      const hub = yield* fakeHub(demands, positionAt(FIRST_SESSION, 0))
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const demands = yield* Queue.unbounded<TranscriptDemand>()
+        const hub = yield* fakeHub(demands, positionAt(FIRST_SESSION, 0))
 
-      yield* Effect.forkScoped(streams.serve(hub.link))
-      yield* Queue.offer(
-        demands,
-        new TranscriptDemand({
-          watches: [
-            new TranscriptWatch({
-              id: WATCH,
-              source: new PaneTranscript({ pane: PANE }),
-              from: positionAt(FIRST_SESSION, bytesOf(seen)),
-            }),
-          ],
-        }),
-      )
+        yield* Effect.forkScoped(streams.serve(hub.link))
+        yield* Queue.offer(
+          demands,
+          new TranscriptDemand({
+            watches: [
+              new TranscriptWatch({
+                id: WATCH,
+                source: new PaneTranscript({ pane: PANE }),
+                from: positionAt(FIRST_SESSION, bytesOf(seen)),
+              }),
+            ],
+          }),
+        )
 
-      expect(yield* takeAll(hub.accepted, 4)).toEqual([
-        `0 opened ${FIRST_SESSION}`,
-        `0 rejected chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
-        `0 opened ${FIRST_SESSION}`,
-        `0 chunk ${FIRST_SESSION} 0-${bytesOf(seen + missed)} 2`,
-      ])
-    }),
-  )
+        expect(yield* takeAll(hub.accepted, 4)).toEqual([
+          `0 opened ${FIRST_SESSION}`,
+          `0 rejected chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
+          `0 opened ${FIRST_SESSION}`,
+          `0 chunk ${FIRST_SESSION} 0-${bytesOf(seen + missed)} 2`,
+        ])
+      }),
+    )
 
-  it.effect('stops a watch the hub no longer asks for', () =>
-    Effect.gen(function* () {
-      const root = yield* claudeRoot()
-      const first = userLine('first')
-      const second = userLine('second')
+    it.effect('stops a watch the hub no longer asks for', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const first = userLine('first')
+        const second = userLine('second')
 
-      yield* append(transcriptPath(root, FIRST_SESSION), first)
+        yield* append(transcriptPath(root, FIRST_SESSION), first)
 
-      const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
-      const streams = yield* streamsAt(root, state)
-      const demands = yield* Queue.unbounded<TranscriptDemand>()
-      const hub = yield* fakeHub(demands, Option.none())
-      const watchFor = (id: TranscriptWatchId) =>
-        new TranscriptWatch({ id, source: new PaneTranscript({ pane: PANE }), from: Option.none() })
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const demands = yield* Queue.unbounded<TranscriptDemand>()
+        const hub = yield* fakeHub(demands, Option.none())
+        const watchFor = (id: TranscriptWatchId) =>
+          new TranscriptWatch({
+            id,
+            source: new PaneTranscript({ pane: PANE }),
+            from: Option.none(),
+          })
 
-      yield* Effect.forkScoped(streams.serve(hub.link))
-      yield* Queue.offer(demands, new TranscriptDemand({ watches: [watchFor(WATCH)] }))
+        yield* Effect.forkScoped(streams.serve(hub.link))
+        yield* Queue.offer(demands, new TranscriptDemand({ watches: [watchFor(WATCH)] }))
 
-      expect(yield* takeAll(hub.accepted, 2)).toEqual([
-        `0 opened ${FIRST_SESSION}`,
-        `0 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
-      ])
+        expect(yield* takeAll(hub.accepted, 2)).toEqual([
+          `0 opened ${FIRST_SESSION}`,
+          `0 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
+        ])
 
-      yield* Queue.offer(demands, new TranscriptDemand({ watches: [] }))
-      yield* Queue.offer(demands, new TranscriptDemand({ watches: [watchFor(REPLACEMENT_WATCH)] }))
+        yield* Queue.offer(demands, new TranscriptDemand({ watches: [] }))
+        yield* Queue.offer(
+          demands,
+          new TranscriptDemand({ watches: [watchFor(REPLACEMENT_WATCH)] }),
+        )
 
-      expect(yield* takeAll(hub.accepted, 2)).toEqual([
-        `1 opened ${FIRST_SESSION}`,
-        `1 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
-      ])
+        expect(yield* takeAll(hub.accepted, 2)).toEqual([
+          `1 opened ${FIRST_SESSION}`,
+          `1 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
+        ])
 
-      yield* append(transcriptPath(root, FIRST_SESSION), second)
+        yield* append(transcriptPath(root, FIRST_SESSION), second)
 
-      expect(yield* Queue.take(hub.accepted)).toBe(
-        `1 chunk ${FIRST_SESSION} ${bytesOf(first)}-${bytesOf(first + second)} 1`,
-      )
+        expect(yield* Queue.take(hub.accepted)).toBe(
+          `1 chunk ${FIRST_SESSION} ${bytesOf(first)}-${bytesOf(first + second)} 1`,
+        )
 
-      yield* Effect.sleep(WATCHERS_SETTLED)
+        yield* Effect.sleep(WATCHERS_SETTLED)
 
-      expect(yield* Queue.size(hub.accepted)).toBe(0)
-    }),
-  )
+        expect(yield* Queue.size(hub.accepted)).toBe(0)
+      }),
+    )
 
-  it.effect('tells the hub when a watch cannot run', () =>
-    Effect.gen(function* () {
-      const root = yield* claudeRoot()
-      const state = yield* SubscriptionRef.make(stateOn(Option.none()))
-      const streams = yield* streamsAt(root, state)
-      const demands = yield* Queue.unbounded<TranscriptDemand>()
-      const hub = yield* fakeHub(demands, Option.none())
-      const unsafe = ClaudeSessionId.make('../escape')
+    it.effect('tells the hub when a watch cannot run', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const state = yield* SubscriptionRef.make(stateOn(Option.none()))
+        const streams = yield* streamsAt(root, state)
+        const demands = yield* Queue.unbounded<TranscriptDemand>()
+        const hub = yield* fakeHub(demands, Option.none())
+        const unsafe = ClaudeSessionId.make('../escape')
 
-      yield* Effect.forkScoped(streams.serve(hub.link))
-      yield* Queue.offer(
-        demands,
-        new TranscriptDemand({
-          watches: [
-            new TranscriptWatch({
-              id: WATCH,
-              source: new SubagentTranscript({ session: unsafe, subagent: SUBAGENT }),
-              from: Option.none(),
-            }),
-          ],
-        }),
-      )
+        yield* Effect.forkScoped(streams.serve(hub.link))
+        yield* Queue.offer(
+          demands,
+          new TranscriptDemand({
+            watches: [
+              new TranscriptWatch({
+                id: WATCH,
+                source: new SubagentTranscript({ session: unsafe, subagent: SUBAGENT }),
+                from: Option.none(),
+              }),
+            ],
+          }),
+        )
 
-      expect(yield* takeAll(hub.accepted, 2)).toEqual([
-        `0 opened ${unsafe}`,
-        `0 failed ${new TranscriptSessionRejected({ session: unsafe }).message}`,
-      ])
-    }),
-  )
-})
+        expect(yield* takeAll(hub.accepted, 2)).toEqual([
+          `0 opened ${unsafe}`,
+          `0 failed ${new TranscriptSessionRejected({ session: unsafe }).message}`,
+        ])
+      }),
+    )
+
+    it.effect('tells the hub when a watch dies of a defect, instead of going quiet', () =>
+      Effect.gen(function* () {
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* defectiveStreams(state)
+        const demands = yield* Queue.unbounded<TranscriptDemand>()
+        const hub = yield* fakeHub(demands, Option.none())
+
+        yield* Effect.forkScoped(streams.serve(hub.link))
+        yield* Queue.offer(
+          demands,
+          new TranscriptDemand({
+            watches: [
+              new TranscriptWatch({
+                id: WATCH,
+                source: new PaneTranscript({ pane: PANE }),
+                from: Option.none(),
+              }),
+            ],
+          }),
+        )
+        const [opened, failed] = yield* takeAll(hub.accepted, 2)
+
+        expect(opened).toBe(`0 opened ${FIRST_SESSION}`)
+        expect(failed).toContain(
+          `0 failed ${new TranscriptReadFailed({ detail: 'a bug in the crook agent stopped the watch: ' }).message}`,
+        )
+        expect(failed).toContain(LOCATOR_BUG)
+      }),
+    )
+  },
+)

@@ -5,12 +5,13 @@ import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
-import { ClaudeRoots } from '@crook/claude/ClaudeRoots'
-import { awaitPath, watchReady } from '@crook/claude/FileWatch'
+import { claudeRoots } from '@crook/claude/ClaudeRoots'
+import { FileWatch } from '@crook/claude/FileWatch'
 import { ClaudeSessionId, type SubagentId } from '@crook/domain/Ids'
 
 export type LocateError = TranscriptSessionInvalid | TranscriptDirectoryUnreadable
@@ -19,6 +20,8 @@ const PROJECTS_DIRECTORY = 'projects'
 const TRANSCRIPT_EXTENSION = '.jsonl'
 const SUBAGENTS_DIRECTORY = 'subagents'
 const SAFE_SESSION_ID = /^[0-9A-Za-z][0-9A-Za-z-]*$/u
+
+export const SUBAGENT_FILE_PREFIX = 'agent-'
 
 export class TranscriptFile extends Schema.Class<TranscriptFile>('TranscriptFile')({
   session: ClaudeSessionId,
@@ -43,24 +46,29 @@ export class TranscriptDirectoryUnreadable extends Schema.TaggedError<Transcript
   }
 }
 
-export const sessionDirectoryOf = (file: TranscriptFile) =>
-  file.path.slice(0, -TRANSCRIPT_EXTENSION.length)
+export const sessionDirectoryOf = (path: Path.Path, file: TranscriptFile) =>
+  path.join(path.dirname(file.path), path.basename(file.path, TRANSCRIPT_EXTENSION))
 
-export const subagentsDirectoryOf = (file: TranscriptFile) =>
-  `${sessionDirectoryOf(file)}/${SUBAGENTS_DIRECTORY}`
+export const subagentsDirectoryOf = (path: Path.Path, file: TranscriptFile) =>
+  path.join(sessionDirectoryOf(path, file), SUBAGENTS_DIRECTORY)
 
-export const subagentFileOf = (file: TranscriptFile, subagent: SubagentId) =>
+export const subagentFileOf = (path: Path.Path, file: TranscriptFile, subagent: SubagentId) =>
   new TranscriptFile({
     session: file.session,
-    path: `${subagentsDirectoryOf(file)}/agent-${subagent}${TRANSCRIPT_EXTENSION}`,
+    path: path.join(
+      subagentsDirectoryOf(path, file),
+      `${SUBAGENT_FILE_PREFIX}${subagent}${TRANSCRIPT_EXTENSION}`,
+    ),
   })
 
 const make = (roots: readonly string[]) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const watch = yield* FileWatch
 
-    const unreadable = (path: string) => (cause: PlatformError) =>
-      new TranscriptDirectoryUnreadable({ path, cause })
+    const unreadable = (directory: string) => (cause: PlatformError) =>
+      new TranscriptDirectoryUnreadable({ path: directory, cause })
 
     const validSession = (session: ClaudeSessionId) =>
       SAFE_SESSION_ID.test(session)
@@ -68,23 +76,24 @@ const make = (roots: readonly string[]) =>
         : Effect.fail(new TranscriptSessionInvalid({ session }))
 
     const projectDirectories = (root: string) => {
-      const projects = `${root}/${PROJECTS_DIRECTORY}`
+      const projects = path.join(root, PROJECTS_DIRECTORY)
 
       return fileSystem.readDirectory(projects).pipe(
-        Effect.map(Arr.map((name) => `${projects}/${name}`)),
+        Effect.map(Arr.map((name) => path.join(projects, name))),
         Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(Arr.empty<string>())),
         Effect.mapError(unreadable(projects)),
       )
     }
 
     const fileIn = (directory: string, session: ClaudeSessionId) => {
-      const path = `${directory}/${session}${TRANSCRIPT_EXTENSION}`
+      const file = new TranscriptFile({
+        session,
+        path: path.join(directory, `${session}${TRANSCRIPT_EXTENSION}`),
+      })
 
-      return fileSystem.exists(path).pipe(
-        Effect.map((exists) =>
-          Option.liftPredicate(new TranscriptFile({ session, path }), () => exists),
-        ),
-        Effect.mapError(unreadable(path)),
+      return fileSystem.exists(file.path).pipe(
+        Effect.map((exists) => (exists ? Option.some(file) : Option.none())),
+        Effect.mapError(unreadable(file.path)),
       )
     }
 
@@ -105,7 +114,7 @@ const make = (roots: readonly string[]) =>
     })
 
     const watchProjectDirectory = (directory: string, session: ClaudeSessionId) =>
-      watchReady(fileSystem, directory).pipe(
+      watch.watchReady(directory).pipe(
         Stream.mapError(unreadable(directory)),
         Stream.filter(
           Option.match({
@@ -116,13 +125,13 @@ const make = (roots: readonly string[]) =>
       )
 
     const rootTriggers = (root: string, session: ClaudeSessionId) => {
-      const projects = `${root}/${PROJECTS_DIRECTORY}`
+      const projects = path.join(root, PROJECTS_DIRECTORY)
 
       return Stream.unwrap(
-        awaitPath(fileSystem, projects).pipe(
+        watch.awaitPath(projects).pipe(
           Effect.mapError(unreadable(projects)),
           Effect.as(
-            watchReady(fileSystem, projects).pipe(
+            watch.watchReady(projects).pipe(
               Stream.mapError(unreadable(projects)),
               Stream.switchMap(() =>
                 Stream.unwrap(
@@ -165,9 +174,9 @@ const make = (roots: readonly string[]) =>
       file: TranscriptFile,
       subagent: SubagentId,
     ) {
-      const target = subagentFileOf(file, subagent)
+      const target = subagentFileOf(path, file, subagent)
 
-      yield* awaitPath(fileSystem, target.path).pipe(Effect.mapError(unreadable(target.path)))
+      yield* watch.awaitPath(target.path).pipe(Effect.mapError(unreadable(target.path)))
 
       return target
     })
@@ -189,7 +198,8 @@ export class TranscriptLocator extends Context.Service<
     ) => Effect.Effect<TranscriptFile, TranscriptDirectoryUnreadable>
   }
 >()('@crook/claude/TranscriptLocator') {
-  static readonly layerAt = (roots: readonly string[]) => Layer.effect(this, make(roots))
+  static readonly layerAt = (roots: readonly string[]) =>
+    Layer.effect(this, make(roots)).pipe(Layer.provide(FileWatch.layer))
 
-  static readonly layer = Layer.unwrap(Effect.map(ClaudeRoots, (roots) => this.layerAt(roots)))
+  static readonly layer = Layer.unwrap(Effect.map(claudeRoots, (roots) => this.layerAt(roots)))
 }

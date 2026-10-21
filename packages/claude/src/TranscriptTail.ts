@@ -10,7 +10,7 @@ import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
-import { watchReady } from '@crook/claude/FileWatch'
+import { FileWatch } from '@crook/claude/FileWatch'
 import type { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import { parseLine } from '@crook/claude/TranscriptParser'
 import { type ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
@@ -131,13 +131,16 @@ const afterRead = (
 
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
+  const fileWatch = yield* FileWatch
+
+  const unreadableFile = (file: TranscriptFile) => (cause: PlatformError) =>
+    new TranscriptUnreadable({ path: file.path, cause })
 
   const open = Effect.fn('TranscriptTail.open')(function* (
     file: TranscriptFile,
     from: TranscriptOffset,
   ) {
-    const unreadable = (cause: PlatformError) =>
-      new TranscriptUnreadable({ path: file.path, cause })
+    const unreadable = unreadableFile(file)
     const handle = yield* fileSystem
       .open(file.path, { flag: 'r' })
       .pipe(Effect.mapError(unreadable))
@@ -208,24 +211,21 @@ const make = Effect.gen(function* () {
       })
     })
 
-    const available = Stream.unwrap(
+    return Stream.unwrap(
       Effect.as(
         checkSize,
         Stream.paginate<void, TranscriptChunk, TailError>(undefined, () => readOnce),
       ),
     )
-
-    return { available, unreadable }
   })
 
-  const drain = (file: TranscriptFile, from: TranscriptOffset) =>
-    Stream.unwrap(Effect.map(open(file, from), ({ available }) => available))
+  const drain = (file: TranscriptFile, from: TranscriptOffset) => Stream.unwrap(open(file, from))
 
   const follow = (file: TranscriptFile, from: TranscriptOffset) =>
     Stream.unwrap(
-      Effect.map(open(file, from), ({ available, unreadable }) =>
-        watchReady(fileSystem, file.path).pipe(
-          Stream.mapError(unreadable),
+      Effect.map(open(file, from), (available) =>
+        fileWatch.watchReady(file.path).pipe(
+          Stream.mapError(unreadableFile(file)),
           Stream.buffer({ capacity: 1, strategy: 'sliding' }),
           Stream.flatMap(() => available),
         ),
@@ -248,5 +248,5 @@ export class TranscriptTail extends Context.Service<
     ) => Stream.Stream<TranscriptChunk, TailError>
   }
 >()('@crook/claude/TranscriptTail') {
-  static readonly layer = Layer.effect(this, make)
+  static readonly layer = Layer.effect(this, make).pipe(Layer.provide(FileWatch.layer))
 }

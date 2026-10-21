@@ -1,3 +1,5 @@
+import * as Arr from 'effect/Array'
+import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
@@ -68,5 +70,46 @@ export const positionAfter = (
       TranscriptChunk: (chunk) =>
         Option.some(new TranscriptPosition({ session: chunk.session, offset: chunk.nextOffset })),
       SubagentsChanged: () => position,
+    }),
+  )
+
+const inSession = (position: Option.Option<TranscriptPosition>, session: ClaudeSessionId) =>
+  Option.exists(position, (current) => current.session === session)
+
+const chunkRemainder = (
+  position: Option.Option<TranscriptPosition>,
+  chunk: TranscriptChunk,
+): Option.Option<TranscriptEvent> =>
+  pipe(
+    position,
+    Option.filter(
+      (current) =>
+        current.session === chunk.session &&
+        chunk.offset <= current.offset &&
+        current.offset < chunk.nextOffset,
+    ),
+    Option.map((current) =>
+      current.offset === chunk.offset
+        ? chunk
+        : new TranscriptChunk({
+            session: chunk.session,
+            offset: current.offset,
+            nextOffset: chunk.nextOffset,
+            messages: Arr.filter(chunk.messages, (message) => message.offset >= current.offset),
+          }),
+    ),
+  )
+
+export const remainderAfter = (
+  position: Option.Option<TranscriptPosition>,
+  event: TranscriptEvent,
+): Option.Option<TranscriptEvent> =>
+  Match.value(event).pipe(
+    Match.tagsExhaustive({
+      TranscriptOpened: (opened) =>
+        Option.liftPredicate(opened, ({ session }) => !inSession(position, session)),
+      TranscriptChunk: (chunk) => chunkRemainder(position, chunk),
+      SubagentsChanged: (changed) =>
+        Option.liftPredicate(changed, ({ session }) => inSession(position, session)),
     }),
   )

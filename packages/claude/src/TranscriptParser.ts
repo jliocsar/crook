@@ -12,8 +12,10 @@ import {
   AssistantMessage,
   type AssistantBlock,
   CompactBoundaryBlock,
+  CompactTrigger,
   CompactSummaryBlock,
   ImageBlock,
+  ImageMediaType,
   InterruptionBlock,
   LocalCommandBlock,
   LocalCommandOutputBlock,
@@ -40,6 +42,12 @@ import {
 const UNKNOWN_KIND = 'unknown'
 const INTERRUPTION_PREFIX = '[Request interrupted by user'
 const TASK_NOTIFICATION_TAG = 'task-notification'
+const TASK_ID_TAG = 'task-id'
+const TASK_TOOL_USE_ID_TAG = 'tool-use-id'
+const TASK_STATUS_TAG = 'status'
+const TASK_SUMMARY_TAG = 'summary'
+const TASK_RESULT_TAG = 'result'
+const TOOL_RESULT_KIND = 'tool_result'
 const COMMAND_NAME_TAG = 'command-name'
 const COMMAND_ARGS_TAG = 'command-args'
 const COMMAND_STDOUT_TAG = 'local-command-stdout'
@@ -193,7 +201,7 @@ const RawSourcedImage = Schema.Struct({
   type: Schema.Literal('image'),
   source: Schema.Struct({
     type: Schema.Literal('base64'),
-    media_type: Schema.String,
+    media_type: ImageMediaType,
     data: Schema.String,
   }),
 })
@@ -201,7 +209,7 @@ const RawSourcedImage = Schema.Struct({
 const RawInlineImage = Schema.Struct({
   type: Schema.Literal('image'),
   data: Schema.String,
-  mimeType: Schema.String,
+  mimeType: ImageMediaType,
 })
 
 const RawToolReference = Schema.Struct({
@@ -210,7 +218,7 @@ const RawToolReference = Schema.Struct({
 })
 
 const RawToolResult = Schema.Struct({
-  type: Schema.Literal('tool_result'),
+  type: Schema.Literal(TOOL_RESULT_KIND),
   tool_use_id: Schema.String,
   is_error: Schema.optionalKey(Schema.Boolean),
   content: Schema.optionalKey(Content),
@@ -233,6 +241,21 @@ const RawLaunch = Schema.Struct({ agentId: SubagentId, status: Schema.String })
 type RawUser = typeof RawUser.Type
 
 const decodeKind = Schema.decodeUnknownOption(Kind)
+const decodeText = Schema.decodeUnknownOption(RawText)
+const decodeThinking = Schema.decodeUnknownOption(RawThinking)
+const decodeToolUse = Schema.decodeUnknownOption(RawToolUse)
+const decodeSourcedImage = Schema.decodeUnknownOption(RawSourcedImage)
+const decodeInlineImage = Schema.decodeUnknownOption(RawInlineImage)
+const decodeToolReference = Schema.decodeUnknownOption(RawToolReference)
+const decodeToolResult = Schema.decodeUnknownOption(RawToolResult)
+const decodePatch = Schema.decodeUnknownOption(RawPatch)
+const decodeLaunch = Schema.decodeUnknownOption(RawLaunch)
+const decodeCompactTrigger = Schema.decodeUnknownOption(CompactTrigger)
+const decodeEnvelope = Schema.decodeUnknownOption(Envelope)
+const decodeUser = Schema.decodeUnknownOption(RawUser)
+const decodeAssistant = Schema.decodeUnknownOption(RawAssistant)
+const decodeSystem = Schema.decodeUnknownOption(RawSystem)
+const decodeAttachment = Schema.decodeUnknownOption(RawAttachment)
 
 const kindOf = (value: Schema.Json) =>
   decodeKind(value).pipe(
@@ -247,25 +270,28 @@ const withoutAnsi = (text: string) => text.replaceAll(ANSI_SEQUENCE, '')
 
 const textBlock = (text: string) => new TextBlock({ text })
 
-const imageBlock = (mediaType: string, data: string) => new ImageBlock({ mediaType, data })
-
-const contentBlock = (value: Schema.Json): ToolResultContent =>
+const imageOf = (value: Schema.Json) =>
   pipe(
-    Schema.decodeUnknownOption(RawText)(value),
-    Option.map((raw): ToolResultContent => textBlock(raw.text)),
-    Option.orElse(() =>
-      Option.map(Schema.decodeUnknownOption(RawSourcedImage)(value), (raw) =>
-        imageBlock(raw.source.media_type, raw.source.data),
-      ),
-    ),
-    Option.orElse(() =>
-      Option.map(Schema.decodeUnknownOption(RawInlineImage)(value), (raw) =>
-        imageBlock(raw.mimeType, raw.data),
-      ),
+    decodeSourcedImage(value),
+    Option.map(
+      (raw) => new ImageBlock({ mediaType: raw.source.media_type, data: raw.source.data }),
     ),
     Option.orElse(() =>
       Option.map(
-        Schema.decodeUnknownOption(RawToolReference)(value),
+        decodeInlineImage(value),
+        (raw) => new ImageBlock({ mediaType: raw.mimeType, data: raw.data }),
+      ),
+    ),
+  )
+
+const contentBlock = (value: Schema.Json): ToolResultContent =>
+  pipe(
+    decodeText(value),
+    Option.map((raw): ToolResultContent => textBlock(raw.text)),
+    Option.orElse((): Option.Option<ToolResultContent> => imageOf(value)),
+    Option.orElse(() =>
+      Option.map(
+        decodeToolReference(value),
         (raw) => new ToolReferenceBlock({ toolName: raw.tool_name }),
       ),
     ),
@@ -282,7 +308,7 @@ const toolResultContent = (content: Option.Option<typeof Content.Type>) =>
 const patchOf = (result: Option.Option<Schema.Json>) =>
   pipe(
     result,
-    Option.flatMap(Schema.decodeUnknownOption(RawPatch)),
+    Option.flatMap(decodePatch),
     Option.map((raw) => Arr.map(raw.structuredPatch, (hunk) => new PatchHunk(hunk))),
     Option.filter((hunks) => Arr.isReadonlyArrayNonEmpty(hunks)),
   )
@@ -290,7 +316,7 @@ const patchOf = (result: Option.Option<Schema.Json>) =>
 const launchOf = (result: Option.Option<Schema.Json>) =>
   pipe(
     result,
-    Option.flatMap(Schema.decodeUnknownOption(RawLaunch)),
+    Option.flatMap(decodeLaunch),
     Option.map((raw) => new SubagentLaunch({ subagent: raw.agentId, status: raw.status })),
   )
 
@@ -312,34 +338,23 @@ const userBlock =
   (details: Option.Option<Schema.Json>) =>
   (value: Schema.Json): UserBlock =>
     pipe(
-      Schema.decodeUnknownOption(RawToolResult)(value),
+      decodeToolResult(value),
       Option.map(toolResultBlock(details)),
-      Option.orElse(() =>
-        Option.map(Schema.decodeUnknownOption(RawText)(value), (raw) => userTextBlock(raw.text)),
-      ),
-      Option.orElse(() =>
-        Option.map(Schema.decodeUnknownOption(RawSourcedImage)(value), (raw) =>
-          imageBlock(raw.source.media_type, raw.source.data),
-        ),
-      ),
-      Option.orElse(() =>
-        Option.map(Schema.decodeUnknownOption(RawInlineImage)(value), (raw) =>
-          imageBlock(raw.mimeType, raw.data),
-        ),
-      ),
+      Option.orElse(() => Option.map(decodeText(value), (raw) => userTextBlock(raw.text))),
+      Option.orElse((): Option.Option<UserBlock> => imageOf(value)),
       Option.getOrElse((): UserBlock => new UnrecognizedBlock({ kind: kindOf(value) })),
     )
 
 const taskNotificationBlock = (text: string) =>
   Option.map(
-    taggedText(text, 'task-id'),
+    taggedText(text, TASK_ID_TAG),
     (taskId) =>
       new TaskNotificationBlock({
         taskId,
-        toolUseId: taggedText(text, 'tool-use-id'),
-        status: taggedText(text, 'status'),
-        summary: taggedText(text, 'summary'),
-        result: taggedText(text, 'result'),
+        toolUseId: taggedText(text, TASK_TOOL_USE_ID_TAG),
+        status: taggedText(text, TASK_STATUS_TAG),
+        summary: taggedText(text, TASK_SUMMARY_TAG),
+        result: taggedText(text, TASK_RESULT_TAG),
       }),
   )
 
@@ -361,7 +376,8 @@ const commandOutputOf = (text: string) =>
 
 const stringContentBlock = (raw: RawUser, text: string): UserBlock =>
   pipe(
-    Option.liftPredicate(new CompactSummaryBlock({ text }), () => raw.isCompactSummary === true),
+    Option.liftPredicate(raw, (entry) => entry.isCompactSummary === true),
+    Option.map((): UserBlock => new CompactSummaryBlock({ text })),
     Option.orElse((): Option.Option<UserBlock> =>
       raw.origin?.kind === TASK_NOTIFICATION_TAG ||
       text.trimStart().startsWith(`<${TASK_NOTIFICATION_TAG}>`)
@@ -375,7 +391,7 @@ const stringContentBlock = (raw: RawUser, text: string): UserBlock =>
 
 const singleToolResultDetails = (raw: RawUser) =>
   Schema.is(Schema.String)(raw.message.content) ||
-  Arr.filter(raw.message.content, (value) => kindOf(value) === 'tool_result').length !== 1
+  Arr.filter(raw.message.content, (value) => kindOf(value) === TOOL_RESULT_KIND).length !== 1
     ? Option.none<Schema.Json>()
     : Option.fromUndefinedOr(raw.toolUseResult)
 
@@ -387,11 +403,11 @@ const userBlocks = (raw: RawUser): readonly UserBlock[] => {
     : Arr.map(content, userBlock(singleToolResultDetails(raw)))
 }
 
-const envelopeOf = (json: Schema.Json, line: TranscriptOffset) => {
-  const envelope = Schema.decodeUnknownOption(Envelope)(json)
+const envelopeOf = (json: Schema.Json, offset: TranscriptOffset) => {
+  const envelope = decodeEnvelope(json)
 
   return {
-    line,
+    offset,
     uuid: Option.flatMap(envelope, (found) => Option.fromUndefinedOr(found.uuid)),
     timestamp: pipe(
       envelope,
@@ -402,16 +418,16 @@ const envelopeOf = (json: Schema.Json, line: TranscriptOffset) => {
   }
 }
 
-const unrecognizedEntry = (line: TranscriptOffset, entryType: string) => [
-  new UnrecognizedEntry({ line, entryType }),
+const unrecognizedEntry = (offset: TranscriptOffset, entryType: string) => [
+  new UnrecognizedEntry({ offset, entryType }),
 ]
 
-const userEntry = (json: Schema.Json, line: TranscriptOffset): readonly TranscriptMessage[] =>
-  Option.match(Schema.decodeUnknownOption(RawUser)(json), {
-    onNone: () => unrecognizedEntry(line, 'user'),
+const userEntry = (json: Schema.Json, offset: TranscriptOffset): readonly TranscriptMessage[] =>
+  Option.match(decodeUser(json), {
+    onNone: () => unrecognizedEntry(offset, 'user'),
     onSome: (raw) => [
       new UserMessage({
-        ...envelopeOf(json, line),
+        ...envelopeOf(json, offset),
         isMeta: raw.isMeta ?? false,
         origin: Option.fromUndefinedOr(raw.origin?.kind),
         queued: false,
@@ -422,29 +438,29 @@ const userEntry = (json: Schema.Json, line: TranscriptOffset): readonly Transcri
 
 const assistantBlock = (value: Schema.Json): AssistantBlock =>
   pipe(
-    Schema.decodeUnknownOption(RawText)(value),
+    decodeText(value),
     Option.map((raw): AssistantBlock => textBlock(raw.text)),
     Option.orElse(() =>
-      Option.map(
-        Schema.decodeUnknownOption(RawThinking)(value),
-        (raw) => new ThinkingBlock({ text: raw.thinking }),
-      ),
+      Option.map(decodeThinking(value), (raw) => new ThinkingBlock({ text: raw.thinking })),
     ),
     Option.orElse(() =>
       Option.map(
-        Schema.decodeUnknownOption(RawToolUse)(value),
+        decodeToolUse(value),
         (raw) => new ToolUseBlock({ id: raw.id, name: raw.name, input: raw.input }),
       ),
     ),
     Option.getOrElse(() => new UnrecognizedBlock({ kind: kindOf(value) })),
   )
 
-const assistantEntry = (json: Schema.Json, line: TranscriptOffset): readonly TranscriptMessage[] =>
-  Option.match(Schema.decodeUnknownOption(RawAssistant)(json), {
-    onNone: () => unrecognizedEntry(line, 'assistant'),
+const assistantEntry = (
+  json: Schema.Json,
+  offset: TranscriptOffset,
+): readonly TranscriptMessage[] =>
+  Option.match(decodeAssistant(json), {
+    onNone: () => unrecognizedEntry(offset, 'assistant'),
     onSome: (raw) => [
       new AssistantMessage({
-        ...envelopeOf(json, line),
+        ...envelopeOf(json, offset),
         apiMessageId: Option.fromUndefinedOr(raw.message.id),
         model: Option.fromUndefinedOr(raw.message.model),
         stopReason: Option.fromNullishOr(raw.message.stop_reason),
@@ -458,24 +474,27 @@ const wholeNumber = (value: number | undefined) =>
   Option.filter(Option.fromUndefinedOr(value), Number.isInteger)
 
 const systemMessage =
-  (json: Schema.Json, line: TranscriptOffset) =>
+  (json: Schema.Json, offset: TranscriptOffset) =>
   (block: CompactBoundaryBlock | TurnDurationBlock | LocalCommandOutputBlock | NoticeBlock) => [
-    new SystemMessage({ ...envelopeOf(json, line), blocks: [block] }),
+    new SystemMessage({ ...envelopeOf(json, offset), blocks: [block] }),
   ]
 
 const systemEntryOf = (
   raw: typeof RawSystem.Type,
   json: Schema.Json,
-  line: TranscriptOffset,
+  offset: TranscriptOffset,
 ): readonly TranscriptMessage[] =>
   Match.value(raw.subtype).pipe(
     Match.when('compact_boundary', () =>
       systemMessage(
         json,
-        line,
+        offset,
       )(
         new CompactBoundaryBlock({
-          trigger: raw.compactMetadata?.trigger ?? UNKNOWN_KIND,
+          trigger: Option.flatMap(
+            Option.fromUndefinedOr(raw.compactMetadata?.trigger),
+            decodeCompactTrigger,
+          ),
           tokensBefore: wholeNumber(raw.compactMetadata?.preTokens),
           tokensAfter: wholeNumber(raw.compactMetadata?.postTokens),
         }),
@@ -483,8 +502,8 @@ const systemEntryOf = (
     ),
     Match.when('turn_duration', () =>
       Option.match(wholeNumber(raw.durationMs), {
-        onNone: () => unrecognizedEntry(line, 'system/turn_duration'),
-        onSome: (durationMs) => systemMessage(json, line)(new TurnDurationBlock({ durationMs })),
+        onNone: () => unrecognizedEntry(offset, 'system/turn_duration'),
+        onSome: (durationMs) => systemMessage(json, offset)(new TurnDurationBlock({ durationMs })),
       }),
     ),
     Match.when('local_command', () =>
@@ -492,7 +511,7 @@ const systemEntryOf = (
         Option.fromUndefinedOr(raw.content),
         Option.flatMap(commandOutputOf),
         Option.filter((output) => output.text.trim().length > 0),
-        Option.match({ onNone: () => [], onSome: systemMessage(json, line) }),
+        Option.match({ onNone: () => [], onSome: systemMessage(json, offset) }),
       ),
     ),
     Match.when(
@@ -500,26 +519,26 @@ const systemEntryOf = (
       () =>
         Option.match(Option.fromUndefinedOr(raw.content), {
           onNone: () => [],
-          onSome: (text) => systemMessage(json, line)(new NoticeBlock({ text })),
+          onSome: (text) => systemMessage(json, offset)(new NoticeBlock({ text })),
         }),
     ),
     Match.when(
       (subtype) => HashSet.has(METADATA_SYSTEM_SUBTYPES, subtype),
       () => [],
     ),
-    Match.orElse((subtype) => unrecognizedEntry(line, `system/${subtype}`)),
+    Match.orElse((subtype) => unrecognizedEntry(offset, `system/${subtype}`)),
   )
 
-const systemEntry = (json: Schema.Json, line: TranscriptOffset): readonly TranscriptMessage[] =>
-  Option.match(Schema.decodeUnknownOption(RawSystem)(json), {
-    onNone: () => unrecognizedEntry(line, 'system'),
-    onSome: (raw) => systemEntryOf(raw, json, line),
+const systemEntry = (json: Schema.Json, offset: TranscriptOffset): readonly TranscriptMessage[] =>
+  Option.match(decodeSystem(json), {
+    onNone: () => unrecognizedEntry(offset, 'system'),
+    onSome: (raw) => systemEntryOf(raw, json, offset),
   })
 
 const queuedPrompt = (
   attachment: typeof RawAttachment.Type.attachment,
   json: Schema.Json,
-  line: TranscriptOffset,
+  offset: TranscriptOffset,
 ): readonly TranscriptMessage[] =>
   pipe(
     Option.fromUndefinedOr(attachment.prompt),
@@ -536,7 +555,7 @@ const queuedPrompt = (
       onNone: () => [],
       onSome: (blocks) => [
         new UserMessage({
-          ...envelopeOf(json, line),
+          ...envelopeOf(json, offset),
           isMeta: false,
           origin: Option.some(HUMAN_ORIGIN),
           queued: true,
@@ -546,26 +565,29 @@ const queuedPrompt = (
     }),
   )
 
-const attachmentEntry = (json: Schema.Json, line: TranscriptOffset): readonly TranscriptMessage[] =>
-  Option.match(Schema.decodeUnknownOption(RawAttachment)(json), {
-    onNone: () => unrecognizedEntry(line, 'attachment'),
+const attachmentEntry = (
+  json: Schema.Json,
+  offset: TranscriptOffset,
+): readonly TranscriptMessage[] =>
+  Option.match(decodeAttachment(json), {
+    onNone: () => unrecognizedEntry(offset, 'attachment'),
     onSome: ({ attachment }) =>
       HashSet.has(KNOWN_ATTACHMENT_TYPES, attachment.type)
-        ? queuedPrompt(attachment, json, line)
-        : unrecognizedEntry(line, `attachment/${attachment.type}`),
+        ? queuedPrompt(attachment, json, offset)
+        : unrecognizedEntry(offset, `attachment/${attachment.type}`),
   })
 
-const entry = (json: Schema.Json, line: TranscriptOffset): readonly TranscriptMessage[] =>
+const entry = (json: Schema.Json, offset: TranscriptOffset): readonly TranscriptMessage[] =>
   Match.value(kindOf(json)).pipe(
-    Match.when('user', () => userEntry(json, line)),
-    Match.when('assistant', () => assistantEntry(json, line)),
-    Match.when('system', () => systemEntry(json, line)),
-    Match.when('attachment', () => attachmentEntry(json, line)),
+    Match.when('user', () => userEntry(json, offset)),
+    Match.when('assistant', () => assistantEntry(json, offset)),
+    Match.when('system', () => systemEntry(json, offset)),
+    Match.when('attachment', () => attachmentEntry(json, offset)),
     Match.when(
       (type) => HashSet.has(METADATA_ENTRY_TYPES, type),
       () => [],
     ),
-    Match.orElse((type) => unrecognizedEntry(line, type)),
+    Match.orElse((type) => unrecognizedEntry(offset, type)),
   )
 
 const decodeLine = Schema.decodeUnknownOption(Line)
@@ -587,27 +609,27 @@ const recordStarts = (text: string) =>
     Arr.sort(Order.Number),
   )
 
-const salvaged = (text: string, line: TranscriptOffset): readonly TranscriptMessage[] =>
+const salvaged = (text: string, offset: TranscriptOffset): readonly TranscriptMessage[] =>
   pipe(
     recordStarts(text),
     Arr.findFirst((start) =>
       Option.map(decodeLine(text.slice(start)), (json) => ({ start, json })),
     ),
     Option.match({
-      onNone: () => [new MalformedLine({ line, byteLength: byteLengthOf(text) })],
+      onNone: () => [new MalformedLine({ offset, byteLength: byteLengthOf(text) })],
       onSome: ({ start, json }) => {
         const prefixBytes = byteLengthOf(text.slice(0, start))
 
         return [
-          new MalformedLine({ line, byteLength: prefixBytes }),
-          ...entry(json, TranscriptOffset.make(line + prefixBytes)),
+          new MalformedLine({ offset, byteLength: prefixBytes }),
+          ...entry(json, TranscriptOffset.make(offset + prefixBytes)),
         ]
       },
     }),
   )
 
-export const parseLine = (text: string, line: TranscriptOffset): readonly TranscriptMessage[] =>
+export const parseLine = (text: string, offset: TranscriptOffset): readonly TranscriptMessage[] =>
   Option.match(decodeLine(text), {
-    onNone: () => salvaged(text, line),
-    onSome: (json) => entry(json, line),
+    onNone: () => salvaged(text, offset),
+    onSome: (json) => entry(json, offset),
   })

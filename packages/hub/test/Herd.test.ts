@@ -407,6 +407,21 @@ it.effect('refuses to mark seen a pane or a machine the herd does not show', () 
   }).pipe(withFreshHerd),
 )
 
+it.effect('admits a pane the machine last published, and a machine the herd shows', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+    yield* herd.requirePane(LAPTOP, PANE)
+    yield* herd.requireMachine(LAPTOP)
+    const unknownPane = yield* herd.requirePane(LAPTOP, OTHER_PANE).pipe(Effect.flip)
+    const unknownMachine = yield* herd.requireMachine(WORK).pipe(Effect.flip)
+
+    expect(unknownPane).toEqual(new PaneNotInHerd({ machine: LAPTOP, pane: OTHER_PANE }))
+    expect(unknownMachine).toEqual(new MachineNotInHerd({ machine: WORK }))
+  }).pipe(withFreshHerd),
+)
+
 it.effect('keeps seen across a hub restart and drops it once the pane is gone', () =>
   Effect.gen(function* () {
     const hub = yield* restartingHerd()

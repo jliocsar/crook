@@ -2,6 +2,7 @@ import * as Config from 'effect/Config'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Stream from 'effect/Stream'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
@@ -11,10 +12,11 @@ import * as RpcServer from 'effect/rpc/RpcServer'
 import type { SqlError } from 'effect/sql/SqlError'
 
 import type { MachineId } from '@crook/domain/Ids'
+import type { TranscriptSource } from '@crook/domain/Transcript'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
 import { Herd } from '@crook/hub/Herd'
-import { TranscriptRelay, admitWatch } from '@crook/hub/TranscriptRelay'
+import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
 import { ClientApi, HubStorageFailed } from '@crook/protocol/ClientApi'
 import { protocolSerialization } from '@crook/protocol/Serialization'
@@ -41,6 +43,15 @@ const routes = Effect.gen(function* () {
   const identity = yield* ExeDevIdentity
   const serialization = yield* RpcSerialization.RpcSerialization
   const serveWeb = yield* HttpStaticServer.make({ root: yield* CrookWebRoot, spa: true })
+
+  const admitTranscript = (machine: MachineId, source: TranscriptSource) =>
+    Match.value(source).pipe(
+      Match.tagsExhaustive({
+        PaneTranscript: ({ pane }) => herd.requirePane(machine, pane),
+        SubagentTranscript: () => herd.requireMachine(machine),
+      }),
+    )
+
   const clientHandlers = yield* ClientApi.toHandlers({
     WatchHerd: () => herd.view,
     ForgetMachine: ({ machine }) =>
@@ -49,10 +60,8 @@ const routes = Effect.gen(function* () {
       herd.markSeen(machine, pane).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
     SendCommand: ({ machine, key, command }) => router.send(machine, key, command),
     WatchTranscript: ({ machine, source, from }) =>
-      herd.view.pipe(
-        Stream.take(1),
-        Stream.mapEffect((view) => Effect.fromResult(admitWatch(view, machine, source))),
-        Stream.flatMap(() => transcripts.watch(machine, source, from)),
+      Stream.unwrap(
+        Effect.as(admitTranscript(machine, source), transcripts.watch(machine, source, from)),
       ),
   })
   const serveClients = yield* RpcServer.toHttpEffectWebsocket(ClientApi).pipe(

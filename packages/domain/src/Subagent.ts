@@ -1,4 +1,3 @@
-import * as Arr from 'effect/Array'
 import * as Schema from 'effect/Schema'
 
 import { SubagentId } from '@crook/domain/Ids'
@@ -15,8 +14,3 @@ export class Subagent extends Schema.Class<Subagent>('Subagent')({
   finished: Schema.Boolean,
   stoppedByUser: Schema.Boolean,
 }) {}
-
-export const isRunning = (subagent: Subagent) => !subagent.finished && !subagent.stoppedByUser
-
-export const runningCount = (subagents: readonly Subagent[]) =>
-  Arr.filter(subagents, isRunning).length

@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Equivalence from 'effect/Equivalence'
@@ -81,6 +82,23 @@ export const toWireFailure = (error: FollowError): TranscriptFailure =>
         new TranscriptResumeRejected({ detail: rejected.message }),
       TranscriptShrank: (rejected) => new TranscriptResumeRejected({ detail: rejected.message }),
     }),
+  )
+
+const failedWith = (failure: TranscriptFailure, log: Effect.Effect<void>) =>
+  Stream.concat(
+    Stream.fromEffectDrain(log),
+    Stream.succeed<TranscriptUpdate>(new TranscriptWatchFailed({ failure })),
+  )
+
+const followFailed = (error: FollowError) =>
+  failedWith(toWireFailure(error), Effect.logWarning(error.message))
+
+const followDefected = (defect: Cause.Cause<never>) =>
+  failedWith(
+    new TranscriptReadFailed({
+      detail: `a bug in the crook agent stopped the watch: ${Cause.pretty(defect)}`,
+    }),
+    Effect.logError('A transcript watch died of a defect; the phone is told it failed.', defect),
   )
 
 const startIn = (session: ClaudeSessionId, from: Option.Option<TranscriptPosition>) =>
@@ -189,37 +207,20 @@ const make = Effect.gen(function* () {
     )
 
   const runWatch = (link: TranscriptLink, watch: TranscriptWatch) => {
-    const attempt = (
+    const attempt = Effect.fn('TranscriptStreams.attempt')(function* (
       from: Option.Option<TranscriptPosition>,
-    ): Effect.Effect<void, RpcClientError> =>
-      follow(watch.source, from).pipe(
-        Stream.runForEach((event) => link.publish(watch.id, event)),
+    ): Effect.fn.Return<void, RpcClientError> {
+      return yield* follow(watch.source, from).pipe(
+        Stream.catch((error) => followFailed(error)),
+        Stream.catchDefect((defect) => followDefected(Cause.die(defect))),
+        Stream.runForEach((update) => link.publish(watch.id, update)),
         Effect.catchTag('TranscriptOutOfStep', (outOfStep) =>
           Effect.andThen(Effect.logDebug(outOfStep.message), attempt(outOfStep.expected)),
         ),
-        Effect.catchTags({
-          TranscriptSessionInvalid: (error) => failWatch(error),
-          TranscriptDirectoryUnreadable: (error) => failWatch(error),
-          TranscriptUnreadable: (error) => failWatch(error),
-          SubagentsUnreadable: (error) => failWatch(error),
-          TranscriptOffsetBeyondEnd: (error) => failWatch(error),
-          TranscriptOffsetMidLine: (error) => failWatch(error),
-          TranscriptShrank: (error) => failWatch(error),
-        }),
       )
-
-    const failWatch = (error: FollowError) =>
-      Effect.andThen(
-        Effect.logWarning(error.message),
-        link.publish(watch.id, new TranscriptWatchFailed({ failure: toWireFailure(error) })),
-      ).pipe(
-        Effect.catchTag('TranscriptOutOfStep', (outOfStep) => Effect.logDebug(outOfStep.message)),
-      )
+    })
 
     return attempt(watch.from).pipe(
-      Effect.catchDefect((defect) =>
-        Effect.logWarning('A transcript watch died; the hub will not hear from it again.', defect),
-      ),
       Effect.catchTag('RpcClientError', (error) => Effect.logDebug(error.message)),
       Effect.annotateLogs('transcriptWatch', watch.id),
     )

@@ -3,6 +3,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
@@ -19,9 +20,11 @@ export const START = TranscriptOffset.make(0)
 export const SLOWEST_MEASURED_WATCH_INSTALL = Duration.millis(8)
 export const WATCHERS_SETTLED = Duration.times(SLOWEST_MEASURED_WATCH_INSTALL, 10)
 
+export const platform = Layer.mergeAll(BunFileSystem.layer, Path.layer)
+
 export const services = Layer.provideMerge(
   Layer.mergeAll(TranscriptTail.layer, SubagentRoster.layer),
-  BunFileSystem.layer,
+  platform,
 )
 
 export const encodeMessages = Schema.encodeSync(Schema.Array(TranscriptMessage))

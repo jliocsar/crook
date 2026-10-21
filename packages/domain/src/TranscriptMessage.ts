@@ -16,8 +16,14 @@ export class ToolUseBlock extends Schema.TaggedClass<ToolUseBlock>()('ToolUse', 
   input: Schema.Json,
 }) {}
 
+export const ImageMediaType = Schema.Literals(['image/png', 'image/jpeg'])
+export type ImageMediaType = typeof ImageMediaType.Type
+
+export const CompactTrigger = Schema.Literals(['manual', 'auto'])
+export type CompactTrigger = typeof CompactTrigger.Type
+
 export class ImageBlock extends Schema.TaggedClass<ImageBlock>()('Image', {
-  mediaType: Schema.String,
+  mediaType: ImageMediaType,
   data: Schema.String,
 }) {}
 
@@ -91,7 +97,7 @@ export class InterruptionBlock extends Schema.TaggedClass<InterruptionBlock>()('
 export class CompactBoundaryBlock extends Schema.TaggedClass<CompactBoundaryBlock>()(
   'CompactBoundary',
   {
-    trigger: Schema.String,
+    trigger: Schema.OptionFromNullOr(CompactTrigger),
     tokensBefore: Schema.OptionFromNullOr(Schema.Int),
     tokensAfter: Schema.OptionFromNullOr(Schema.Int),
   },
@@ -136,7 +142,7 @@ export const SystemBlock = Schema.Union([
 export type SystemBlock = typeof SystemBlock.Type
 
 const entryFields = {
-  line: TranscriptOffset,
+  offset: TranscriptOffset,
   uuid: Schema.OptionFromNullOr(Schema.String),
   timestamp: Schema.OptionFromNullOr(Schema.DateTimeUtcFromString),
 }
@@ -165,11 +171,11 @@ export class SystemMessage extends Schema.TaggedClass<SystemMessage>()('System',
 
 export class UnrecognizedEntry extends Schema.TaggedClass<UnrecognizedEntry>()(
   'UnrecognizedEntry',
-  { line: TranscriptOffset, entryType: Schema.String },
+  { offset: TranscriptOffset, entryType: Schema.String },
 ) {}
 
 export class MalformedLine extends Schema.TaggedClass<MalformedLine>()('Malformed', {
-  line: TranscriptOffset,
+  offset: TranscriptOffset,
   byteLength: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 }) {}
 

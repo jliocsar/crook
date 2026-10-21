@@ -2,6 +2,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import * as DateTime from 'effect/DateTime'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import type * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
@@ -110,4 +111,5 @@ export const linkedAgentWith = (
     MachineStateSync.layerTest(state),
     herdr,
     BunFileSystem.layer,
+    Path.layer,
   ])

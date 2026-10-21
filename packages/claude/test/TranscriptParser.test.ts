@@ -1,5 +1,6 @@
 import { expect, layer } from '@effect/vitest'
 import * as Effect from 'effect/Effect'
+import * as Schema from 'effect/Schema'
 
 import { parseLine } from '@crook/claude/TranscriptParser'
 import { TranscriptOffset } from '@crook/domain/Ids'
@@ -9,6 +10,8 @@ import { encodeMessages, fixtureText, messagesOf, services } from './Fixtures'
 
 const LINE = TranscriptOffset.make(711)
 
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Json))
+
 layer(services, { excludeTestServices: true })('parseLine on real transcript lines', (live) => {
   live.effect(
     'keeps the prompt, the reply and the turn end of a plain turn, and drops metadata',
@@ -17,7 +20,7 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
         expect(yield* messagesOf('plain-turn.jsonl')).toEqual([
           {
             _tag: 'User',
-            line: 800,
+            offset: 800,
             uuid: 'b1d1b34a-10f0-4471-98ef-c604be264ab0',
             timestamp: '2026-10-20T17:52:35.958Z',
             isMeta: false,
@@ -27,7 +30,7 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
           },
           {
             _tag: 'Assistant',
-            line: 20016,
+            offset: 20016,
             uuid: 'd902aae0-0e88-4c1a-9dac-e6e0da005a1f',
             timestamp: '2026-10-20T17:52:39.863Z',
             apiMessageId: 'msg_011CgDv3WRgi9fKeFdsAUB1j',
@@ -38,7 +41,7 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
           },
           {
             _tag: 'System',
-            line: 36050,
+            offset: 36050,
             uuid: 'aa7d13a0-8c4d-4b22-8055-1880e76d0e77',
             timestamp: '2026-10-20T17:52:40.081Z',
             blocks: [{ _tag: 'TurnDuration', durationMs: 4263 }],
@@ -144,6 +147,27 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
       expect(messages[8]).toMatchObject({
         blocks: [{ _tag: 'ToolResult', content: [{ _tag: 'Text', text: 'C here' }, image] }],
       })
+    }),
+  )
+
+  live.effect('keeps an image of a type nobody measured out of the image blocks', () =>
+    Effect.gen(function* () {
+      const svgPaste = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/svg+xml', data: 'PHN2Zz4=' },
+            },
+          ],
+        },
+      }
+
+      expect(encodeMessages(parseLine(encodeJson(svgPaste), LINE))).toMatchObject([
+        { _tag: 'User', blocks: [{ _tag: 'Unrecognized', kind: 'image' }] },
+      ])
     }),
   )
 
@@ -260,7 +284,7 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
   live.effect('names entries and blocks it does not know instead of dropping them', () =>
     Effect.gen(function* () {
       expect(yield* messagesOf('unknown-future-entry.jsonl')).toMatchObject([
-        { _tag: 'UnrecognizedEntry', line: 0, entryType: 'some-future-type' },
+        { _tag: 'UnrecognizedEntry', offset: 0, entryType: 'some-future-type' },
         { _tag: 'Assistant', blocks: [{ _tag: 'Unrecognized', kind: 'some_future_block' }] },
       ])
     }),
@@ -275,11 +299,11 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
         const user = recovered.replace('"type": "attachment"', '"type": "future-attachment"')
 
         expect(yield* messagesOf('torn-mid-file.jsonl')).toEqual([
-          { _tag: 'Malformed', line: 711, byteLength: 259 },
+          { _tag: 'Malformed', offset: 711, byteLength: 259 },
         ])
         expect(encodeMessages(parseLine(torn.replace(recovered, user), LINE))).toEqual([
-          { _tag: 'Malformed', line: 711, byteLength: 259 },
-          { _tag: 'UnrecognizedEntry', line: 970, entryType: 'future-attachment' },
+          { _tag: 'Malformed', offset: 711, byteLength: 259 },
+          { _tag: 'UnrecognizedEntry', offset: 970, entryType: 'future-attachment' },
         ])
       }),
   )
@@ -289,10 +313,10 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
       const truncated = (yield* fixtureText('truncated-final-line.jsonl')).split('\n')[2] ?? ''
 
       expect(parseLine(truncated, LINE)).toEqual([
-        new MalformedLine({ line: LINE, byteLength: new TextEncoder().encode(truncated).length }),
+        new MalformedLine({ offset: LINE, byteLength: new TextEncoder().encode(truncated).length }),
       ])
       expect(parseLine('{"type": 42}', LINE)).toEqual([
-        new UnrecognizedEntry({ line: LINE, entryType: 'unknown' }),
+        new UnrecognizedEntry({ offset: LINE, entryType: 'unknown' }),
       ])
     }),
   )

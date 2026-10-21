@@ -1,4 +1,3 @@
-import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import { expect, layer } from '@effect/vitest'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -6,6 +5,7 @@ import * as Fiber from 'effect/Fiber'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 
 import {
   TranscriptFile,
@@ -16,7 +16,7 @@ import {
 } from '@crook/claude/TranscriptLocator'
 import { ClaudeSessionId, SubagentId } from '@crook/domain/Ids'
 
-import { SESSION, WATCHERS_SETTLED } from './Fixtures'
+import { SESSION, WATCHERS_SETTLED, platform } from './Fixtures'
 
 const OTHER_SESSION = ClaudeSessionId.make('ff0f77be-1e98-4bb2-8b24-38d673361867')
 const PROJECT = '-home-dev-Projects-crook'
@@ -49,7 +49,7 @@ const locatorAt = Effect.fn('locatorAt')(function* (paths: readonly string[]) {
   return Context.get(context, TranscriptLocator)
 })
 
-layer(BunFileSystem.layer, { excludeTestServices: true })('TranscriptLocator', (live) => {
+layer(platform, { excludeTestServices: true })('TranscriptLocator', (live) => {
   live.effect('finds a session under any configured root, never from the cwd', () =>
     Effect.gen(function* () {
       const { claude, work } = yield* roots()
@@ -107,15 +107,16 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('TranscriptLocator', (
 
   live.effect('places subagent transcripts in the session folder', () =>
     Effect.gen(function* () {
+      const path = yield* Path.Path
       const file = new TranscriptFile({
         session: SESSION,
         path: `/home/dev/.claude/projects/${PROJECT}/${SESSION}.jsonl`,
       })
 
-      expect(subagentsDirectoryOf(file)).toBe(
+      expect(subagentsDirectoryOf(path, file)).toBe(
         `/home/dev/.claude/projects/${PROJECT}/${SESSION}/subagents`,
       )
-      expect(subagentFileOf(file, SubagentId.make('a370777a87a436836'))).toEqual(
+      expect(subagentFileOf(path, file, SubagentId.make('a370777a87a436836'))).toEqual(
         new TranscriptFile({
           session: SESSION,
           path: `/home/dev/.claude/projects/${PROJECT}/${SESSION}/subagents/agent-a370777a87a436836.jsonl`,
