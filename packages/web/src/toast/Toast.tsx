@@ -22,7 +22,7 @@ export function ToastLine({ toast }: { toast: Option.Option<Toast> }) {
     <div
       role="status"
       data-slot="toast"
-      className="pointer-events-none fixed bottom-[calc(3.5rem+var(--safe-bottom)+0.75rem)] z-40 flex justify-center px-4"
+      className="pointer-events-none fixed bottom-[calc(var(--tab-bar-height)+var(--safe-bottom)+0.75rem)] z-40 flex justify-center px-4"
       style={COLUMN_STYLE}
     >
       <AnimatePresence initial={false}>

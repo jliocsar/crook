@@ -4,9 +4,11 @@ import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Result from 'effect/Result'
 import * as Duration from 'effect/Duration'
+import * as Struct from 'effect/Struct'
 
 import { PaneClosed, PaneRenamed } from '@crook/domain/Command'
 import type { CommandReceipt } from '@crook/domain/Command'
+import { HerdMachine } from '@crook/domain/HerdView'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import {
   CommandDeliveryUnknown,
@@ -28,6 +30,7 @@ import {
   pinProgress,
   SheetOutcome,
   sheetOutcome,
+  UNEXPLAINED_FAILURE,
 } from '@crook/web/actions/PaneActions'
 import type { SendCommandFailure, SetPinnedFailure } from '@crook/web/actions/PaneActions'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
@@ -53,7 +56,7 @@ describe('commandProgress', () => {
     expect(commandProgress(acked(new PaneClosed({ pane })), [])).toEqual(ActionProgress.Done())
   })
 
-  it('names a refusal, keeps the key only where the command may have run, and asks to confirm a foreign pane', () => {
+  it('names a refusal and asks to confirm a foreign pane', () => {
     const timedOut = commandProgress(
       refused(new CommandTimedOut({ machine: LAPTOP, timeout: Duration.seconds(10) })),
       [],
@@ -64,14 +67,12 @@ describe('commandProgress', () => {
     expect(timedOut).toEqual(
       ActionProgress.Failed({
         message: new CommandTimedOut({ machine: LAPTOP, timeout: Duration.seconds(10) }).message,
-        keepsKey: true,
         asksConfirmation: false,
       }),
     )
     expect(unknown).toEqual(
       ActionProgress.Failed({
         message: new CommandDeliveryUnknown().message,
-        keepsKey: false,
         asksConfirmation: false,
       }),
     )
@@ -95,6 +96,20 @@ describe('commandProgress', () => {
     )
     expect(isRetriableFailure(refused(new CommandDeliveryUnknown()))).toBe(false)
     expect(isRetriableFailure(acked(renamed))).toBe(false)
+  })
+
+  it('keeps the key after a failure that says nothing, which it reports as unexplained', () => {
+    const died = AsyncResult.failure<CommandReceipt, SendCommandFailure>(
+      Cause.die(new Error('handler crashed')),
+    )
+
+    expect(isRetriableFailure(died)).toBe(true)
+    expect(failureOf(commandProgress(died, []))).toEqual(Option.some(UNEXPLAINED_FAILURE))
+    expect(
+      isRetriableFailure(
+        AsyncResult.failure<CommandReceipt, SendCommandFailure>(Cause.interrupt()),
+      ),
+    ).toBe(false)
   })
 })
 
@@ -133,9 +148,9 @@ describe('labelFromInput', () => {
 })
 
 describe('sheetOutcome', () => {
-  const laptop = machine(LAPTOP, [], { shellPanes: ['w1:p2'] })
+  const laptop = machine(LAPTOP, [agent('w1:p1', 'idle')], { shellPanes: ['w1:p2'] })
+  const emptied = machine(LAPTOP, [], { shellPanes: ['w1:p2'] })
   const sheet = {
-    present: true,
     herdMachine: Option.some(laptop),
     pane,
     rename: ActionProgress.Idle(),
@@ -144,8 +159,11 @@ describe('sheetOutcome', () => {
   }
 
   it('tells a pane that closed from Claude exiting in a pane that is still there', () => {
-    expect(endedNotice(Option.some(laptop), pane)).toBe(PANE_CLOSED_NOTICE)
-    expect(endedNotice(Option.some(laptop), agent('w1:p2', 'idle').pane)).toBe(CLAUDE_EXITED_NOTICE)
+    expect(endedNotice(Option.some(laptop), pane)).toEqual(Option.none())
+    expect(endedNotice(Option.some(emptied), pane)).toEqual(Option.some(PANE_CLOSED_NOTICE))
+    expect(endedNotice(Option.some(emptied), agent('w1:p2', 'idle').pane)).toEqual(
+      Option.some(CLAUDE_EXITED_NOTICE),
+    )
   })
 
   it('stays open, finishes after a rename or pin, and ends when the agent goes on its own', () => {
@@ -153,17 +171,30 @@ describe('sheetOutcome', () => {
     expect(sheetOutcome({ ...sheet, rename: ActionProgress.Done() })).toEqual(
       SheetOutcome.Finished(),
     )
-    expect(sheetOutcome({ ...sheet, present: false })).toEqual(
+    expect(sheetOutcome({ ...sheet, herdMachine: Option.some(emptied) })).toEqual(
       SheetOutcome.Ended({ notice: PANE_CLOSED_NOTICE }),
     )
   })
 
-  it('counts the agent going as its own close while that close is underway', () => {
-    expect(sheetOutcome({ ...sheet, present: false, close: ActionProgress.Sending() })).toEqual(
+  it('stays open while the machine state is unknown, as it is after a hub restart', () => {
+    const unknown = new HerdMachine(Struct.evolve(laptop, { state: () => Option.none() }))
+
+    expect(sheetOutcome({ ...sheet, herdMachine: Option.some(unknown) })).toEqual(
       SheetOutcome.Stay(),
     )
-    expect(sheetOutcome({ ...sheet, present: false, close: ActionProgress.Done() })).toEqual(
-      SheetOutcome.Closed(),
-    )
+    expect(sheetOutcome({ ...sheet, herdMachine: Option.none() })).toEqual(SheetOutcome.Stay())
+  })
+
+  it('counts the agent going as its own close while that close is underway', () => {
+    expect(
+      sheetOutcome({
+        ...sheet,
+        herdMachine: Option.some(emptied),
+        close: ActionProgress.Sending(),
+      }),
+    ).toEqual(SheetOutcome.Stay())
+    expect(
+      sheetOutcome({ ...sheet, herdMachine: Option.some(emptied), close: ActionProgress.Done() }),
+    ).toEqual(SheetOutcome.Closed())
   })
 })

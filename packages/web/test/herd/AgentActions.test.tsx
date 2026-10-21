@@ -3,18 +3,24 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import type * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { ClosePane, RenameAgent } from '@crook/domain/Command'
 import type { AgentRow } from '@crook/domain/AgentRow'
-import { CommandTimedOut, PaneNotCreatedByCrook } from '@crook/protocol/Commands'
+import { HubStorageFailed } from '@crook/protocol/ClientApi'
+import {
+  CommandDeliveryUnknown,
+  CommandTimedOut,
+  PaneNotCreatedByCrook,
+} from '@crook/protocol/Commands'
 import { ActionsIntent, agentActionsAtom, PaneAddress } from '@crook/web/atoms/AgentActions'
 import { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
-import { afterSpring, dragX, eventually, findByRole, present } from '../Dom.ts'
+import { afterSpring, click, dragX, eventually, findByRole, present } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import type { SentCommand } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
@@ -56,6 +62,20 @@ const openSheetOn = Effect.fn('openSheetOn')(function* (title: string) {
 const sheetGone = eventually(() => {
   expect(screen.queryByRole('dialog')).toBeNull()
 })
+
+const dismissSheet = (sheet: HTMLElement) => {
+  fireEvent.keyDown(sheet, { key: 'Escape' })
+}
+
+const openFromChat = (registry: AtomRegistry.AtomRegistry) => {
+  registry.set(
+    agentActionsAtom,
+    ActionsIntent.Open({
+      agent: new PaneAddress({ machine: LAPTOP, pane: porting.pane }),
+      origin: 'chat',
+    }),
+  )
+}
 
 const sentCommands = (link: { readonly commands: Ref.Ref<readonly SentCommand[]> }) =>
   Ref.getUnsafe(link.commands).map((sent) => sent.command)
@@ -348,13 +368,7 @@ describe('the action sheet', () => {
       )
 
       yield* findByRole('heading', 'Port the herd screen')
-      registry.set(
-        agentActionsAtom,
-        ActionsIntent.Open({
-          agent: new PaneAddress({ machine: LAPTOP, pane: porting.pane }),
-          origin: 'chat',
-        }),
-      )
+      openFromChat(registry)
       const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
 
       fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
@@ -372,6 +386,202 @@ describe('the action sheet', () => {
       yield* eventually(() => {
         expect(document.activeElement?.textContent).toContain('Agents')
       })
+    }),
+  )
+})
+
+describe('the action sheet, while an action is out', () => {
+  it.effect('keeps focus where the user moved it while the herd changes under the name field', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+      const sheet = yield* openSheetOn('Port the herd screen')
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Rename' }))
+      const field = within(sheet).getByRole('textbox', { name: 'Agent name' })
+
+      yield* eventually(() => {
+        expect(document.activeElement).toBe(field)
+      })
+      const pin = within(sheet).getByRole('button', { name: 'Pin to top' })
+
+      pin.focus()
+      yield* SubscriptionRef.set(
+        link.state,
+        liveWith(
+          herd([
+            laptopWith([
+              porting,
+              wiring,
+              banner,
+              agent('w1:p4', 'idle', { title: 'Draw the pin' }),
+            ]),
+          ]),
+        ),
+      )
+      yield* eventually(() => {
+        expect(cardTitles()).toContain('Draw the pin')
+      })
+
+      expect(document.activeElement).toBe(pin)
+    }),
+  )
+
+  it.effect('holds Save and the Hold Button off while their answers are out', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* link.commandAnswers.close
+      const sheet = yield* openSheetOn('Port the herd screen')
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Rename' }))
+      fireEvent.change(within(sheet).getByRole('textbox', { name: 'Agent name' }), {
+        target: { value: 'Herd port' },
+      })
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Save' }))
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+
+      yield* eventually(() => {
+        expect(sentCommands(link)).toHaveLength(2)
+      })
+
+      expect(within(sheet).getByRole('button', { name: 'Saving…' })).toHaveProperty(
+        'disabled',
+        true,
+      )
+      expect(within(sheet).getByRole('button', { name: /^Closing…/u })).toHaveProperty(
+        'disabled',
+        true,
+      )
+    }),
+  )
+
+  it.effect("shows the hub's refusal of a pin in the sheet", () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+      const refusal = new HubStorageFailed({ detail: 'disk full' })
+
+      yield* Ref.set(link.pinRefusal, Option.some(refusal))
+      const sheet = yield* openSheetOn('Write the banner')
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Pin to top' }))
+
+      expect((yield* Effect.promise(() => within(sheet).findByRole('alert'))).textContent).toBe(
+        refusal.message,
+      )
+    }),
+  )
+
+  it.effect('retries a confirmed close that timed out as confirmed, under the same key', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+      const timedOut = new CommandTimedOut({ machine: LAPTOP, timeout: Duration.seconds(10) })
+
+      yield* Ref.set(link.commandRefusals, [
+        new PaneNotCreatedByCrook({ pane: porting.pane }),
+        timedOut,
+      ])
+      const sheet = yield* openSheetOn('Port the herd screen')
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* afterSpring(() => {
+        expect(within(sheet).getByRole('button', { name: 'Hold to close anyway' })).toBeDefined()
+      })
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close anyway' }))
+
+      expect((yield* Effect.promise(() => within(sheet).findByRole('alert'))).textContent).toBe(
+        timedOut.message,
+      )
+
+      yield* afterSpring(() => {
+        expect(within(sheet).getByRole('button', { name: 'Hold to close anyway' })).toBeDefined()
+      })
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close anyway' }))
+
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.commands)).toHaveLength(3)
+      })
+      const [, second, third] = Ref.getUnsafe(link.commands)
+
+      expect(third?.command).toEqual(new ClosePane({ pane: porting.pane, confirmed: true }))
+      expect(third?.key).toBe(second?.key)
+    }),
+  )
+
+  it.effect('brings the sheet back with the reason when a close dismissed in flight fails', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* Ref.set(link.commandRefusals, [new CommandDeliveryUnknown()])
+      yield* link.commandAnswers.close
+      const sheet = yield* openSheetOn('Port the herd screen')
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* eventually(() => {
+        expect(sentCommands(link)).toHaveLength(1)
+      })
+      dismissSheet(sheet)
+      yield* sheetGone
+      yield* link.commandAnswers.open
+      const back = yield* Effect.promise(() => screen.findByRole('dialog'))
+
+      expect((yield* Effect.promise(() => within(back).findByRole('alert'))).textContent).toBe(
+        new CommandDeliveryUnknown().message,
+      )
+    }),
+  )
+
+  it.effect('still goes back to the herd when a close from the chat is dismissed in flight', () =>
+    Effect.gen(function* () {
+      const { router, link, registry } = yield* renderApp(
+        '/m/laptop/p/w1%3Ap1',
+        liveWith(herd([everyone])),
+      )
+
+      yield* findByRole('heading', 'Port the herd screen')
+      yield* link.commandAnswers.close
+      openFromChat(registry)
+      const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* eventually(() => {
+        expect(sentCommands(link)).toHaveLength(1)
+      })
+      dismissSheet(sheet)
+      yield* sheetGone
+      yield* link.commandAnswers.open
+      yield* SubscriptionRef.set(link.state, liveWith(herd([laptopWith([wiring, banner])])))
+
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/')
+      })
+
+      expect(yield* Effect.promise(() => screen.findByText('Pane closed'))).toBeDefined()
+    }),
+  )
+
+  it.effect('goes back through history to the herd the chat was opened from', () =>
+    Effect.gen(function* () {
+      const { router, link, registry } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* click(yield* Effect.promise(() => screen.findByText('Port the herd screen')))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap1')
+      })
+      openFromChat(registry)
+      const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* eventually(() => {
+        expect(sentCommands(link)).toHaveLength(1)
+      })
+      yield* SubscriptionRef.set(link.state, liveWith(herd([laptopWith([wiring, banner])])))
+
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/')
+      })
+
+      expect(router.history.canGoBack()).toBe(false)
+      expect(yield* Effect.promise(() => screen.findByText('Pane closed'))).toBeDefined()
     }),
   )
 })
@@ -417,6 +627,32 @@ describe('swiping a card', () => {
       const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
 
       expect(within(sheet).getByRole('button', { name: 'Hold to close agent' })).toBeDefined()
+    }),
+  )
+
+  it.effect("shows the hub's refusal of a pin beneath the card", () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+      const refusal = new HubStorageFailed({ detail: 'disk full' })
+
+      yield* Ref.set(link.pinRefusal, Option.some(refusal))
+      yield* Effect.promise(() => screen.findByText('Write the banner'))
+      const swipeCard = present(
+        cardButton('Write the banner').closest('[data-slot="swipe-card"]'),
+        'The swipe card',
+      )
+      const swipeRow = present(swipeCard.parentElement, 'The swipe row')
+      const pin = within(swipeRow).getByRole('button', { name: 'Pin', hidden: true })
+
+      yield* dragX(swipeCard, [200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100])
+      yield* eventually(() => {
+        expect(pin.parentElement).toHaveProperty('inert', false)
+      })
+      fireEvent.click(pin)
+      const alert = yield* Effect.promise(() => screen.findByRole('alert'))
+
+      expect(alert.textContent).toBe(refusal.message)
+      expect(alert.closest('li')?.textContent).toContain('Write the banner')
     }),
   )
 })

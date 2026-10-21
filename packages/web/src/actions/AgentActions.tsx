@@ -1,6 +1,8 @@
 import { useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
 import { useRouter } from '@tanstack/react-router'
 import * as Effect from 'effect/Effect'
+import * as Equal from 'effect/Equal'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { Pencil, Pin, PinOff } from 'lucide-react'
@@ -28,10 +30,12 @@ import {
 import type { ActionsOrigin, AgentActionsView } from '@crook/web/atoms/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { ToastIntent, toastAtom } from '@crook/web/atoms/Toast'
+import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Sheet } from '@crook/web/components/Sheet'
 import { Button } from '@crook/web/components/ui/button'
 import { HoldButton } from '@crook/web/components/ui/hold-button'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
+import type { OpenCardActions } from '@crook/web/herd/HerdList'
 import { restoreFocus } from '@crook/web/navigation/Focus'
 
 export type OpenAgentActions = (machine: MachineId, pane: PaneId, origin: ActionsOrigin) => void
@@ -64,25 +68,34 @@ export const useOpenAgentActions = (): OpenAgentActions => {
   }
 }
 
-const useLastSome = <Value,>(value: Option.Option<Value>): Option.Option<Value> => {
-  const last = React.useRef(value)
+export const useOpenCardActions = (): OpenCardActions => {
+  const open = useOpenAgentActions()
 
-  if (Option.isSome(value)) {
-    last.current = value
+  return (machine, pane) => {
+    open(machine, pane, 'card')
+  }
+}
+
+const useShownAgent = (view: Option.Option<AgentActionsView>): Option.Option<ShownAgent> => {
+  const last = React.useRef(Option.none<ShownAgent>())
+
+  if (Option.isSome(view)) {
+    const current = view.value
+
+    last.current = pipe(
+      current.card,
+      Option.orElse(() =>
+        pipe(
+          last.current,
+          Option.filter((shown) => Equal.equals(shown.view.session.agent, current.session.agent)),
+          Option.map((shown) => shown.card),
+        ),
+      ),
+      Option.map((card): ShownAgent => ({ view: current, card })),
+    )
   }
 
   return last.current
-}
-
-function ActionFailure({ message }: { message: Option.Option<string> }) {
-  return Option.match(message, {
-    onNone: () => null,
-    onSome: (text) => (
-      <p role="alert" className="text-destructive text-sm leading-5">
-        {text}
-      </p>
-    ),
-  })
 }
 
 function RenameField({
@@ -99,7 +112,14 @@ function RenameField({
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(() => agentTitle(row))
   const [invalid, setInvalid] = React.useState(Option.none<string>())
+  const field = React.useRef<HTMLInputElement>(null)
   const saving = isUnderway(progress)
+
+  React.useEffect(() => {
+    if (editing) {
+      field.current?.focus({ preventScroll: true })
+    }
+  }, [editing])
 
   if (!editing) {
     return (
@@ -142,9 +162,7 @@ function RenameField({
     >
       <div className="flex gap-2">
         <input
-          ref={(input) => {
-            input?.focus({ preventScroll: true })
-          }}
+          ref={field}
           value={draft}
           aria-label="Agent name"
           placeholder={row.title}
@@ -205,7 +223,10 @@ export function AgentActionsSheet({
       {Option.match(shown, {
         onNone: () => null,
         onSome: ({ view, card }) => {
-          const confirming = !card.row.createdByCrook || isConfirmationAsked(view.close)
+          const confirming =
+            !card.row.createdByCrook ||
+            isConfirmationAsked(view.close) ||
+            Option.exists(view.session.close, (attempt) => attempt.confirmed)
           const closing = isUnderway(view.close)
 
           return (
@@ -265,20 +286,41 @@ export function AgentActions() {
   const toast = useAtomSet(toastAtom)
   const connection = useAtomValue(connectionAtom)
   const router = useRouter()
-  const lastCard = useLastSome(Option.flatMap(view, (current) => current.card))
-  const shown = useLastSome(
-    Option.flatMap(view, (current) =>
-      Option.map(
-        Option.orElse(current.card, () => lastCard),
-        (card): ShownAgent => ({ view: current, card }),
-      ),
-    ),
-  )
+  const shown = useShownAgent(view)
   const machineOnline = Option.exists(view, (current) => current.machineOnline)
+
+  const onHerd = () => router.state.location.pathname === HERD_PATH
+
+  const backThroughHistory = Effect.callback<void>((resume) => {
+    const stop = router.subscribe('onResolved', () => {
+      stop()
+      resume(Effect.void)
+    })
+
+    router.history.back()
+
+    return Effect.sync(stop)
+  })
+
+  const leaveForHerd = Effect.suspend(() => {
+    if (onHerd()) {
+      return Effect.void
+    }
+
+    if (!router.history.canGoBack()) {
+      return Effect.promise(() => router.navigate({ to: HERD_PATH, replace: true }))
+    }
+
+    return backThroughHistory.pipe(
+      Effect.andThen(() =>
+        onHerd() ? Effect.void : Effect.promise(() => router.navigate({ to: HERD_PATH })),
+      ),
+    )
+  })
 
   const goToHerd = () =>
     Effect.runCallback(
-      Effect.promise(() => router.navigate({ to: HERD_PATH, replace: true })).pipe(
+      leaveForHerd.pipe(
         Effect.andThen(
           Effect.sync(() => {
             toast(ToastIntent.Show({ text: PANE_CLOSED_NOTICE }))
@@ -297,7 +339,6 @@ export function AgentActions() {
 
     SheetOutcome.$match(
       sheetOutcome({
-        present: Option.isSome(current.card),
         herdMachine: current.herdMachine,
         pane: current.session.agent.pane,
         rename: current.rename,
@@ -307,17 +348,17 @@ export function AgentActions() {
       {
         Stay: () => undefined,
         Finished: () => {
-          dispatch(ActionsIntent.Dismiss())
+          dispatch(ActionsIntent.Finish())
         },
         Closed: () => {
-          dispatch(ActionsIntent.Dismiss())
+          dispatch(ActionsIntent.Finish())
 
           if (current.session.origin === 'chat') {
             goToHerd()
           }
         },
         Ended: ({ notice }) => {
-          dispatch(ActionsIntent.Dismiss())
+          dispatch(ActionsIntent.Finish())
           toast(ToastIntent.Show({ text: notice }))
         },
       },
@@ -326,7 +367,7 @@ export function AgentActions() {
 
   return (
     <AgentActionsSheet
-      open={Option.isSome(view)}
+      open={Option.exists(view, (current) => current.open)}
       shown={shown}
       canAct={connection.controlsEnabled && machineOnline}
       canPin={connection.controlsEnabled}

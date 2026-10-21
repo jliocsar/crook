@@ -34,7 +34,7 @@ export function TabScreen({
       <div
         inert={covered}
         data-slot="tab-scroller"
-        className="no-scrollbar h-dvh overflow-y-auto overscroll-y-none pb-[calc(3.5rem+var(--safe-bottom)+1rem)]"
+        className="no-scrollbar h-dvh overflow-y-auto overscroll-y-none pb-[calc(var(--tab-bar-height)+var(--safe-bottom)+1rem)]"
       >
         <TabHeader title={title} action={action} />
         {children}

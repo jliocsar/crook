@@ -5,8 +5,8 @@ import * as Option from 'effect/Option'
 import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
-import { useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { isOffline } from '@crook/domain/Machine'
+import { useOpenCardActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { machineScreenAtom } from '@crook/web/atoms/Machines'
@@ -164,11 +164,7 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
   const herd = useAtomValue(herdAtom)
   const model = useAtomValue(machineScreenAtom(machine))
   const navigate = useNavigate()
-  const openActions = useOpenAgentActions()
-
-  const openCardActions: OpenCardActions = (agentMachine, pane) => {
-    openActions(agentMachine, pane, 'card')
-  }
+  const openCardActions = useOpenCardActions()
 
   const openAgent: OpenAgent = (agentMachine, card, opener) => {
     void navigate({

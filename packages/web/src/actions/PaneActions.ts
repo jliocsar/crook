@@ -14,6 +14,7 @@ import type { CommandReceipt } from '@crook/domain/Command'
 import type { HerdMachine } from '@crook/domain/HerdView'
 import type { PaneId } from '@crook/domain/Ids'
 import { panePresence } from '@crook/domain/MachineState'
+import type { PanePresence } from '@crook/domain/MachineState'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import type { HubCallFailed, SetPinnedRefused } from '@crook/web/rpc/HubConnection'
 import type { HubNotConnected } from '@crook/web/rpc/HubLink'
@@ -29,7 +30,6 @@ export type ActionProgress = Data.TaggedEnum<{
   Done: Record<never, never>
   Failed: {
     readonly message: string
-    readonly keepsKey: boolean
     readonly asksConfirmation: boolean
   }
 }>
@@ -42,7 +42,6 @@ export type SheetOutcome = Data.TaggedEnum<{
 }>
 
 export interface SheetProgress {
-  readonly present: boolean
   readonly herdMachine: Option.Option<HerdMachine>
   readonly pane: PaneId
   readonly rename: ActionProgress
@@ -90,6 +89,14 @@ export const asksConfirmation = (error: SendCommandFailure | SetPinnedFailure): 
     Match.orElse(() => false),
   )
 
+const keepsKeyAfter = <Failure extends SendCommandFailure | SetPinnedFailure>(
+  cause: Cause.Cause<Failure>,
+): boolean =>
+  Option.match(Cause.findErrorOption(cause), {
+    onNone: () => !Cause.hasInterruptsOnly(cause),
+    onSome: keepsKey,
+  })
+
 const failed = <Failure extends SendCommandFailure | SetPinnedFailure>(
   cause: Cause.Cause<Failure>,
 ): ActionProgress =>
@@ -97,17 +104,9 @@ const failed = <Failure extends SendCommandFailure | SetPinnedFailure>(
     onNone: () =>
       Cause.hasInterruptsOnly(cause)
         ? IDLE
-        : ActionProgress.Failed({
-            message: UNEXPLAINED_FAILURE,
-            keepsKey: true,
-            asksConfirmation: false,
-          }),
+        : ActionProgress.Failed({ message: UNEXPLAINED_FAILURE, asksConfirmation: false }),
     onSome: (error) =>
-      ActionProgress.Failed({
-        message: error.message,
-        keepsKey: keepsKey(error),
-        asksConfirmation: asksConfirmation(error),
-      }),
+      ActionProgress.Failed({ message: error.message, asksConfirmation: asksConfirmation(error) }),
   })
 
 const progressOf = <Success, Failure extends SendCommandFailure | SetPinnedFailure>(
@@ -167,9 +166,11 @@ export const isConfirmationAsked = (progress: ActionProgress): boolean =>
 export const isRetriableFailure = <Success, Failure extends SendCommandFailure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
 ): boolean =>
-  !AsyncResult.isWaiting(result) &&
-  AsyncResult.isFailure(result) &&
-  Option.exists(Cause.findErrorOption(result.cause), keepsKey)
+  !AsyncResult.isWaiting(result) && AsyncResult.isFailure(result) && keepsKeyAfter(result.cause)
+
+export const isCommandUnderway = <Success, Failure extends SendCommandFailure>(
+  result: AsyncResult.AsyncResult<Success, Failure>,
+): boolean => isUnderway(progressOf(result, () => false))
 
 export const labelFromInput = (
   input: string,
@@ -193,11 +194,16 @@ export const keepsName = (row: AgentRow, label: Option.Option<string>): boolean 
     onSome: (name) => name === agentTitle(row),
   })
 
-export const endedNotice = (herdMachine: Option.Option<HerdMachine>, pane: PaneId): string =>
+const ENDED_NOTICE = {
+  agent: Option.none(),
+  noAgent: Option.some(CLAUDE_EXITED_NOTICE),
+  gone: Option.some(PANE_CLOSED_NOTICE),
+} satisfies Record<PanePresence, Option.Option<string>>
+
+export const endedNotice = (herdMachine: Option.Option<HerdMachine>, pane: PaneId) =>
   pipe(
     Option.flatMap(herdMachine, (entry) => entry.state),
-    Option.filter((state) => panePresence(state, pane) === 'noAgent'),
-    Option.match({ onNone: () => PANE_CLOSED_NOTICE, onSome: () => CLAUDE_EXITED_NOTICE }),
+    Option.flatMap((state) => ENDED_NOTICE[panePresence(state, pane)]),
   )
 
 export const sheetOutcome = (sheet: SheetProgress): SheetOutcome => {
@@ -205,9 +211,13 @@ export const sheetOutcome = (sheet: SheetProgress): SheetOutcome => {
     return SheetOutcome.Closed()
   }
 
-  if (!sheet.present && !isUnderway(sheet.close)) {
-    return SheetOutcome.Ended({ notice: endedNotice(sheet.herdMachine, sheet.pane) })
-  }
-
-  return isDone(sheet.rename) || isDone(sheet.pin) ? SheetOutcome.Finished() : SheetOutcome.Stay()
+  return pipe(
+    endedNotice(sheet.herdMachine, sheet.pane),
+    Option.filter(() => !isUnderway(sheet.close)),
+    Option.match({
+      onSome: (notice) => SheetOutcome.Ended({ notice }),
+      onNone: () =>
+        isDone(sheet.rename) || isDone(sheet.pin) ? SheetOutcome.Finished() : SheetOutcome.Stay(),
+    }),
+  )
 }

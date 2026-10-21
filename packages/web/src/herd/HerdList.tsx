@@ -1,14 +1,14 @@
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
+import { Pin, PinOff, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import type * as React from 'react'
-
-import { Pin, PinOff, X } from 'lucide-react'
 
 import { toGlobalPaneId } from '@crook/domain/Ids'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { usePinAgent } from '@crook/web/actions/PinAgent'
 import { PaneAddress } from '@crook/web/atoms/AgentActions'
+import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { SwipeRow, useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import type { OpenRow, SwipeAction } from '@crook/web/components/swipe/SwipeRow'
 import { AgentCard } from '@crook/web/herd/AgentCard'
@@ -107,14 +107,7 @@ function AgentCardRow({
       >
         <AgentCard card={card} now={now} />
       </SwipeRow>
-      {Option.match(pin.failure, {
-        onNone: () => null,
-        onSome: (message) => (
-          <p role="alert" className="text-destructive text-sm leading-5">
-            {message}
-          </p>
-        ),
-      })}
+      <ActionFailure message={pin.failure} />
     </motion.li>
   )
 }

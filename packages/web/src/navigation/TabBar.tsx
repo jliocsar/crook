@@ -47,7 +47,7 @@ export function TabBar({ needsYou = 0 }: { needsYou?: number }) {
             to={to}
             replace
             activeOptions={{ exact }}
-            className="text-muted-foreground data-[status=active]:text-primary flex min-h-14 touch-manipulation flex-col items-center justify-center gap-1 text-xs leading-4 font-medium select-none"
+            className="text-muted-foreground data-[status=active]:text-primary flex min-h-[var(--tab-bar-height)] touch-manipulation flex-col items-center justify-center gap-1 text-xs leading-4 font-medium select-none"
           >
             {({ isActive }) => (
               <>

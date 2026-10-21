@@ -6,7 +6,7 @@ import * as Option from 'effect/Option'
 import * as Atom from 'effect/reactivity/Atom'
 import * as Struct from 'effect/Struct'
 
-import { ClosePane, RenameAgent } from '@crook/domain/Command'
+import { ClosePane, RenameAgent, samePaneLabel } from '@crook/domain/Command'
 import type { Command } from '@crook/domain/Command'
 import type { HerdMachine } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
@@ -14,7 +14,9 @@ import { agentsIn } from '@crook/domain/MachineState'
 import {
   ActionProgress,
   commandProgress,
+  isCommandUnderway,
   isRetriableFailure,
+  isUnderway,
   pinProgress,
 } from '@crook/web/actions/PaneActions'
 import { herdAtom } from '@crook/web/atoms/Herd'
@@ -44,6 +46,7 @@ export class CloseAttempt extends Data.Class<{
 export class ActionsSession extends Data.Class<{
   readonly agent: PaneAddress
   readonly origin: ActionsOrigin
+  readonly visible: boolean
   readonly rename: Option.Option<RenameAttempt>
   readonly close: Option.Option<CloseAttempt>
   readonly pin: Option.Option<boolean>
@@ -57,6 +60,7 @@ export class CommandRequest extends Data.Class<{
 export type ActionsIntent = Data.TaggedEnum<{
   Open: { readonly agent: PaneAddress; readonly origin: ActionsOrigin }
   Dismiss: Record<never, never>
+  Finish: Record<never, never>
   Rename: { readonly label: Option.Option<string> }
   Close: { readonly confirmed: boolean }
   Pin: { readonly pinned: boolean }
@@ -66,6 +70,7 @@ export interface AgentActionsView {
   readonly session: ActionsSession
   readonly herdMachine: Option.Option<HerdMachine>
   readonly card: Option.Option<AgentCardModel>
+  readonly open: boolean
   readonly machineOnline: boolean
   readonly rename: ActionProgress
   readonly close: ActionProgress
@@ -116,10 +121,7 @@ const keyFor = <Attempt extends { readonly key: IdempotencyKey }>(
   )
 
 const sameLabel = (label: Option.Option<string>) => (attempt: RenameAttempt) =>
-  Option.match(label, {
-    onNone: () => Option.isNone(attempt.label),
-    onSome: (name) => Option.contains(attempt.label, name),
-  })
+  samePaneLabel(attempt.label, label)
 
 const sameConfirmation = (confirmed: boolean) => (attempt: CloseAttempt) =>
   attempt.confirmed === confirmed
@@ -131,9 +133,18 @@ const withSession = (
   Option.match(context.get(sessionAtom), { onNone: () => undefined, onSome: step })
 }
 
+const closeUnderway = (
+  context: Atom.WriteContext<Option.Option<ActionsSession>>,
+  session: ActionsSession,
+): boolean =>
+  Option.exists(session.close, (attempt) =>
+    isCommandUnderway(context.get(sendCommandAtom(attempt.key))),
+  )
+
 const evolved = (
   session: ActionsSession,
   change: Partial<{
+    readonly visible: (visible: boolean) => boolean
     readonly rename: (attempt: Option.Option<RenameAttempt>) => Option.Option<RenameAttempt>
     readonly close: (attempt: Option.Option<CloseAttempt>) => Option.Option<CloseAttempt>
     readonly pin: (pinned: Option.Option<boolean>) => Option.Option<boolean>
@@ -151,6 +162,7 @@ export const agentActionsAtom = Atom.writable(
             new ActionsSession({
               agent,
               origin,
+              visible: true,
               rename: Option.none(),
               close: Option.none(),
               pin: Option.none(),
@@ -159,6 +171,16 @@ export const agentActionsAtom = Atom.writable(
         )
       },
       Dismiss: () => {
+        withSession(context, (session) => {
+          context.set(
+            sessionAtom,
+            closeUnderway(context, session)
+              ? evolved(session, { visible: () => false })
+              : Option.none(),
+          )
+        })
+      },
+      Finish: () => {
         context.set(sessionAtom, Option.none())
       },
       Rename: ({ label }) => {
@@ -167,7 +189,10 @@ export const agentActionsAtom = Atom.writable(
 
           context.set(
             sessionAtom,
-            evolved(session, { rename: () => Option.some(new RenameAttempt({ key, label })) }),
+            evolved(session, {
+              visible: () => true,
+              rename: () => Option.some(new RenameAttempt({ key, label })),
+            }),
           )
           context.set(
             sendCommandAtom(key),
@@ -184,7 +209,10 @@ export const agentActionsAtom = Atom.writable(
 
           context.set(
             sessionAtom,
-            evolved(session, { close: () => Option.some(new CloseAttempt({ key, confirmed })) }),
+            evolved(session, {
+              visible: () => true,
+              close: () => Option.some(new CloseAttempt({ key, confirmed })),
+            }),
           )
           context.set(
             sendCommandAtom(key),
@@ -197,7 +225,10 @@ export const agentActionsAtom = Atom.writable(
       },
       Pin: ({ pinned }) => {
         withSession(context, (session) => {
-          context.set(sessionAtom, evolved(session, { pin: () => Option.some(pinned) }))
+          context.set(
+            sessionAtom,
+            evolved(session, { visible: () => true, pin: () => Option.some(pinned) }),
+          )
           context.set(setPinnedAtom(session.agent), pinned)
         })
       },
@@ -228,14 +259,16 @@ export const agentActionsViewAtom = Atom.make((get): Option.Option<AgentActionsV
         onNone: () => ActionProgress.Idle(),
         onSome: ({ key }) => commandProgress(get(sendCommandAtom(key)), agents),
       })
+    const close = commandOf(session.close)
 
     return {
       session,
       herdMachine,
       card,
+      open: session.visible || !isUnderway(close),
       machineOnline: Option.exists(herdMachine, (entry) => entry.machine.connection === 'online'),
       rename: commandOf(session.rename),
-      close: commandOf(session.close),
+      close,
       pin: Option.match(session.pin, {
         onNone: () => ActionProgress.Idle(),
         onSome: () =>

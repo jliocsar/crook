@@ -4,11 +4,11 @@ import { ChevronRight, Trash2 } from 'lucide-react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
+import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Pressable } from '@crook/web/components/press/Pressable'
 import { SwipeRow, useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import type { OpenRow, SwipeAction } from '@crook/web/components/swipe/SwipeRow'
 import { useForgetMachine } from '@crook/web/machines/Forget'
-import { ForgetFailure } from '@crook/web/machines/ForgetMachine'
 import { MachineHeading } from '@crook/web/machines/MachineHeading'
 import { agentSummary, versionsLine } from '@crook/web/machines/MachineLayout'
 import type { MachineCardModel, MachinesLayout } from '@crook/web/machines/MachineLayout'
@@ -97,10 +97,7 @@ function OfflineMachineRow({
       >
         <MachineCardBody card={card} now={now} />
       </SwipeRow>
-      {Option.match(forgetting.failure, {
-        onNone: () => null,
-        onSome: (message) => <ForgetFailure message={message} />,
-      })}
+      <ActionFailure message={forgetting.failure} />
     </li>
   )
 }
