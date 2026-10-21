@@ -16,7 +16,12 @@ import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
-import type { HubCallFailed, HubCalls, MarkSeenRefused } from '@crook/web/rpc/HubConnection'
+import type {
+  ForgetMachineRefused,
+  HubCallFailed,
+  HubCalls,
+  MarkSeenRefused,
+} from '@crook/web/rpc/HubConnection'
 import {
   announce,
   beginAttempt,
@@ -188,6 +193,15 @@ const make = Effect.gen(function* () {
     })
   })
 
+  const forgetMachine = Effect.fn('HubLink.forgetMachine')(function* (machine: MachineId) {
+    const hub = yield* Ref.get(connected)
+
+    return yield* Option.match(hub, {
+      onNone: () => Effect.fail(new HubNotConnected()),
+      onSome: (calls) => calls.forgetMachine(machine),
+    })
+  })
+
   return HubLink.of({
     changes: Stream.merge(
       SubscriptionRef.changes(state),
@@ -195,6 +209,7 @@ const make = Effect.gen(function* () {
     ),
     resync,
     markSeen,
+    forgetMachine,
   })
 })
 
@@ -207,6 +222,9 @@ export class HubLink extends Context.Service<
       machine: MachineId,
       pane: PaneId,
     ) => Effect.Effect<void, MarkSeenRefused | HubCallFailed | HubNotConnected>
+    readonly forgetMachine: (
+      machine: MachineId,
+    ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed | HubNotConnected>
   }
 >()('@crook/web/HubLink') {
   static readonly layerWithoutBrowser = Layer.effect(this, make)
