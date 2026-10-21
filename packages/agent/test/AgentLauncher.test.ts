@@ -47,10 +47,15 @@ import {
   WorkspaceCreateMethod,
   WorktreeCreateMethod,
 } from '@crook/herdr/Methods'
-import { agentInfo, paneInfo, tabInfo, workspaceInfo } from '@crook/herdr/RecordFixtures'
+import {
+  agentInfo,
+  paneInfo,
+  sessionSnapshot,
+  tabInfo,
+  workspaceInfo,
+} from '@crook/herdr/RecordFixtures'
 import {
   type AgentInfo,
-  SessionSnapshot,
   WorkspaceInfo,
   WorkspaceWorktreeInfo,
   WorktreeInfo,
@@ -101,17 +106,7 @@ const snapshotOf = (
 ): ScriptedResponse =>
   scriptedResult(SessionSnapshotMethod, {
     type: 'session_snapshot',
-    snapshot: new SessionSnapshot({
-      version: '0.9.5',
-      protocol: 22,
-      focused_workspace_id: Option.none(),
-      focused_tab_id: Option.none(),
-      focused_pane_id: Option.none(),
-      workspaces,
-      tabs: [tabInfo],
-      panes: [],
-      agents,
-    }),
+    snapshot: sessionSnapshot(agents, [], { version: '0.9.5', workspaces }),
   })
 
 const workspaceAt = (folder: string) =>

@@ -80,7 +80,7 @@ const paneOf = (agent: AgentInfo) =>
 export const sessionSnapshot = (
   agents: readonly AgentInfo[],
   panes: readonly PaneInfo[] = agents.map(paneOf),
-  tabs: readonly TabInfo[] = [tabInfo],
+  fields: Partial<ConstructorParameters<typeof SessionSnapshot>[0]> = {},
 ) =>
   new SessionSnapshot({
     version: '0.9.1',
@@ -89,7 +89,8 @@ export const sessionSnapshot = (
     focused_tab_id: Option.none(),
     focused_pane_id: Option.none(),
     workspaces: [workspaceInfo],
-    tabs,
+    tabs: [tabInfo],
     panes,
     agents,
+    ...fields,
   })

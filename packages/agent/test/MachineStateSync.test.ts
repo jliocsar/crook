@@ -581,7 +581,7 @@ it.effect('drops a tab that vanished with only the pane_exited of its last pane'
     const twoTabs = sessionSnapshot(
       [agentInfo()],
       [paneInfo(), paneInfo({ pane_id: 'w1:p7', terminal_id: 'term_7', tab_id: 'w1:t4' })],
-      [tabInfo, exitTestTab],
+      { tabs: [tabInfo, exitTestTab] },
     )
     const { sync, subscriptions, answerRead } = yield* startSync(twoTabs)
     const subscription = yield* Queue.take(subscriptions)

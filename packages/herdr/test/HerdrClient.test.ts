@@ -43,6 +43,7 @@ import {
   SessionSnapshotMethod,
   WorktreeCreateMethod,
 } from '@crook/herdr/Methods'
+import { sessionSnapshot } from '@crook/herdr/RecordFixtures'
 import { SessionSnapshot } from '@crook/herdr/Records'
 
 interface ConnectionScript {
@@ -560,17 +561,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
   )
 })
 
-const scriptedSnapshot = new SessionSnapshot({
-  version: '0.9.1',
-  protocol: 22,
-  focused_workspace_id: Option.none(),
-  focused_tab_id: Option.none(),
-  focused_pane_id: Option.none(),
-  workspaces: [],
-  tabs: [],
-  panes: [],
-  agents: [],
-})
+const scriptedSnapshot = sessionSnapshot([], [], { workspaces: [], tabs: [] })
 
 const scriptedEvent: HerdrEvent = {
   event: 'pane_closed',
