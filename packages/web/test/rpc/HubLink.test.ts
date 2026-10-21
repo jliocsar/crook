@@ -15,8 +15,10 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { AgentStarted, StartAgent } from '@crook/domain/Command'
-import { IdempotencyKey } from '@crook/domain/Ids'
+import { IdempotencyKey, PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import { defaultNotificationPrefs, NotificationSettings } from '@crook/domain/Notifications'
+import { PaneTranscript, positionAfter, TranscriptPosition } from '@crook/domain/Transcript'
+import type { TranscriptEvent } from '@crook/domain/Transcript'
 import { AGENT_PING_INTERVAL, HUB_RECONNECT_BASE } from '@crook/protocol/AgentLink'
 import { HubAccount } from '@crook/protocol/ClientApi'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
@@ -34,6 +36,7 @@ import { LogOutRefused, SESSION_CHECK_TIMEOUT } from '@crook/web/rpc/SessionChec
 
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { dropSession, makeFakeBrowser, OWNER_EMAIL, readySettings } from '../HubFakes.ts'
+import { chunk, opened, prompt, said, SESSION } from '../TranscriptFixtures.ts'
 import type { FakeSession } from '../HubFakes.ts'
 
 const SETTLE_STEPS = 50
@@ -519,6 +522,58 @@ describe('HubLink', () => {
       expect(isLive((yield* current).status)).toBe(true)
       expect(Option.isSome(yield* Ref.get(browser.saved))).toBe(true)
       expect(yield* Ref.get(browser.closed)).toBe(0)
+    }),
+  )
+
+  it.effect('resumes a transcript watch on the next connection from where the phone stands', () =>
+    Effect.gen(function* () {
+      const { link, current, nextSession, settle } = yield* start()
+      const first = yield* nextSession
+      const position = yield* Ref.make(Option.none<TranscriptPosition>())
+      const received = yield* Ref.make<readonly TranscriptEvent[]>([])
+
+      yield* Queue.offer(first.views, liveView)
+      yield* current
+      yield* TestClock.adjust(AGENT_PING_INTERVAL)
+      yield* link
+        .watchTranscript(
+          LAPTOP,
+          new PaneTranscript({ pane: PaneId.make('w1:p1') }),
+          Effect.map(Ref.get(position), (from) => ({ from, tail: Option.none() })),
+        )
+        .pipe(
+          Stream.runForEach((event) =>
+            Effect.andThen(
+              Ref.update(received, (events) => [...events, event]),
+              Ref.update(position, (held) => positionAfter(held, event)),
+            ),
+          ),
+          Effect.forkScoped,
+        )
+      const firstWatch = yield* Effect.andThen(settle, Queue.take(first.transcripts))
+
+      yield* Queue.offer(firstWatch, opened())
+      yield* Queue.offer(firstWatch, chunk(0, 10, [prompt(0, 'hi')]))
+      yield* settle
+      yield* Queue.fail(firstWatch, refused)
+      yield* dropSession(first, refused)
+      const second = yield* nextSession
+
+      yield* Queue.offer(second.views, liveView)
+      const secondWatch = yield* Effect.andThen(settle, Queue.take(second.transcripts))
+
+      yield* Queue.offer(secondWatch, chunk(10, 20, [said(10, 'hello')]))
+      yield* settle
+
+      expect((yield* Ref.get(first.transcriptRequests)).map((request) => request.from)).toEqual([
+        Option.none(),
+      ])
+      expect((yield* Ref.get(second.transcriptRequests)).map((request) => request.from)).toEqual([
+        Option.some(
+          new TranscriptPosition({ session: SESSION, offset: TranscriptOffset.make(10) }),
+        ),
+      ])
+      expect(yield* Ref.get(received)).toHaveLength(3)
     }),
   )
 

@@ -1,12 +1,13 @@
+import { cn } from 'cn'
 import { ArrowUp } from 'lucide-react'
 import * as React from 'react'
 
+import { keepFocus } from '@crook/web/components/KeepFocus'
+import { isSendKey } from '@crook/web/components/SendKey'
+import { ROUND_BUTTON } from '@crook/web/components/ui/prompt-input'
 import { Spinner } from '@crook/web/components/ui/spinner'
 
-const COARSE_POINTER_QUERY = '(pointer: coarse)'
 const SEND_SPINNER_SIZE = 16
-
-const softKeyboard = () => window.matchMedia(COARSE_POINTER_QUERY).matches
 
 const growToContent = (field: HTMLTextAreaElement) => {
   field.style.height = 'auto'
@@ -66,27 +67,18 @@ export function TaskComposer({
             onTaskChange(event.target.value)
           }}
           onKeyDown={(event) => {
-            if (
-              event.key !== 'Enter' ||
-              event.shiftKey ||
-              event.nativeEvent.isComposing ||
-              softKeyboard()
-            ) {
-              return
+            if (isSendKey(event)) {
+              event.preventDefault()
+              event.currentTarget.form?.requestSubmit()
             }
-
-            event.preventDefault()
-            event.currentTarget.form?.requestSubmit()
           }}
         />
         <button
           type="submit"
           aria-label="Start Claude"
           disabled={!sendable}
-          className="bg-foreground text-background focus-visible:ring-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-opacity duration-150 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-40 motion-reduce:transition-none"
-          onPointerDown={(event) => {
-            event.preventDefault()
-          }}
+          className={cn(ROUND_BUTTON, 'disabled:opacity-40')}
+          onPointerDown={keepFocus}
         >
           {sending ? (
             <Spinner size={SEND_SPINNER_SIZE} />

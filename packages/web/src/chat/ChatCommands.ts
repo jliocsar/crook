@@ -1,0 +1,331 @@
+import { useNavigate } from '@tanstack/react-router'
+import * as Arr from 'effect/Array'
+import * as Duration from 'effect/Duration'
+import { pipe } from 'effect/Function'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
+import * as React from 'react'
+
+import type { AgentRow } from '@crook/domain/AgentRow'
+import {
+  AnswerAsk,
+  Decline,
+  FolderPath,
+  interrupt,
+  Prompt,
+  StartAgent,
+} from '@crook/domain/Command'
+import type { Command, CommandReceipt } from '@crook/domain/Command'
+import type { MachineId, PaneId } from '@crook/domain/Ids'
+import { PendingAction } from '@crook/web/atoms/Commands'
+import { isUserPrompt } from '@crook/web/chat/ChatItems'
+import type { ChatItem } from '@crook/web/chat/ChatItems'
+import { activityOf } from '@crook/web/chat/ChatModel'
+import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
+import { useCommandAction } from '@crook/web/chat/CommandAction'
+import type { CommandAction } from '@crook/web/chat/CommandAction'
+import type { ComposerProps, ComposerMode } from '@crook/web/chat/Composer'
+import type { Restart } from '@crook/web/chat/EdgeCard'
+import type { ConnectionView } from '@crook/web/connection/ConnectionView'
+import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
+
+export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange'>
+
+export interface ChatCommands {
+  readonly composer: ComposerCommands
+  readonly blocked: boolean
+  readonly restart: Option.Option<Restart>
+  readonly pendingPrompt: Option.Option<string>
+}
+
+export interface ChatCommandsInput {
+  readonly machine: MachineId
+  readonly pane: PaneId
+  readonly model: ChatScreenModel
+  readonly connection: ConnectionView
+  readonly items: readonly ChatItem[]
+  readonly draft: string
+  readonly setDraft: (draft: string) => void
+}
+
+export interface PromptWait {
+  readonly promptsAtSend: number
+  readonly awaited: number
+}
+
+export interface PromptSend {
+  readonly replacesFailed: boolean
+  readonly awaitsPrompt: boolean
+}
+
+const SLASH = '/'
+const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, awaited: 0 }
+
+export const STOP_SETTLE = Duration.millis(512)
+
+const isSending = PendingAction.$is('Sending')
+const isSent = PendingAction.$is('Sent')
+const isDone = PendingAction.$is('Done')
+const isFailed = PendingAction.$is('Failed')
+
+const decodeFolder = Schema.decodeUnknownOption(FolderPath)
+
+export const failureOf = (action: CommandAction): Option.Option<string> =>
+  PendingAction.$match(action.state, {
+    Failed: (failed) => Option.some(failed.message),
+    Idle: () => Option.none(),
+    Sending: () => Option.none(),
+    Sent: () => Option.none(),
+    Done: () => Option.none(),
+  })
+
+export const isInFlight = (action: CommandAction): boolean =>
+  isSending(action.state) || isSent(action.state)
+
+const textOf = (command: Command): Option.Option<string> =>
+  Match.value(command).pipe(
+    Match.tags({
+      Prompt: (prompt) => Option.some(prompt.text),
+      AnswerAsk: (answer) =>
+        Match.value(answer.answer).pipe(
+          Match.tag('Decline', (decline) => decline.message),
+          Match.orElse(() => Option.none<string>()),
+        ),
+    }),
+    Match.orElse(() => Option.none<string>()),
+  )
+
+const isAcknowledged = (action: CommandAction): boolean =>
+  isSent(action.state) || isDone(action.state)
+
+export const sentText = (action: CommandAction): Option.Option<string> =>
+  pipe(
+    Option.liftPredicate(action, isAcknowledged),
+    Option.flatMap((acknowledged) => acknowledged.last),
+    Option.flatMap(textOf),
+  )
+
+export const promptCount = (items: readonly ChatItem[]): number =>
+  Arr.filter(items, isUserPrompt).length
+
+const hasArrived = (wait: PromptWait, items: readonly ChatItem[]): boolean =>
+  wait.awaited === 0 || promptCount(items) >= wait.promptsAtSend + wait.awaited
+
+const awaitsPrompt = (command: Command): boolean =>
+  Option.exists(textOf(command), (text) => !text.startsWith(SLASH))
+
+export const waitAfterSend = (
+  wait: PromptWait,
+  items: readonly ChatItem[],
+  send: PromptSend,
+): PromptWait => {
+  const carried = hasArrived(wait, items) ? 0 : wait.awaited - (send.replacesFailed ? 1 : 0)
+  const awaited = carried + (send.awaitsPrompt ? 1 : 0)
+
+  if (awaited === 0) {
+    return NOTHING_AWAITED
+  }
+
+  return { promptsAtSend: carried === 0 ? promptCount(items) : wait.promptsAtSend, awaited }
+}
+
+export const pendingPromptText = (
+  action: CommandAction,
+  wait: PromptWait,
+  items: readonly ChatItem[],
+): Option.Option<string> =>
+  pipe(
+    sentText(action),
+    Option.filter((text) => !text.startsWith(SLASH)),
+    Option.filter(() => !hasArrived(wait, items)),
+  )
+
+const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
+  Match.value(receipt).pipe(
+    Match.tag('AgentStarted', (started) => Option.some(started.pane)),
+    Match.orElse(() => Option.none<PaneId>()),
+  )
+
+export const composerMode = (row: Option.Option<AgentRow>, blocked: boolean): ComposerMode =>
+  blocked && Option.exists(row, (found) => Option.isSome(found.ask)) ? 'decline' : 'prompt'
+
+export const placeholderOf = (
+  connection: ConnectionView,
+  mode: ComposerMode,
+  blocked: boolean,
+): string => {
+  if (!connection.canAct) {
+    return 'Sending is paused until crook reconnects'
+  }
+
+  if (mode === 'decline') {
+    return 'Or tell Claude what to do instead'
+  }
+
+  return blocked ? "Waiting for Claude's question" : 'Message Claude'
+}
+
+const useClearSentDraft = (
+  action: CommandAction,
+  draft: string,
+  setDraft: (draft: string) => void,
+) => {
+  const sent = Option.getOrElse(sentText(action), () => '')
+
+  React.useEffect(() => {
+    if (sent !== '' && draft.trim() === sent) {
+      setDraft('')
+    }
+  }, [sent])
+}
+
+const usePromptWait = (items: readonly ChatItem[]) => {
+  const [wait, setWait] = React.useState<PromptWait>(NOTHING_AWAITED)
+  const arrived = hasArrived(wait, items)
+
+  React.useEffect(() => {
+    if (arrived && wait.awaited > 0) {
+      setWait(NOTHING_AWAITED)
+    }
+  }, [arrived, wait])
+
+  return {
+    wait,
+    afterSend: (send: PromptSend) => {
+      setWait(waitAfterSend(wait, items, send))
+    },
+  }
+}
+
+const useStopLock = (stop: CommandAction): boolean => {
+  const acknowledged = isSent(stop.state)
+  const [settled, setSettled] = React.useState(false)
+
+  React.useEffect(() => {
+    setSettled(false)
+
+    if (!acknowledged) {
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      setSettled(true)
+    }, Duration.toMillis(STOP_SETTLE))
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [acknowledged])
+
+  return isSending(stop.state) || (acknowledged && !settled)
+}
+
+const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
+  const navigate = useNavigate()
+  const started = PendingAction.$match(action.state, {
+    Done: (done) => startedPane(done.receipt),
+    Idle: () => Option.none<PaneId>(),
+    Sending: () => Option.none<PaneId>(),
+    Sent: () => Option.none<PaneId>(),
+    Failed: () => Option.none<PaneId>(),
+  })
+  const target = Option.getOrUndefined(started)
+
+  React.useEffect(() => {
+    if (target !== undefined) {
+      void navigate({
+        to: '/m/$machine/p/$pane',
+        params: { machine, pane: target },
+        replace: true,
+        state: carriedOrigin,
+      })
+    }
+  }, [target, machine, navigate])
+}
+
+export const useChatCommands = ({
+  machine,
+  pane,
+  model,
+  connection,
+  items,
+  draft,
+  setDraft,
+}: ChatCommandsInput): ChatCommands => {
+  const prompt = useCommandAction(machine)
+  const stop = useCommandAction(machine)
+  const restart = useCommandAction(machine)
+  const prompted = usePromptWait(items)
+  const activity = activityOf(model)
+  const blocked = activity === 'blocked'
+  const mode = composerMode(model.row, blocked)
+  const stopping = useStopLock(stop)
+
+  useClearSentDraft(prompt, draft, setDraft)
+  useRestartInPlace(machine, restart)
+
+  const sendPrompt = (command: Command) => {
+    prompted.afterSend({
+      replacesFailed: isFailed(prompt.state) && Option.exists(prompt.last, awaitsPrompt),
+      awaitsPrompt: awaitsPrompt(command),
+    })
+    prompt.send(command)
+  }
+
+  const send = (text: string) => {
+    Option.match(
+      Option.flatMap(
+        Option.filter(model.row, () => mode === 'decline'),
+        (row) => row.ask,
+      ),
+      {
+        onNone: () => {
+          sendPrompt(new Prompt({ pane, text }))
+        },
+        onSome: (ask) => {
+          sendPrompt(
+            new AnswerAsk({
+              pane,
+              ask: ask.id,
+              answer: new Decline({ message: Option.some(text) }),
+            }),
+          )
+        },
+      },
+    )
+  }
+
+  return {
+    blocked,
+    composer: {
+      onSend: send,
+      onStop: () => {
+        if (!stopping) {
+          stop.send(interrupt(pane))
+        }
+      },
+      mode,
+      working: activity === 'working',
+      disabled:
+        !connection.canAct || (blocked && mode === 'prompt') || model.presence === 'loading',
+      sending: isSending(prompt.state),
+      stopping,
+      placeholder: placeholderOf(connection, mode, blocked),
+      label: mode === 'decline' ? 'Tell Claude what to do instead' : 'Message to Claude',
+      failure: Option.orElse(failureOf(prompt), () => failureOf(stop)),
+    },
+    restart: Option.map(
+      Option.flatMap(model.row, (row) => decodeFolder(row.cwd)),
+      (folder) => ({
+        start: () => {
+          restart.send(new StartAgent({ kind: 'claude', folder, task: Option.none() }))
+        },
+        starting: isInFlight(restart),
+        disabled: !connection.canAct,
+        failure: failureOf(restart),
+      }),
+    ),
+    pendingPrompt: pendingPromptText(prompt, prompted.wait, items),
+  }
+}

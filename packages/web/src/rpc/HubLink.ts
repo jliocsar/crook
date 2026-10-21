@@ -15,6 +15,12 @@ import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import type { NotificationEvent, NotificationSettings } from '@crook/domain/Notifications'
+import type {
+  TranscriptEvent,
+  TranscriptPosition,
+  TranscriptSource,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
 import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import type { HubAccount, HubStorageFailed } from '@crook/protocol/ClientApi'
@@ -28,6 +34,7 @@ import type {
   HubCalls,
   MarkSeenRefused,
   SetPinnedRefused,
+  WatchTranscriptRefused,
 } from '@crook/web/rpc/HubConnection'
 import {
   announce,
@@ -47,6 +54,11 @@ import type { LogOutFailed } from '@crook/web/rpc/SessionCheck'
 type SessionFailure = HubCallFailed | HubWatchEnded
 
 type ConnectedCalls = SubscriptionRef.SubscriptionRef<Option.Option<HubCalls>>
+
+export interface TranscriptResume {
+  readonly from: Option.Option<TranscriptPosition>
+  readonly tail: Option.Option<TranscriptTailBytes>
+}
 
 export const SYNC_NOTICE_DELAY = Duration.seconds(1)
 export const RECOVERED_NOTICE_DURATION = Duration.millis(1500)
@@ -78,10 +90,10 @@ const whenConnected = <Success, Failure>(
       }),
   )
 
-const whileConnected = <Success>(
+const whileConnected = <Success, Failure>(
   connected: ConnectedCalls,
-  watch: (calls: HubCalls) => Stream.Stream<Success, HubCallFailed>,
-): Stream.Stream<Success, HubCallDefected> =>
+  watch: (calls: HubCalls) => Stream.Stream<Success, Failure | HubCallFailed>,
+) =>
   SubscriptionRef.changes(connected).pipe(
     Stream.switchMap(
       Option.match({
@@ -288,6 +300,19 @@ const make = Effect.gen(function* () {
     }),
   ).pipe(Effect.withSpan('HubLink.logOut'))
 
+  const watchTranscript = (
+    machine: MachineId,
+    source: TranscriptSource,
+    resume: Effect.Effect<TranscriptResume>,
+  ): Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallDefected> =>
+    whileConnected(connected, (calls) =>
+      Stream.unwrap(
+        Effect.map(resume, ({ from, tail }) =>
+          calls.watchTranscript({ machine, source, from, tail }),
+        ),
+      ),
+    )
+
   return HubLink.of({
     changes: Stream.merge(
       SubscriptionRef.changes(state),
@@ -303,6 +328,7 @@ const make = Effect.gen(function* () {
     setNotificationPref,
     sendTestNotification,
     logOut,
+    watchTranscript,
   })
 })
 
@@ -339,6 +365,11 @@ export class HubLink extends Context.Service<
       TestNotificationFailure | HubCallFailed | HubNotConnected
     >
     readonly logOut: Effect.Effect<void, LogOutFailed>
+    readonly watchTranscript: (
+      machine: MachineId,
+      source: TranscriptSource,
+      resume: Effect.Effect<TranscriptResume>,
+    ) => Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallDefected>
   }
 >()('@crook/web/HubLink') {
   static readonly layerWithoutBrowser = Layer.effect(this, make)

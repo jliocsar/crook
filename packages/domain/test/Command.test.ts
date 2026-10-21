@@ -263,6 +263,7 @@ describe('isReceiptShown', () => {
     expect(isReceiptShown(new InputDelivered({ pane, terminal, stateChangeSeq: 4 }), agents)).toBe(
       false,
     )
+    expect(isReceiptShown(new InputDelivered({ pane, terminal, stateChangeSeq: 4 }), [])).toBe(true)
   })
 })
 

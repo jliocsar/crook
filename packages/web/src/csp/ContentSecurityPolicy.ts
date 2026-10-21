@@ -2,7 +2,7 @@ export const CONTENT_SECURITY_POLICY_DIRECTIVES = {
   'default-src': ["'none'"],
   'script-src': ["'self'"],
   'style-src': ["'self'"],
-  'img-src': ["'self'"],
+  'img-src': ["'self'", 'blob:'],
   'font-src': ["'self'"],
   'connect-src': ["'self'"],
   'manifest-src': ["'self'"],

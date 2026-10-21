@@ -10,12 +10,14 @@ import {
   TranscriptOpened,
   TranscriptPosition,
   continuesFrom,
+  omittedUpTo,
   positionAfter,
   remainderAfter,
 } from '@crook/domain/Transcript'
 import {
   AssistantMessage,
   ImageBlock,
+  OmittedLines,
   TextBlock,
   UnrecognizedEntry,
 } from '@crook/domain/TranscriptMessage'
@@ -62,6 +64,19 @@ describe('positionAfter', () => {
     expect(
       positionAfter(Option.some(at(FIRST, 800)), new TranscriptOpened({ session: CLEARED })),
     ).toEqual(Option.some(at(CLEARED, 0)))
+  })
+})
+
+describe('omittedUpTo', () => {
+  it('stands for the bytes a tail skipped, as the chunk that opens the session', () => {
+    const omitted = omittedUpTo(FIRST, TranscriptOffset.make(800))
+    const opened = positionAfter(Option.none(), new TranscriptOpened({ session: FIRST }))
+
+    expect(continuesFrom(opened, omitted)).toBe(true)
+    expect(positionAfter(opened, omitted)).toEqual(Option.some(at(FIRST, 800)))
+    expect(omitted.messages).toEqual([
+      new OmittedLines({ offset: TranscriptOffset.make(0), byteLength: 800 }),
+    ])
   })
 })
 
@@ -122,6 +137,21 @@ describe('remainderAfter', () => {
   it('cuts a chunk that overlaps the position down to the lines after it', () => {
     expect(remainderAfter(Option.some(at(FIRST, 100)), chunkOf(FIRST, [0, 50, 100], 200))).toEqual(
       Option.some(chunkOf(FIRST, [100], 200)),
+    )
+  })
+
+  it('keeps the part of an Omitted note the position has not passed yet', () => {
+    expect(
+      remainderAfter(Option.some(at(FIRST, 500)), omittedUpTo(FIRST, TranscriptOffset.make(800))),
+    ).toEqual(
+      Option.some(
+        new TranscriptChunk({
+          session: FIRST,
+          offset: TranscriptOffset.make(500),
+          nextOffset: TranscriptOffset.make(800),
+          messages: [new OmittedLines({ offset: TranscriptOffset.make(500), byteLength: 300 })],
+        }),
+      ),
     )
   })
 

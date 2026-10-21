@@ -2,6 +2,7 @@ import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import type { PlatformError } from 'effect/PlatformError'
@@ -13,7 +14,7 @@ import { FileWatch } from '@crook/claude/FileWatch'
 import type { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import { parseLine } from '@crook/claude/TranscriptParser'
 import { type ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
-import { TranscriptChunk } from '@crook/domain/Transcript'
+import { TranscriptChunk, type TranscriptTailBytes } from '@crook/domain/Transcript'
 
 interface TailState {
   readonly consumed: number
@@ -119,6 +120,28 @@ const afterRead = (
       ]
 }
 
+const lineStartBefore = (
+  handle: FileSystem.File,
+  position: number,
+): Effect.Effect<number, PlatformError> => {
+  const windowStart = Math.max(0, position - TAIL_READ_SIZE)
+
+  return handle.readAlloc(position - windowStart, { position: BigInt(windowStart) }).pipe(
+    Effect.flatMap((read) =>
+      pipe(
+        read,
+        Option.map((bytes) => bytes.lastIndexOf(NEWLINE)),
+        Option.filter((newline) => newline >= 0),
+        Option.match({
+          onSome: (newline) => Effect.succeed(windowStart + newline + 1),
+          onNone: () =>
+            windowStart === 0 ? Effect.succeed(0) : lineStartBefore(handle, windowStart),
+        }),
+      ),
+    ),
+  )
+}
+
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const fileWatch = yield* FileWatch
@@ -126,15 +149,22 @@ const make = Effect.gen(function* () {
   const unreadableFile = (file: TranscriptFile) => (cause: PlatformError) =>
     new TranscriptUnreadable({ path: file.path, cause })
 
+  const openWithSize = Effect.fn('TranscriptTail.openWithSize')(function* (file: TranscriptFile) {
+    const unreadable = unreadableFile(file)
+    const handle = yield* fileSystem
+      .open(file.path, { flag: 'r' })
+      .pipe(Effect.mapError(unreadable))
+    const info = yield* handle.stat.pipe(Effect.mapError(unreadable))
+
+    return { handle, size: Number(info.size) }
+  })
+
   const open = Effect.fn('TranscriptTail.open')(function* (
     file: TranscriptFile,
     from: TranscriptOffset,
   ) {
     const unreadable = unreadableFile(file)
-    const handle = yield* fileSystem
-      .open(file.path, { flag: 'r' })
-      .pipe(Effect.mapError(unreadable))
-    const sizeAtOpen = Number((yield* handle.stat.pipe(Effect.mapError(unreadable))).size)
+    const { handle, size: sizeAtOpen } = yield* openWithSize(file)
 
     if (from > sizeAtOpen) {
       return yield* new TranscriptOffsetBeyondEnd({
@@ -222,7 +252,20 @@ const make = Effect.gen(function* () {
       ),
     )
 
-  return TranscriptTail.of({ follow, drain })
+  const tailStart = Effect.fn('TranscriptTail.tailStart')(function* (
+    file: TranscriptFile,
+    bytes: TranscriptTailBytes,
+  ) {
+    const { handle, size } = yield* openWithSize(file)
+    const start =
+      size <= bytes
+        ? 0
+        : yield* lineStartBefore(handle, size - bytes).pipe(Effect.mapError(unreadableFile(file)))
+
+    return TranscriptOffset.make(start)
+  }, Effect.scoped)
+
+  return TranscriptTail.of({ follow, drain, tailStart })
 })
 
 export class TranscriptTail extends Context.Service<
@@ -236,6 +279,10 @@ export class TranscriptTail extends Context.Service<
       file: TranscriptFile,
       from: TranscriptOffset,
     ) => Stream.Stream<TranscriptChunk, TailError>
+    readonly tailStart: (
+      file: TranscriptFile,
+      bytes: TranscriptTailBytes,
+    ) => Effect.Effect<TranscriptOffset, TranscriptUnreadable>
   }
 >()('@crook/claude/TranscriptTail') {
   static readonly layer = Layer.effect(this, make).pipe(Layer.provide(FileWatch.layer))

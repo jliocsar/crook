@@ -1,6 +1,7 @@
 import type { TargetAndTransition, Transition } from 'motion/react'
 
 import * as Arr from 'effect/Array'
+import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
@@ -13,7 +14,6 @@ export type MotionTokens = {
   readonly exit: TargetAndTransition
 }
 
-const MILLISECONDS_PER_SECOND = 1000
 const CSS_TIME = /^\s*(\d*\.?\d+)(ms|s)\s*$/u
 const CUBIC_BEZIER = /^\s*cubic-bezier\(([^)]*)\)\s*$/u
 
@@ -24,7 +24,7 @@ export const parseCssTime = (value: string): Option.Option<number> =>
       Option.all([Option.fromNullishOr(match[1]), Option.fromNullishOr(match[2])]),
     ),
     Option.map(([amount, unit]) =>
-      unit === 'ms' ? Number(amount) / MILLISECONDS_PER_SECOND : Number(amount),
+      unit === 'ms' ? Duration.toSeconds(Duration.millis(Number(amount))) : Number(amount),
     ),
   )
 

@@ -1,6 +1,7 @@
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import type * as Option from 'effect/Option'
 import * as Schedule from 'effect/Schedule'
 import * as Schema from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
@@ -13,6 +14,12 @@ import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import type { NotificationEvent, NotificationSettings } from '@crook/domain/Notifications'
+import type {
+  TranscriptEvent,
+  TranscriptPosition,
+  TranscriptSource,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
 import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import type {
@@ -26,6 +33,7 @@ import type { CommandFailure } from '@crook/protocol/Commands'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
+import type { TranscriptFailure } from '@crook/protocol/Transcripts'
 
 export type ClientApiClient = RpcClient.FromGroup<typeof ClientApi, RpcClientError>
 
@@ -35,7 +43,16 @@ export type ForgetMachineRefused = MachineNotInHerd | MachineStillConnected | Hu
 
 export type SetPinnedRefused = MachineNotInHerd | PaneNotInHerd | HubStorageFailed
 
+export type WatchTranscriptRefused = MachineNotInHerd | PaneNotInHerd | TranscriptFailure
+
 export type HubCallFailed = HubConnectionLost | HubCallDefected
+
+export interface TranscriptRequest {
+  readonly machine: MachineId
+  readonly source: TranscriptSource
+  readonly from: Option.Option<TranscriptPosition>
+  readonly tail: Option.Option<TranscriptTailBytes>
+}
 
 export interface HubCalls {
   readonly watchHerd: Stream.Stream<HerdView, HubCallFailed>
@@ -51,6 +68,9 @@ export interface HubCalls {
     pane: PaneId,
     pinned: boolean,
   ) => Effect.Effect<void, SetPinnedRefused | HubCallFailed>
+  readonly watchTranscript: (
+    request: TranscriptRequest,
+  ) => Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallFailed>
   readonly sendCommand: (
     machine: MachineId,
     key: IdempotencyKey,
@@ -120,6 +140,7 @@ export const callsFrom = (client: ClientApiClient): HubCalls => ({
   markSeen: (machine, pane) => hubCall(client.MarkSeen({ machine, pane })),
   forgetMachine: (machine) => hubCall(client.ForgetMachine({ machine })),
   setPinned: (machine, pane, pinned) => hubCall(client.SetPinned({ machine, pane, pinned })),
+  watchTranscript: (request) => hubStream(client.WatchTranscript(request)),
   sendCommand: (machine, key, command) => hubCall(client.SendCommand({ machine, key, command })),
   watchNotificationSettings: hubStream(client.WatchNotificationSettings()),
   setNotificationPref: (event, enabled) => hubCall(client.SetNotificationPref({ event, enabled })),

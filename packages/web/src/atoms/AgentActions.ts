@@ -9,7 +9,7 @@ import type * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Struct from 'effect/Struct'
 
 import { ClosePane, RenameAgent, samePaneLabel } from '@crook/domain/Command'
-import type { Command, CommandReceipt } from '@crook/domain/Command'
+import type { CommandReceipt } from '@crook/domain/Command'
 import type { HerdMachine } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
@@ -23,6 +23,7 @@ import {
 } from '@crook/web/actions/PaneActions'
 import type { SheetOutcome } from '@crook/web/actions/PaneActions'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
+import { CommandRequest, sendCommandAtom } from '@crook/web/atoms/Commands'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import { cardFor } from '@crook/web/herd/HerdLayout'
@@ -56,11 +57,6 @@ export class ActionsSession extends Data.Class<{
   readonly pin: Option.Option<boolean>
 }> {}
 
-export class CommandRequest extends Data.Class<{
-  readonly machine: MachineId
-  readonly command: Command
-}> {}
-
 export type ActionsIntent = Data.TaggedEnum<{
   Open: { readonly agent: PaneAddress; readonly origin: ActionsOrigin }
   Dismiss: Record<never, never>
@@ -89,18 +85,6 @@ type CommandResultOf = (
 type SessionsContext = Atom.WriteContext<readonly ActionsSession[]>
 
 export const ActionsIntent = Data.taggedEnum<ActionsIntent>()
-
-export const sendCommandAtom = Atom.family((key: IdempotencyKey) =>
-  hubRuntime
-    .fn((request: CommandRequest) =>
-      Effect.gen(function* () {
-        const link = yield* HubLink
-
-        return yield* link.sendCommand(request.machine, key, request.command)
-      }),
-    )
-    .pipe(Atom.keepAlive),
-)
 
 export const setPinnedAtom = Atom.family((agent: PaneAddress) =>
   hubRuntime

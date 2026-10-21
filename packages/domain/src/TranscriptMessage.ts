@@ -179,11 +179,17 @@ export class MalformedLine extends Schema.TaggedClass<MalformedLine>()('Malforme
   byteLength: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 }) {}
 
+export class OmittedLines extends Schema.TaggedClass<OmittedLines>()('Omitted', {
+  offset: TranscriptOffset,
+  byteLength: Schema.Int.check(Schema.isGreaterThan(0)),
+}) {}
+
 export const TranscriptMessage = Schema.Union([
   UserMessage,
   AssistantMessage,
   SystemMessage,
   UnrecognizedEntry,
   MalformedLine,
+  OmittedLines,
 ])
 export type TranscriptMessage = typeof TranscriptMessage.Type

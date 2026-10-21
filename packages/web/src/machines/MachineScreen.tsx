@@ -25,7 +25,7 @@ import { MachineStatus } from '@crook/web/machines/MachineHeading'
 import { agentsHeading } from '@crook/web/machines/MachineLayout'
 import type { MachineScreenModel } from '@crook/web/machines/MachineLayout'
 import { SectionLabel } from '@crook/web/machines/SectionLabel'
-import { openedFrom } from '@crook/web/navigation/Opener'
+import { openedFromMachine } from '@crook/web/navigation/ChatOrigin'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
 import { useNow } from '@crook/web/time/Now'
 
@@ -171,7 +171,7 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
     void navigate({
       to: '/m/$machine/p/$pane',
       params: { machine: agentMachine, pane: card.row.pane },
-      state: openedFrom(opener),
+      state: openedFromMachine(opener),
     })
   }
 

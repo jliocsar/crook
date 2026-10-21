@@ -6,7 +6,7 @@ import * as Schema from 'effect/Schema'
 
 import { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
 import { Subagent } from '@crook/domain/Subagent'
-import { TranscriptMessage } from '@crook/domain/TranscriptMessage'
+import { OmittedLines, TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 export class TranscriptPosition extends Schema.Class<TranscriptPosition>('TranscriptPosition')({
   session: ClaudeSessionId,
@@ -46,6 +46,19 @@ export type TranscriptEvent = typeof TranscriptEvent.Type
 
 export const TRANSCRIPT_START = TranscriptOffset.make(0)
 
+export const TranscriptTailBytes = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
+  Schema.brand('TranscriptTailBytes'),
+)
+export type TranscriptTailBytes = typeof TranscriptTailBytes.Type
+
+export const omittedUpTo = (session: ClaudeSessionId, start: TranscriptOffset) =>
+  new TranscriptChunk({
+    session,
+    offset: TRANSCRIPT_START,
+    nextOffset: start,
+    messages: [new OmittedLines({ offset: TRANSCRIPT_START, byteLength: start })],
+  })
+
 export const continuesFrom = (
   position: Option.Option<TranscriptPosition>,
   chunk: TranscriptChunk,
@@ -76,6 +89,25 @@ export const positionAfter = (
 const inSession = (position: Option.Option<TranscriptPosition>, session: ClaudeSessionId) =>
   Option.exists(position, (current) => current.session === session)
 
+const messageAfter = (
+  message: TranscriptMessage,
+  from: TranscriptOffset,
+): Option.Option<TranscriptMessage> =>
+  Match.value(message).pipe(
+    Match.tag('Omitted', (omitted) =>
+      omitted.offset >= from
+        ? Option.some(omitted)
+        : pipe(
+            Option.liftPredicate(
+              omitted.offset + omitted.byteLength - from,
+              (byteLength) => byteLength > 0,
+            ),
+            Option.map((byteLength) => new OmittedLines({ offset: from, byteLength })),
+          ),
+    ),
+    Match.orElse((other) => Option.liftPredicate(other, ({ offset }) => offset >= from)),
+  )
+
 const chunkRemainder = (
   position: Option.Option<TranscriptPosition>,
   chunk: TranscriptChunk,
@@ -95,7 +127,11 @@ const chunkRemainder = (
             session: chunk.session,
             offset: current.offset,
             nextOffset: chunk.nextOffset,
-            messages: Arr.filter(chunk.messages, (message) => message.offset >= current.offset),
+            messages: pipe(
+              chunk.messages,
+              Arr.map((message) => messageAfter(message, current.offset)),
+              Arr.getSomes,
+            ),
           }),
     ),
   )

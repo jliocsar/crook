@@ -139,7 +139,11 @@ export const hasClosed = (receipt: PaneClosed, agents: readonly AgentRow[]) =>
 export const isReceiptShown = (receipt: CommandReceipt, agents: readonly AgentRow[]): boolean =>
   Match.value(receipt).pipe(
     Match.tagsExhaustive({
-      InputDelivered: (delivered) => Arr.some(agents, (row) => hasMovedSince(delivered, row)),
+      InputDelivered: (delivered) =>
+        Option.match(
+          Arr.findFirst(agents, (row) => row.pane === delivered.pane),
+          { onNone: () => true, onSome: (row) => hasMovedSince(delivered, row) },
+        ),
       PaneRenamed: (renamed) => Arr.some(agents, (row) => hasRenamed(renamed, row)),
       PaneClosed: (closed) => hasClosed(closed, agents),
       AgentStarted: (started) => hasStarted(started, agents),

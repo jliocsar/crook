@@ -147,6 +147,7 @@ const demand = new TranscriptDemand({
       id: TranscriptWatchId.make(0),
       source: new PaneTranscript({ pane }),
       from: Option.some(resumeAt),
+      tail: Option.none(),
     }),
   ],
 })
@@ -293,10 +294,15 @@ layer(clientApiHandlers)('ClientApi', (rpc) => {
       const client = yield* RpcTest.makeClient(ClientApi)
       const source = new PaneTranscript({ pane })
       const events = yield* client
-        .WatchTranscript({ machine: laptop, source, from: Option.none() })
+        .WatchTranscript({ machine: laptop, source, from: Option.none(), tail: Option.none() })
         .pipe(Stream.runCollect)
       const failure = yield* client
-        .WatchTranscript({ machine: impostor, source, from: Option.some(resumeAt) })
+        .WatchTranscript({
+          machine: impostor,
+          source,
+          from: Option.some(resumeAt),
+          tail: Option.none(),
+        })
         .pipe(Stream.runCollect, Effect.flip)
 
       expect(events).toEqual([opened, firstChunk])

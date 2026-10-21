@@ -19,6 +19,7 @@ import {
   type TranscriptEvent,
   type TranscriptPosition,
   type TranscriptSource,
+  type TranscriptTailBytes,
   continuesFrom,
   positionAfter,
   remainderAfter,
@@ -36,6 +37,7 @@ interface Watcher {
   readonly machine: MachineId
   readonly source: TranscriptSource
   readonly position: Option.Option<TranscriptPosition>
+  readonly tail: Option.Option<TranscriptTailBytes>
   readonly inbox: Queue.Queue<TranscriptEvent, TranscriptFailure>
   readonly delivery: Semaphore.Semaphore
 }
@@ -60,7 +62,12 @@ const demandOf = (watchers: Watchers, machine: MachineId) =>
       Arr.filter(([, watcher]) => watcher.machine === machine),
       Arr.map(
         ([id, watcher]) =>
-          new TranscriptWatch({ id, source: watcher.source, from: watcher.position }),
+          new TranscriptWatch({
+            id,
+            source: watcher.source,
+            from: watcher.position,
+            tail: watcher.tail,
+          }),
       ),
       Arr.sort(Order.mapInput(Order.Number, (watch: TranscriptWatch) => watch.id)),
     ),
@@ -81,6 +88,7 @@ const make = Effect.gen(function* () {
     machine: MachineId,
     source: TranscriptSource,
     from: Option.Option<TranscriptPosition>,
+    tail: Option.Option<TranscriptTailBytes>,
   ) =>
     Stream.unwrap(
       Effect.gen(function* () {
@@ -91,7 +99,7 @@ const make = Effect.gen(function* () {
         yield* Effect.acquireRelease(
           SubscriptionRef.update(
             watchers,
-            HashMap.set(id, { machine, source, position: from, inbox, delivery }),
+            HashMap.set(id, { machine, source, position: from, tail, inbox, delivery }),
           ),
           () =>
             Effect.andThen(
@@ -178,6 +186,7 @@ export class TranscriptRelay extends Context.Service<
       machine: MachineId,
       source: TranscriptSource,
       from: Option.Option<TranscriptPosition>,
+      tail: Option.Option<TranscriptTailBytes>,
     ) => Stream.Stream<TranscriptEvent, TranscriptFailure>
     readonly demands: (machine: MachineId) => Stream.Stream<TranscriptDemand>
     readonly publish: (

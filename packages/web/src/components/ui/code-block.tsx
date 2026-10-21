@@ -5,12 +5,15 @@ import * as Option from 'effect/Option'
 import { Check, ChevronDown, Clipboard, WrapText } from 'lucide-react'
 import * as React from 'react'
 
+import { useRowFlag } from '@crook/web/components/RowMemory'
+import { useHighlightedLines } from '@crook/web/highlight/Highlighter'
+
 type CopyState = 'idle' | 'copied' | 'error'
 
 export type CodeBlockProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   code: string
-  filename?: string
-  language?: string
+  filename?: string | undefined
+  language?: string | undefined
   showLineNumbers?: boolean
   highlightLines?: readonly number[]
   maxLines?: number
@@ -21,6 +24,8 @@ export type CodeBlockProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'childre
 }
 
 const COPY_FEEDBACK_MS = 1400
+const BAR_ICON_SIZE = 14
+const TOGGLE_ICON_SIZE = 13
 
 const BAR_BUTTON =
   'hit-area text-muted-foreground hover:bg-card hover:text-foreground relative inline-flex size-8 items-center justify-center rounded-md transition-colors duration-150 motion-reduce:transition-none'
@@ -84,6 +89,7 @@ const useCopy = (code: string) => {
 
 function CodeLine({
   line,
+  content,
   number,
   marked,
   gutter,
@@ -91,6 +97,7 @@ function CodeLine({
   wrapped,
 }: {
   line: string
+  content: Option.Option<React.ReactNode>
   number: number
   marked: boolean
   gutter: number
@@ -117,7 +124,7 @@ function CodeLine({
       <span
         className={cn('min-w-0', wrapped ? 'break-words whitespace-pre-wrap' : 'whitespace-pre')}
       >
-        {line === '' ? ' ' : line}
+        {line === '' ? ' ' : Option.getOrElse(content, () => line)}
       </span>
     </span>
   )
@@ -168,7 +175,7 @@ function CodeBlockBar({
             className={cn(BAR_BUTTON, 'aria-pressed:bg-card aria-pressed:text-foreground')}
             onClick={onWrap}
           >
-            <WrapText aria-hidden="true" size={14} />
+            <WrapText aria-hidden="true" size={BAR_ICON_SIZE} />
           </button>
         ) : null}
 
@@ -181,9 +188,9 @@ function CodeBlockBar({
             onClick={onCopy}
           >
             {copyState === 'copied' ? (
-              <Check aria-hidden="true" size={14} />
+              <Check aria-hidden="true" size={BAR_ICON_SIZE} />
             ) : (
-              <Clipboard aria-hidden="true" size={14} />
+              <Clipboard aria-hidden="true" size={BAR_ICON_SIZE} />
             )}
           </button>
         ) : null}
@@ -192,7 +199,7 @@ function CodeBlockBar({
   )
 }
 
-function ExpandToggle({
+export function ExpandToggle({
   expanded,
   hidden,
   onToggle,
@@ -205,12 +212,12 @@ function ExpandToggle({
     <button
       type="button"
       aria-expanded={expanded}
-      className="border-border text-muted-foreground hover:text-foreground flex w-full items-center justify-center gap-1.5 border-t py-2 text-xs transition-colors duration-150 motion-reduce:transition-none"
+      className="border-border text-muted-foreground hover:text-foreground flex min-h-11 w-full items-center justify-center gap-1.5 border-t text-xs transition-colors duration-150 motion-reduce:transition-none"
       onClick={onToggle}
     >
       <ChevronDown
         aria-hidden="true"
-        size={13}
+        size={TOGGLE_ICON_SIZE}
         className={cn(
           'transition-transform duration-200 motion-reduce:transition-none',
           expanded && 'rotate-180',
@@ -236,7 +243,7 @@ export function CodeBlock({
   ...rootProps
 }: CodeBlockProps) {
   const { copyState, copy } = useCopy(code)
-  const [expanded, setExpanded] = React.useState(false)
+  const [expanded, setExpanded] = useRowFlag('code', false)
   const [override, setOverride] = React.useState<Option.Option<boolean>>(Option.none())
   const wrapped = Option.getOrElse(override, () => wrap)
   const lines = React.useMemo(() => code.replace(/\n$/u, '').split('\n'), [code])
@@ -245,6 +252,7 @@ export function CodeBlock({
   const clipped = collapsible && !expanded
   const shown = clipped ? lines.slice(0, maxLines) : lines
   const label = filename ?? language
+  const highlighted = useHighlightedLines(shown.join('\n'), Option.fromUndefinedOr(language))
 
   return (
     <div
@@ -271,6 +279,7 @@ export function CodeBlock({
       <div className="relative">
         <pre
           data-slot="code-block-code"
+          data-shiki={Option.isSome(highlighted) || undefined}
           tabIndex={0}
           className={cn(
             'text-foreground m-0 overflow-x-auto rounded-none bg-transparent px-0 py-2.5 font-[family-name:var(--font-mono),monospace] text-xs leading-relaxed',
@@ -282,6 +291,7 @@ export function CodeBlock({
               <CodeLine
                 key={index + 1}
                 line={line}
+                content={Option.flatMap(highlighted, (rows) => Option.fromUndefinedOr(rows[index]))}
                 number={index + 1}
                 marked={marked.has(index + 1)}
                 gutter={String(lines.length).length}
@@ -305,7 +315,7 @@ export function CodeBlock({
           expanded={expanded}
           hidden={lines.length - shown.length}
           onToggle={() => {
-            setExpanded((open) => !open)
+            setExpanded(!expanded)
           }}
         />
       ) : null}

@@ -9,13 +9,15 @@ import * as Stream from 'effect/Stream'
 
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import {
+  NEWLINE,
   TranscriptOffsetBeyondEnd,
   TranscriptOffsetMidLine,
+  TAIL_READ_SIZE,
   TranscriptShrank,
   TranscriptTail,
 } from '@crook/claude/TranscriptTail'
 import { TranscriptOffset } from '@crook/domain/Ids'
-import type { TranscriptChunk } from '@crook/domain/Transcript'
+import { type TranscriptChunk, TranscriptTailBytes } from '@crook/domain/Transcript'
 
 import {
   FIXTURES,
@@ -29,6 +31,7 @@ import {
 
 const PAGE = 4096
 const LARGE_APPEND = 120 * 1024
+const LONG_LINE = 3 * TAIL_READ_SIZE
 
 const encoder = new TextEncoder()
 
@@ -84,7 +87,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
     Effect.gen(function* () {
       const whole = yield* fixtureBytes('plain-turn.jsonl')
       const expected = messagesIn(yield* drained(fixtureFile('plain-turn.jsonl')))
-      const lastNewlineInPage = whole.subarray(0, PAGE).lastIndexOf(0x0a) + 1
+      const lastNewlineInPage = whole.subarray(0, PAGE).lastIndexOf(NEWLINE) + 1
       const file = yield* scratchFile(whole.subarray(0, PAGE))
       const chunks = yield* following(file, START)
       const first = yield* takeUntilOffset(chunks, lastNewlineInPage)
@@ -122,7 +125,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
           (chunk, index) => index === 0 || received[index - 1]?.nextOffset === chunk.offset,
         ),
       ).toBe(true)
-      expect(Arr.every(received, (chunk) => appended[chunk.nextOffset - 1] === 0x0a)).toBe(true)
+      expect(Arr.every(received, (chunk) => appended[chunk.nextOffset - 1] === NEWLINE)).toBe(true)
     }),
   )
 
@@ -145,6 +148,42 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
       )
       expect(midLine).toEqual(new TranscriptOffsetMidLine({ path: file.path, offset: 20017 }))
       expect(beyond).toBeInstanceOf(TranscriptOffsetBeyondEnd)
+    }),
+  )
+
+  live.effect('starts a tail at the line that holds the byte it was asked for', () =>
+    Effect.gen(function* () {
+      const tail = yield* TranscriptTail
+      const file = fixtureFile('plain-turn.jsonl')
+      const whole = yield* fixtureBytes('plain-turn.jsonl')
+      const bytes = TranscriptTailBytes.make(Math.floor(whole.length / 2))
+      const start = yield* tail.tailStart(file, bytes)
+      const resumed = yield* tail.drain(file, start).pipe(Stream.runCollect)
+      const everything = yield* tail.tailStart(file, TranscriptTailBytes.make(whole.length + 1))
+      const expected = messagesIn(yield* drained(file)).filter((message) => message.offset >= start)
+
+      expect(start).toBeGreaterThan(0)
+      expect(start).toBeLessThanOrEqual(whole.length - bytes)
+      expect(whole[start - 1]).toBe(NEWLINE)
+      expect(whole.subarray(start, whole.length - bytes).includes(NEWLINE)).toBe(false)
+      expect(messagesIn(resumed)).toEqual(expected)
+      expect(everything).toBe(START)
+    }),
+  )
+
+  live.effect('walks back past a read window to find the start of a long line', () =>
+    Effect.gen(function* () {
+      const tail = yield* TranscriptTail
+      const first = encoder.encode('{"type":"first"}\n')
+      const long = encoder.encode(`{"type":"${'x'.repeat(LONG_LINE)}"}\n`)
+      const content = new Uint8Array(first.length + long.length)
+
+      content.set(first)
+      content.set(long, first.length)
+      const file = yield* scratchFile(content)
+      const start = yield* tail.tailStart(file, TranscriptTailBytes.make(TAIL_READ_SIZE))
+
+      expect(start).toBe(first.length)
     }),
   )
 

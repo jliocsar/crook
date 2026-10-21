@@ -307,6 +307,10 @@ reset interrupts the running effect.
 A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
 `effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
 
+`Effect.andThen(effect, f)` runs what `f` returns as an effect: an `f` that only does a side
+effect and returns nothing dies with `Not a valid effect: undefined` (measured on `effect@4.0.5`).
+Write the step in an `Effect.gen` body, or map with `Effect.map`.
+
 `Arr.filterMap` takes a function returning a `Result`, not an `Option`, in `effect@4.0.5` (measured: a
 type error). Keep an `Option` pipeline on `Arr.flatMap` or `Arr.getSomes`. `Arr.replicate` and
 `Arr.makeBy` clamp the count to at least 1 (read in their source), so a count that can be zero is
@@ -543,6 +547,18 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   any machine (measured: five calls where one was due). It reads a derived atom that holds only
   its decision instead; atoms compare values with `Object.is`, so a boolean that did not flip
   wakes nothing.
+- Shiki's hast names an element's classes in `properties.class`, a space-separated string, not in
+  hast's usual `className` array (measured on 4.5). A walk that looks for `className` finds no
+  line and renders every block plain; test the walk against a real highlighter's output.
+- An atom that has to react to another atom without re-running reads it through `get.stream`,
+  which subscribes through the registry instead of adding a dependency (read in `AtomRegistry`).
+  Each run of that stream adds a subscription that lives until the atom does, so run it once for
+  the atom's life and fan it out, rather than re-running it per wait.
+- Claude Code's Read tool result numbers its lines as `1	…` today and `     1→…` in older
+  transcripts (measured in local transcripts). Strip either only when every line carries it.
+- An agent with a long transcript to look at in a probe needs no tokens: `herdr agent start …
+  --kind claude -- --resume <session>` reopens an earlier Claude session in the pane, and the chat
+  tails its file (measured in the JC-101 probe).
 - Vite's dev and preview servers check the `Host` header against `allowedHosts` for HTTP
   requests and the HMR socket, but not for a proxied WebSocket upgrade (measured on 8.3.4: an
   upgrade with `Host: attacker.example` was proxied). A proxy rule that trusts an upgrade does
@@ -594,6 +610,10 @@ Checking the web app against real data, measured:
   is checked without calling Hark, whose base URL is fixed.
 - Vite's dev server answers a POST to `/__exe.dev/logout` with 404, so Log out fails honestly
   there; a browser route that answers it is what reaches the logged-out screen.
+- The agent has no long-running entry of its own yet, so a probe composes its layers itself. It
+  exits on a config error before dialing unless `CROOK_MACHINE_ID` is set.
+- agent-browser scrolls an element into view before it clicks it, which moves the scroll container
+  around it. A scroll position read after such a click is the tool's, not the app's.
 :::
 
 :::warning
@@ -623,6 +643,10 @@ happy-dom, measured:
 - It does not resolve custom properties from stylesheets. Code that reads a CSS token at runtime
   gets nothing unless the setup copies the tokens onto the root element from the raw stylesheet.
   Vitest empties CSS imports, a `?raw` one included, unless its `css.include` names that file.
+- It does no layout, so nothing scrolls on its own. TanStack Virtual takes the viewport's size
+  from `clientHeight` and its offset from `scrollTop` on a `scroll` event, so a test that needs
+  rows to leave the range defines `scrollHeight` on the viewport, lets the thread follow the
+  bottom, and dispatches `scroll` itself once `scrollTop` has moved.
 :::
 
 :::tip

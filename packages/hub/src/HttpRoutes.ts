@@ -92,9 +92,12 @@ const routes = Effect.gen(function* () {
             ...commandAudit(command),
           }),
         ),
-      WatchTranscript: ({ machine, source, from }) =>
+      WatchTranscript: ({ machine, source, from, tail }) =>
         Stream.unwrap(
-          Effect.as(admitTranscript(machine, source), transcripts.watch(machine, source, from)),
+          Effect.as(
+            admitTranscript(machine, source),
+            transcripts.watch(machine, source, from, tail),
+          ),
         ),
       WatchNotificationSettings: () => notifier.settings,
       SetNotificationPref: ({ event, enabled }) =>

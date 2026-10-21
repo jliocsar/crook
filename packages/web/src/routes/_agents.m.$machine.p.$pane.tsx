@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
 
 import { MachineId, PaneId } from '@crook/domain/Ids'
 import { AgentChatScreen } from '@crook/web/chat/AgentChatScreen'
@@ -15,5 +15,10 @@ export const Route = createFileRoute('/_agents/m/$machine/p/$pane')({
 function AgentChat() {
   const { machine, pane } = Route.useParams()
 
-  return <AgentChatScreen machine={machine} pane={pane} />
+  return (
+    <>
+      <AgentChatScreen machine={machine} pane={pane} />
+      <Outlet />
+    </>
+  )
 }

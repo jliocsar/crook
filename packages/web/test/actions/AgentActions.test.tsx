@@ -18,12 +18,8 @@ import {
   CommandTimedOut,
   PaneNotCreatedByCrook,
 } from '@crook/protocol/Commands'
-import {
-  ActionsIntent,
-  agentActionsAtom,
-  PaneAddress,
-  sendCommandAtom,
-} from '@crook/web/atoms/AgentActions'
+import { ActionsIntent, agentActionsAtom, PaneAddress } from '@crook/web/atoms/AgentActions'
+import { sendCommandAtom } from '@crook/web/atoms/Commands'
 import { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
