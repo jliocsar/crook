@@ -8,7 +8,8 @@ import type { CommandReceipt } from '@crook/domain/Command'
 import { PaneId } from '@crook/domain/Ids'
 import { MachineNotInHerd } from '@crook/protocol/ClientApi'
 import { UNEXPECTED_FAILURE_MESSAGE } from '@crook/web/atoms/ActionFailure'
-import { PendingAction, pendingAction } from '@crook/web/atoms/Commands'
+import { ActionProgress } from '@crook/web/atoms/ActionProgress'
+import { pendingAction } from '@crook/web/atoms/Commands'
 
 import { agent, herd, LAPTOP, machine } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
@@ -27,28 +28,34 @@ const stateOf = (
 
 describe('pendingAction', () => {
   it('is idle before anything is sent, and sending while the hub has not answered', () => {
-    expect(stateOf(AsyncResult.initial())).toStrictEqual(PendingAction.Idle())
-    expect(stateOf(AsyncResult.initial(true))).toStrictEqual(PendingAction.Sending())
+    expect(stateOf(AsyncResult.initial())).toStrictEqual(ActionProgress.Idle())
+    expect(stateOf(AsyncResult.initial(true))).toStrictEqual(ActionProgress.Sending())
   })
 
   it('is sent on the ack, and done once the pane has moved since', () => {
-    expect(stateOf(AsyncResult.success(receipt))).toStrictEqual(PendingAction.Sent({ receipt }))
+    expect(stateOf(AsyncResult.success(receipt))).toStrictEqual(ActionProgress.Sent({ receipt }))
     expect(stateOf(AsyncResult.success(receipt), herdWith(2))).toStrictEqual(
-      PendingAction.Done({ receipt }),
+      ActionProgress.Done({ receipt }),
     )
     expect(
       stateOf(AsyncResult.success(receipt), Option.some(herd([machine(LAPTOP, [])]))),
-    ).toStrictEqual(PendingAction.Done({ receipt }))
+    ).toStrictEqual(ActionProgress.Done({ receipt }))
+  })
+
+  it('stays sent on the ack while no herd has arrived to show it in', () => {
+    expect(stateOf(AsyncResult.success(receipt), Option.none())).toStrictEqual(
+      ActionProgress.Sent({ receipt }),
+    )
   })
 
   it('says why it failed, and gives the one unexpected-failure sentence when no error came back', () => {
     const refusal = new MachineNotInHerd({ machine: LAPTOP })
 
     expect(stateOf(AsyncResult.fail(refusal))).toStrictEqual(
-      PendingAction.Failed({ message: refusal.message }),
+      ActionProgress.Failed({ message: refusal.message, asksConfirmation: false }),
     )
     expect(stateOf(AsyncResult.failure(Cause.die('torn frame')))).toStrictEqual(
-      PendingAction.Failed({ message: UNEXPECTED_FAILURE_MESSAGE }),
+      ActionProgress.Failed({ message: UNEXPECTED_FAILURE_MESSAGE, asksConfirmation: false }),
     )
   })
 })

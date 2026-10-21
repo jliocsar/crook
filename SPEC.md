@@ -200,7 +200,7 @@ Screens
 2. **Agent chat**
    - Transcript rendered as chat: user bubbles, assistant markdown, tool calls collapsed by default (name + one-line summary, expand for input/output), diffs with syntax highlight, images.
    - Live tail while `working` (streaming indicator from Herdr status; message text arrives as transcript lines are appended).
-   - Ask card pinned above the composer when `blocked`: header, command/diff, buttons (Yes / Yes always / No / options from AskUserQuestion).
+   - Ask dock above the composer while `blocked`: "Needs you", a title, the command or diff, and Yes / Always / No as the dialog offers them; AskUserQuestion as a questionnaire whose "Something else" declines with your text; an ask crook cannot read as its screen with a plain decline. Sending from the composer while blocked declines with that message.
    - Composer: plain textarea (system dictation works), send button, key strip (Esc, Ctrl+C, ↑, ↓, Tab, Enter), slash-command shortcuts.
    - No terminal view: the chat is the only view of an agent.
 3. **Machines** — one card per machine: label, connection badge, agent counts, crook agent and Herdr versions, "update agent" when the agent is older than the hub. A pushed machine screen lists its agents and its details. An offline machine can be forgotten from here (swipe, or hold to forget on its screen).

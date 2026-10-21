@@ -14,6 +14,10 @@ import { translate, useTransformString } from '@crook/web/motion/TransformString
 
 export type ComposerMode = 'prompt' | 'decline'
 
+export interface ComposerHandle {
+  readonly focus: () => void
+}
+
 export interface ComposerProps {
   readonly value: string
   readonly onValueChange: (value: string) => void
@@ -27,6 +31,7 @@ export interface ComposerProps {
   readonly placeholder: string
   readonly label: string
   readonly failure: Option.Option<string>
+  readonly handle?: React.Ref<ComposerHandle>
 }
 
 const SLASH_ONLY = /^\/\S*$/u
@@ -49,6 +54,7 @@ export function Composer({
   placeholder,
   label,
   failure,
+  handle,
 }: ComposerProps) {
   const field = React.useRef<HTMLTextAreaElement>(null)
   const transform = useTransformString()
@@ -57,6 +63,8 @@ export function Composer({
   const focusField = () => {
     field.current?.focus()
   }
+
+  React.useImperativeHandle(handle, () => ({ focus: focusField }))
 
   return (
     <div data-slot="composer" data-mode={mode} className="grid gap-2">

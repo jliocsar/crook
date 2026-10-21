@@ -4,8 +4,16 @@ import * as Atom from 'effect/reactivity/Atom'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import type { OpenedAgent } from '@crook/web/atoms/Herd'
 import { herdAtom } from '@crook/web/atoms/Herd'
+import type { AlwaysNote } from '@crook/web/chat/AskModel'
 import { chatScreenModel, LOADING_CHAT } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
+
+export const alwaysNotesAtom = Atom.family((opened: OpenedAgent) =>
+  Atom.make<readonly AlwaysNote[]>([]).pipe(
+    Atom.keepAlive,
+    Atom.withLabel(`always notes ${opened.machine} ${opened.pane}`),
+  ),
+)
 
 export const chatScreenAtom = Atom.family((opened: OpenedAgent) =>
   Atom.make((get) =>

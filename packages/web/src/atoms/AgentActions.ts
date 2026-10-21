@@ -14,8 +14,6 @@ import type { HerdMachine } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
 import {
-  ActionProgress,
-  commandProgress,
   isCommandUnderway,
   isRetriableFailure,
   pinProgress,
@@ -23,6 +21,8 @@ import {
 } from '@crook/web/actions/PaneActions'
 import type { SheetOutcome } from '@crook/web/actions/PaneActions'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
+import { ActionProgress, commandProgress } from '@crook/web/atoms/ActionProgress'
+import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { CommandRequest, sendCommandAtom } from '@crook/web/atoms/Commands'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
@@ -72,9 +72,9 @@ export interface AgentActionsView {
   readonly card: Option.Option<AgentCardModel>
   readonly open: boolean
   readonly machineOnline: boolean
-  readonly rename: ActionProgress
-  readonly close: ActionProgress
-  readonly pin: ActionProgress
+  readonly rename: CommandProgress
+  readonly close: CommandProgress
+  readonly pin: ActionProgress<boolean>
   readonly outcome: SheetOutcome
 }
 

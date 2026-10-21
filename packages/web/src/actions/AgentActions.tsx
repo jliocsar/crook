@@ -14,7 +14,6 @@ import { type AgentRow, agentTitle, agentTitleOrPane } from '@crook/domain/Agent
 import { toGlobalPaneId } from '@crook/domain/Ids'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import {
-  type ActionProgress,
   closeNeedsConfirmation,
   failureOf,
   isInFlightOrDone,
@@ -31,6 +30,7 @@ import {
   PaneAddress,
 } from '@crook/web/atoms/AgentActions'
 import type { ActionsOrigin, AgentActionsView } from '@crook/web/atoms/AgentActions'
+import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { ToastIntent, toastAtom } from '@crook/web/atoms/Toast'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
@@ -68,6 +68,24 @@ export const useOpenAgentActions = (): OpenAgentActions => {
   return (machine, pane, origin) => {
     dispatch(ActionsIntent.Open({ agent: new PaneAddress({ machine, pane }), origin }))
   }
+}
+
+export const useClosedFromChat = (machine: MachineId, pane: PaneId): boolean => {
+  const views = useAtomValue(agentActionsViewsAtom)
+  const agent = new PaneAddress({ machine, pane })
+  const closingNow = views.some(
+    (view) =>
+      view.session.origin === 'chat' &&
+      Equal.equals(view.session.agent, agent) &&
+      SheetOutcome.$is('Closed')(view.outcome),
+  )
+  const [closed, setClosed] = React.useState(closingNow)
+
+  if (closingNow && !closed) {
+    setClosed(true)
+  }
+
+  return closed || closingNow
 }
 
 export const useOpenCardActions = (): OpenCardActions => {
@@ -121,7 +139,7 @@ function RenameField({
   onRename,
 }: {
   row: AgentRow
-  progress: ActionProgress
+  progress: CommandProgress
   disabled: boolean
   onRename: (label: Option.Option<string>) => void
 }) {

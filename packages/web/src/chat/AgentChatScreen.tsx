@@ -3,11 +3,11 @@ import { useNavigate } from '@tanstack/react-router'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
+import { Ellipsis } from 'lucide-react'
 import * as React from 'react'
 
-import { pendingAskSummary } from '@crook/domain/AgentRow'
-import type { AgentRow } from '@crook/domain/AgentRow'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
+import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
@@ -17,8 +17,11 @@ import {
   transcriptRetryAtom,
   transcriptWholeAtom,
 } from '@crook/web/atoms/Transcript'
+import { AskDock } from '@crook/web/chat/AskDock'
+import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
+import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
-import type { ComposerCommands } from '@crook/web/chat/ChatCommands'
+import type { AskDockCommands, ComposerCommands } from '@crook/web/chat/ChatCommands'
 import { ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
 import {
   chatItems,
@@ -56,6 +59,8 @@ import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import { linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
+import { Button } from '@crook/web/components/ui/button'
+import { Collapse } from '@crook/web/components/Collapse'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { Message } from '@crook/web/components/ui/message'
 import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
@@ -65,8 +70,9 @@ import { useNow } from '@crook/web/time/Now'
 
 interface DockProps {
   readonly model: ChatScreenModel
+  readonly closedHere: boolean
   readonly composer: ComposerCommands
-  readonly blocked: boolean
+  readonly ask: Option.Option<AskDockCommands>
   readonly restart: Option.Option<Restart>
   readonly draft: string
   readonly onDraftChange: (draft: string) => void
@@ -103,26 +109,14 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
   return Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>
 }
 
-function AskSlot({ row }: { row: AgentRow }) {
-  return Option.match(pendingAskSummary(row), {
-    onNone: () => null,
-    onSome: (summary) => (
-      <section
-        data-slot="ask-dock"
-        aria-label="Needs you"
-        className="border-border bg-muted/40 grid gap-0.5 rounded-[var(--radius)] border px-3.5 py-2.5"
-      >
-        <p className="text-muted-foreground text-xs font-semibold">Needs you</p>
-        <p className="truncate font-mono text-sm">{summary}</p>
-      </section>
-    ),
-  })
-}
+const hasActions = (model: ChatScreenModel): boolean =>
+  Option.isSome(model.row) && (model.presence === 'live' || model.presence === 'away')
 
 function ChatDock({
   model,
+  closedHere,
   composer,
-  blocked,
+  ask,
   restart,
   draft,
   onDraftChange,
@@ -132,17 +126,23 @@ function ChatDock({
 }: DockProps) {
   const inset = useKeyboardInset()
   const [composerFocused, setComposerFocused] = React.useState(false)
+  const askFocus = useFocusAfterAsk(
+    Option.match(ask, { onNone: () => '', onSome: (dock) => dock.ask.id }),
+  )
 
-  if (model.presence === 'notClaude') {
+  if (model.presence === 'notClaude' || closedHere) {
     return null
   }
 
   return (
     <div
       data-slot="chat-dock"
-      className="border-border bg-card border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)]"
+      className="border-border bg-card flex min-h-0 flex-col border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)]"
       style={inset > 0 ? { paddingBottom: inset } : undefined}
     >
+      <p role="status" className="sr-only">
+        {Option.match(ask, { onNone: () => '', onSome: (dock) => askAnnouncement(dock.ask) })}
+      </p>
       {Option.match(edgeKindOf(model), {
         onSome: (kind) => (
           <EdgeCard
@@ -162,19 +162,30 @@ function ChatDock({
         ),
         onNone: () => (
           <div
-            className="grid gap-2"
-            onFocus={() => {
+            className="flex min-h-0 flex-col gap-2"
+            onFocus={(event) => {
               setComposerFocused(true)
+              askFocus.onFocus(event)
             }}
-            onBlur={() => {
+            onBlur={(event) => {
               setComposerFocused(false)
+              askFocus.onBlur(event)
             }}
           >
-            {Option.match(
-              Option.filter(model.row, () => blocked),
-              { onNone: () => null, onSome: (row) => <AskSlot row={row} /> },
-            )}
-            <Composer value={draft} onValueChange={onDraftChange} {...composer} />
+            <Collapse open={Option.isSome(ask)} className="flex min-h-0 flex-col">
+              {Option.match(ask, {
+                onNone: () => null,
+                onSome: (dock) => (
+                  <AskDock key={dock.ask.id} ref={askFocus.region} cwd={cwdOf(model)} {...dock} />
+                ),
+              })}
+            </Collapse>
+            <Composer
+              handle={askFocus.composer}
+              value={draft}
+              onValueChange={onDraftChange}
+              {...composer}
+            />
           </div>
         ),
       })}
@@ -209,6 +220,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   )
   const commands = useChatCommands({ machine, pane, model, connection, items, draft, setDraft })
   const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS
+  const openActions = useOpenAgentActions()
+  const closedHere = useClosedFromChat(machine, pane)
+  const title = titleOf(model, pane)
 
   useAtomMount(seenWhileOpenAtom(opened))
 
@@ -239,7 +253,13 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     model.presence === 'notClaude'
       ? []
       : [
-          ...itemRows(items, environment),
+          ...itemRows(
+            withoutAskedCall(
+              withAlwaysNotes(items, commands.alwaysNotes),
+              Option.map(commands.ask, (dock) => dock.ask.id),
+            ),
+            environment,
+          ),
           ...pendingPromptRows(commands.pendingPrompt),
           ...Option.toArray(
             Option.map(working, (row) => workingRow(shortElapsed(now, row.statusChangedAt))),
@@ -254,20 +274,36 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   return (
     <>
       <PushedHeader
-        title={titleOf(model, pane)}
+        title={title}
         subtitle={<ChatStatusLine status={chatStatus(model)} place={placeOf(model)} />}
         backLabel={backLabel}
         trailing={
-          <RunningPill
-            count={runningCount(items)}
-            onShow={() => {
-              const key = firstRunningTreeKey(items)
+          <>
+            <RunningPill
+              count={runningCount(items)}
+              onShow={() => {
+                const key = firstRunningTreeKey(items)
 
-              if (Option.isSome(key)) {
-                thread.current?.scrollToKey(key.value)
-              }
-            }}
-          />
+                if (Option.isSome(key)) {
+                  thread.current?.scrollToKey(key.value)
+                }
+              }}
+            />
+            {hasActions(model) && !closedHere ? (
+              <Button
+                variant="ghost"
+                size="icon-touch"
+                data-slot="chat-actions"
+                aria-label={`Actions for ${title}`}
+                className="text-muted-foreground shrink-0"
+                onClick={() => {
+                  openActions(machine, pane, 'chat')
+                }}
+              >
+                <Ellipsis className="size-5" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </>
         }
       />
       <div className="min-h-0 flex-1">
@@ -280,8 +316,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       </div>
       <ChatDock
         model={model}
+        closedHere={closedHere}
         composer={commands.composer}
-        blocked={commands.blocked}
+        ask={commands.ask}
         restart={commands.restart}
         draft={draft}
         onDraftChange={setDraft}

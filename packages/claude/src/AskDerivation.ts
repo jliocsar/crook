@@ -58,6 +58,7 @@ const NO_LABEL = 'No'
 const ALWAYS_DESCRIPTION = 'always allow'
 const OTHER_DESCRIPTION = 'other'
 const LINE_BREAK = '\n'
+const WRAPPED_LINE_JOIN = ' '
 const PATH_SEPARATOR = '/'
 const WHITESPACE = /\s+/gu
 
@@ -134,14 +135,11 @@ const askOptionsOf = (dialog: Option.Option<ScreenDialog>): readonly AskOption[]
     onNone: () => [],
     onSome: (found) =>
       found.kind === 'permission'
-        ? found.options.map(
-            (option) =>
-              new AskOption({
-                number: option.number,
-                label: option.label,
-                choice: optionChoice(option.label),
-              }),
-          )
+        ? found.options.map((option) => {
+            const label = [option.label, ...option.details].join(WRAPPED_LINE_JOIN)
+
+            return new AskOption({ number: option.number, label, choice: optionChoice(label) })
+          })
         : [],
   })
 

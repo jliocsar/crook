@@ -1,6 +1,5 @@
 import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
-import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Result from 'effect/Result'
@@ -8,29 +7,18 @@ import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
 
 import { type AgentRow, agentTitle } from '@crook/domain/AgentRow'
-import { isReceiptShown, PaneLabel } from '@crook/domain/Command'
-import type { CommandReceipt } from '@crook/domain/Command'
+import { PaneLabel } from '@crook/domain/Command'
 import type { HerdMachine } from '@crook/domain/HerdView'
 import type { PaneId } from '@crook/domain/Ids'
 import { panePresence } from '@crook/domain/MachineState'
 import type { PanePresence } from '@crook/domain/MachineState'
-import { failureMessage, remembersOutcome, settledError } from '@crook/web/atoms/ActionFailure'
+import { remembersOutcome, settledError } from '@crook/web/atoms/ActionFailure'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
+import { ActionProgress, isDone, isIdle, progressOf } from '@crook/web/atoms/ActionProgress'
 import type { HubCallFailed, SetPinnedRefused } from '@crook/web/rpc/HubConnection'
 import type { HubNotConnected } from '@crook/web/rpc/HubLink'
 
 export type SetPinnedFailure = SetPinnedRefused | HubCallFailed | HubNotConnected
-
-export type ActionProgress = Data.TaggedEnum<{
-  Idle: Record<never, never>
-  Sending: Record<never, never>
-  Sent: Record<never, never>
-  Done: Record<never, never>
-  Failed: {
-    readonly message: string
-    readonly asksConfirmation: boolean
-  }
-}>
 
 export type SheetOutcome = Data.TaggedEnum<{
   Stay: Record<never, never>
@@ -41,8 +29,6 @@ export type SheetOutcome = Data.TaggedEnum<{
 
 export const PANE_CLOSED_NOTICE = 'Pane closed'
 export const CLAUDE_EXITED_NOTICE = 'Claude exited'
-
-export const ActionProgress = Data.taggedEnum<ActionProgress>()
 
 export const SheetOutcome = Data.taggedEnum<SheetOutcome>()
 
@@ -55,50 +41,10 @@ export class InvalidPaneLabel extends Schema.TaggedError<InvalidPaneLabel>()(
   }
 }
 
-const IDLE = ActionProgress.Idle()
-const SENDING = ActionProgress.Sending()
-const SENT = ActionProgress.Sent()
-const DONE = ActionProgress.Done()
-
-const asksConfirmation = (error: SendCommandFailure | SetPinnedFailure): boolean =>
-  Match.value(error).pipe(
-    Match.tag('PaneNotCreatedByCrook', () => true),
-    Match.orElse(() => false),
-  )
-
-const progressOf = <Success, Failure extends SendCommandFailure | SetPinnedFailure>(
-  result: AsyncResult.AsyncResult<Success, Failure>,
-  shown: (success: Success) => boolean,
-): ActionProgress => {
-  if (AsyncResult.isWaiting(result)) {
-    return SENDING
-  }
-
-  return Option.match(failureMessage(result), {
-    onSome: (message) =>
-      ActionProgress.Failed({
-        message,
-        asksConfirmation: Option.exists(settledError(result), asksConfirmation),
-      }),
-    onNone: () => {
-      if (!AsyncResult.isSuccess(result)) {
-        return IDLE
-      }
-
-      return shown(result.value) ? DONE : SENT
-    },
-  })
-}
-
-export const commandProgress = (
-  result: AsyncResult.AsyncResult<CommandReceipt, SendCommandFailure>,
-  agents: readonly AgentRow[],
-): ActionProgress => progressOf(result, (receipt) => isReceiptShown(receipt, agents))
-
 export const pinProgress = (
   result: AsyncResult.AsyncResult<boolean, SetPinnedFailure>,
   pinnedNow: boolean,
-): ActionProgress => progressOf(result, (pinned) => pinned === pinnedNow)
+): ActionProgress<boolean> => progressOf(result, (pinned) => pinned === pinnedNow)
 
 export const isInFlightOrDone = ActionProgress.$match({
   Idle: () => false,
@@ -108,13 +54,10 @@ export const isInFlightOrDone = ActionProgress.$match({
   Failed: () => false,
 })
 
-const isDone = ActionProgress.$is('Done')
+const isSettled = (progress: ActionProgress<unknown>): boolean =>
+  isIdle(progress) || isDone(progress)
 
-const isIdle = ActionProgress.$is('Idle')
-
-const isSettled = (progress: ActionProgress): boolean => isIdle(progress) || isDone(progress)
-
-export const failureOf = (progress: ActionProgress): Option.Option<string> =>
+export const failureOf = (progress: ActionProgress<unknown>): Option.Option<string> =>
   ActionProgress.$match(progress, {
     Idle: () => Option.none(),
     Sending: () => Option.none(),
@@ -124,7 +67,7 @@ export const failureOf = (progress: ActionProgress): Option.Option<string> =>
       confirming ? Option.none() : Option.some(message),
   })
 
-export const isConfirmationAsked = (progress: ActionProgress): boolean =>
+export const isConfirmationAsked = (progress: ActionProgress<unknown>): boolean =>
   ActionProgress.$match(progress, {
     Idle: () => false,
     Sending: () => false,
@@ -135,7 +78,7 @@ export const isConfirmationAsked = (progress: ActionProgress): boolean =>
 
 export const closeNeedsConfirmation = (
   row: AgentRow,
-  close: ActionProgress,
+  close: ActionProgress<unknown>,
   lastClose: Option.Option<{ readonly confirmed: boolean }>,
 ): boolean =>
   !row.createdByCrook ||
@@ -187,9 +130,9 @@ export const endedNotice = (herdMachine: Option.Option<HerdMachine>, pane: PaneI
 export const sheetOutcome = (sheet: {
   readonly herdMachine: Option.Option<HerdMachine>
   readonly pane: PaneId
-  readonly rename: ActionProgress
-  readonly close: ActionProgress
-  readonly pin: ActionProgress
+  readonly rename: ActionProgress<unknown>
+  readonly close: ActionProgress<unknown>
+  readonly pin: ActionProgress<unknown>
 }): SheetOutcome => {
   if (isDone(sheet.close)) {
     return SheetOutcome.Closed()

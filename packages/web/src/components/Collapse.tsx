@@ -3,7 +3,19 @@ import * as React from 'react'
 
 import { INSTANT, SPRING } from '@crook/web/motion/Springs'
 
-function CollapseBody({ children }: { children: React.ReactNode }) {
+interface CollapseProps {
+  readonly open: boolean
+  readonly className?: string
+  readonly children: React.ReactNode
+}
+
+function CollapseBody({
+  className,
+  children,
+}: {
+  className: string | undefined
+  children: React.ReactNode
+}) {
   const [clipping, setClipping] = React.useState(false)
   const present = useIsPresent()
   const reduce = useReducedMotion() ?? false
@@ -15,6 +27,7 @@ function CollapseBody({ children }: { children: React.ReactNode }) {
       exit={{ height: 0, opacity: 0 }}
       transition={reduce ? INSTANT : SPRING}
       inert={!present}
+      className={className}
       onAnimationStart={() => {
         setClipping(true)
       }}
@@ -28,10 +41,14 @@ function CollapseBody({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+export function Collapse({ open, className, children }: CollapseProps) {
   return (
     <AnimatePresence initial={false}>
-      {open ? <CollapseBody key="body">{children}</CollapseBody> : null}
+      {open ? (
+        <CollapseBody key="body" className={className}>
+          {children}
+        </CollapseBody>
+      ) : null}
     </AnimatePresence>
   )
 }
