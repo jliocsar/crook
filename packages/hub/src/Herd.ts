@@ -259,6 +259,12 @@ const make = Effect.gen(function* () {
       Effect.mapError(() => new MachineNotInHerd({ machine: id })),
     )
 
+  const agentIn = (id: MachineId, found: MachineEntry, pane: PaneId) =>
+    Arr.findFirst(agentsIn(found.state), (agent) => agent.pane === pane).pipe(
+      Effect.fromOption,
+      Effect.mapError(() => new PaneNotInHerd({ machine: id, pane })),
+    )
+
   const expireAfterGrace = (id: MachineId, entry: MachineEntry) =>
     entry.connection === 'reconnecting'
       ? Effect.sleep(RECONNECT_GRACE).pipe(
@@ -331,13 +337,7 @@ const make = Effect.gen(function* () {
     yield* change(id, (entry) =>
       Effect.gen(function* () {
         const found = yield* visible(id, entry)
-        const row = yield* Arr.findFirst(
-          agentsIn(found.state),
-          (agent) => agent.pane === pane,
-        ).pipe(
-          Effect.fromOption,
-          Effect.mapError(() => new PaneNotInHerd({ machine: id, pane })),
-        )
+        const row = yield* agentIn(id, found, pane)
 
         if (HashMap.has(found.seen, pane)) {
           return Option.none()
@@ -373,10 +373,7 @@ const make = Effect.gen(function* () {
           return Option.some({ ...found, pinned: HashSet.remove(found.pinned, pane) })
         }
 
-        if (!Arr.some(agentsIn(found.state), (agent) => agent.pane === pane)) {
-          return yield* new PaneNotInHerd({ machine: id, pane })
-        }
-
+        yield* agentIn(id, found, pane)
         yield* pinnedAgents.pin(record)
 
         return Option.some({ ...found, pinned: HashSet.add(found.pinned, pane) })

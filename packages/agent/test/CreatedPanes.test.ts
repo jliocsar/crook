@@ -74,6 +74,26 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
       }),
     )
 
+    it.effect('moves an unreadable record aside before the next change writes a new one', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const file = yield* scratchFile('created-panes.json')
+
+        yield* fileSystem.makeDirectory(file.slice(0, file.lastIndexOf('/')), { recursive: true })
+        yield* fileSystem.writeFileString(file, '{"panes":')
+        const unreadable = yield* createdPanesAt(file)
+
+        yield* unreadable.remember(PANE)
+        const setAside = yield* fileSystem.readFileString(`${file}.unreadable`)
+        const stored = yield* fileSystem
+          .readFileString(file)
+          .pipe(Effect.flatMap(Schema.decodeEffect(StoredPanes)))
+
+        expect(setAside).toBe('{"panes":')
+        expect(stored).toEqual(['w1:p1'])
+      }),
+    )
+
     it.effect('keeps its record under the XDG state directory unless told otherwise', () =>
       Effect.gen(function* () {
         const fromStateHome = yield* CrookCreatedPanesPath.parse(

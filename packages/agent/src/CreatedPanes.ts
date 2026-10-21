@@ -12,6 +12,7 @@ import { makeEnsureParentDirectory, stateFile } from '@crook/agent/StateDirector
 import { PaneId } from '@crook/domain/Ids'
 
 const TEMPORARY_SUFFIX = '.tmp'
+const UNREADABLE_SUFFIX = '.unreadable'
 
 export const CrookCreatedPanesPath = stateFile('CROOK_CREATED_PANES_PATH', 'created-panes.json')
 
@@ -28,10 +29,19 @@ export class CreatedPanesUnwritable extends Schema.TaggedError<CreatedPanesUnwri
 
 export class CreatedPanesUnreadable extends Schema.TaggedError<CreatedPanesUnreadable>()(
   'CreatedPanesUnreadable',
-  { path: Schema.String, cause: Schema.Defect() },
+  { path: Schema.String, setAsidePath: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return `Could not read the panes crook created from ${this.path}, so crook starts as if it had created none and asks for confirmation before closing any pane. Check that file, or move it aside to start a fresh record.`
+    return `Could not read the panes crook created from ${this.path}, so it was moved to ${this.setAsidePath} and crook starts as if it had created none, asking for confirmation before closing any pane. Inspect the moved file, and delete it once its record is no longer wanted.`
+  }
+}
+
+export class CreatedPanesNotSetAside extends Schema.TaggedError<CreatedPanesNotSetAside>()(
+  'CreatedPanesNotSetAside',
+  { path: Schema.String, setAsidePath: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Could not read the panes crook created from ${this.path}, nor move it to ${this.setAsidePath}, so crook starts as if it had created none and the next pane it creates or closes replaces that file. Copy the file elsewhere now to keep it, and check the permissions of its folder.`
   }
 }
 
@@ -39,6 +49,7 @@ const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const ensureParentDirectory = yield* makeEnsureParentDirectory
   const file = yield* CrookCreatedPanesPath
+  const unreadableFile = `${file}${UNREADABLE_SUFFIX}`
   const writing = yield* Semaphore.make(1)
 
   const stored = yield* fileSystem.readFileString(file).pipe(
@@ -46,9 +57,22 @@ const make = Effect.gen(function* () {
     Effect.map(HashSet.fromIterable),
     Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(HashSet.empty<PaneId>())),
     Effect.catch((cause) =>
-      Effect.as(
-        Effect.logWarning(new CreatedPanesUnreadable({ path: file, cause }).message),
-        HashSet.empty<PaneId>(),
+      fileSystem.rename(file, unreadableFile).pipe(
+        Effect.andThen(
+          Effect.logWarning(
+            new CreatedPanesUnreadable({ path: file, setAsidePath: unreadableFile, cause }).message,
+          ),
+        ),
+        Effect.catch((moveFailure) =>
+          Effect.logWarning(
+            new CreatedPanesNotSetAside({
+              path: file,
+              setAsidePath: unreadableFile,
+              cause: moveFailure,
+            }).message,
+          ),
+        ),
+        Effect.as(HashSet.empty<PaneId>()),
       ),
     ),
   )
