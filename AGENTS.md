@@ -150,6 +150,11 @@ writes `@crook/domain/Ids`, the same leaf-only rule the `effect` imports follow.
 tests import it through that specifier too; the package resolves itself through its `exports`
 (measured).
 
+A fixture that another member's tests read stays in the member that owns it, exported as
+`"./fixtures/*": "./test/fixtures/*"`, and the reader turns it into a path with
+`new URL(import.meta.resolve('@crook/<member>/fixtures/…')).pathname`, which resolves under
+`bun --bun vitest` (measured). A copy drifts from the capture it was taken from.
+
 ## Rules
 
 Leaf imports only: `effect/Effect`, `effect/cli/Command`.
