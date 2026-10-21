@@ -8,19 +8,14 @@ import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import * as Record from 'effect/Record'
 import * as Ref from 'effect/Ref'
 import * as Schedule from 'effect/Schedule'
 
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
-import {
-  type AgentKind,
-  AgentStarted,
-  type CreateWorktree,
-  type LaunchCommand,
-  type StartAgent,
-} from '@crook/domain/Command'
+import { type AgentKind, AgentStarted, type LaunchCommand } from '@crook/domain/Command'
 import { PaneId } from '@crook/domain/Ids'
 import {
   HerdrClient,
@@ -48,6 +43,7 @@ import {
   FolderNotCheckout,
   FolderNotFound,
   FolderUnreadable,
+  HerdrAnswerUnreadable,
   HerdrRefusedCommand,
   HerdrUnavailable,
   TaskNotDelivered,
@@ -56,6 +52,7 @@ import {
 interface LaunchedPane {
   readonly pane: PaneId
   readonly folder: string
+  readonly worktree: Option.Option<string>
   readonly herdrRootPane: Option.Option<PaneId>
 }
 
@@ -101,14 +98,15 @@ export const CLAUDE_CHILD_VARIABLES = [
 
 export const UNSET_CLAUDE_CHILD_VARIABLES = ` unset ${CLAUDE_CHILD_VARIABLES.join(' ')}`
 
-export const SCRUBBED_ENVIRONMENT: Readonly<Record<string, string>> = Record.fromEntries(
+export const SCRUBBED_ENVIRONMENT: Record.ReadonlyRecord<string, string> = Record.fromEntries(
   Arr.map(CLAUDE_CHILD_VARIABLES, (name) => [name, ''] as const),
 )
 
-const NOTHING_SENT: TransportFailures<HerdrUnavailable> = {
+const NOTHING_SENT: TransportFailures<HerdrUnavailable | HerdrAnswerUnreadable> = {
   unreachable: () => Effect.fail(new HerdrUnavailable()),
   lost: () => Effect.fail(new HerdrUnavailable()),
-  unreadable: (invalid) => Effect.die(invalid),
+  unreadable: (invalid) =>
+    Effect.fail(new HerdrAnswerUnreadable({ method: invalid.method, issue: invalid.issue })),
 }
 
 const CREATING_PANE: TransportFailures<HerdrUnavailable | CommandDeliveryUnknown> = {
@@ -143,7 +141,7 @@ export const worktreePathBeside = (checkoutRoot: string, branch: string): string
 const workingDirectoryOfPane = (pane: PaneInfo): Option.Option<string> =>
   Option.orElse(pane.foreground_cwd, () => pane.cwd)
 
-export const workspaceWithFolder = (snapshot: SessionSnapshot, folder: string) =>
+const workspaceWithFolder = (snapshot: SessionSnapshot, folder: string) =>
   Arr.findFirst(
     snapshot.workspaces,
     (workspace) =>
@@ -199,7 +197,7 @@ const fromHerdr = <Success, Lost, Refused>(
 const refusedCommand = (refusal: Refusal) => new HerdrRefusedCommand(refusal)
 
 const notStartedIn = (launched: LaunchedPane) => (refusal: Refusal) =>
-  new AgentNotStarted({ folder: launched.folder, ...refusal })
+  new AgentNotStarted({ folder: launched.folder, worktree: launched.worktree, ...refusal })
 
 const reserveNameBeside = (
   reservedNames: Ref.Ref<HashSet.HashSet<string>>,
@@ -222,6 +220,7 @@ const make = Effect.gen(function* () {
   const createdPanes = yield* CreatedPanes
   const gitBranches = yield* GitBranches
   const fileSystem = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
   const reservedNames = yield* Ref.make(HashSet.empty<string>())
 
   const requireFolder = (folder: string) =>
@@ -240,7 +239,9 @@ const make = Effect.gen(function* () {
 
   const requireCheckout = (folder: string) =>
     gitBranches.checkoutOf(folder).pipe(
-      Effect.mapError((error) => new FolderUnreadable({ folder, reason: error.message })),
+      Effect.mapError(
+        (error) => new FolderUnreadable({ folder, reason: `could not read ${error.path}` }),
+      ),
       Effect.flatMap(
         Option.match({
           onNone: () => Effect.fail(new FolderNotCheckout({ folder })),
@@ -350,15 +351,12 @@ const make = Effect.gen(function* () {
     return new AgentStarted({ pane: launched.pane })
   })
 
-  const openPane = Effect.fn('AgentLauncher.openPane')(function* (start: StartAgent) {
+  const openPane = Effect.fn('AgentLauncher.openPane')(function* (folder: string) {
     const snapshot = yield* fromHerdr(herdr.snapshot, NOTHING_SENT, refusedCommand)
-    const created = yield* Option.match(workspaceWithFolder(snapshot, start.folder), {
+    const created = yield* Option.match(workspaceWithFolder(snapshot, folder), {
       onNone: () =>
         fromHerdr(
-          herdr.request(WorkspaceCreateMethod, {
-            cwd: start.folder,
-            env: SCRUBBED_ENVIRONMENT,
-          }),
+          herdr.request(WorkspaceCreateMethod, { cwd: folder, env: SCRUBBED_ENVIRONMENT }),
           CREATING_PANE,
           refusedCommand,
         ),
@@ -366,7 +364,7 @@ const make = Effect.gen(function* () {
         fromHerdr(
           herdr.request(TabCreateMethod, {
             workspace_id: workspace.workspace_id,
-            cwd: start.folder,
+            cwd: folder,
             env: SCRUBBED_ENVIRONMENT,
           }),
           CREATING_PANE,
@@ -375,41 +373,47 @@ const make = Effect.gen(function* () {
     })
     const launched: LaunchedPane = {
       pane: PaneId.make(created.root_pane.pane_id),
-      folder: start.folder,
+      folder,
+      worktree: Option.none(),
       herdrRootPane: Option.none(),
     }
 
     return launched
   })
 
-  const openWorktree = Effect.fn('AgentLauncher.openWorktree')(function* (create: CreateWorktree) {
-    const checkout = yield* requireCheckout(create.folder)
+  const openWorktree = Effect.fn('AgentLauncher.openWorktree')(function* (
+    folder: string,
+    branch: string,
+  ) {
+    const checkout = yield* requireCheckout(folder)
     const created = yield* fromHerdr(
       herdr.request(WorktreeCreateMethod, {
-        cwd: create.folder,
-        branch: create.branch,
-        path: worktreePathBeside(checkout.root, create.branch),
+        cwd: folder,
+        branch,
+        path: worktreePathBeside(checkout.root, branch),
       }),
       CREATING_PANE,
       refusedCommand,
     )
     const herdrRootPane = PaneId.make(created.root_pane.pane_id)
-    const folder = created.worktree.path
+    const worktree = created.worktree.path
 
     yield* remember(herdrRootPane)
 
     const tab = yield* fromHerdr(
       herdr.request(TabCreateMethod, {
         workspace_id: created.workspace.workspace_id,
-        cwd: folder,
+        cwd: worktree,
         env: SCRUBBED_ENVIRONMENT,
       }),
       PANE_OPENED,
-      (refusal) => new AgentNotStarted({ folder, ...refusal }),
+      (refusal) =>
+        new AgentNotStarted({ folder: worktree, worktree: Option.some(worktree), ...refusal }),
     ).pipe(Effect.tapErrorTag('AgentNotStarted', () => closeQuietly(herdrRootPane)))
     const launched: LaunchedPane = {
       pane: PaneId.make(tab.root_pane.pane_id),
-      folder,
+      folder: worktree,
+      worktree: Option.some(worktree),
       herdrRootPane: Option.some(herdrRootPane),
     }
 
@@ -417,11 +421,13 @@ const make = Effect.gen(function* () {
   })
 
   const launch = Effect.fn('AgentLauncher.launch')(function* (command: LaunchCommand) {
-    yield* requireFolder(command.folder)
+    const folder = path.resolve(command.folder)
+
+    yield* requireFolder(folder)
     const launched = yield* Match.value(command).pipe(
       Match.tagsExhaustive({
-        StartAgent: openPane,
-        CreateWorktree: openWorktree,
+        StartAgent: () => openPane(folder),
+        CreateWorktree: (create) => openWorktree(folder, create.branch),
       }),
     )
 
@@ -443,6 +449,7 @@ export class AgentLauncher extends Context.Service<
       | FolderNotCheckout
       | HerdrRefusedCommand
       | HerdrUnavailable
+      | HerdrAnswerUnreadable
       | AgentNotStarted
       | TaskNotDelivered
       | CommandDeliveryUnknown

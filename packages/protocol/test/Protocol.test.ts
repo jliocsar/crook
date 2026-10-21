@@ -48,6 +48,7 @@ import {
   CommandId,
   CommandResult,
   FolderNotFound,
+  HerdrAnswerUnreadable,
   MachineOffline,
   PaneNotAgent,
   PaneNotCreatedByCrook,
@@ -340,7 +341,8 @@ describe('Command wire shapes', () => {
     const missing = Result.fail(new FolderNotFound({ folder: '/home/jliocsar/gone' }))
     const notStarted = Result.fail(
       new AgentNotStarted({
-        folder: '/home/jliocsar/Projects/crook',
+        folder: '/home/jliocsar/Projects/crook-feat-jc-111-new-agent',
+        worktree: Option.some('/home/jliocsar/Projects/crook-feat-jc-111-new-agent'),
         code: 'timeout',
         detail: 'timed out waiting for agent state',
       }),
@@ -352,6 +354,12 @@ describe('Command wire shapes', () => {
         detail: 'agent did not start working',
       }),
     )
+    const unreadable = Result.fail(
+      new HerdrAnswerUnreadable({
+        method: 'session.snapshot',
+        issue: 'Missing key at ["snapshot"]["workspaces"]',
+      }),
+    )
 
     expect(roundTrip(RoutedCommand, start)).toEqual(start)
     expect(roundTrip(RoutedCommand, worktree)).toEqual(worktree)
@@ -359,5 +367,26 @@ describe('Command wire shapes', () => {
     expect(roundTrip(CommandResult, missing)).toEqual(missing)
     expect(roundTrip(CommandResult, notStarted)).toEqual(notStarted)
     expect(roundTrip(CommandResult, notDelivered)).toEqual(notDelivered)
+    expect(roundTrip(CommandResult, unreadable)).toEqual(unreadable)
+  })
+
+  it('mentions a worktree left on disk only when the launch made one', () => {
+    const inFolder = new AgentNotStarted({
+      folder: '/home/jliocsar/Projects/crook',
+      worktree: Option.none(),
+      code: 'timeout',
+      detail: 'timed out waiting for agent state',
+    })
+    const inWorktree = new AgentNotStarted({
+      folder: '/home/jliocsar/Projects/crook-fix-reconnect',
+      worktree: Option.some('/home/jliocsar/Projects/crook-fix-reconnect'),
+      code: 'timeout',
+      detail: 'timed out waiting for agent state',
+    })
+
+    expect(inFolder.message).not.toContain('worktree')
+    expect(inWorktree.message).toContain(
+      'git worktree remove /home/jliocsar/Projects/crook-fix-reconnect',
+    )
   })
 })

@@ -50,6 +50,7 @@ const reading = (agents: HerdReading['agents'], herdrVersion = HERDR_VERSION): H
   ),
   agents,
   createdPanes: HashSet.empty(),
+  places: [],
 })
 
 const tabViewedIf = (tab_id: string, viewedTab: string) =>

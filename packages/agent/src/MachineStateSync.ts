@@ -20,17 +20,17 @@ import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import {
-  type HerdReading,
   type ResolvedAgent,
+  agentRowsOf,
   herdrLostState,
   initialMachineState,
   nextMachineState,
   withCreatedPanes,
-  withPlaces,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
+import type { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import type { LifecycleEventKind, Subscription } from '@crook/herdr/Events'
@@ -124,12 +124,12 @@ const make = Effect.gen(function* () {
       { concurrent: true },
     ).pipe(Effect.annotateLogs('pane', info.pane_id))
 
-  const read = Effect.fn('MachineStateSync.read')(function* () {
+  const read = Effect.fn('MachineStateSync.read')(function* (previousAgents: readonly AgentRow[]) {
     const snapshot = yield* herdr.snapshot
     const agents = yield* Effect.forEach(snapshot.agents, resolveAgent, {
       concurrency: 'unbounded',
     })
-    const reading: HerdReading = {
+    const herd = {
       herdrVersion: snapshot.version,
       workspaces: snapshot.workspaces,
       tabs: snapshot.tabs,
@@ -137,16 +137,15 @@ const make = Effect.gen(function* () {
       agents,
       createdPanes: yield* createdPanes.current,
     }
+    const now = yield* DateTime.now
+    const places = yield* recentPlaces.observe(agentRowsOf(previousAgents, herd, now))
 
-    return { reading, now: yield* DateTime.now }
+    return { reading: { ...herd, places }, now }
   })
 
   const firstConnection = yield* mintConnection
-  const knownPlaces = yield* recentPlaces.current
-  const initial = yield* read().pipe(
-    Effect.map(({ reading, now }) =>
-      initialMachineState(machine, firstConnection, reading, now, knownPlaces),
-    ),
+  const initial = yield* read([]).pipe(
+    Effect.map(({ reading, now }) => initialMachineState(machine, firstConnection, reading, now)),
     Effect.tapError(logHerdrFailure),
     Effect.retry(herdrBackoff),
   )
@@ -160,7 +159,7 @@ const make = Effect.gen(function* () {
 
   const refresh = SubscriptionRef.updateSomeAndGetEffect(state, (previous) =>
     Effect.gen(function* () {
-      const { reading, now } = yield* read()
+      const { reading, now } = yield* read(previous.agents)
       const connection = yield* connectionAfter(previous)
 
       return nextMachineState(previous, connection, reading, now)
@@ -219,18 +218,6 @@ const make = Effect.gen(function* () {
   yield* createdPanes.changes.pipe(
     Stream.runForEach((created) =>
       SubscriptionRef.updateSome(state, (previous) => withCreatedPanes(previous, created)),
-    ),
-    Effect.forkScoped,
-  )
-
-  yield* SubscriptionRef.changes(state).pipe(
-    Stream.runForEach((current) => recentPlaces.observe(current.agents)),
-    Effect.forkScoped,
-  )
-
-  yield* recentPlaces.changes.pipe(
-    Stream.runForEach((places) =>
-      SubscriptionRef.updateSome(state, (previous) => withPlaces(previous, places)),
     ),
     Effect.forkScoped,
   )

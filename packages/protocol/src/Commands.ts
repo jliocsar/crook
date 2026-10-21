@@ -1,4 +1,5 @@
 import * as Duration from 'effect/Duration'
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { Command, CommandReceipt } from '@crook/domain/Command'
@@ -50,6 +51,15 @@ export class HerdrUnavailable extends Schema.TaggedError<HerdrUnavailable>()(
   }
 }
 
+export class HerdrAnswerUnreadable extends Schema.TaggedError<HerdrAnswerUnreadable>()(
+  'HerdrAnswerUnreadable',
+  { method: Schema.String, issue: Schema.String },
+) {
+  override get message(): string {
+    return `Herdr answered ${this.method} with something crook cannot read (${this.issue}), so nothing was sent. The agent and herdr on that machine most likely speak different protocol versions: update one to match the other, then send again.`
+  }
+}
+
 export class CommandDeliveryUnknown extends Schema.TaggedError<CommandDeliveryUnknown>()(
   'CommandDeliveryUnknown',
   {},
@@ -87,11 +97,18 @@ export class FolderNotCheckout extends Schema.TaggedError<FolderNotCheckout>()(
 
 export class AgentNotStarted extends Schema.TaggedError<AgentNotStarted>()('AgentNotStarted', {
   folder: Schema.String,
+  worktree: Schema.OptionFromNullOr(Schema.String),
   code: Schema.String,
   detail: Schema.String,
 }) {
   override get message(): string {
-    return `Claude did not start in ${this.folder}: herdr answered ${this.code}, ${this.detail}. crook closed the panes it opened for it; a new worktree stays on disk. Look at the machine, then start the agent again as a new action.`
+    const leftOnDisk = Option.match(this.worktree, {
+      onNone: () => '',
+      onSome: (path) =>
+        `, but the worktree it made at ${path} stays on disk: remove it with \`git worktree remove ${path}\` if you do not want it`,
+    })
+
+    return `Claude did not start in ${this.folder}: herdr answered ${this.code}, ${this.detail}. crook closed the panes it opened for it${leftOnDisk}. Look at the machine, then start the agent again as a new action.`
   }
 }
 
@@ -127,6 +144,7 @@ export const AgentCommandFailure = Schema.Union([
   PaneNotCreatedByCrook,
   HerdrRefusedCommand,
   HerdrUnavailable,
+  HerdrAnswerUnreadable,
   CommandDeliveryUnknown,
   FolderNotFound,
   FolderUnreadable,

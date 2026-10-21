@@ -64,6 +64,7 @@ import {
   FolderNotCheckout,
   FolderNotFound,
   FolderUnreadable,
+  HerdrAnswerUnreadable,
   TaskNotDelivered,
 } from '@crook/protocol/Commands'
 
@@ -87,6 +88,9 @@ const TASK = 'Fix the flaky reconnect test'
 const WORKTREE_BRANCH = 'fix/reconnect'
 const NO_PERMISSIONS = 0o000
 const OWNER_PERMISSIONS = 0o700
+
+const UNREADABLE_SNAPSHOT =
+  '{"id":"session.snapshot","result":{"type":"session_snapshot","snapshot":{"version":22}}}'
 
 const SentLine = Schema.fromJsonString(
   Schema.Struct({ id: Schema.String, method: Schema.String, params: Schema.Unknown }),
@@ -342,6 +346,53 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
       }),
   )
 
+  onDisk.effect('reads a typed folder with a trailing slash or a dot as the folder itself', () =>
+    Effect.gen(function* () {
+      const folder = yield* temporaryFolder
+      const { executor, sent } = yield* startLauncher([
+        snapshotOf([workspaceAt(folder)]),
+        tabCreated(NEW_PANE, 'w1', folder),
+        inputSent,
+        agentStarted(NEW_PANE),
+        agentReady(NEW_PANE),
+      ])
+      const receipt = yield* executor.execute(
+        FIRST_ACTION,
+        new StartAgent({ kind: 'claude', folder: `${folder}/./`, task: Option.none() }),
+      )
+      const requests = yield* sent
+
+      expect(receipt).toEqual(new AgentStarted({ pane: NEW_PANE }))
+      expect(requests[1]).toEqual({
+        id: 'tab.create',
+        method: 'tab.create',
+        params: { workspace_id: 'w1', cwd: folder, env: SCRUBBED_ENVIRONMENT },
+      })
+    }),
+  )
+
+  onDisk.effect(
+    'refuses to go on when herdr answers the first read with a snapshot it cannot read',
+    () =>
+      Effect.gen(function* () {
+        const folder = yield* temporaryFolder
+        const { executor, sent } = yield* startLauncher([
+          { method: SessionSnapshotMethod.name, line: UNREADABLE_SNAPSHOT },
+          { method: SessionSnapshotMethod.name, line: UNREADABLE_SNAPSHOT },
+        ])
+        const start = new StartAgent({ kind: 'claude', folder, task: Option.some(TASK) })
+        const refused = yield* executor.execute(FIRST_ACTION, start).pipe(Effect.flip)
+        const requests = yield* sent
+        const retried = yield* executor.execute(FIRST_ACTION, start).pipe(Effect.flip)
+
+        expect(refused).toBeInstanceOf(HerdrAnswerUnreadable)
+        expect(refused).toMatchObject({ method: 'session.snapshot' })
+        expect(requests.map((request) => request.method)).toEqual(['session.snapshot'])
+        expect(retried).toBeInstanceOf(HerdrAnswerUnreadable)
+        expect(yield* sent).toHaveLength(1)
+      }),
+  )
+
   onDisk.effect('tries agent.start again while the new pane is not at a shell yet', () =>
     Effect.gen(function* () {
       const folder = yield* temporaryFolder
@@ -453,7 +504,12 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
       const replayed = yield* executor.execute(FIRST_ACTION, start).pipe(Effect.flip)
 
       expect(failed).toEqual(
-        new AgentNotStarted({ folder, code: 'timeout', detail: 'timed out waiting for agent' }),
+        new AgentNotStarted({
+          folder,
+          worktree: Option.none(),
+          code: 'timeout',
+          detail: 'timed out waiting for agent',
+        }),
       )
       expect(requests.map((request) => request.method)).toEqual([
         'session.snapshot',
@@ -597,6 +653,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
       expect(failed).toEqual(
         new AgentNotStarted({
           folder: checkout,
+          worktree: Option.some(checkout),
           code: 'timeout',
           detail: 'timed out waiting for agent',
         }),

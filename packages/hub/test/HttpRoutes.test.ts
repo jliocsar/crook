@@ -76,6 +76,7 @@ import {
 
 const EVIL_ORIGIN = 'https://evil.example'
 const STRANGER = 'someone@example.com'
+const BUN_IDLE_TIMEOUT_TICK = Duration.seconds(4)
 
 const stateOf = (machine: MachineId, version: number) =>
   machineStateWith(machine, version, [agentRow()])
@@ -244,14 +245,17 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
         const pinging = MachineId.make('pinging')
 
         yield* attachAs(silent, Duration.infinity)
-        yield* attachAs(pinging)
         const silentSince = yield* Clock.currentTimeMillis
+        yield* attachAs(pinging)
         yield* machineShows(silent, 'reconnecting')
         const silentFor = Duration.millis((yield* Clock.currentTimeMillis) - silentSince)
 
-        expect(Duration.isGreaterThanOrEqualTo(silentFor, HttpRoutes.SOCKET_SILENCE_TIMEOUT)).toBe(
-          true,
-        )
+        expect(
+          Duration.isGreaterThanOrEqualTo(
+            silentFor,
+            Duration.subtract(HttpRoutes.SOCKET_SILENCE_TIMEOUT, BUN_IDLE_TIMEOUT_TICK),
+          ),
+        ).toBe(true)
         expect(
           Option.map(
             machineIn(yield* herdWhere(() => true), pinging),

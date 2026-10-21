@@ -186,6 +186,7 @@ export const executorWith = (
     herdr,
     gitBranchesOnDisk,
     BunFileSystem.layer,
+    Path.layer,
   ])
 
 export const linkedAgentWith = (

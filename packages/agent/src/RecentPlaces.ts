@@ -11,8 +11,6 @@ import * as Record from 'effect/Record'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as Semaphore from 'effect/Semaphore'
-import type * as Stream from 'effect/Stream'
-import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { GitBranches } from '@crook/agent/GitBranches'
 import { makeWriteAtomically, stateFile } from '@crook/agent/StateDirectory'
@@ -31,7 +29,6 @@ export class UsedFolder extends Schema.Class<UsedFolder>('UsedFolder')({
 const RecentPlacesFile = Schema.fromJsonString(Schema.Array(UsedFolder))
 
 const isSameUse = Schema.toEquivalence(Schema.Array(UsedFolder))
-const isSamePlaces = Schema.toEquivalence(Schema.Array(Place))
 
 const byMostRecentUseThenFolder = Order.combine(
   byMostRecentUse,
@@ -80,7 +77,6 @@ export const mergeUsedFolders = (
     Record.values,
     Arr.map(latestUse),
     Arr.sort(byMostRecentUseThenFolder),
-    Arr.take(RECENT_PLACES_CAPACITY),
   )
 
 const make = Effect.gen(function* () {
@@ -106,32 +102,30 @@ const make = Effect.gen(function* () {
       ),
     )
 
-  const stillThere = (folder: string) =>
+  const stillThere = (entry: UsedFolder) =>
     fileSystem
-      .exists(folder)
+      .exists(entry.folder)
       .pipe(
         Effect.catchTag('PlatformError', (error) =>
           Effect.as(Effect.logWarning(error.message), true),
         ),
       )
 
+  const keepPresent = (uses: readonly UsedFolder[]) =>
+    Effect.forEach(
+      uses,
+      (entry) =>
+        Effect.map(stillThere(entry), (present) =>
+          present ? Option.some(entry) : Option.none<UsedFolder>(),
+        ),
+      { concurrency: 'unbounded' },
+    ).pipe(Effect.map((kept) => pipe(kept, Arr.getSomes, Arr.take(RECENT_PLACES_CAPACITY))))
+
   const placeOf = (entry: UsedFolder) =>
     Effect.map(
       checkoutOf(entry.folder),
       (checkout) => new Place({ folder: entry.folder, checkout, usedAt: entry.usedAt }),
     )
-
-  const resolvePlaces = (used: readonly UsedFolder[]) =>
-    Effect.forEach(
-      used,
-      (entry) =>
-        stillThere(entry.folder).pipe(
-          Effect.flatMap((present) =>
-            present ? Effect.map(placeOf(entry), Option.some) : Effect.succeedNone,
-          ),
-        ),
-      { concurrency: 'unbounded' },
-    ).pipe(Effect.map(Arr.getSomes))
 
   const save = Effect.fn('RecentPlaces.save')(function* (next: readonly UsedFolder[]) {
     return yield* Schema.encodeEffect(RecentPlacesFile)(next).pipe(
@@ -143,56 +137,30 @@ const make = Effect.gen(function* () {
   })
 
   const used = yield* Ref.make(stored)
-  const places = yield* SubscriptionRef.make<readonly Place[]>(yield* resolvePlaces(stored))
 
-  const observe = (agents: readonly AgentRow[]) =>
-    writing.withPermits(1)(
-      Effect.gen(function* () {
-        const current = yield* Ref.get(used)
-        const next = mergeUsedFolders(current, foldersUsedBy(agents))
+  const observe = Effect.fn('RecentPlaces.observe')(function* (agents: readonly AgentRow[]) {
+    const current = yield* Ref.get(used)
+    const next = yield* keepPresent(mergeUsedFolders(current, foldersUsedBy(agents)))
 
-        if (!isSameUse(next, current)) {
-          yield* save(next)
-          yield* Ref.set(used, next)
-        }
+    if (!isSameUse(next, current)) {
+      yield* save(next)
+      yield* Ref.set(used, next)
+    }
 
-        const resolved = yield* resolvePlaces(next)
+    return yield* Effect.forEach(next, placeOf, { concurrency: 'unbounded' })
+  }, writing.withPermits(1))
 
-        if (!isSamePlaces(resolved, yield* SubscriptionRef.get(places))) {
-          yield* SubscriptionRef.set(places, resolved)
-        }
-      }),
-    )
-
-  return RecentPlaces.of({
-    ...RecentPlaces.readingFrom(places),
-    observe: (agents) => observe(agents).pipe(Effect.withSpan('RecentPlaces.observe')),
-  })
+  return RecentPlaces.of({ observe })
 })
 
 export class RecentPlaces extends Context.Service<
   RecentPlaces,
   {
-    readonly current: Effect.Effect<readonly Place[]>
-    readonly changes: Stream.Stream<readonly Place[]>
-    readonly observe: (agents: readonly AgentRow[]) => Effect.Effect<void>
+    readonly observe: (agents: readonly AgentRow[]) => Effect.Effect<readonly Place[]>
   }
 >()('@crook/agent/RecentPlaces') {
   static readonly layer = Layer.effect(this, make)
 
-  static readonly readingFrom = (places: SubscriptionRef.SubscriptionRef<readonly Place[]>) => ({
-    current: SubscriptionRef.get(places),
-    changes: SubscriptionRef.changes(places),
-  })
-
-  static readonly layerTest = (initial: readonly Place[] = []) =>
-    Layer.effect(
-      this,
-      Effect.map(SubscriptionRef.make<readonly Place[]>(initial), (places) =>
-        RecentPlaces.of({
-          ...RecentPlaces.readingFrom(places),
-          observe: () => Effect.void,
-        }),
-      ),
-    )
+  static readonly layerTest = (places: readonly Place[] = []) =>
+    Layer.succeed(this, RecentPlaces.of({ observe: () => Effect.succeed(places) }))
 }

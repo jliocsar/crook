@@ -10,7 +10,6 @@ import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
-import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
@@ -571,29 +570,27 @@ it.effect('drops a tab that vanished with only the pane_exited of its last pane'
   }),
 )
 
-it.effect('shows each agent to the recent places and publishes the places they answer with', () =>
-  Effect.gen(function* () {
-    const places = yield* SubscriptionRef.make<readonly Place[]>([])
-    const observed = yield* Queue.unbounded<readonly AgentRow[]>()
-    const recentPlaces = Layer.succeed(
-      RecentPlaces,
-      RecentPlaces.of({
-        ...RecentPlaces.readingFrom(places),
-        observe: (agents) => Queue.offer(observed, agents),
-      }),
-    )
-    const { sync } = yield* startSync(working, [], recentPlaces)
-    const seen = yield* Queue.take(observed)
-    const place = new Place({
-      folder: '/home/jliocsar/Projects/crook',
-      checkout: Option.some(new Checkout({ branch: Option.some(BRANCH) })),
-      usedAt: DateTime.makeUnsafe('2026-10-21T13:27:00Z'),
-    })
+it.effect(
+  'shows each read to the recent places and publishes their answer in the same version',
+  () =>
+    Effect.gen(function* () {
+      const observed = yield* Queue.unbounded<readonly AgentRow[]>()
+      const place = new Place({
+        folder: '/home/jliocsar/Projects/crook',
+        checkout: Option.some(new Checkout({ branch: Option.some(BRANCH) })),
+        usedAt: DateTime.makeUnsafe('2026-10-21T13:27:00Z'),
+      })
+      const recentPlaces = Layer.succeed(
+        RecentPlaces,
+        RecentPlaces.of({
+          observe: (agents) => Effect.as(Queue.offer(observed, agents), [place]),
+        }),
+      )
+      const { sync } = yield* startSync(working, [], recentPlaces)
+      const seen = yield* Queue.take(observed)
+      const published = yield* stateAt(sync, 0)
 
-    yield* SubscriptionRef.set(places, [place])
-    const published = yield* stateAt(sync, 1)
-
-    expect(seen.map((row) => row.pane)).toEqual(['w1:p1'])
-    expect(published.places).toEqual([place])
-  }),
+      expect(seen.map((row) => row.pane)).toEqual(['w1:p1'])
+      expect(published.places).toEqual([place])
+    }),
 )

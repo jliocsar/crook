@@ -62,6 +62,16 @@ const scratchFolder = Effect.gen(function* () {
   return yield* fileSystem.makeTempDirectoryScoped()
 })
 
+const foldersIn = Effect.fn('foldersIn')(function* (count: number) {
+  const fileSystem = yield* FileSystem.FileSystem
+  const parent = yield* scratchFolder
+  const folders = Arr.makeBy(count, (index) => `${parent}/folder-${index}`)
+
+  yield* Effect.forEach(folders, (folder) => fileSystem.makeDirectory(folder), { discard: true })
+
+  return folders
+})
+
 describe('mergeUsedFolders', () => {
   it('keeps one entry per folder, at its latest use, most recent first', () => {
     expect(
@@ -78,16 +88,6 @@ describe('mergeUsedFolders', () => {
     ])
   })
 
-  it('keeps only the most recent folders up to the capacity', () => {
-    const folders = Arr.makeBy(RECENT_PLACES_CAPACITY + 1, (index) =>
-      used(`/home/jliocsar/Projects/repo-${index}`, DateTime.add(EARLIER, { minutes: index })),
-    )
-    const kept = mergeUsedFolders([], folders)
-
-    expect(kept).toHaveLength(RECENT_PLACES_CAPACITY)
-    expect(kept.map((entry) => entry.folder)).not.toContain('/home/jliocsar/Projects/repo-0')
-  })
-
   it('takes a folder from each agent with a working directory, at its last status change', () => {
     expect(
       foldersUsedBy([agentRow({ cwd: CROOK, statusChangedAt: LATER }), agentRow({ cwd: '' })]),
@@ -98,6 +98,11 @@ describe('mergeUsedFolders', () => {
 layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices: true })(
   'RecentPlaces',
   (onDisk) => {
+    const agentsIn = (folders: readonly string[]) =>
+      folders.map((folder, index) =>
+        agentRow({ cwd: folder, statusChangedAt: DateTime.add(EARLIER, { minutes: index }) }),
+      )
+
     onDisk.effect(
       'publishes the folders agents used with their checkout, and keeps them across a restart',
       () =>
@@ -109,8 +114,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
           const first = yield* recentPlacesAt(file, branches)
 
           yield* first.observe([agentRow({ cwd: repository, statusChangedAt: LATER })])
-          yield* first.observe([agentRow({ cwd: plain, statusChangedAt: EARLIER })])
-          const published = yield* first.current
+          const published = yield* first.observe([
+            agentRow({ cwd: plain, statusChangedAt: EARLIER }),
+          ])
           const restarted = yield* recentPlacesAt(file, branches)
 
           expect(published).toEqual([
@@ -121,7 +127,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
             }),
             new Place({ folder: plain, checkout: Option.none(), usedAt: EARLIER }),
           ])
-          expect(yield* restarted.current).toEqual(published)
+          expect(yield* restarted.observe([])).toEqual(published)
         }),
     )
 
@@ -134,18 +140,53 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
 
         yield* fileSystem.makeDirectory(removed)
         const places = yield* recentPlacesAt(file)
-
-        yield* places.observe([
+        const before = yield* places.observe([
           agentRow({ cwd: removed, statusChangedAt: LATER }),
           agentRow({ pane: PaneId.make('w1:p2'), cwd: kept, statusChangedAt: EARLIER }),
         ])
-        const before = yield* places.current
 
         yield* fileSystem.remove(removed, { recursive: true })
-        yield* places.observe([agentRow({ cwd: kept, statusChangedAt: EARLIER })])
+        const after = yield* places.observe([agentRow({ cwd: kept, statusChangedAt: EARLIER })])
 
         expect(before.map((place) => place.folder)).toEqual([removed, kept])
-        expect((yield* places.current).map((place) => place.folder)).toEqual([kept])
+        expect(after.map((place) => place.folder)).toEqual([kept])
+      }),
+    )
+
+    onDisk.effect('keeps only the most recent folders up to the capacity', () =>
+      Effect.gen(function* () {
+        const file = yield* scratchFile()
+        const folders = yield* foldersIn(RECENT_PLACES_CAPACITY + 1)
+        const places = yield* recentPlacesAt(file)
+        const kept = yield* places.observe(agentsIn(folders))
+
+        expect(kept).toHaveLength(RECENT_PLACES_CAPACITY)
+        expect(kept.map((place) => place.folder)).not.toContain(folders[0])
+      }),
+    )
+
+    onDisk.effect("gives a removed folder's slot to the next folder that still exists", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const file = yield* scratchFile()
+        const folders = yield* foldersIn(RECENT_PLACES_CAPACITY + 1)
+        const removed = Arr.getUnsafe(folders, 1)
+        const places = yield* recentPlacesAt(file)
+
+        yield* places.observe(agentsIn(Arr.take(folders, RECENT_PLACES_CAPACITY)))
+        yield* fileSystem.remove(removed, { recursive: true })
+        const after = yield* places.observe([
+          agentRow({
+            cwd: Arr.getUnsafe(folders, RECENT_PLACES_CAPACITY),
+            statusChangedAt: LATER,
+          }),
+        ])
+        const restarted = yield* recentPlacesAt(file)
+
+        expect(after).toHaveLength(RECENT_PLACES_CAPACITY)
+        expect(after.map((place) => place.folder)).toContain(folders[0])
+        expect(after.map((place) => place.folder)).not.toContain(removed)
+        expect(yield* restarted.observe([])).toEqual(after)
       }),
     )
 
@@ -162,13 +203,13 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
           yield* ensureParentDirectory(file)
           yield* fileSystem.writeFileString(file, '[{"folder":')
           const places = yield* recentPlacesAt(file)
-          const before = yield* places.current
+          const before = yield* places.observe([])
 
           yield* places.observe([agentRow({ cwd: folder, statusChangedAt: LATER })])
           const restarted = yield* recentPlacesAt(file)
 
           expect(before).toEqual([])
-          expect((yield* restarted.current).map((place) => place.folder)).toEqual([folder])
+          expect((yield* restarted.observe([])).map((place) => place.folder)).toEqual([folder])
         }),
     )
   },
