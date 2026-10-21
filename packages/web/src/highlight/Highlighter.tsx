@@ -17,6 +17,7 @@ type HastNode = HastRoot['children'][number]
 type HastElement = Extract<HastNode, { readonly type: 'element' }>
 
 const LINE_CLASS = 'line'
+const CLASS_SEPARATOR = ' '
 const CUSTOM_PROPERTY_PREFIX = '--'
 const STYLE_SEPARATOR = ';'
 const STYLE_DECLARATION = /^\s*([^:]+?)\s*:\s*(.+?)\s*$/u
@@ -86,8 +87,8 @@ export const languageOfPath = (path: string): Option.Option<string> =>
 const isLine = (node: HastNode): boolean =>
   node.type === 'element' &&
   pipe(
-    Arr.ensure(node.properties.className ?? []),
-    Arr.some((name) => name === LINE_CLASS),
+    Schema.decodeUnknownOption(Schema.String)(node.properties.class),
+    Option.exists((names) => names.split(CLASS_SEPARATOR).includes(LINE_CLASS)),
   )
 
 const childrenOf = (node: HastNode): readonly HastNode[] =>
