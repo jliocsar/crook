@@ -2,6 +2,7 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AgentStatus } from '@crook/domain/AgentStatus'
+import { Ask, askSummary } from '@crook/domain/Ask'
 import { ClaudeSessionId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 
 export type SeenMark = Pick<AgentRow, 'terminal' | 'stateChangeSeq'>
@@ -30,6 +31,7 @@ export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   stateChangeSeq: StateChangeSeq,
   statusChangedAt: Schema.DateTimeUtcFromString,
   beforeHandoff: Schema.OptionFromNullOr(StatusBeforeHandoff),
+  ask: Schema.OptionFromNullOr(Ask),
 }) {}
 
 export const seenMarkOf = (row: AgentRow): SeenMark =>
@@ -39,3 +41,8 @@ export const seenMarkOf = (row: AgentRow): SeenMark =>
   })
 
 export const agentTitle = (row: AgentRow): string => Option.getOrElse(row.label, () => row.title)
+
+export const pendingAskSummary = (row: AgentRow): Option.Option<string> =>
+  row.status === 'blocked'
+    ? Option.flatMap(row.ask, (ask) => askSummary(ask, row.cwd))
+    : Option.none()

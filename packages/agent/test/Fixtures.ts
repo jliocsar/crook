@@ -147,6 +147,7 @@ export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[
     stateChangeSeq: 4,
     statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
     beforeHandoff: Option.none(),
+    ask: Option.none(),
     ...fields,
   })
 
