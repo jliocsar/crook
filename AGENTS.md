@@ -508,7 +508,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   The long-running members' `Layer.launch` form does not carry over: it never returns, and the
   script hung until killed (measured).
 - The router percent-encodes a path param, so a herdr pane id like `w1:p3` sits in the URL as
-  `w1%3Ap3`, and the route's params hand it back decoded (measured).
+  `w1%3Ap3`, and the route's params hand it back decoded (measured). A memory history started at
+  the unencoded path keeps it as typed, so a test that compares the location with one the router
+  builds starts at the encoded path (measured: the close from the chat never went back otherwise).
 - A hook that hands back an `Effect` is a zero-argument function returning a lazy Effect, and
   `effecttsgo/lazy-effect` rejects it (measured). Code that needs the router takes it as an
   argument, typed `RegisteredRouter`: `AnyRouter` types `history` as `any`, and the type-aware
@@ -611,7 +613,13 @@ Checking the web app against real data, measured:
 - Vite's dev server answers a POST to `/__exe.dev/logout` with 404, so Log out fails honestly
   there; a browser route that answers it is what reaches the logged-out screen.
 - The agent has no long-running entry of its own yet, so a probe composes its layers itself. It
-  exits on a config error before dialing unless `CROOK_MACHINE_ID` is set.
+  exits on a config error before dialing unless `CROOK_MACHINE_ID` is set. Such a script can sit in
+  the agent member's own `tmp/`, which is ignored at any depth, and Bun resolves the member's
+  leaves and dependencies from there.
+- A herdr server started under `env -i` with only `HOME`, `PATH`, `USER`, `SHELL`, `TERM` and
+  `LANG` hands none of Claude's variables to its panes. `command claude --permission-mode default`
+  typed into one skips a user's shell function that turns auto mode on, and starts in manual mode,
+  so a Bash command it runs asks first (measured).
 - agent-browser scrolls an element into view before it clicks it, which moves the scroll container
   around it. A scroll position read after such a click is the tool's, not the app's.
 :::
