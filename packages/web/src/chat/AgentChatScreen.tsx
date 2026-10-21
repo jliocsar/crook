@@ -90,6 +90,7 @@ const NOT_CLAUDE = 'Not a Claude pane'
 const NO_MESSAGES = 'No messages yet'
 const PENDING_PROMPT_KEY = 'pending prompt'
 const STOP_FINGERPRINT = 'stop'
+const SLASH = '/'
 
 const isSending = PendingAction.$is('Sending')
 const isSent = PendingAction.$is('Sent')
@@ -143,6 +144,7 @@ const pendingPromptRows = (
 ): readonly ThreadRow[] =>
   pipe(
     sentText(action),
+    Option.filter((text) => isSent(action.state) && !text.startsWith(SLASH)),
     Option.filter((text) => !Option.contains(lastPromptText(items), text)),
     Option.map((text) => ({
       key: PENDING_PROMPT_KEY,
@@ -191,6 +193,9 @@ const edgeKindOf = (model: ChatScreenModel): Option.Option<EdgeKind> =>
     ? Option.some(model.presence)
     : Option.none()
 
+const isWatching = (model: ChatScreenModel): boolean =>
+  model.presence === 'live' || model.presence === 'loading'
+
 const placeOf = (model: ChatScreenModel): Option.Option<string> =>
   pipe(
     [Option.some(machineLabelOf(model)), workspaceLabelOf(model)],
@@ -203,6 +208,10 @@ const placeOf = (model: ChatScreenModel): Option.Option<string> =>
 const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>) => {
   if (model.presence === 'notClaude') {
     return <EmptyState title={NOT_CLAUDE} />
+  }
+
+  if (!isWatching(model)) {
+    return null
   }
 
   return Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>
@@ -442,7 +451,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           ...Option.toArray(
             Option.map(working, (row) => workingRow(shortElapsed(now, row.statusChangedAt))),
           ),
-          ...failureRows(view),
+          ...(isWatching(model) ? failureRows(view) : []),
         ]
 
   return (

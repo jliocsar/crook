@@ -185,6 +185,30 @@ describe('AgentChatScreen', () => {
     }),
   )
 
+  it.effect('sends a slash command without leaving a bubble the transcript never answers', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/compact' }))),
+      )
+      yield* Queue.offer(transcript, opened())
+      yield* Effect.promise(() => screen.findByText('No messages yet'))
+      fireEvent.change(field(), { target: { value: '/compact' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* eventually(() => {
+        expect(field()).toHaveProperty('value', '')
+      })
+
+      expect(Ref.getUnsafe(link.sent).map((call) => call.command)).toMatchObject([
+        { _tag: 'Prompt', pane: PANE, text: '/compact' },
+      ])
+      expect(screen.queryByText('Sent')).toBeNull()
+    }),
+  )
+
   it.effect('turns Send into Stop while Claude works, and Stop sends Esc', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
