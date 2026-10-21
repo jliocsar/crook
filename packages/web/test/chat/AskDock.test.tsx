@@ -23,7 +23,7 @@ import {
   UnknownAsk,
 } from '@crook/domain/Ask'
 import type { AskChoice } from '@crook/domain/Ask'
-import { AnswerAsk, Approve, ApproveAlways, Choose, Decline } from '@crook/domain/Command'
+import { AnswerAsk, Approve, ApproveAlways, Choose, Decline, Prompt } from '@crook/domain/Command'
 import type { AskAnswer } from '@crook/domain/Command'
 import { AskId, PaneId } from '@crook/domain/Ids'
 import { PaneTranscript } from '@crook/domain/Transcript'
@@ -304,29 +304,53 @@ describe('the ask dock', () => {
     }),
   )
 
-  it.effect('sends a decline whose message went undelivered again under a new key', () =>
-    Effect.gen(function* () {
-      const ask = question(Option.some(false))
-      const { link } = yield* renderApp(CHAT, blockedOn(ask))
-      const typed = answered(new Decline({ message: Option.some('Use both') }), ask.id)
-      const refusal = new DeclineMessageUndelivered({ pane: PANE, reason: 'herdr hung up' })
+  it.effect(
+    'keeps a typed answer whose message went undelivered after the ask closed, and sends it as a prompt',
+    () =>
+      Effect.gen(function* () {
+        const ask = question(Option.some(false))
+        const { link } = yield* renderApp(CHAT, blockedOn(ask))
+        const refusal = new DeclineMessageUndelivered({
+          pane: PANE,
+          reason: 'herdr did not confirm the prompt in time',
+        })
+        const resent = new Prompt({ pane: PANE, text: 'Use both' })
 
-      yield* Ref.set(link.commandAnswer, Exit.fail(refusal))
-      const other = yield* Effect.promise(() => screen.findByPlaceholderText('Something else…'))
+        yield* link.commandAnswers.close
+        const other = yield* Effect.promise(() => screen.findByPlaceholderText('Something else…'))
 
-      yield* Effect.promise(() => userEvent.type(other, 'Use both'))
-      yield* click(screen.getByRole('button', { name: 'Answer' }))
-      yield* Effect.promise(() => screen.findByText(refusal.message))
-      yield* click(screen.getByRole('button', { name: 'Answer' }))
-      yield* eventually(() => {
-        expect(Ref.getUnsafe(link.sent)).toHaveLength(2)
-      })
+        yield* Effect.promise(() => userEvent.type(other, 'Use both'))
+        yield* click(screen.getByRole('button', { name: 'Answer' }))
+        yield* eventually(() => {
+          expect(Ref.getUnsafe(link.sent)).toHaveLength(1)
+        })
+        yield* SubscriptionRef.set(
+          link.state,
+          live([agent('w1:p1', 'working', { seq: 2, title: 'Lint the web package' })]),
+        )
+        yield* eventually(() => {
+          expect(document.querySelector('[data-slot="ask-dock"]')).toBeNull()
+        })
+        yield* Ref.set(link.commandAnswer, Exit.fail(refusal))
+        yield* link.commandAnswers.open
+        yield* Effect.promise(() => screen.findByText(refusal.message))
 
-      const [first, retry] = Ref.getUnsafe(link.sent)
+        expect(screen.getByRole('textbox')).toHaveProperty('value', 'Use both')
 
-      expect(retry?.command).toEqual(typed)
-      expect(retry?.key).not.toBe(first?.key)
-    }),
+        yield* Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(resent)))
+        yield* click(screen.getByRole('button', { name: 'Send' }))
+        yield* eventually(() => {
+          expect(Ref.getUnsafe(link.sent)).toHaveLength(2)
+        })
+
+        const [first, retry] = Ref.getUnsafe(link.sent)
+
+        expect(first?.command).toEqual(
+          answered(new Decline({ message: Option.some('Use both') }), ask.id),
+        )
+        expect(retry?.command).toEqual(resent)
+        expect(retry?.key).not.toBe(first?.key)
+      }),
   )
 
   it.effect('announces the ask, and hands keyboard focus to the composer when it clears', () =>

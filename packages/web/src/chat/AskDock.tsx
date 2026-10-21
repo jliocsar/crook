@@ -5,7 +5,7 @@ import * as Option from 'effect/Option'
 import * as React from 'react'
 
 import type { Ask, AskQuestion, PermissionAsk, QuestionAsk, UnknownAsk } from '@crook/domain/Ask'
-import { Choose, Decline } from '@crook/domain/Command'
+import { Choose } from '@crook/domain/Command'
 import type { AskAnswer } from '@crook/domain/Command'
 import {
   alwaysCaption,
@@ -19,6 +19,7 @@ import {
   isAnswerUnderway,
   NEEDS_YOU,
   permissionButtons,
+  PLAIN_DECLINE,
 } from '@crook/web/chat/AskModel'
 import type { AskButton } from '@crook/web/chat/AskModel'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
@@ -36,6 +37,7 @@ export interface AskDockProps {
   readonly state: AskAnswerState
   readonly disabled: boolean
   readonly onAnswer: (answer: AskAnswer) => void
+  readonly onDeclineWithMessage: (text: string) => void
 }
 
 type AnswerControls = Pick<AskDockProps, 'state' | 'disabled' | 'onAnswer'>
@@ -51,9 +53,7 @@ const UNREADABLE_HINT = 'Decline it here, or tell Claude what to do instead.'
 const QUESTIONNAIRE_HINT =
   'crook can only pick the answer to one question with one choice. Answer this one in the terminal, or tell Claude what to do instead.'
 
-const DECLINE_BUTTONS: readonly AskButton[] = [
-  { label: DECLINE_LABEL, answer: new Decline({ message: Option.none() }) },
-]
+const DECLINE_BUTTONS: readonly AskButton[] = [{ label: DECLINE_LABEL, answer: PLAIN_DECLINE }]
 
 const locked = (controls: AnswerControls): boolean =>
   controls.disabled || isAnswerUnderway(controls.state)
@@ -190,7 +190,15 @@ function QuestionList({ questions }: { questions: readonly AskQuestion[] }) {
   )
 }
 
-function QuestionDock({ ask, controls }: { ask: QuestionAsk; controls: AnswerControls }) {
+function QuestionDock({
+  ask,
+  controls,
+  onDeclineWithMessage,
+}: {
+  ask: QuestionAsk
+  controls: AnswerControls
+  onDeclineWithMessage: (text: string) => void
+}) {
   return Option.match(answerableQuestion(ask), {
     onSome: (question) => (
       <>
@@ -208,9 +216,7 @@ function QuestionDock({ ask, controls }: { ask: QuestionAsk; controls: AnswerCon
           onChoose={(label) => {
             controls.onAnswer(new Choose({ answer: label }))
           }}
-          onFreeform={(text) => {
-            controls.onAnswer(new Decline({ message: Option.some(text) }))
-          }}
+          onFreeform={onDeclineWithMessage}
         />
       </>
     ),
@@ -239,6 +245,7 @@ export function AskDock({
   ask,
   cwd,
   ref,
+  onDeclineWithMessage,
   ...controls
 }: AskDockProps & { readonly ref?: React.Ref<HTMLElement> }) {
   const labelId = React.useId()
@@ -248,7 +255,7 @@ export function AskDock({
       ref={ref}
       data-slot="ask-dock"
       aria-labelledby={labelId}
-      className="flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-1 *:shrink-0"
+      className="-mx-1 flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain px-1 pb-1 *:shrink-0"
     >
       <SectionLabel id={labelId} className="text-primary px-0 pb-0">
         {NEEDS_YOU}
@@ -259,7 +266,11 @@ export function AskDock({
             <PermissionDock ask={permission} cwd={cwd} controls={controls} />
           ),
           QuestionAsk: (question): React.ReactNode => (
-            <QuestionDock ask={question} controls={controls} />
+            <QuestionDock
+              ask={question}
+              controls={controls}
+              onDeclineWithMessage={onDeclineWithMessage}
+            />
           ),
           UnknownAsk: (unknown): React.ReactNode => (
             <UnknownDock ask={unknown} controls={controls} />

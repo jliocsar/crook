@@ -171,6 +171,27 @@ export const placeholderOf = (
   return blocked ? "Waiting for Claude's question" : 'Message Claude'
 }
 
+const undeliveredText = (action: CommandAction): Option.Option<string> =>
+  pipe(
+    Option.liftPredicate(action, (failed) => isFailed(failed.state)),
+    Option.flatMap((failed) => failed.last),
+    Option.flatMap(textOf),
+  )
+
+const useRestoreUndeliveredDraft = (
+  action: CommandAction,
+  draft: string,
+  setDraft: (draft: string) => void,
+) => {
+  const undelivered = Option.getOrElse(undeliveredText(action), () => '')
+
+  React.useEffect(() => {
+    if (undelivered !== '' && draft.trim() === '') {
+      setDraft(undelivered)
+    }
+  }, [undelivered])
+}
+
 const useClearSentDraft = (
   action: CommandAction,
   draft: string,
@@ -298,6 +319,7 @@ export const useChatCommands = ({
   const declining = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(prompt, ask.id)))
 
   useClearSentDraft(prompt, draft, setDraft)
+  useRestoreUndeliveredDraft(prompt, draft, setDraft)
   useRestartInPlace(machine, restart)
 
   const sendPrompt = (command: Command) => {
@@ -336,6 +358,7 @@ export const useChatCommands = ({
       state: answerState(answer, ask.id),
       disabled: !connection.canAct || declining,
       onAnswer: answerAsk(ask),
+      onDeclineWithMessage: send,
     })),
     alwaysNotes: always.notes,
     composer: {

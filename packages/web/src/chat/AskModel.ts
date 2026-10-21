@@ -55,6 +55,9 @@ const KEY_HINT = /\s+\([a-z+]+\)$/u
 export const NEEDS_YOU = 'Needs you'
 export const RUN_COMMAND_TITLE = 'Run this command?'
 export const UNKNOWN_ASK_TITLE = "Claude is waiting on something crook can't read"
+export const PLAIN_DECLINE = new Decline({ message: Option.none() })
+
+const NO_BUTTON: AskButton = { label: NO_LABEL, answer: PLAIN_DECLINE }
 
 export const AskDetail = Data.taggedEnum<AskDetail>()
 
@@ -79,8 +82,12 @@ export const isAnswerUnderway = AskAnswerState.$is('Answering')
 export const answerInFlight = (state: AskAnswerState): Option.Option<AskAnswer> =>
   Option.map(Option.liftPredicate(state, isAnswerUnderway), (answering) => answering.answer)
 
+const isAlreadyAnsweredState = AskAnswerState.$is('AlreadyAnswered')
+
+const isRefused = AskAnswerState.$is('Refused')
+
 export const isAnswerSettled = (state: AskAnswerState): boolean =>
-  AskAnswerState.$is('AlreadyAnswered')(state) || AskAnswerState.$is('Refused')(state)
+  isAlreadyAnsweredState(state) || isRefused(state)
 
 const permissionTitle = (ask: PermissionAsk): string =>
   Match.value(ask.action).pipe(
@@ -151,8 +158,8 @@ export const askDetail = (ask: PermissionAsk, cwd: string): AskDetail =>
     }),
   )
 
-export const permissionButtons = (ask: PermissionAsk): readonly AskButton[] =>
-  Arr.getSomes([
+export const permissionButtons = (ask: PermissionAsk): readonly AskButton[] => [
+  ...Arr.getSomes([
     Option.map(askOption(ask, 'yes'), (): AskButton => ({
       label: YES_LABEL,
       answer: new Approve(),
@@ -161,8 +168,9 @@ export const permissionButtons = (ask: PermissionAsk): readonly AskButton[] =>
       label: ALWAYS_LABEL,
       answer: new ApproveAlways(),
     })),
-    Option.some<AskButton>({ label: NO_LABEL, answer: new Decline({ message: Option.none() }) }),
-  ])
+  ]),
+  NO_BUTTON,
+]
 
 const withoutAnswerPrefix = (label: string): string =>
   pipe(
