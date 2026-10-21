@@ -6,8 +6,9 @@ import type * as React from 'react'
 import type { NotificationSettings } from '@crook/domain/Notifications'
 import { HarkNotConfigured } from '@crook/protocol/Hark'
 import { Dimmed } from '@crook/web/components/Dimmed'
+import { FailureNote } from '@crook/web/components/FailureNote'
 import { Swap } from '@crook/web/components/Swap'
-import { Button } from '@crook/web/components/ui/button'
+import { Button, BUTTON_ICON_SIZE } from '@crook/web/components/ui/button'
 import { Skeleton } from '@crook/web/components/ui/skeleton'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { useNotificationPref, useTestNotification } from '@crook/web/settings/SettingsActions'
@@ -17,7 +18,7 @@ import type {
   SettingsReadFailure,
   TestNotificationState,
 } from '@crook/web/settings/SettingsLayout'
-import { SettingsFailure, SettingsNote, SettingsSection } from '@crook/web/settings/SettingsSection'
+import { SettingsNote, SettingsSection } from '@crook/web/settings/SettingsSection'
 import { ToggleRow } from '@crook/web/settings/ToggleRow'
 
 const SHARED_NOTE = 'Saved on the hub, so every device you log in on shares them.'
@@ -35,7 +36,7 @@ const TEST_LABEL = {
 
 const TEST_ICON = {
   idle: <Send />,
-  sending: <Spinner size={16} />,
+  sending: <Spinner size={BUTTON_ICON_SIZE} />,
   sent: <Check />,
 } satisfies Record<TestNotificationState, React.ReactNode>
 
@@ -55,7 +56,8 @@ function NotificationToggle({
       label={row.label}
       detail={row.detail}
       checked={checked}
-      disabled={!controlsEnabled || pref.pending}
+      disabled={!controlsEnabled}
+      busy={pref.pending}
       failure={pref.failure}
       onChange={pref.write}
     />
@@ -130,7 +132,6 @@ function TestNotification({ disabled }: { disabled: boolean }) {
         <Button
           variant="secondary"
           size="touch"
-          aria-label="Send a test notification"
           aria-disabled={unavailable}
           className="w-full text-base aria-disabled:pointer-events-none aria-disabled:opacity-60"
           onClick={() => {
@@ -152,7 +153,7 @@ function TestNotification({ disabled }: { disabled: boolean }) {
       </div>
       {Option.match(test.failure, {
         onNone: () => null,
-        onSome: (message) => <SettingsFailure message={message} />,
+        onSome: (message) => <FailureNote className="px-4" message={message} />,
       })}
     </div>
   )
@@ -176,7 +177,7 @@ export function NotificationsSection({
         onNone: () =>
           Option.match(settledFailure(settings), {
             onNone: () => <TogglesLoading />,
-            onSome: (message) => <SettingsFailure message={message} />,
+            onSome: (message) => <FailureNote className="px-4" message={message} />,
           }),
         onSome: (known) => (
           <NotificationToggles settings={known} controlsEnabled={controlsEnabled} stale={stale} />

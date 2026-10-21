@@ -3,10 +3,11 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
 import type { HubAccount } from '@crook/protocol/ClientApi'
+import { FailureNote } from '@crook/web/components/FailureNote'
 import { InfoList } from '@crook/web/components/InfoList'
 import { Sheet } from '@crook/web/components/Sheet'
 import { Swap } from '@crook/web/components/Swap'
-import { Button } from '@crook/web/components/ui/button'
+import { Button, BUTTON_ICON_SIZE } from '@crook/web/components/ui/button'
 import { Skeleton } from '@crook/web/components/ui/skeleton'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { useLogOut } from '@crook/web/settings/SettingsActions'
@@ -14,7 +15,12 @@ import { settledFailure } from '@crook/web/settings/SettingsLayout'
 import type { SettingsReadFailure } from '@crook/web/settings/SettingsLayout'
 import { SettingsNote, SettingsSection } from '@crook/web/settings/SettingsSection'
 
+type LogOut = ReturnType<typeof useLogOut>
+
 const LOST_PHONE_NOTE = 'Lost this phone? End its session on exe.dev from another device.'
+
+const LOG_OUT_SCOPE_NOTE =
+  "This ends crook's exe.dev session on this phone only. exe.dev itself stays signed in, so Log in with exe.dev may bring you straight back."
 
 function AccountEmail({
   account,
@@ -31,9 +37,15 @@ function AccountEmail({
   })
 }
 
-function LogOutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const logOut = useLogOut()
-
+function LogOutSheet({
+  open,
+  logOut,
+  onClose,
+}: {
+  open: boolean
+  logOut: LogOut
+  onClose: () => void
+}) {
   return (
     <Sheet
       open={open}
@@ -42,13 +54,10 @@ function LogOutSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
       description="Your agents keep running."
     >
       <div className="grid grid-cols-1 gap-2">
+        <p className="text-muted-foreground pb-1 text-sm leading-5">{LOG_OUT_SCOPE_NOTE}</p>
         {Option.match(logOut.failure, {
           onNone: () => null,
-          onSome: (message) => (
-            <p role="alert" className="text-destructive pb-1 text-sm leading-5">
-              {message}
-            </p>
-          ),
+          onSome: (message) => <FailureNote className="pb-1" message={message} />,
         })}
         <Button
           variant="destructive"
@@ -62,7 +71,7 @@ function LogOutSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
           }}
         >
           <Swap id={logOut.pending ? 'pending' : 'idle'}>
-            {logOut.pending ? <Spinner size={16} /> : null}
+            {logOut.pending ? <Spinner size={BUTTON_ICON_SIZE} /> : null}
             {logOut.pending ? 'Logging out' : 'Log out'}
           </Swap>
         </Button>
@@ -80,6 +89,7 @@ export function AccountSection({
   account: AsyncResult.AsyncResult<HubAccount, SettingsReadFailure>
 }) {
   const [confirming, setConfirming] = React.useState(false)
+  const logOut = useLogOut()
 
   return (
     <SettingsSection title="Account">
@@ -92,6 +102,7 @@ export function AccountSection({
             aria-haspopup="dialog"
             className="w-full text-base"
             onClick={() => {
+              logOut.forgetSettled()
               setConfirming(true)
             }}
           >
@@ -102,6 +113,7 @@ export function AccountSection({
       </div>
       <LogOutSheet
         open={confirming}
+        logOut={logOut}
         onClose={() => {
           setConfirming(false)
         }}

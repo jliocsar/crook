@@ -1,5 +1,6 @@
 import * as Option from 'effect/Option'
 
+import { FailureNote } from '@crook/web/components/FailureNote'
 import { HoldButton } from '@crook/web/components/ui/hold-button'
 
 export function ForgetMachine({
@@ -28,16 +29,8 @@ export function ForgetMachine({
       </p>
       {Option.match(failure, {
         onNone: () => null,
-        onSome: (message) => <ForgetFailure message={message} />,
+        onSome: (message) => <FailureNote message={message} />,
       })}
     </div>
-  )
-}
-
-export function ForgetFailure({ message }: { message: string }) {
-  return (
-    <p role="alert" className="text-destructive text-sm leading-5">
-      {message}
-    </p>
   )
 }

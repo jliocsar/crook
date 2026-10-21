@@ -29,7 +29,8 @@ const valueOf = (section: string, label: string) =>
 
 const switchOf = (name: string) => screen.getByRole('switch', { name })
 
-const testButton = () => screen.getByRole('button', { name: 'Send a test notification' })
+const testButton = () =>
+  screen.getByRole('button', { name: /^(?:Send a test|Sending|Sent to your phone)$/u })
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -74,6 +75,33 @@ describe('SettingsScreen', () => {
         expect(switchOf('Finished').getAttribute('aria-checked')).toBe('false')
       })
 
+      expect(yield* Ref.get(link.prefWrites)).toEqual([{ event: 'finished', enabled: false }])
+    }),
+  )
+
+  it.effect('keeps a switch focusable but unchangeable while its write is in flight', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/settings', liveWith(view))
+
+      yield* link.prefAnswers.close
+      yield* eventually(() => {
+        expect(switchOf('Finished').getAttribute('aria-checked')).toBe('true')
+      })
+      yield* click(switchOf('Finished'))
+      yield* eventually(() => {
+        expect(switchOf('Finished').getAttribute('aria-readonly')).toBe('true')
+      })
+
+      expect(switchOf('Finished').hasAttribute('data-disabled')).toBe(false)
+      expect(switchOf('Finished').getAttribute('aria-busy')).toBe('true')
+
+      yield* click(switchOf('Finished'))
+      yield* link.prefAnswers.open
+      yield* eventually(() => {
+        expect(switchOf('Finished').getAttribute('aria-checked')).toBe('false')
+      })
+
+      expect(switchOf('Finished').hasAttribute('aria-readonly')).toBe(false)
       expect(yield* Ref.get(link.prefWrites)).toEqual([{ event: 'finished', enabled: false }])
     }),
   )
@@ -179,6 +207,7 @@ describe('SettingsScreen', () => {
       const sheet = yield* findByRole('dialog', 'Log out of crook?')
 
       expect(within(sheet).getByText('Your agents keep running.')).toBeDefined()
+      expect(within(sheet).getByText(/on this phone only/u)).toBeDefined()
 
       yield* click(within(sheet).getByRole('button', { name: 'Log out' }))
       const heading = yield* findByRole('heading', "You're logged out")
@@ -205,6 +234,28 @@ describe('SettingsScreen', () => {
       expect(alert.textContent).toBe(refusal.message)
       expect(within(sheet).getByRole('button', { name: 'Log out' })).toBeDefined()
       expect(screen.queryByRole('heading', { name: "You're logged out" })).toBeNull()
+    }),
+  )
+
+  it.effect('opens the confirm sheet clean again after a refused logout', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/settings', liveWith(view))
+
+      yield* Ref.set(link.logOutRefusal, Option.some(new LogOutRefused({ status: 404 })))
+      yield* click(yield* findByRole('button', 'Log out'))
+      const refusedSheet = yield* findByRole('dialog', 'Log out of crook?')
+
+      yield* click(within(refusedSheet).getByRole('button', { name: 'Log out' }))
+      yield* Effect.promise(() => within(refusedSheet).findByRole('alert'))
+      yield* click(within(refusedSheet).getByRole('button', { name: 'Cancel' }))
+      yield* eventually(() => {
+        expect(screen.queryByRole('dialog')).toBeNull()
+      })
+      yield* click(yield* findByRole('button', 'Log out'))
+      const reopened = yield* findByRole('dialog', 'Log out of crook?')
+
+      expect(within(reopened).queryByRole('alert')).toBeNull()
+      expect(yield* Ref.get(link.logOuts)).toBe(0)
     }),
   )
 

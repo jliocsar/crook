@@ -2,13 +2,14 @@ import { Switch } from '@base-ui/react/switch'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
-import { SettingsFailure } from '@crook/web/settings/SettingsSection'
+import { FailureNote } from '@crook/web/components/FailureNote'
 
 export function ToggleRow({
   label,
   detail,
   checked,
   disabled,
+  busy,
   failure,
   onChange,
 }: {
@@ -16,6 +17,7 @@ export function ToggleRow({
   detail: string
   checked: boolean
   disabled: boolean
+  busy: boolean
   failure: Option.Option<string>
   onChange: (checked: boolean) => void
 }) {
@@ -37,6 +39,8 @@ export function ToggleRow({
           id={id}
           checked={checked}
           disabled={disabled}
+          readOnly={busy}
+          aria-busy={busy}
           aria-describedby={detailId}
           onCheckedChange={onChange}
           className="bg-muted data-[checked]:bg-primary focus-visible:ring-ring/50 hit-area relative inline-flex h-7 w-12 shrink-0 touch-manipulation items-center rounded-full p-0.5 transition-colors duration-[var(--motion)] ease-[var(--ease-out)] outline-none focus-visible:ring-3 motion-reduce:transition-none"
@@ -46,7 +50,7 @@ export function ToggleRow({
       </div>
       {Option.match(failure, {
         onNone: () => null,
-        onSome: (message) => <SettingsFailure message={message} />,
+        onSome: (message) => <FailureNote className="px-4" message={message} />,
       })}
     </div>
   )

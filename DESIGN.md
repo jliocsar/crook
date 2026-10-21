@@ -358,9 +358,11 @@ rule.
   stay usable; "Send a test" is disabled.
 - **Account**: "Logged in as" with the exe.dev email the hub admitted, a full-width destructive "Log
   out", and "Lost this phone? End its session on exe.dev from another device."
-- **Log out** asks in a sheet: "Log out of crook?", "Your agents keep running.", Log out and
-  Cancel. Log out reads "Logging out" until exe.dev answers, and a refusal stays in the sheet with
-  its sentence. Once logged out, the logged-out screen replaces everything, pushed screens and
+- **Log out** asks in a sheet: "Log out of crook?", "Your agents keep running.", a muted line
+  saying it ends crook's exe.dev session on this phone only, since exe.dev itself stays signed in
+  and "Log in with exe.dev" may bring the user straight back, then Log out and Cancel. Log out reads
+  "Logging out" until exe.dev answers, and a refusal stays in the sheet with its sentence until the
+  sheet is opened again. Once logged out, the logged-out screen replaces everything, pushed screens and
   sheets included.
 - **Hub**: Status (connected, connecting, syncing, unreachable or offline, as a plain Status Pill
   that follows the banner), Address (the host the page came from, which is the hub's) and Version

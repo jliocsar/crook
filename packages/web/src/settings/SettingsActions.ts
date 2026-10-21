@@ -1,5 +1,6 @@
-import { useAtom } from '@effect/atom-react/Hooks'
+import { useAtom, useAtomSet } from '@effect/atom-react/Hooks'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
+import * as Atom from 'effect/reactivity/Atom'
 
 import type { NotificationEvent } from '@crook/domain/Notifications'
 import {
@@ -35,12 +36,19 @@ export const useTestNotification = () => {
 
 export const useLogOut = () => {
   const [result, logOut] = useAtom(logOutAtom, { mode: 'promiseExit' })
+  const control = useAtomSet(logOutAtom)
+  const pending = AsyncResult.isWaiting(result)
 
   return {
-    pending: AsyncResult.isWaiting(result),
+    pending,
     failure: settledFailure(result),
     logOut: () => {
       void logOut()
+    },
+    forgetSettled: () => {
+      if (!pending) {
+        control(Atom.Reset)
+      }
     },
   }
 }
