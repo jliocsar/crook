@@ -13,6 +13,7 @@ import { HerdList } from '@crook/web/herd/HerdList'
 import type { OpenAgent } from '@crook/web/herd/HerdList'
 import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
 import { PullToResync } from '@crook/web/herd/PullToResync'
+import { AddMachineSheet } from '@crook/web/machines/AddMachineSheet'
 import { openedFrom } from '@crook/web/navigation/Opener'
 import { TabScreen } from '@crook/web/navigation/TabScreen'
 import { useNow } from '@crook/web/time/Now'
@@ -65,6 +66,7 @@ export function HerdScreen() {
   const navigate = useNavigate()
   const now = useNow()
   const sections = useCollapsedMachines()
+  const [addingMachine, setAddingMachine] = React.useState(false)
 
   const openNewAgent = (opener: HTMLElement) => {
     void navigate({ to: '/new', state: openedFrom(opener) })
@@ -96,11 +98,20 @@ export function HerdScreen() {
                 onToggle={sections.toggle}
                 onOpenAgent={openAgent}
                 onNewAgent={openNewAgent}
+                onAddMachine={() => {
+                  setAddingMachine(true)
+                }}
               />
             </Dimmed>
           </PullToResync>
         ),
       })}
+      <AddMachineSheet
+        open={addingMachine}
+        onClose={() => {
+          setAddingMachine(false)
+        }}
+      />
     </TabScreen>
   )
 }
