@@ -582,19 +582,28 @@ it.effect('cancels the approval as soon as the agent stops waiting some other wa
   }).pipe(Effect.scoped),
 )
 
-it.effect('does not cancel an approval answered on the lock screen once the agent moves on', () =>
-  Effect.gen(function* () {
-    const { calls, start } = yield* withNotifier(approvingHark('denied'))
-    const { herd } = yield* start
+it.effect(
+  'cancels an approval answered on the lock screen once the agent moves on, and takes the 404 as done',
+  () =>
+    Effect.gen(function* () {
+      const { calls, start } = yield* withNotifier((call) =>
+        isCancel(call)
+          ? { status: 404, body: { error: 'Interaction is not pending' } }
+          : approvingHark('denied')(call),
+      )
+      const { herd } = yield* start
 
-    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
-    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
-    yield* nextCallWhere(calls, isWait)
-    yield* callsWithin(calls, 3)
-    yield* herd.publish(LAPTOP, stateAt(3, 'working', 8))
+      yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+      yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+      yield* nextCallWhere(calls, isWait)
+      yield* callsWithin(calls, 3)
+      yield* herd.publish(LAPTOP, stateAt(3, 'working', 8))
+      const afterMovingOn = yield* callsWithin(calls, 70)
 
-    expect(yield* callsWithin(calls, 3)).toEqual([])
-  }).pipe(Effect.scoped),
+      expect(Arr.map(afterMovingOn, (call) => call.url)).toEqual([
+        `https://hark.ryan.ceo/api/agent/interactions/${INTERACTION_ID}/cancel`,
+      ])
+    }).pipe(Effect.scoped),
 )
 
 const attachedAgent = Effect.fn('attachedAgent')(function* (router: CommandRouter['Service']) {

@@ -3,6 +3,7 @@ import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
+import * as Hash from 'effect/Hash'
 import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -37,6 +38,8 @@ export type ActivityStep = Data.TaggedEnum<{
 
 export type ActivityAttempt = 'start' | 'update' | 'end'
 
+type FollowedFields = Pick<FollowedHerd, 'agents' | 'awayFrom' | 'endsFrom'>
+
 export class ActivityAgent extends Data.Class<{
   readonly machineLabel: string
   readonly title: string
@@ -47,6 +50,7 @@ export class ActivityAgent extends Data.Class<{
 
 export class FollowedHerd extends Data.Class<{
   readonly agents: ActivityHerd
+  readonly awayFrom: HashMap.HashMap<MachineId, DateTime.Utc>
   readonly busyThroughResync: boolean
   readonly endsFrom: DateTime.Utc
 }> {}
@@ -61,6 +65,7 @@ export const ActivityStep = Data.taggedEnum<ActivityStep>()
 export const ACTIVITY_START_SPACING = Duration.minutes(1)
 export const ALL_DONE_LINGER = Duration.seconds(45)
 export const ACTIVITY_RESTART_MARGIN = HARK_RATE_WINDOW
+export const ACTIVITY_START_KEY_PREFIX = 'crook/herd'
 export const WAIT_FOR_A_CHANGE = ActivityStep.Wait({ atMost: Option.none() })
 
 export const ALL_DONE = new HarkActivityContent({
@@ -70,6 +75,14 @@ export const ALL_DONE = new HarkActivityContent({
 })
 
 export const isSameContent = Schema.toEquivalence(HarkActivityContent)
+
+const encodeContent = Schema.encodeSync(Schema.fromJsonString(HarkActivityContent))
+
+const untilThen = (now: DateTime.Utc, then: DateTime.Utc) =>
+  Duration.max(Duration.zero, DateTime.distance(now, then))
+
+const isReached = (now: DateTime.Utc, then: DateTime.Utc) =>
+  DateTime.isGreaterThanOrEqualTo(now, then)
 
 const waitAtMost = (duration: Duration.Duration) =>
   ActivityStep.Wait({ atMost: Option.some(duration) })
@@ -132,9 +145,44 @@ const allAgents = (herd: ActivityHerd) =>
 
 export const isBusy = (herd: ActivityHerd): boolean => Arr.some(allAgents(herd), isBusyAgent)
 
+const isAwayAt = (
+  awayFrom: FollowedHerd['awayFrom'],
+  machine: MachineId,
+  now: DateTime.Utc,
+): boolean => Option.exists(HashMap.get(awayFrom, machine), (from) => isReached(now, from))
+
+export const countedAgents = (
+  followed: Pick<FollowedHerd, 'agents' | 'awayFrom'>,
+  now: DateTime.Utc,
+): ActivityHerd =>
+  HashMap.filter(followed.agents, (_agents, machine) => !isAwayAt(followed.awayFrom, machine, now))
+
+const awayNoLaterThan = (
+  awayFrom: FollowedHerd['awayFrom'],
+  machine: MachineId,
+  from: DateTime.Utc,
+) =>
+  HashMap.set(
+    awayFrom,
+    machine,
+    Option.match(HashMap.get(awayFrom, machine), {
+      onNone: () => from,
+      onSome: (earlier) => DateTime.min(earlier, from),
+    }),
+  )
+
+const followedWith = (fields: FollowedFields, held: boolean, now: DateTime.Utc) =>
+  new FollowedHerd({
+    agents: fields.agents,
+    awayFrom: fields.awayFrom,
+    busyThroughResync: held && isBusy(countedAgents(fields, now)),
+    endsFrom: fields.endsFrom,
+  })
+
 export const followedHerdFrom = (hubStartedAt: DateTime.Utc) =>
   new FollowedHerd({
     agents: HashMap.empty(),
+    awayFrom: HashMap.empty(),
     busyThroughResync: false,
     endsFrom: DateTime.addDuration(hubStartedAt, RECONNECT_GRACE),
   })
@@ -148,39 +196,105 @@ export const activityAfterPublish = (
   },
   now: DateTime.Utc,
 ): FollowedHerd => {
+  const machine = change.next.machine
+
   if (isHerdrLost(change.next)) {
-    return followed
+    return followedWith(
+      {
+        agents: followed.agents,
+        awayFrom: awayNoLaterThan(
+          followed.awayFrom,
+          machine,
+          DateTime.addDuration(now, RECONNECT_GRACE),
+        ),
+        endsFrom: followed.endsFrom,
+      },
+      followed.busyThroughResync,
+      now,
+    )
   }
 
   const resync = Option.exists(change.previous, (previous) => isResync(previous, change.next))
-  const before = machineAgentsIn(followed.agents, change.next.machine)
+  const acrossGap = resync || isAwayAt(followed.awayFrom, machine, now)
+  const before = machineAgentsIn(followed.agents, machine)
   const after = machineAgentsAfter(before, change.machineLabel, change.next)
-  const agents = HashMap.set(followed.agents, change.next.machine, after)
-  const held = resync
-    ? followed.busyThroughResync || !isBusy(followed.agents)
-    : followed.busyThroughResync && !hasTurnedBusy(before, after)
+  const heldBefore = acrossGap
+    ? followed.busyThroughResync || !isBusy(countedAgents(followed, now))
+    : followed.busyThroughResync
 
-  return new FollowedHerd({
-    agents,
-    busyThroughResync: held && isBusy(agents),
-    endsFrom: resync
-      ? DateTime.max(followed.endsFrom, DateTime.addDuration(now, RECONNECT_GRACE))
-      : followed.endsFrom,
-  })
+  return followedWith(
+    {
+      agents: HashMap.set(followed.agents, machine, after),
+      awayFrom: HashMap.remove(followed.awayFrom, machine),
+      endsFrom: resync
+        ? DateTime.max(followed.endsFrom, DateTime.addDuration(now, RECONNECT_GRACE))
+        : followed.endsFrom,
+    },
+    heldBefore && (resync || !hasTurnedBusy(before, after)),
+    now,
+  )
 }
+
+export const activityAfterOffline = (
+  followed: FollowedHerd,
+  machine: MachineId,
+  now: DateTime.Utc,
+): FollowedHerd =>
+  HashMap.has(followed.agents, machine)
+    ? followedWith(
+        {
+          agents: followed.agents,
+          awayFrom: awayNoLaterThan(followed.awayFrom, machine, now),
+          endsFrom: followed.endsFrom,
+        },
+        followed.busyThroughResync,
+        now,
+      )
+    : followed
 
 export const activityAfterForgotten = (
   followed: FollowedHerd,
   machine: MachineId,
-): FollowedHerd => {
-  const agents = HashMap.remove(followed.agents, machine)
+  now: DateTime.Utc,
+): FollowedHerd =>
+  followedWith(
+    {
+      agents: HashMap.remove(followed.agents, machine),
+      awayFrom: HashMap.remove(followed.awayFrom, machine),
+      endsFrom: followed.endsFrom,
+    },
+    followed.busyThroughResync,
+    now,
+  )
 
-  return new FollowedHerd({
-    agents,
-    busyThroughResync: followed.busyThroughResync && isBusy(agents),
-    endsFrom: followed.endsFrom,
-  })
-}
+export const wakeWithin = (
+  followed: FollowedHerd,
+  now: DateTime.Utc,
+  atMost: Option.Option<Duration.Duration>,
+): Option.Option<Duration.Duration> =>
+  pipe(
+    HashMap.toValues(followed.awayFrom),
+    Arr.filter((from) => !isReached(now, from)),
+    Arr.map((from) => untilThen(now, from)),
+    Arr.appendAll(Option.toArray(atMost)),
+    Arr.match({
+      onEmpty: () => Option.none(),
+      onNonEmpty: (durations) => Option.some(Arr.min(durations, Duration.Order)),
+    }),
+  )
+
+export const activityStartKey = (
+  record: Option.Option<LiveActivityRecord>,
+  content: HarkActivityContent,
+): string =>
+  [
+    ACTIVITY_START_KEY_PREFIX,
+    Option.match(record, {
+      onNone: () => 'first',
+      onSome: (live) => DateTime.formatIso(live.lastStartAt),
+    }),
+    String(Hash.string(encodeContent(content))),
+  ].join('/')
 
 const agentsWith = (herd: ActivityHerd, status: AgentStatus) =>
   pipe(
@@ -232,12 +346,6 @@ export const herdContent = (herd: ActivityHerd): HarkActivityContent => {
     Option.getOrElse(() => ALL_DONE),
   )
 }
-
-const untilThen = (now: DateTime.Utc, then: DateTime.Utc) =>
-  Duration.max(Duration.zero, DateTime.distance(now, then))
-
-const isReached = (now: DateTime.Utc, then: DateTime.Utc) =>
-  DateTime.isGreaterThanOrEqualTo(now, then)
 
 const restartAtOf = (record: LiveActivityRecord) =>
   DateTime.addDuration(
@@ -292,7 +400,7 @@ export const nextActivityStep = (input: {
   readonly now: DateTime.Utc
 }): ActivityStep => {
   const shown = shownIn(input.record)
-  const herd = input.followed.agents
+  const herd = countedAgents(input.followed, input.now)
 
   if (!input.enabled) {
     return Option.match(shown, {

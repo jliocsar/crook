@@ -116,6 +116,7 @@ const make = Effect.gen(function* () {
           MachinePublished: (published) => afterPublish(notifications, published),
           PaneSeen: (seen) => afterSeen(notifications, seen.machine, seen.pane),
           MachineForgotten: (forgotten) => afterForgotten(notifications, forgotten.machine),
+          MachineWentOffline: () => notifications,
         }),
       ),
     ).pipe(
@@ -171,7 +172,6 @@ const make = Effect.gen(function* () {
 
   const forgetSent = (notification: SentNotification) =>
     Ref.update(sent, HashMap.remove(notificationKey(notification))).pipe(
-      Effect.andThen(approvals.forget(notification)),
       Effect.andThen(store.forgetSent(notification.machine, notification.pane)),
       Effect.catchTag(
         'SqlError',

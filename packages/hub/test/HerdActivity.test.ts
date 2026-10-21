@@ -2,8 +2,10 @@ import { expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
+import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import type * as HttpClient from 'effect/http/HttpClient'
@@ -30,7 +32,7 @@ import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { SeenTracker } from '@crook/hub/SeenTracker'
 
-import { agentRow, bashAsk } from './Fixtures'
+import { agentRow, bashAsk, hello } from './Fixtures'
 import {
   HARK_TOKEN,
   type HarkCall,
@@ -56,12 +58,17 @@ const TITLE = 'EX-253 Example feature'
 const ACTIVITIES_URL = 'https://hark.ryan.ceo/api/agent/activities'
 const ACTIVITY_URL = `${ACTIVITIES_URL}/crook-herd`
 
-const stateWith = (version: number, agents: readonly AgentRow[], connection = 1) =>
+const stateWith = (
+  version: number,
+  agents: readonly AgentRow[],
+  connection = 1,
+  lostAt = Option.none<DateTime.Utc>(),
+) =>
   new MachineState({
     machine: LAPTOP,
     version: MachineStateVersion.make(version),
     herdrVersion: '0.9.5',
-    herdr: new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt: Option.none() }),
+    herdr: new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt }),
     workspaces: [new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })],
     tabs: [],
     panes: [],
@@ -179,8 +186,10 @@ it.effect(
           symbol: 'terminal',
           accentColor: '#EEEBE4',
           expiresInSeconds: 28_800,
+          staleAfterSeconds: 28_800,
         }),
       )
+      expect(Option.isSome(started.idempotencyKey)).toBe(true)
       expect([updated.method, updated.url]).toEqual(['PATCH', ACTIVITY_URL])
       expect(updated.body).toEqual(
         Option.some({
@@ -360,6 +369,9 @@ const startTriedAfter = Effect.fn('startTriedAfter')(function* (failure: HarkRep
   yield* herd.publish(LAPTOP, twoWorkingAt(2))
   const updated = yield* nextCallWhere(calls, isActivityCall)
 
+  expect(Option.isSome(failed.idempotencyKey)).toBe(true)
+  expect(retried.idempotencyKey).toEqual(failed.idempotencyKey)
+
   return Arr.map([failed, retried, updated], endpointOf)
 })
 
@@ -500,6 +512,70 @@ it.effect('ends the card a grace after a herdr resync empties the herd for good'
       }),
     )
     expect(endedAt - resyncAt).toBeGreaterThanOrEqual(Duration.toMillis(RECONNECT_GRACE))
+  }).pipe(Effect.scoped),
+)
+
+const ALL_DONE_ENDING = Option.some({
+  status: 'All done',
+  detail: null,
+  symbol: 'success',
+  accentColor: '#EEEBE4',
+  dismissAfterSeconds: Duration.toSeconds(ALL_DONE_LINGER),
+})
+
+it.effect(
+  'ends the card a grace after its only busy machine drops, and starts none when it returns unchanged',
+  () =>
+    Effect.gen(function* () {
+      const { calls, start } = yield* withActivity(acceptingActivities)
+      const { herd } = yield* start
+      const link = yield* Effect.forkScoped(herd.hold(LAPTOP, hello), { startImmediately: true })
+
+      yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+      yield* nextCallWhere(calls, isActivityCall)
+      yield* Fiber.interrupt(link)
+      const droppedAt = yield* Clock.currentTimeMillis
+      const ended = yield* nextCallWhere(calls, isActivityCall)
+      const endedAt = yield* Clock.currentTimeMillis
+
+      yield* Effect.forkScoped(herd.hold(LAPTOP, hello), { startImmediately: true })
+      yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+      const afterReturn = Arr.filter(yield* callsWithin(calls, 70), isActivityCall)
+
+      yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+      const restarted = yield* nextCallWhere(calls, isActivityCall)
+
+      expect(endpointOf(ended)).toEqual(['POST', `${ACTIVITY_URL}/end`])
+      expect(ended.body).toEqual(ALL_DONE_ENDING)
+      expect(endedAt - droppedAt).toBeGreaterThanOrEqual(Duration.toMillis(RECONNECT_GRACE))
+      expect(afterReturn).toEqual([])
+      expect(endpointOf(restarted)).toEqual(['POST', ACTIVITIES_URL])
+    }).pipe(Effect.scoped),
+)
+
+it.effect('ends the card a grace after the herdr of its only busy machine is lost', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withActivity(acceptingActivities)
+    const { herd } = yield* start
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* nextCallWhere(calls, isActivityCall)
+    yield* herd.publish(
+      LAPTOP,
+      stateWith(
+        2,
+        [agentRow({ status: 'working', stateChangeSeq: 6 })],
+        1,
+        Option.some(yield* DateTime.now),
+      ),
+    )
+    const lostAt = yield* Clock.currentTimeMillis
+    const ended = yield* nextCallWhere(calls, isActivityCall)
+    const endedAt = yield* Clock.currentTimeMillis
+
+    expect(endpointOf(ended)).toEqual(['POST', `${ACTIVITY_URL}/end`])
+    expect(ended.body).toEqual(ALL_DONE_ENDING)
+    expect(endedAt - lostAt).toBeGreaterThanOrEqual(Duration.toMillis(RECONNECT_GRACE))
   }).pipe(Effect.scoped),
 )
 

@@ -1,4 +1,5 @@
 import * as DateTime from 'effect/DateTime'
+import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
@@ -14,12 +15,15 @@ import {
   type ActivityStep,
   type LiveActivityRecord,
   activityAfterForgotten,
+  activityAfterOffline,
   activityAfterPublish,
+  activityStartKey,
   attemptOf,
   followedHerdFrom,
   nextActivityStep,
   recordAfter,
   recordWithoutActivity,
+  wakeWithin,
 } from '@crook/hub/ActivityPlan'
 import { logStorageFailure } from '@crook/hub/Database'
 import {
@@ -35,11 +39,6 @@ import { type HerdChange, Herd } from '@crook/hub/Herd'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 
 type ActivityOutcome = 'done' | 'gone' | 'retry' | 'abandoned'
-
-const outcomeAfter = (what: string, failure: HarkFailure): Effect.Effect<ActivityOutcome> =>
-  Effect.map(pauseOrGiveUp(what, failure), (outcome): ActivityOutcome =>
-    outcome === 'retry' ? 'retry' : 'abandoned',
-  )
 
 const make = Effect.gen(function* () {
   const hark = yield* HarkClient
@@ -66,7 +65,9 @@ const make = Effect.gen(function* () {
             Match.tagsExhaustive({
               MachinePublished: (published) => activityAfterPublish(current, published, now),
               PaneSeen: () => current,
-              MachineForgotten: (forgotten) => activityAfterForgotten(current, forgotten.machine),
+              MachineForgotten: (forgotten) =>
+                activityAfterForgotten(current, forgotten.machine, now),
+              MachineWentOffline: (offline) => activityAfterOffline(current, offline.machine, now),
             }),
           ),
         ),
@@ -94,7 +95,11 @@ const make = Effect.gen(function* () {
       Effect.catchTag('HarkActivityGone', (gone) =>
         Effect.logInfo(gone.message).pipe(Effect.as<ActivityOutcome>('gone')),
       ),
-      Effect.catch((failure) => outcomeAfter(what, failure)),
+      Effect.catch((failure) =>
+        Effect.map(pauseOrGiveUp(what, failure), (after): ActivityOutcome =>
+          after === 'retry' ? 'retry' : 'abandoned',
+        ),
+      ),
     )
   })
 
@@ -121,34 +126,53 @@ const make = Effect.gen(function* () {
       )
     })
 
-  const take = (step: ActivityStep): Effect.Effect<void> =>
+  const awaitWake = (atMost: Option.Option<Duration.Duration>) =>
+    Option.match(atMost, {
+      onNone: () => Queue.take(wake),
+      onSome: (duration) => Effect.raceFirst(Effect.sleep(duration), Queue.take(wake)),
+    })
+
+  const take = (
+    step: ActivityStep,
+    current: Option.Option<LiveActivityRecord>,
+    wakeAtMost: (atMost: Option.Option<Duration.Duration>) => Option.Option<Duration.Duration>,
+  ): Effect.Effect<void> =>
     Match.value(step).pipe(
       Match.tagsExhaustive({
-        Start: (start) => act(step, 'start', hark.startActivity(start.content)),
+        Start: (start) =>
+          act(
+            step,
+            'start',
+            hark.startActivity(start.content, activityStartKey(current, start.content)),
+          ),
         Update: (update) => act(step, 'update', hark.updateActivity(update.content)),
         End: (end) => act(step, 'end', hark.endActivity(end.content, end.linger)),
         Wait: (wait) =>
           Option.match(wait.atMost, {
-            onNone: () =>
-              Ref.set(abandonedAttempt, Option.none()).pipe(Effect.andThen(Queue.take(wake))),
-            onSome: (duration) => Effect.raceFirst(Effect.sleep(duration), Queue.take(wake)),
-          }),
+            onNone: () => Ref.set(abandonedAttempt, Option.none()),
+            onSome: () => Effect.void,
+          }).pipe(Effect.andThen(awaitWake(wakeAtMost(wait.atMost)))),
       }),
     )
 
   const stepOnce = Effect.gen(function* () {
+    const now = yield* DateTime.now
+    const herdNow = yield* Ref.get(followed)
+    const current = yield* Ref.get(record)
     const step = nextActivityStep({
-      followed: yield* Ref.get(followed),
+      followed: herdNow,
       enabled: yield* Ref.get(enabled),
-      record: yield* Ref.get(record),
-      now: yield* DateTime.now,
+      record: current,
+      now,
     })
     const abandoned = yield* Ref.get(abandonedAttempt)
     const isAbandoned = Option.exists(attemptOf(step), (attempt) =>
       Option.contains(abandoned, attempt),
     )
+    const wakeAtMost = (atMost: Option.Option<Duration.Duration>) =>
+      wakeWithin(herdNow, now, atMost)
 
-    yield* isAbandoned ? Queue.take(wake) : take(step)
+    yield* isAbandoned ? awaitWake(wakeAtMost(Option.none())) : take(step, current, wakeAtMost)
   }).pipe(
     Effect.catchDefect((defect) =>
       Effect.logError(pausedOnBug('Live Activity'), defect).pipe(

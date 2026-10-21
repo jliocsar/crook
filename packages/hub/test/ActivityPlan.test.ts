@@ -18,11 +18,19 @@ import {
   FollowedHerd,
   LiveActivityRecord,
   WAIT_FOR_A_CHANGE,
+  activityAfterOffline,
   activityAfterPublish,
+  activityStartKey,
+  countedAgents,
   herdContent,
   nextActivityStep,
+  wakeWithin,
 } from '@crook/hub/ActivityPlan'
-import { HARK_ACTIVITY_LIFETIME, HarkActivityContent } from '@crook/hub/HarkClient'
+import {
+  HARK_ACTIVITY_LIFETIME,
+  HARK_IDEMPOTENCY_KEY_LIMIT,
+  HarkActivityContent,
+} from '@crook/hub/HarkClient'
 import { RECONNECT_GRACE } from '@crook/hub/Herd'
 
 import { agentRow, bashAsk } from './Fixtures'
@@ -69,6 +77,7 @@ const agentAt = (
 
 const emptyHerd = new FollowedHerd({
   agents: HashMap.empty(),
+  awayFrom: HashMap.empty(),
   busyThroughResync: false,
   endsFrom: STARTED_AT,
 })
@@ -82,9 +91,12 @@ const herdOf = (...states: readonly MachineState[]): FollowedHerd =>
     ),
   )
 
-const contentOf = (followed: FollowedHerd) => herdContent(followed.agents)
+const contentOf = (followed: FollowedHerd, elapsed = Duration.zero) =>
+  herdContent(countedAgents(followed, DateTime.addDuration(STARTED_AT, elapsed)))
 
-const busyHerd = herdOf(stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'working', 5)]))
+const laptopWorking = stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'working', 5)])
+
+const busyHerd = herdOf(laptopWorking)
 
 const WORKING = contentOf(busyHerd)
 
@@ -165,13 +177,64 @@ describe('herdContent', () => {
 })
 
 describe('activityAfterPublish', () => {
-  it('ignores a lost herdr, and keeps an agent not known yet as it was', () => {
-    const previous = Option.some(stateOf(LAPTOP, []))
+  it('keeps the agents of a lost herdr for a grace, then stops counting them', () => {
+    const lostAt = Duration.seconds(30)
     const lost = activityAfterPublish(
       busyHerd,
-      { machineLabel: 'laptop', previous, next: stateOf(LAPTOP, [], { lost: true }) },
-      STARTED_AT,
+      {
+        machineLabel: 'laptop',
+        previous: Option.some(laptopWorking),
+        next: stateOf(LAPTOP, [], { lost: true }),
+      },
+      DateTime.addDuration(STARTED_AT, lostAt),
     )
+    const graceLater = Duration.sum(lostAt, RECONNECT_GRACE)
+
+    expect(contentOf(lost, lostAt)).toEqual(WORKING)
+    expect(wakeWithin(lost, DateTime.addDuration(STARTED_AT, lostAt), Option.none())).toEqual(
+      Option.some(RECONNECT_GRACE),
+    )
+    expect(contentOf(lost, graceLater)).toEqual(ALL_DONE)
+    expect(stepAt(lost, liveSince(STARTED_AT, WORKING), graceLater)).toEqual(
+      ActivityStep.End({ content: ALL_DONE, linger: ALL_DONE_LINGER }),
+    )
+  })
+
+  it('stops counting an offline machine, and starts nothing when it comes back unchanged', () => {
+    const offlineAt = Duration.seconds(30)
+    const backAt = Duration.seconds(90)
+    const offline = activityAfterOffline(
+      busyHerd,
+      LAPTOP,
+      DateTime.addDuration(STARTED_AT, offlineAt),
+    )
+    const back = activityAfterPublish(
+      offline,
+      { machineLabel: 'laptop', previous: Option.some(laptopWorking), next: laptopWorking },
+      DateTime.addDuration(STARTED_AT, backAt),
+    )
+    const turnedBusy = activityAfterPublish(
+      back,
+      {
+        machineLabel: 'laptop',
+        previous: Option.some(laptopWorking),
+        next: stateOf(LAPTOP, [agentAt('w1:p1', 'Port the herd', 'blocked', 95)]),
+      },
+      DateTime.addDuration(STARTED_AT, backAt),
+    )
+
+    expect(stepAt(offline, liveSince(STARTED_AT, WORKING), offlineAt)).toEqual(
+      ActivityStep.End({ content: ALL_DONE, linger: ALL_DONE_LINGER }),
+    )
+    expect(contentOf(back, backAt)).toEqual(WORKING)
+    expect(stepAt(back, Option.none(), backAt)).toEqual(WAIT_FOR_A_CHANGE)
+    expect(stepAt(turnedBusy, Option.none(), backAt)).toEqual(
+      ActivityStep.Start({ content: contentOf(turnedBusy, backAt) }),
+    )
+  })
+
+  it('keeps an agent not known yet as it was', () => {
+    const previous = Option.some(stateOf(LAPTOP, []))
     const notKnownYet = activityAfterPublish(
       busyHerd,
       {
@@ -182,7 +245,6 @@ describe('activityAfterPublish', () => {
       STARTED_AT,
     )
 
-    expect(lost).toEqual(busyHerd)
     expect(contentOf(notKnownYet)).toEqual(WORKING)
   })
 
@@ -245,6 +307,27 @@ describe('activityAfterPublish', () => {
     expect(stepAt(turnedBusy, Option.none(), Duration.zero)).toEqual(
       ActivityStep.Start({ content: contentOf(turnedBusy) }),
     )
+  })
+})
+
+describe('activityStartKey', () => {
+  it('names the same start the same way, and any other start another way', () => {
+    const ended = Option.some(
+      new LiveActivityRecord({ lastStartAt: STARTED_AT, shown: Option.none() }),
+    )
+    const later = Option.some(
+      new LiveActivityRecord({
+        lastStartAt: DateTime.addDuration(STARTED_AT, ACTIVITY_START_SPACING),
+        shown: Option.none(),
+      }),
+    )
+    const key = activityStartKey(ended, WORKING)
+
+    expect(activityStartKey(ended, WORKING)).toBe(key)
+    expect(activityStartKey(later, WORKING)).not.toBe(key)
+    expect(activityStartKey(ended, ALL_DONE)).not.toBe(key)
+    expect(activityStartKey(Option.none(), WORKING)).not.toBe(key)
+    expect(key.length).toBeLessThanOrEqual(HARK_IDEMPOTENCY_KEY_LIMIT)
   })
 })
 

@@ -236,6 +236,12 @@ const activityGone = (response: HttpClientResponse.HttpClientResponse) =>
 
 const stillProcessing = () => Effect.fail(new HarkStillProcessing())
 
+const failureCases = {
+  [STATUS_TOO_MANY_REQUESTS]: rateLimited,
+  '5xx': serverFailed,
+  orElse: refused,
+}
+
 const unreadable = (error: { readonly message: string }) =>
   new HarkAnswerUnreadable({ detail: error.message })
 
@@ -303,6 +309,7 @@ const activityStartBody = (content: HarkActivityContent) => ({
   symbol: content.symbol,
   accentColor: HARK_ACTIVITY_ACCENT,
   expiresInSeconds: Duration.toSeconds(HARK_ACTIVITY_LIFETIME),
+  staleAfterSeconds: Duration.toSeconds(HARK_ACTIVITY_LIFETIME),
 })
 
 const activityUpdateBody = (content: HarkActivityContent) => ({
@@ -443,9 +450,7 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
       HttpClientResponse.matchStatus({
         [STATUS_STILL_PROCESSING]: stillProcessing,
         '2xx': readCreated,
-        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
-        '5xx': serverFailed,
-        orElse: refused,
+        ...failureCases,
       }),
     )
   })
@@ -474,9 +479,7 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
       HttpClientResponse.matchStatus({
         [STATUS_STILL_PROCESSING]: stillProcessing,
         '2xx': readInteraction,
-        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
-        '5xx': serverFailed,
-        orElse: refused,
+        ...failureCases,
       }),
     )
   })
@@ -490,9 +493,7 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
       request,
       HttpClientResponse.matchStatus({
         '2xx': readApprovalState,
-        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
-        '5xx': serverFailed,
-        orElse: refused,
+        ...failureCases,
       }),
     )
   })
@@ -503,25 +504,23 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
       HttpClientResponse.matchStatus({
         '2xx': () => Effect.void,
         [STATUS_NOT_FOUND]: () => Effect.void,
-        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
-        '5xx': serverFailed,
-        orElse: refused,
+        ...failureCases,
       }),
     )
   })
 
   const startActivity = Effect.fn('HarkClient.startActivity')(function* (
     content: HarkActivityContent,
+    idempotencyKey: string,
   ) {
     yield* execute(
       HttpClientRequest.post(`${HARK_API_URL}/activities`).pipe(
         HttpClientRequest.bodyJsonUnsafe(activityStartBody(content)),
+        withIdempotencyKey(Option.some(idempotencyKey)),
       ),
       HttpClientResponse.matchStatus({
         '2xx': () => Effect.void,
-        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
-        '5xx': serverFailed,
-        orElse: refused,
+        ...failureCases,
       }),
     )
   })
@@ -537,9 +536,7 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
         '2xx': () => Effect.void,
         [STATUS_NOT_FOUND]: activityGone,
         [STATUS_CONFLICT]: activityGone,
-        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
-        '5xx': serverFailed,
-        orElse: refused,
+        ...failureCases,
       }),
     )
   })
@@ -556,9 +553,7 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
         '2xx': () => Effect.void,
         [STATUS_NOT_FOUND]: () => Effect.void,
         [STATUS_CONFLICT]: () => Effect.void,
-        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
-        '5xx': serverFailed,
-        orElse: refused,
+        ...failureCases,
       }),
     )
   })
@@ -610,7 +605,10 @@ export class HarkClient extends Context.Service<
     readonly ask: (approval: HarkApproval) => Effect.Effect<HarkId, HarkFailure>
     readonly awaitApproval: (id: HarkId) => Effect.Effect<HarkApprovalState, HarkFailure>
     readonly cancel: (id: HarkId) => Effect.Effect<void, HarkFailure>
-    readonly startActivity: (content: HarkActivityContent) => Effect.Effect<void, HarkFailure>
+    readonly startActivity: (
+      content: HarkActivityContent,
+      idempotencyKey: string,
+    ) => Effect.Effect<void, HarkFailure>
     readonly updateActivity: (
       content: HarkActivityContent,
     ) => Effect.Effect<void, HarkFailure | HarkActivityGone>

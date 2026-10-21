@@ -1,24 +1,20 @@
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as FiberMap from 'effect/FiberMap'
-import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Ref from 'effect/Ref'
 import * as Schedule from 'effect/Schedule'
 
 import { commandAudit } from '@crook/domain/Audit'
 import { AnswerAsk, Approve, type AskAnswer, Decline } from '@crook/domain/Command'
 import { type AskId, type GlobalPaneId, IdempotencyKey } from '@crook/domain/Ids'
 import type { CommandFailure } from '@crook/protocol/Commands'
-import type { HarkFailure } from '@crook/protocol/Hark'
 
 import { AuditTrail } from '@crook/hub/AuditTrail'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import {
   type HarkApprovalState,
   HarkClient,
-  type HarkId,
   gaveUpOnBug,
   pauseOrGiveUp,
 } from '@crook/hub/HarkClient'
@@ -42,17 +38,11 @@ const answerOf = (state: HarkApprovalState): Option.Option<AskAnswer> =>
     Match.orElse(() => Option.none()),
   )
 
-const waitedAfter = (what: string, failure: HarkFailure): Effect.Effect<WaitedApproval> =>
-  Effect.map(pauseOrGiveUp(what, failure), (outcome): WaitedApproval =>
-    outcome === 'retry' ? 'pending' : 'abandoned',
-  )
-
 export const makeApprovalAnswers = Effect.gen(function* () {
   const hark = yield* HarkClient
   const router = yield* CommandRouter
   const audit = yield* AuditTrail
   const scope = yield* Effect.scope
-  const closed = yield* Ref.make(HashSet.empty<HarkId>())
   const waiters = yield* FiberMap.make<GlobalPaneId>()
 
   const routeAnswer = Effect.fn('ApprovalAnswers.routeAnswer')(function* (
@@ -100,7 +90,13 @@ export const makeApprovalAnswers = Effect.gen(function* () {
 
     return yield* hark
       .awaitApproval(approval.harkId)
-      .pipe(Effect.catch((failure) => waitedAfter(what, failure)))
+      .pipe(
+        Effect.catch((failure) =>
+          Effect.map(pauseOrGiveUp(what, failure), (after): WaitedApproval =>
+            after === 'retry' ? 'pending' : 'abandoned',
+          ),
+        ),
+      )
   })
 
   const awaitAnswer = Effect.fn('ApprovalAnswers.awaitAnswer')(function* (
@@ -114,7 +110,6 @@ export const makeApprovalAnswers = Effect.gen(function* () {
       return
     }
 
-    yield* Ref.update(closed, HashSet.add(approval.harkId))
     yield* Option.match(Option.all({ answer: answerOf(state), ask: approval.ask }), {
       onNone: () => Effect.void,
       onSome: ({ answer, ask }) => deliverAnswer(approval, ask, answer),
@@ -134,15 +129,8 @@ export const makeApprovalAnswers = Effect.gen(function* () {
 
   const cancel = Effect.fn('ApprovalAnswers.cancel')(function* (approval: SentNotification) {
     yield* FiberMap.remove(waiters, notificationKey(approval))
-
-    if (HashSet.has(yield* Ref.get(closed), approval.harkId)) {
-      return
-    }
-
     yield* hark.cancel(approval.harkId)
   })
 
-  const forget = (approval: SentNotification) => Ref.update(closed, HashSet.remove(approval.harkId))
-
-  return { watch, cancel, forget }
+  return { watch, cancel }
 })

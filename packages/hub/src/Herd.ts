@@ -54,7 +54,11 @@ export class MachineForgotten extends Data.TaggedClass('MachineForgotten')<{
   readonly machine: MachineId
 }> {}
 
-export type HerdChange = MachinePublished | PaneSeen | MachineForgotten
+export class MachineWentOffline extends Data.TaggedClass('MachineWentOffline')<{
+  readonly machine: MachineId
+}> {}
+
+export type HerdChange = MachinePublished | PaneSeen | MachineForgotten | MachineWentOffline
 
 interface MachineEntry {
   readonly id: MachineId
@@ -292,11 +296,15 @@ const make = Effect.gen(function* () {
       ? Effect.sleep(RECONNECT_GRACE).pipe(
           Effect.andThen(
             change(id, (current) =>
-              Effect.succeed(
-                current.pipe(
-                  Option.filter(stillDroppedSince(entry.connectionChangedAt)),
-                  Option.map((dropped): MachineEntry => ({ ...dropped, connection: 'offline' })),
-                ),
+              current.pipe(
+                Option.filter(stillDroppedSince(entry.connectionChangedAt)),
+                Option.match({
+                  onNone: () => Effect.succeedNone,
+                  onSome: (dropped) =>
+                    PubSub.publish(changes, new MachineWentOffline({ machine: id })).pipe(
+                      Effect.as(Option.some<MachineEntry>({ ...dropped, connection: 'offline' })),
+                    ),
+                }),
               ),
             ),
           ),
