@@ -147,7 +147,10 @@ export const testHub = Layer.provideMerge(
   Database.layerAt(IN_MEMORY),
 )
 
-const discardingAgentAudit = Layer.succeed(AuditLog, AuditLog.of({ record: () => Effect.void }))
+export const discardingAgentAudit = Layer.succeed(
+  AuditLog,
+  AuditLog.of({ record: () => Effect.void }),
+)
 
 const socketUrl = (path: string) =>
   HttpServer.addressFormattedWith((address) =>
@@ -183,19 +186,21 @@ export const machineShows = (id: MachineId, connection: MachineConnection) =>
     Option.exists(findMachine(view, id), (entry) => entry.machine.connection === connection),
   )
 
+export const hubDialFor = (machine: MachineId) =>
+  Effect.map(Effect.service(HttpServer.HttpServer), (server) =>
+    connect(AgentLink, AGENT_PATH, agentToken(machine)).pipe(
+      Effect.provideService(HttpServer.HttpServer, server),
+    ),
+  )
+
 export const realAgent = Effect.fn('realAgent')(function* (
   machine: MachineId,
   state: SubscriptionRef.SubscriptionRef<MachineState>,
   herdr: Layer.Layer<HerdrClient>,
   claudeRoots: readonly string[],
 ) {
-  const server = yield* HttpServer.HttpServer
-  const dialHub = connect(AgentLink, AGENT_PATH, agentToken(machine)).pipe(
-    Effect.provideService(HttpServer.HttpServer, server),
-  )
-
   return Layer.provide(
-    HubLink.layerWith(dialHub, hello),
+    HubLink.layerWith(yield* hubDialFor(machine), hello),
     Layer.provideMerge(
       Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt(claudeRoots)),
       [
