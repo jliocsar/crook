@@ -54,29 +54,31 @@ const toPane = (info: PaneInfo) =>
     tab: TabId.make(info.tab_id),
   })
 
-const previousRowOf = (previousAgents: readonly AgentRow[], info: AgentInfo) =>
-  Arr.findFirst(previousAgents, (row) => row.pane === info.pane_id)
+const isSameAgent =
+  ({ info, claudeSession }: ResolvedAgent) =>
+  (row: AgentRow) =>
+    row.terminal === info.terminal_id ||
+    Option.exists(row.claudeSession, (session) => Option.contains(claudeSession, session))
+
+const previousRowOf = (previousAgents: readonly AgentRow[], resolved: ResolvedAgent) =>
+  Arr.findFirst(previousAgents, (row) => row.pane === resolved.info.pane_id).pipe(
+    Option.filter(isSameAgent(resolved)),
+  )
 
 const isHandedOffFrom = (info: AgentInfo) => (row: AgentRow) =>
   row.terminal !== info.terminal_id && row.status !== 'unknown'
 
+const statusBeforeHandoffOf = (row: AgentRow) =>
+  new StatusBeforeHandoff({ status: row.status, statusChangedAt: row.statusChangedAt })
+
 const beforeHandoffOf = (previous: Option.Option<AgentRow>, info: AgentInfo) =>
-  previous.pipe(
-    Option.filter(() => info.agent_status === 'unknown'),
-    Option.flatMap((row) =>
-      Option.orElse(row.beforeHandoff, () =>
-        Option.liftPredicate(row, isHandedOffFrom(info)).pipe(
-          Option.map(
-            (handedOff) =>
-              new StatusBeforeHandoff({
-                status: handedOff.status,
-                statusChangedAt: handedOff.statusChangedAt,
-              }),
-          ),
+  info.agent_status === 'unknown'
+    ? Option.flatMap(previous, (row) =>
+        Option.orElse(row.beforeHandoff, () =>
+          Option.liftPredicate(row, isHandedOffFrom(info)).pipe(Option.map(statusBeforeHandoffOf)),
         ),
-      ),
-    ),
-  )
+      )
+    : Option.none()
 
 const statusChangedAt = (
   previous: Option.Option<AgentRow>,
@@ -97,9 +99,9 @@ export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
   Option.orElse(info.foreground_cwd, () => info.cwd)
 
 const toAgentRow =
-  (previousAgents: readonly AgentRow[], now: DateTime.Utc) =>
-  ({ info, claudeSession, branch }: ResolvedAgent) => {
-    const previous = previousRowOf(previousAgents, info)
+  (previousAgents: readonly AgentRow[], now: DateTime.Utc) => (resolved: ResolvedAgent) => {
+    const { info, claudeSession, branch } = resolved
+    const previous = previousRowOf(previousAgents, resolved)
 
     return new AgentRow({
       pane: PaneId.make(info.pane_id),

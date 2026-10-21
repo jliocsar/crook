@@ -1,4 +1,3 @@
-import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AgentStatus } from '@crook/domain/AgentStatus'
@@ -23,9 +22,3 @@ export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   statusChangedAt: Schema.DateTimeUtcFromString,
   beforeHandoff: Schema.OptionFromNullOr(StatusBeforeHandoff),
 }) {}
-
-export const lastKnownStatus = (row: AgentRow): AgentStatus =>
-  Option.match(row.beforeHandoff, {
-    onNone: () => row.status,
-    onSome: (before) => before.status,
-  })

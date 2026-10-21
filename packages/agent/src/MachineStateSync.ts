@@ -161,14 +161,25 @@ const make = Effect.gen(function* () {
 
   const follow = Effect.fn('MachineStateSync.follow')(function* (markHealthy: Effect.Effect<void>) {
     const subscribed = agentPanes(yield* SubscriptionRef.get(state))
-    const events = yield* herdr.subscribe(subscriptionsFor(subscribed))
 
-    yield* Stream.concat(Stream.succeed(undefined), events).pipe(
-      Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-      Stream.mapEffect(() => refresh),
-      Stream.tap(() => markHealthy),
-      Stream.takeUntil((next) => !Equal.equals(agentPanes(next), subscribed)),
-      Stream.runDrain,
+    yield* herdr.subscribe(subscriptionsFor(subscribed)).pipe(
+      Effect.flatMap((events) =>
+        Stream.concat(Stream.succeed(undefined), events).pipe(
+          Stream.buffer({ capacity: 1, strategy: 'sliding' }),
+          Stream.mapEffect(() => refresh),
+          Stream.tap(() => markHealthy),
+          Stream.takeUntil((next) => !Equal.equals(agentPanes(next), subscribed)),
+          Stream.runDrain,
+        ),
+      ),
+      Effect.catchTag('HerdrPaneNotFound', (error) =>
+        Effect.logDebug(error.message).pipe(
+          Effect.andThen(refresh),
+          Effect.flatMap((next) =>
+            Equal.equals(agentPanes(next), subscribed) ? Effect.fail(error) : Effect.void,
+          ),
+        ),
+      ),
     )
   }, Effect.scoped)
 
@@ -176,9 +187,7 @@ const make = Effect.gen(function* () {
     const health = yield* trackConnectionHealth
 
     yield* follow(health.markHealthy).pipe(
-      Effect.catchTag('HerdrPaneNotFound', (error) =>
-        Effect.andThen(Effect.logDebug(error.message), refresh),
-      ),
+      Effect.forever,
       Effect.catch((error) =>
         logHerdrFailure(error).pipe(
           Effect.andThen(Ref.set(resyncPending, true)),

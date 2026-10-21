@@ -18,13 +18,14 @@ import {
   TerminalId,
   WorkspaceId,
 } from '@crook/domain/Ids'
-import { panePresence, statusChanges } from '@crook/domain/MachineState'
+import { panePresence } from '@crook/domain/MachineState'
 import type { AgentInfo } from '@crook/herdr/Records'
 
 import { agentInfo, paneInfo, tabInfo, workspaceInfo } from './Fixtures'
 
 const MACHINE = MachineId.make('laptop')
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
+const SESSION_AFTER_RESTART = ClaudeSessionId.make('5f0c2a8e-91d4-4b6e-a3c7-2e8d6b1f4a90')
 const STARTED = DateTime.makeUnsafe('2026-10-17T10:00:00Z')
 const LATER = DateTime.makeUnsafe('2026-10-17T10:05:00Z')
 const REDETECTED = DateTime.makeUnsafe('2026-10-17T10:05:03Z')
@@ -48,14 +49,42 @@ const handoffReading = (
   terminal_id: string,
   agent_status: AgentInfo['agent_status'],
   state_change_seq: number,
+  claudeSession: Option.Option<ClaudeSessionId> = Option.some(SESSION),
 ) =>
   reading([
     {
       info: agentInfo({ pane_id: 'w1:p6', terminal_id, agent_status, state_change_seq }),
-      claudeSession: Option.none(),
+      claudeSession,
       branch: Option.none(),
     },
   ])
+
+const afterRestart = (claudeSession: Option.Option<ClaudeSessionId>) => {
+  const previous = initialMachineState(
+    MACHINE,
+    CONNECTION,
+    handoffReading(TERMINAL_BEFORE_HANDOFF, 'blocked', 5),
+    STARTED,
+  )
+  const restarted = Option.getOrThrow(
+    nextMachineState(
+      previous,
+      NEXT_CONNECTION,
+      handoffReading(TERMINAL_AFTER_HANDOFF, 'unknown', 0, claudeSession),
+      LATER,
+    ),
+  )
+  const detected = Option.getOrThrow(
+    nextMachineState(
+      restarted,
+      NEXT_CONNECTION,
+      handoffReading(TERMINAL_AFTER_HANDOFF, 'blocked', 1, claudeSession),
+      REDETECTED,
+    ),
+  )
+
+  return { restarted, detected }
+}
 
 const throughHandoff = (redetectedAs: AgentInfo['agent_status']) => {
   const previous = initialMachineState(
@@ -327,25 +356,38 @@ describe('MachineStateMapping', () => {
     ])
   })
 
-  it('keeps the age of a status herdr re-detects unchanged after a handoff, and reports no change', () => {
-    const { previous, resynced, redetected } = throughHandoff('blocked')
+  it('keeps the age of a status herdr re-detects unchanged after a handoff', () => {
+    const { redetected } = throughHandoff('blocked')
 
     expect(
       redetected.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff]),
     ).toEqual([['blocked', STARTED, Option.none()]])
-    expect(statusChanges(previous, resynced)).toEqual([])
-    expect(statusChanges(resynced, redetected)).toEqual([])
   })
 
-  it('reports a status herdr re-detects differently after a handoff as a change from the old one', () => {
-    const { resynced, redetected } = throughHandoff('done')
+  it('stamps a status herdr re-detects differently after a handoff with the re-detection', () => {
+    const { redetected } = throughHandoff('done')
 
-    expect(redetected.agents.map((row) => [row.status, row.statusChangedAt])).toEqual([
-      ['done', REDETECTED],
+    expect(
+      redetected.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff]),
+    ).toEqual([['done', REDETECTED, Option.none()]])
+  })
+
+  it('carries nothing over to a new Claude started in a pane herdr restored after a restart', () => {
+    const { restarted, detected } = afterRestart(Option.some(SESSION_AFTER_RESTART))
+
+    expect(
+      restarted.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff]),
+    ).toEqual([['unknown', LATER, Option.none()]])
+    expect(detected.agents.map((row) => [row.status, row.statusChangedAt])).toEqual([
+      ['blocked', REDETECTED],
     ])
-    expect(statusChanges(resynced, redetected)).toEqual(
-      redetected.agents.map((row) => ({ row, from: Option.some('blocked') })),
-    )
+  })
+
+  it('carries nothing over a new terminal whose Claude session is not resolved', () => {
+    const { restarted, detected } = afterRestart(Option.none())
+
+    expect(restarted.agents.map((row) => row.beforeHandoff)).toEqual([Option.none()])
+    expect(detected.agents.map((row) => row.statusChangedAt)).toEqual([REDETECTED])
   })
 
   it('does not invent a status before a handoff for an agent that was unknown already', () => {
