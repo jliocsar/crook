@@ -3,6 +3,7 @@ import type { ByRoleMatcher } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 
 const SPRING_SETTLED_MS = 2000
 
@@ -12,6 +13,9 @@ export const findByRole = (role: ByRoleMatcher, name: string) =>
   Effect.promise(() => screen.findByRole(role, { name }))
 
 export const eventually = (assertion: () => void) => Effect.promise(() => waitFor(assertion))
+
+export const present = <Value>(value: Value | null | undefined, what: string): NonNullable<Value> =>
+  Option.getOrThrowWith(Option.fromNullishOr(value), () => new Error(`${what} is not on the page.`))
 
 export const afterSpring = (assertion: () => void) =>
   Effect.promise(() => waitFor(assertion, { timeout: SPRING_SETTLED_MS }))

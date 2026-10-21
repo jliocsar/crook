@@ -491,6 +491,17 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   `index.css` spells: `180ms` comes back as `.18s` and `cubic-bezier(0.22, …)` as
   `cubic-bezier(.22, …)` (measured). The dev server and the tests serve the source, so only
   `vite preview` shows it; a parser for a token accepts every form CSS allows.
+- A screen never hands a callback to a hub call it starts. The call can outlive the screen, and
+  the callback then acts on a screen that is gone: a forget's "go back" that lands after the user
+  already went back pops a second history entry. The screen reads the call's result atom and acts
+  on it from an effect, which runs only while it is mounted. A setter from `useAtom` or
+  `useAtomSet` in `promiseExit` mode keeps the call running after the screen unmounts, because
+  it holds a subscription until the result settles (read in its source, and a test that leaves
+  mid-forget sees the forget land).
+- `Effect.catchTag` does not typecheck over a generic error union such as `Failure | RpcClientError`
+  (measured: TS2345, the tag narrows to `{ readonly _tag: unknown }`). A `Schema.Error` there is
+  caught with `Effect.catchIf(Schema.is(X), …)`; `instanceof` is the other spelling, and
+  `effecttsgo/instance-of-schema` rejects it.
 - Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
   with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
   renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
@@ -512,6 +523,14 @@ A probe that starts a real Claude closes its pane, stops its named herdr session
 :::tip
 Checking the web app against real data, measured:
 
+- The agent has no entrypoint yet. A probe script composes its layers and dials the hub directly
+  with the two headers the proxy would add, `X-ExeDev-Email` and `X-ExeDev-Token-Ctx` carrying
+  `{"machine":"<id>"}`; the token header is then not needed. Every herdr-reading layer needs
+  `HerdrClient` under it, not merged beside it.
+- The hub refuses to start on a `CROOK_HUB_ORIGIN` that is not https, a local one included. Any
+  https name works locally, because the Vite proxy sends that same value as the socket's `Origin`.
+- `pkill -f <pattern>` also matches the shell that runs it when the pattern is in its own command
+  line, and kills the call. Stop what you started by its saved pid.
 - A named herdr session runs headless with `herdr --session <name> server`. From inside a herdr
   pane, unset `HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID` and `HERDR_ENV`, and point
   `HERDR_SOCKET_PATH` at the named session's socket, or every command lands in the user's own

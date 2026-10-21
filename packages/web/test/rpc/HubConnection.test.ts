@@ -3,10 +3,15 @@ import * as Effect from 'effect/Effect'
 import * as Stream from 'effect/Stream'
 import * as RpcTest from 'effect/rpc/RpcTest'
 
-import { ClientApi, PaneNotInHerd } from '@crook/protocol/ClientApi'
-import { callsFrom, HubCallDefected, hubSocketUrl } from '@crook/web/rpc/HubConnection'
+import { ClientApi, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
+import {
+  agentSocketUrl,
+  callsFrom,
+  HubCallDefected,
+  hubSocketUrl,
+} from '@crook/web/rpc/HubConnection'
 
-import { agent, herd, LAPTOP, machine } from '../HerdFixtures.ts'
+import { agent, DESK, herd, LAPTOP, machine } from '../HerdFixtures.ts'
 
 const view = herd([machine(LAPTOP, [agent('w1:p1', 'done')])])
 
@@ -14,7 +19,10 @@ const missingPane = agent('w1:p9', 'idle').pane
 
 const handlers = ClientApi.toLayer({
   WatchHerd: () => Stream.make(view),
-  ForgetMachine: () => Effect.void,
+  ForgetMachine: ({ machine: machineId }) =>
+    machineId === LAPTOP
+      ? Effect.fail(new MachineStillConnected({ machine: machineId, connection: 'online' }))
+      : Effect.void,
   MarkSeen: ({ machine: machineId, pane }) =>
     pane === missingPane
       ? Effect.fail(new PaneNotInHerd({ machine: machineId, pane }))
@@ -50,6 +58,12 @@ describe('hubSocketUrl', () => {
       'ws://localhost:5192/rpc/client',
     )
   })
+
+  it('gives the agent endpoint on the same origin for a machine to dial', () => {
+    expect(agentSocketUrl(new URL('https://my-hub.exe.xyz/machines')).href).toBe(
+      'wss://my-hub.exe.xyz/rpc/agent',
+    )
+  })
 })
 
 layer(handlers)('callsFrom', (withHandlers) => {
@@ -63,6 +77,17 @@ layer(handlers)('callsFrom', (withHandlers) => {
 
       expect(views).toEqual([view])
       expect(refusal).toBeInstanceOf(PaneNotInHerd)
+    }),
+  )
+
+  withHandlers.effect('forgets a machine and passes the refusal for a connected one through', () =>
+    Effect.gen(function* () {
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+
+      yield* calls.forgetMachine(DESK)
+      const refusal = yield* Effect.flip(calls.forgetMachine(LAPTOP))
+
+      expect(refusal).toBeInstanceOf(MachineStillConnected)
     }),
   )
 })

@@ -275,6 +275,22 @@ describe('HubLink', () => {
     }),
   )
 
+  it.effect('forgets a machine only over a live connection', () =>
+    Effect.gen(function* () {
+      const { browser, link, nextSession, settle } = yield* start()
+      const session = yield* nextSession
+      const beforeTheHerd = yield* Effect.flip(link.forgetMachine(LAPTOP))
+
+      expect(beforeTheHerd).toBeInstanceOf(HubNotConnected)
+
+      yield* Queue.offer(session.views, liveView)
+      yield* settle
+      yield* link.forgetMachine(LAPTOP)
+
+      expect(yield* Ref.get(browser.forgotten)).toEqual([LAPTOP])
+    }),
+  )
+
   it.effect('refuses hub calls until the herd has arrived over the socket', () =>
     Effect.gen(function* () {
       const { browser, link, nextSession, settle } = yield* start()

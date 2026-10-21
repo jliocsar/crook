@@ -16,7 +16,12 @@ import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
-import type { HubCallFailed, HubCalls, MarkSeenRefused } from '@crook/web/rpc/HubConnection'
+import type {
+  ForgetMachineRefused,
+  HubCallFailed,
+  HubCalls,
+  MarkSeenRefused,
+} from '@crook/web/rpc/HubConnection'
 import {
   announce,
   beginAttempt,
@@ -179,13 +184,22 @@ const make = Effect.gen(function* () {
     )
   }).pipe(Effect.withSpan('HubLink.resync'))
 
-  const markSeen = Effect.fn('HubLink.markSeen')(function* (machine: MachineId, pane: PaneId) {
-    const hub = yield* Ref.get(connected)
+  const whenConnected = <Success, Failure>(
+    call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
+  ) =>
+    Effect.flatMap(Ref.get(connected), (hub): Effect.Effect<Success, Failure | HubNotConnected> =>
+      Option.match(hub, {
+        onNone: () => Effect.fail(new HubNotConnected()),
+        onSome: call,
+      }),
+    )
 
-    return yield* Option.match(hub, {
-      onNone: () => Effect.fail(new HubNotConnected()),
-      onSome: (calls) => calls.markSeen(machine, pane),
-    })
+  const markSeen = Effect.fn('HubLink.markSeen')(function* (machine: MachineId, pane: PaneId) {
+    return yield* whenConnected((calls) => calls.markSeen(machine, pane))
+  })
+
+  const forgetMachine = Effect.fn('HubLink.forgetMachine')(function* (machine: MachineId) {
+    return yield* whenConnected((calls) => calls.forgetMachine(machine))
   })
 
   return HubLink.of({
@@ -195,6 +209,7 @@ const make = Effect.gen(function* () {
     ),
     resync,
     markSeen,
+    forgetMachine,
   })
 })
 
@@ -207,6 +222,9 @@ export class HubLink extends Context.Service<
       machine: MachineId,
       pane: PaneId,
     ) => Effect.Effect<void, MarkSeenRefused | HubCallFailed | HubNotConnected>
+    readonly forgetMachine: (
+      machine: MachineId,
+    ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed | HubNotConnected>
   }
 >()('@crook/web/HubLink') {
   static readonly layerWithoutBrowser = Layer.effect(this, make)

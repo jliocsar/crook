@@ -67,6 +67,8 @@ export const machine = (
     readonly seen?: readonly string[]
     readonly pinned?: readonly string[]
     readonly label?: string
+    readonly agentVersion?: string
+    readonly herdrVersion?: string
   } = {},
 ) =>
   new HerdMachine({
@@ -76,8 +78,10 @@ export const machine = (
       connection: options.connection ?? 'online',
       connectionChangedAt: START,
       lastSeenAt: DateTime.subtractDuration(START, Duration.hours(2)),
-      agentVersion: Option.none(),
-      herdrVersion: Option.none(),
+      agentVersion: Option.map(Option.fromUndefinedOr(options.agentVersion), (version) =>
+        CrookVersion.make(version),
+      ),
+      herdrVersion: Option.fromUndefinedOr(options.herdrVersion),
     }),
     state: Option.some(
       new MachineState({

@@ -1,5 +1,5 @@
 import type * as DateTime from 'effect/DateTime'
-import { Bot, Server, ServerOff } from 'lucide-react'
+import { Bot, ServerOff } from 'lucide-react'
 
 import { Button } from '@crook/web/components/ui/button'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
@@ -30,18 +30,6 @@ export function NothingRunning({
             New agent
           </Button>
         }
-      />
-    </div>
-  )
-}
-
-export function NoMachines() {
-  return (
-    <div className="px-4 pt-6">
-      <EmptyState
-        icon={<Server className="size-5" />}
-        title="No machines yet"
-        description="Install the crook plugin on any machine running Herdr and it shows up here."
       />
     </div>
   )

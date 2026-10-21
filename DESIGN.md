@@ -292,6 +292,53 @@ The Agents tab: every agent on every machine, one section per machine.
 - **The needs-you badge** on the Agents tab counts the same agents as the sections, and ignores
   offline machines, whose agents are hidden. It is hidden on first load.
 
+## Machines
+
+The Machines tab, variant Roster: one card per machine, a pushed screen per machine, and a sheet
+that adds one.
+
+- **A card** is the herd card's surface. The label in display 20/28, then the machine badge and,
+  when its crook agent is older than the hub, a warn "update agent" Status Pill. Then "N agents ·
+  N need you" ("No agents" with none), then the agent and Herdr versions in mono 12px, leaving out
+  a version the hub never heard. A chevron on the right. Tap pushes the machine.
+- **An offline card** reads "Swipe to forget, or wait for it to reconnect" in place of its counts,
+  and swiping it reveals Forget (D15), on the swipe row's knobs. Forget is disabled while the hub
+  can't act and while that machine's forget is in flight. A refused forget shows the hub's
+  sentence beneath its card, until the machine's connection or the link's state changes.
+- **The list dims** when stale, shows skeleton sections on a first load, and shows "No machines
+  yet" with Add a machine when the hub knows none.
+- **The machine screen** is pushed, "Back to machines". Its header is the label over the badge and
+  the update pill.
+  - **Agents · N**: the machine's agents as the herd's cards, in the same order; tap opens the
+    chat. Offline reads "–" and "Offline, so its agents are unknown until it reconnects." None
+    reads "No agents running. Start one from Agents." Reconnecting dims them, like the herd.
+  - **About** is a flat info list: Online for, Reconnecting for or Last seen (from the hub's last
+    connection change), crook agent (a warn pill reading "0.0.9, hub has 0.1.0" when behind),
+    Herdr ("unknown" when the hub never heard) and Machine id.
+  - **Hold to forget** shows only while the machine is offline, with "It comes back on its own if
+    its agent connects again" beneath. It is disabled while the forget is in flight, and reads
+    "Forgetting…" once held, since the hub has not answered yet. Once forgotten, the screen goes
+    back to the list; a refusal shows beneath the button, until the machine's connection or the
+    link's state changes.
+  - A machine that leaves the herd while its screen is open, forgotten elsewhere, keeps its label
+    as the title and reads "crook doesn't know this machine. A forgotten machine comes back once
+    its agent connects again."
+- **Add a machine** is a bottom sheet opened by `+` (and by the Empty State on both tabs): three
+  numbered steps, each with a Code Block, then "It shows up under Machines as soon as it
+  connects."
+  1. "On the machine, install the crook plugin for Herdr." `herdr plugin install jliocsar/crook`.
+     Provisional: the plugin is JC-113's, not built yet.
+  2. "In Herdr, run the plugin's "Connect to hub" action and give it this hub." The agent endpoint
+     on the page's own origin (`wss://<hub>/rpc/agent`), which is what `CROOK_HUB_URL` takes today.
+  3. "Paste an exe.dev token for the hub VM, minted with the machine's name as its context."
+     `{ "machine": "<name>" }`.
+- **A sheet** rises from the bottom on the `bounce: 0` spring over a 40% black backdrop, with a grab
+  handle, the title in display 20/28 and a muted description. A tap on the backdrop, Escape or a
+  drag down closes it.
+
+Unmeasured knobs, picked in the prototype: a sheet closes when dragged down 96px or flicked at
+500px/s, gives 0.05 of the distance dragged up, and is at most 85% of the screen tall.
+
 ## Connection states
 
 - **The banner** is a 32px strip at the top of every header, tab screens and pushed screens alike,
@@ -324,7 +371,8 @@ The Agents tab: every agent on every machine, one section per machine.
 
 - **No agents, machines online:** "Nothing running" at the top of the herd, with a New agent
   button. The machine headers stay below it.
-- **No machines:** "No machines yet". The Add a machine button waits for its sheet.
+- **No machines:** "No machines yet" with Add a machine, the same Empty State and sheet as the
+  Machines tab.
 - **Every machine offline:** a muted "All machines are offline" line at the top, and each machine
   keeps its "Last seen" line. The red banner stays reserved for the hub.
 - **A machine with no agents** next to busy ones: a muted "No agents" line under its header.
@@ -501,7 +549,7 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 
 ## Open
 
-- The screens decided in `TEMP_DESIGN_EXPLORATION.md` (chat, Machines, New agent, Settings) move
+- The screens decided in `TEMP_DESIGN_EXPLORATION.md` (chat, New agent, Settings) move
   here with the ticket that builds each one.
 - The herd's swipe actions, long-press sheet, pins, the order freeze while a card is open, and the
   "Pane closed" toast arrive with JC-112.
