@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import * as Equivalence from 'effect/Equivalence'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
@@ -16,6 +17,8 @@ export const PaneLabel = Schema.Trimmed.check(
   Schema.isNonEmpty(),
   Schema.isPattern(WITHOUT_CONTROL_CHARACTERS),
 )
+
+export const samePaneLabel = Option.makeEquivalence(Equivalence.strictEqual<string>())
 
 export class Prompt extends Schema.TaggedClass<Prompt>()('Prompt', {
   pane: PaneId,
@@ -128,11 +131,7 @@ export const hasStarted = (receipt: AgentStarted, agents: readonly AgentRow[]) =
   agents.some((row) => row.pane === receipt.pane)
 
 export const hasRenamed = (receipt: PaneRenamed, row: AgentRow) =>
-  row.pane === receipt.pane &&
-  Option.match(receipt.label, {
-    onNone: () => Option.isNone(row.label),
-    onSome: (label) => Option.contains(row.label, label),
-  })
+  row.pane === receipt.pane && samePaneLabel(receipt.label, row.label)
 
 export const hasClosed = (receipt: PaneClosed, agents: readonly AgentRow[]) =>
   !agents.some((row) => row.pane === receipt.pane)
