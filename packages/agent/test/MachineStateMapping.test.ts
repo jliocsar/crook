@@ -8,7 +8,7 @@ import {
   initialMachineState,
   nextMachineState,
 } from '@crook/agent/MachineStateMapping'
-import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import { AgentRow, StatusBeforeHandoff, seenMarkOf } from '@crook/domain/AgentRow'
 import {
   ClaudeSessionId,
   HerdrConnectionId,
@@ -18,7 +18,7 @@ import {
   TerminalId,
   WorkspaceId,
 } from '@crook/domain/Ids'
-import { panePresence } from '@crook/domain/MachineState'
+import { type MachineState, panePresence } from '@crook/domain/MachineState'
 import type { AgentInfo } from '@crook/herdr/Records'
 
 import { agentInfo, paneInfo, tabInfo, workspaceInfo } from './Fixtures'
@@ -29,6 +29,7 @@ const SESSION_AFTER_RESTART = ClaudeSessionId.make('5f0c2a8e-91d4-4b6e-a3c7-2e8d
 const STARTED = DateTime.makeUnsafe('2026-10-17T10:00:00Z')
 const LATER = DateTime.makeUnsafe('2026-10-17T10:05:00Z')
 const REDETECTED = DateTime.makeUnsafe('2026-10-17T10:05:03Z')
+const MOVED_ON = DateTime.makeUnsafe('2026-10-17T10:09:00Z')
 const TERMINAL_BEFORE_HANDOFF = 'term_65e4959ec32112'
 const TERMINAL_AFTER_HANDOFF = 'term_65e4981ac9ff02'
 const HERDR_VERSION = '0.9.1'
@@ -86,32 +87,41 @@ const afterRestart = (claudeSession: Option.Option<ClaudeSessionId>) => {
   return { restarted, detected }
 }
 
-const throughHandoff = (redetectedAs: AgentInfo['agent_status']) => {
-  const previous = initialMachineState(
+const TERMINAL_AFTER_SECOND_HANDOFF = 'term_65e4f25072a7a1'
+
+const nextOf = (previous: MachineState, next: HerdReading, now: DateTime.Utc) =>
+  Option.getOrThrow(nextMachineState(previous, NEXT_CONNECTION, next, now))
+
+const throughHandoff = (
+  before: AgentInfo['agent_status'],
+  redetectedAs: AgentInfo['agent_status'],
+  previous: MachineState = initialMachineState(
     MACHINE,
     CONNECTION,
-    handoffReading(TERMINAL_BEFORE_HANDOFF, 'blocked', 5),
+    handoffReading(TERMINAL_BEFORE_HANDOFF, before, 5),
     STARTED,
-  )
-  const resynced = Option.getOrThrow(
-    nextMachineState(
-      previous,
-      NEXT_CONNECTION,
-      handoffReading(TERMINAL_AFTER_HANDOFF, 'unknown', 0),
-      LATER,
-    ),
-  )
-  const redetected = Option.getOrThrow(
-    nextMachineState(
-      resynced,
-      NEXT_CONNECTION,
-      handoffReading(TERMINAL_AFTER_HANDOFF, redetectedAs, 1),
-      REDETECTED,
-    ),
+  ),
+  terminal: string = TERMINAL_AFTER_HANDOFF,
+) => {
+  const placeholder = nextOf(previous, handoffReading(terminal, 'idle', 0), LATER)
+  const resynced = nextOf(placeholder, handoffReading(terminal, 'unknown', 1), LATER)
+  const redetected = nextOf(resynced, handoffReading(terminal, redetectedAs, 2), REDETECTED)
+
+  return { previous, placeholder, resynced, redetected }
+}
+
+const beforeHandoffAs = (status: AgentInfo['agent_status']) =>
+  Option.some(
+    new StatusBeforeHandoff({
+      status,
+      statusChangedAt: STARTED,
+      terminal: TerminalId.make(TERMINAL_BEFORE_HANDOFF),
+      stateChangeSeq: 5,
+    }),
   )
 
-  return { previous, resynced, redetected }
-}
+const statusOf = (state: MachineState) =>
+  state.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff])
 
 describe('MachineStateMapping', () => {
   it('maps a herdr reading to version 0, stamping every status with the read time', () => {
@@ -342,34 +352,57 @@ describe('MachineStateMapping', () => {
     expect(next.agents.map((row) => row.statusChangedAt)).toEqual([LATER])
   })
 
-  it('remembers the status before a handoff while herdr has not re-detected the agent', () => {
-    const { resynced } = throughHandoff('blocked')
+  it('reads a handed-off agent as unknown, remembering its status, until herdr re-detects it', () => {
+    const { placeholder, resynced } = throughHandoff('blocked', 'blocked')
 
-    expect(
-      resynced.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff]),
-    ).toEqual([
-      [
-        'unknown',
-        LATER,
-        Option.some(new StatusBeforeHandoff({ status: 'blocked', statusChangedAt: STARTED })),
-      ],
+    expect(statusOf(placeholder)).toEqual([['unknown', LATER, beforeHandoffAs('blocked')]])
+    expect(statusOf(resynced)).toEqual([['unknown', LATER, beforeHandoffAs('blocked')]])
+  })
+
+  it('keeps the age and the seen mark of a status herdr re-detects unchanged after a handoff', () => {
+    const { redetected } = throughHandoff('blocked', 'blocked')
+
+    expect(statusOf(redetected)).toEqual([['blocked', STARTED, beforeHandoffAs('blocked')]])
+    expect(redetected.agents.map(seenMarkOf)).toEqual([
+      { terminal: TERMINAL_BEFORE_HANDOFF, stateChangeSeq: 5 },
     ])
   })
 
-  it('keeps the age of a status herdr re-detects unchanged after a handoff', () => {
-    const { redetected } = throughHandoff('blocked')
+  it('stamps a status herdr re-detects differently after a handoff with the re-detection', () => {
+    const { redetected } = throughHandoff('blocked', 'done')
 
-    expect(
-      redetected.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff]),
-    ).toEqual([['blocked', STARTED, Option.none()]])
+    expect(statusOf(redetected)).toEqual([['done', REDETECTED, Option.none()]])
+    expect(redetected.agents.map(seenMarkOf)).toEqual([
+      { terminal: TERMINAL_AFTER_HANDOFF, stateChangeSeq: 2 },
+    ])
   })
 
-  it('stamps a status herdr re-detects differently after a handoff with the re-detection', () => {
-    const { redetected } = throughHandoff('done')
+  it('keeps a done agent done when the handoff loses its completion and herdr re-detects idle', () => {
+    const { redetected } = throughHandoff('done', 'idle')
 
-    expect(
-      redetected.agents.map((row) => [row.status, row.statusChangedAt, row.beforeHandoff]),
-    ).toEqual([['done', REDETECTED, Option.none()]])
+    expect(statusOf(redetected)).toEqual([['done', STARTED, beforeHandoffAs('done')]])
+    expect(redetected.agents.map(seenMarkOf)).toEqual([
+      { terminal: TERMINAL_BEFORE_HANDOFF, stateChangeSeq: 5 },
+    ])
+  })
+
+  it('lets a lost completion go once the agent moves on', () => {
+    const { redetected } = throughHandoff('done', 'idle')
+    const working = nextOf(
+      redetected,
+      handoffReading(TERMINAL_AFTER_HANDOFF, 'working', 3),
+      MOVED_ON,
+    )
+
+    expect(statusOf(working)).toEqual([['working', MOVED_ON, Option.none()]])
+  })
+
+  it('keeps the status and seen mark from before the first of two handoffs', () => {
+    const first = throughHandoff('done', 'idle')
+    const second = throughHandoff('done', 'idle', first.redetected, TERMINAL_AFTER_SECOND_HANDOFF)
+
+    expect(statusOf(second.resynced)).toEqual([['unknown', LATER, beforeHandoffAs('done')]])
+    expect(statusOf(second.redetected)).toEqual([['done', STARTED, beforeHandoffAs('done')]])
   })
 
   it('carries nothing over to a new Claude started in a pane herdr restored after a restart', () => {

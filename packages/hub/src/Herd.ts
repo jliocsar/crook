@@ -14,7 +14,7 @@ import type { SqlError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import type { AgentRow } from '@crook/domain/AgentRow'
+import { type SeenMark, seenMarkOf } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
@@ -32,8 +32,6 @@ import packageJson from '../package.json' with { type: 'json' }
 
 import { MachineRecord, MachineRegistry } from '@crook/hub/MachineRegistry'
 import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
-
-type SeenMark = Pick<AgentRow, 'terminal' | 'stateChangeSeq'>
 
 interface MachineEntry {
   readonly id: MachineId
@@ -166,7 +164,7 @@ const isSameMark: Equivalence.Equivalence<SeenMark> = Equivalence.Struct({
 
 const published = (state: MachineState) => {
   const currentMarks = HashMap.fromIterable(
-    Arr.map(state.agents, (row): [PaneId, SeenMark] => [row.pane, row]),
+    Arr.map(state.agents, (row): [PaneId, SeenMark] => [row.pane, seenMarkOf(row)]),
   )
 
   return (entry: MachineEntry, now: DateTime.Utc): MachineEntry => ({
@@ -339,16 +337,11 @@ const make = Effect.gen(function* () {
           return Option.none()
         }
 
-        yield* seenTracker.mark(
-          new SeenRecord({
-            machine: id,
-            pane,
-            terminal: row.terminal,
-            stateChangeSeq: row.stateChangeSeq,
-          }),
-        )
+        const mark = seenMarkOf(row)
 
-        return Option.some({ ...found, seen: HashMap.set(found.seen, pane, row) })
+        yield* seenTracker.mark(new SeenRecord({ machine: id, pane, ...mark }))
+
+        return Option.some({ ...found, seen: HashMap.set(found.seen, pane, mark) })
       }),
     )
   })

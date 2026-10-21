@@ -10,7 +10,8 @@ import { SqlError, UnknownError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { AgentRow } from '@crook/domain/AgentRow'
+import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import type { AgentStatus } from '@crook/domain/AgentStatus'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
@@ -58,6 +59,29 @@ const agentAt = (pane: PaneId, stateChangeSeq: number, terminal: TerminalId = BE
     stateChangeSeq,
     statusChangedAt: DateTime.makeUnsafe(0),
     beforeHandoff: Option.none(),
+  })
+
+const handedOffAt = (stateChangeSeq: number, status: AgentStatus) =>
+  new AgentRow({
+    pane: PANE,
+    workspace: WorkspaceId.make('w1'),
+    tab: TabId.make('w1:t1'),
+    terminal: AFTER_HANDOFF,
+    status,
+    title: 'EX-253 Example feature',
+    cwd: '/home/jliocsar/Projects/crook',
+    branch: Option.none(),
+    claudeSession: Option.none(),
+    stateChangeSeq,
+    statusChangedAt: DateTime.makeUnsafe(0),
+    beforeHandoff: Option.some(
+      new StatusBeforeHandoff({
+        status: 'done',
+        statusChangedAt: DateTime.makeUnsafe(0),
+        terminal: BEFORE_HANDOFF,
+        stateChangeSeq: 5,
+      }),
+    ),
   })
 
 const stateOf = (
@@ -435,6 +459,37 @@ it.effect('keeps a mark through a resync that reconnected to the same herdr serv
 
     expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([PANE]))
   }).pipe(withFreshHerd),
+)
+
+it.effect('keeps a mark through a handoff while the agent carries the state it marked', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 5)]))
+    yield* herd.markSeen(LAPTOP, PANE)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [handedOffAt(1, 'unknown')], 2))
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 3, [handedOffAt(2, 'done')], 2))
+    const redetected = seenOf(yield* currentView, LAPTOP)
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 4, [agentAt(PANE, 3, AFTER_HANDOFF)], 2))
+
+    expect(redetected).toEqual(Option.some([PANE]))
+    expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([]))
+  }).pipe(withFreshHerd),
+)
+
+it.effect(
+  'marks a handed-off agent at the state it carries, so the mark outlives re-detection',
+  () =>
+    Effect.gen(function* () {
+      const herd = yield* Herd
+
+      yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [handedOffAt(1, 'unknown')]))
+      yield* herd.markSeen(LAPTOP, PANE)
+      yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [handedOffAt(2, 'done')]))
+
+      expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([PANE]))
+    }).pipe(withFreshHerd),
 )
 
 it.effect(

@@ -325,7 +325,7 @@ Effect atoms end to end. See `ARCHITECTURE.md` §3.7.
 
 - Stop, `kill -9` and a live handoff all end the subscription with a clean EOF and no error line. A reader that stops reading is cut off the same way once its socket buffer fills; `events_lost` was never seen.
 - Events carry no sequence and no heartbeat is sent. Workspace, tab and pane ids survive every restart and are never reused; `terminal_id` changes and `revision`, `state_change_seq` and `completion_seq` restart.
-- A stop or crash leaves no agents; a handoff keeps the processes and shows each agent `unknown` with sequence 0 for about 3 s before herdr re-detects it.
+- A stop or crash leaves no agents; a handoff keeps the processes and herdr needs about 3 s to re-detect each agent. A real Claude (measured on 6 handoffs, after the spike) reads `idle`/0 for about 300 ms, `unknown`/1, then its status at 2, keeping `agent` and `agent_session` throughout; a `done` one comes back `idle`.
 - Close events are incomplete: a tab can vanish with only its last pane's `pane_exited`.
 - Decision: the agent never resumes, it resyncs from `session.snapshot` on every reconnect, with an exponential backoff from 100 ms to 5 s; seen marks are scoped to `terminal_id`; a state read over a new herdr connection is marked as a resync so notifications skip it (ARCHITECTURE §2.5, §2.6).
 

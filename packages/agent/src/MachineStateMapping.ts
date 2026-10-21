@@ -5,6 +5,7 @@ import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
   type ClaudeSessionId,
@@ -69,31 +70,48 @@ const isHandedOffFrom = (info: AgentInfo) => (row: AgentRow) =>
   row.terminal !== info.terminal_id && row.status !== 'unknown'
 
 const statusBeforeHandoffOf = (row: AgentRow) =>
-  new StatusBeforeHandoff({ status: row.status, statusChangedAt: row.statusChangedAt })
+  new StatusBeforeHandoff({
+    status: row.status,
+    statusChangedAt: row.statusChangedAt,
+    terminal: row.terminal,
+    stateChangeSeq: row.stateChangeSeq,
+  })
 
-const beforeHandoffOf = (previous: Option.Option<AgentRow>, info: AgentInfo) =>
-  info.agent_status === 'unknown'
-    ? Option.flatMap(previous, (row) =>
-        Option.orElse(row.beforeHandoff, () =>
-          Option.liftPredicate(row, isHandedOffFrom(info)).pipe(Option.map(statusBeforeHandoffOf)),
-        ),
-      )
-    : Option.none()
+const carriedBeforeHandoff = (previous: Option.Option<AgentRow>, info: AgentInfo) =>
+  Option.flatMap(previous, (row) =>
+    Option.orElse(row.beforeHandoff, () =>
+      Option.liftPredicate(row, isHandedOffFrom(info)).pipe(Option.map(statusBeforeHandoffOf)),
+    ),
+  )
+
+const isNotYetDetected = (previous: Option.Option<AgentRow>, info: AgentInfo) =>
+  info.agent_status === 'unknown' || (info.state_change_seq === 0 && Option.isSome(previous))
+
+const isLostCompletion = (carried: Option.Option<StatusBeforeHandoff>, info: AgentInfo) =>
+  info.agent_status === 'idle' && Option.exists(carried, (before) => before.status === 'done')
+
+const publishedStatus = (
+  previous: Option.Option<AgentRow>,
+  carried: Option.Option<StatusBeforeHandoff>,
+  info: AgentInfo,
+): AgentStatus => {
+  if (isNotYetDetected(previous, info)) {
+    return 'unknown'
+  }
+
+  return isLostCompletion(carried, info) ? 'done' : info.agent_status
+}
 
 const statusChangedAt = (
   previous: Option.Option<AgentRow>,
-  info: AgentInfo,
+  carried: Option.Option<StatusBeforeHandoff>,
+  status: AgentStatus,
   now: DateTime.Utc,
 ): DateTime.Utc =>
-  previous.pipe(
-    Option.flatMap((row) =>
-      Option.orElse(
-        Option.liftPredicate(row, (same) => same.status === info.agent_status),
-        () => Option.filter(row.beforeHandoff, (before) => before.status === info.agent_status),
-      ),
-    ),
-    Option.match({ onNone: () => now, onSome: (since) => since.statusChangedAt }),
-  )
+  Option.firstSomeOf([
+    Option.filter(previous, (previousRow) => previousRow.status === status),
+    Option.filter(carried, (before) => before.status === status),
+  ]).pipe(Option.match({ onNone: () => now, onSome: (since) => since.statusChangedAt }))
 
 export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
   Option.orElse(info.foreground_cwd, () => info.cwd)
@@ -102,13 +120,15 @@ const toAgentRow =
   (previousAgents: readonly AgentRow[], now: DateTime.Utc) => (resolved: ResolvedAgent) => {
     const { info, claudeSession, branch } = resolved
     const previous = previousRowOf(previousAgents, resolved)
+    const carried = carriedBeforeHandoff(previous, info)
+    const status = publishedStatus(previous, carried, info)
 
     return new AgentRow({
       pane: PaneId.make(info.pane_id),
       workspace: WorkspaceId.make(info.workspace_id),
       tab: TabId.make(info.tab_id),
       terminal: TerminalId.make(info.terminal_id),
-      status: info.agent_status,
+      status,
       title: Option.firstSomeOf([info.terminal_title_stripped, info.title, info.name]).pipe(
         Option.getOrElse(() => ''),
       ),
@@ -116,8 +136,11 @@ const toAgentRow =
       branch,
       claudeSession,
       stateChangeSeq: info.state_change_seq,
-      statusChangedAt: statusChangedAt(previous, info, now),
-      beforeHandoff: beforeHandoffOf(previous, info),
+      statusChangedAt: statusChangedAt(previous, carried, status, now),
+      beforeHandoff: Option.filter(
+        carried,
+        (before) => status === 'unknown' || status === before.status,
+      ),
     })
   }
 

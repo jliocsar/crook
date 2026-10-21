@@ -419,15 +419,22 @@ it.effect(
       ).toEqual([['w1:p6', 'term_65e4981ac9ff02', 'unknown', 0]])
       expect(isResync(resynced, settled)).toBe(false)
       expect(settled.agents.map((row) => [row.status, row.stateChangeSeq])).toEqual([['idle', 1]])
-      expect(resynced.agents.map((row) => row.beforeHandoff)).toEqual(
-        initial.agents.map((row) =>
-          Option.some(
-            new StatusBeforeHandoff({ status: row.status, statusChangedAt: row.statusChangedAt }),
-          ),
+
+      const remembered = initial.agents.map((row) =>
+        Option.some(
+          new StatusBeforeHandoff({
+            status: row.status,
+            statusChangedAt: row.statusChangedAt,
+            terminal: row.terminal,
+            stateChangeSeq: row.stateChangeSeq,
+          }),
         ),
       )
-      expect(settled.agents.map((row) => [row.beforeHandoff, row.statusChangedAt])).toEqual(
-        initial.agents.map((row) => [Option.none(), row.statusChangedAt]),
+
+      expect(resynced.agents.map((row) => row.beforeHandoff)).toEqual(remembered)
+      expect(settled.agents.map((row) => row.beforeHandoff)).toEqual(remembered)
+      expect(settled.agents.map((row) => row.statusChangedAt)).toEqual(
+        initial.agents.map((row) => row.statusChangedAt),
       )
     }),
 )
