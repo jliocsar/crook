@@ -1,6 +1,7 @@
 import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import * as Effect from 'effect/Effect'
+import * as Equal from 'effect/Equal'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Atom from 'effect/reactivity/Atom'
@@ -144,6 +145,7 @@ const closeUnderway = (
 const evolved = (
   session: ActionsSession,
   change: Partial<{
+    readonly origin: (origin: ActionsOrigin) => ActionsOrigin
     readonly visible: (visible: boolean) => boolean
     readonly rename: (attempt: Option.Option<RenameAttempt>) => Option.Option<RenameAttempt>
     readonly close: (attempt: Option.Option<CloseAttempt>) => Option.Option<CloseAttempt>
@@ -158,14 +160,24 @@ export const agentActionsAtom = Atom.writable(
       Open: ({ agent, origin }) => {
         context.set(
           sessionAtom,
-          Option.some(
-            new ActionsSession({
-              agent,
-              origin,
-              visible: true,
-              rename: Option.none(),
-              close: Option.none(),
-              pin: Option.none(),
+          pipe(
+            context.get(sessionAtom),
+            Option.filter(
+              (session) => Equal.equals(session.agent, agent) && closeUnderway(context, session),
+            ),
+            Option.match({
+              onNone: () =>
+                Option.some(
+                  new ActionsSession({
+                    agent,
+                    origin,
+                    visible: true,
+                    rename: Option.none(),
+                    close: Option.none(),
+                    pin: Option.none(),
+                  }),
+                ),
+              onSome: (session) => evolved(session, { origin: () => origin, visible: () => true }),
             }),
           ),
         )

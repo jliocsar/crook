@@ -144,6 +144,8 @@ export const isUnderway = ActionProgress.$match({
 
 export const isDone = ActionProgress.$is('Done')
 
+export const isIdle = ActionProgress.$is('Idle')
+
 export const failureOf = (progress: ActionProgress): Option.Option<string> =>
   ActionProgress.$match(progress, {
     Idle: () => Option.none(),
@@ -170,7 +172,7 @@ export const isRetriableFailure = <Success, Failure extends SendCommandFailure>(
 
 export const isCommandUnderway = <Success, Failure extends SendCommandFailure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
-): boolean => isUnderway(progressOf(result, () => false))
+): boolean => AsyncResult.isWaiting(result) || AsyncResult.isSuccess(result)
 
 export const labelFromInput = (
   input: string,
@@ -217,7 +219,9 @@ export const sheetOutcome = (sheet: SheetProgress): SheetOutcome => {
     Option.match({
       onSome: (notice) => SheetOutcome.Ended({ notice }),
       onNone: () =>
-        isDone(sheet.rename) || isDone(sheet.pin) ? SheetOutcome.Finished() : SheetOutcome.Stay(),
+        isIdle(sheet.close) && (isDone(sheet.rename) || isDone(sheet.pin))
+          ? SheetOutcome.Finished()
+          : SheetOutcome.Stay(),
     }),
   )
 }

@@ -9,6 +9,7 @@ import { Pencil, Pin, PinOff } from 'lucide-react'
 import * as React from 'react'
 
 import { type AgentRow, agentTitle, agentTitleOrPane } from '@crook/domain/AgentRow'
+import { toGlobalPaneId } from '@crook/domain/Ids'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import {
   type ActionProgress,
@@ -37,6 +38,7 @@ import { HoldButton } from '@crook/web/components/ui/hold-button'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import type { OpenCardActions } from '@crook/web/herd/HerdList'
 import { restoreFocus } from '@crook/web/navigation/Focus'
+import { leaveForHerd } from '@crook/web/navigation/LeaveForHerd'
 
 export type OpenAgentActions = (machine: MachineId, pane: PaneId, origin: ActionsOrigin) => void
 
@@ -44,8 +46,6 @@ interface ShownAgent {
   readonly view: AgentActionsView
   readonly card: AgentCardModel
 }
-
-const HERD_PATH = '/'
 
 const FIELD =
   'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/35 placeholder:text-muted-foreground h-11 w-full min-w-0 rounded-lg border px-3 text-base outline-none focus-visible:ring-3'
@@ -76,26 +76,40 @@ export const useOpenCardActions = (): OpenCardActions => {
   }
 }
 
-const useShownAgent = (view: Option.Option<AgentActionsView>): Option.Option<ShownAgent> => {
-  const last = React.useRef(Option.none<ShownAgent>())
-
-  if (Option.isSome(view)) {
-    const current = view.value
-
-    last.current = pipe(
-      current.card,
-      Option.orElse(() =>
-        pipe(
-          last.current,
-          Option.filter((shown) => Equal.equals(shown.view.session.agent, current.session.agent)),
-          Option.map((shown) => shown.card),
+const shownAfter = (
+  view: Option.Option<AgentActionsView>,
+  previous: Option.Option<ShownAgent>,
+): Option.Option<ShownAgent> =>
+  Option.match(view, {
+    onNone: () => previous,
+    onSome: (current) =>
+      pipe(
+        current.card,
+        Option.orElse(() =>
+          pipe(
+            previous,
+            Option.filter((shown) => Equal.equals(shown.view.session.agent, current.session.agent)),
+            Option.map((shown) => shown.card),
+          ),
         ),
+        Option.map((card): ShownAgent => ({ view: current, card })),
       ),
-      Option.map((card): ShownAgent => ({ view: current, card })),
-    )
+  })
+
+const useShownAgent = (view: Option.Option<AgentActionsView>): Option.Option<ShownAgent> => {
+  const [seen, setSeen] = React.useState(view)
+  const [shown, setShown] = React.useState(() => shownAfter(view, Option.none()))
+
+  if (view === seen) {
+    return shown
   }
 
-  return last.current
+  const next = shownAfter(view, shown)
+
+  setSeen(view)
+  setShown(next)
+
+  return next
 }
 
 function RenameField({
@@ -231,7 +245,7 @@ export function AgentActionsSheet({
 
           return (
             <div
-              key={`${view.session.agent.machine}/${view.session.agent.pane}`}
+              key={toGlobalPaneId(view.session.agent.machine, view.session.agent.pane)}
               className="grid gap-2"
             >
               <RenameField
@@ -289,38 +303,9 @@ export function AgentActions() {
   const shown = useShownAgent(view)
   const machineOnline = Option.exists(view, (current) => current.machineOnline)
 
-  const onHerd = () => router.state.location.pathname === HERD_PATH
-
-  const backThroughHistory = Effect.callback<void>((resume) => {
-    const stop = router.subscribe('onResolved', () => {
-      stop()
-      resume(Effect.void)
-    })
-
-    router.history.back()
-
-    return Effect.sync(stop)
-  })
-
-  const leaveForHerd = Effect.suspend(() => {
-    if (onHerd()) {
-      return Effect.void
-    }
-
-    if (!router.history.canGoBack()) {
-      return Effect.promise(() => router.navigate({ to: HERD_PATH, replace: true }))
-    }
-
-    return backThroughHistory.pipe(
-      Effect.andThen(() =>
-        onHerd() ? Effect.void : Effect.promise(() => router.navigate({ to: HERD_PATH })),
-      ),
-    )
-  })
-
   const goToHerd = () =>
     Effect.runCallback(
-      leaveForHerd.pipe(
+      leaveForHerd(router).pipe(
         Effect.andThen(
           Effect.sync(() => {
             toast(ToastIntent.Show({ text: PANE_CLOSED_NOTICE }))

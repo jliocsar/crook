@@ -18,7 +18,7 @@ export const PaneLabel = Schema.Trimmed.check(
   Schema.isPattern(WITHOUT_CONTROL_CHARACTERS),
 )
 
-export const samePaneLabel = Option.makeEquivalence(Equivalence.strictEqual<string>())
+export const samePaneLabel = Option.makeEquivalence(Equivalence.String)
 
 export class Prompt extends Schema.TaggedClass<Prompt>()('Prompt', {
   pane: PaneId,

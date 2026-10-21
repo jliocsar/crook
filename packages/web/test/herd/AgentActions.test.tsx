@@ -530,6 +530,34 @@ describe('the action sheet, while an action is out', () => {
     }),
   )
 
+  it.effect('shows a close still out when the sheet it was dismissed from opens again', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([everyone])))
+
+      yield* link.commandAnswers.close
+      const sheet = yield* openSheetOn('Port the herd screen')
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* eventually(() => {
+        expect(sentCommands(link)).toHaveLength(1)
+      })
+      dismissSheet(sheet)
+      yield* sheetGone
+      const again = yield* openSheetOn('Port the herd screen')
+
+      expect(within(again).getByRole('button', { name: /^Closing…/u })).toHaveProperty(
+        'disabled',
+        true,
+      )
+
+      yield* link.commandAnswers.open
+      yield* SubscriptionRef.set(link.state, liveWith(herd([laptopWith([wiring, banner])])))
+      yield* sheetGone
+
+      expect(sentCommands(link)).toHaveLength(1)
+    }),
+  )
+
   it.effect('still goes back to the herd when a close from the chat is dismissed in flight', () =>
     Effect.gen(function* () {
       const { router, link, registry } = yield* renderApp(

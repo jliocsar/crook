@@ -176,6 +176,17 @@ describe('sheetOutcome', () => {
     )
   })
 
+  it('stays open after a rename or pin while a failed close is still on screen', () => {
+    const refusedClose = ActionProgress.Failed({ message: 'Refused.', asksConfirmation: true })
+
+    expect(sheetOutcome({ ...sheet, pin: ActionProgress.Done(), close: refusedClose })).toEqual(
+      SheetOutcome.Stay(),
+    )
+    expect(sheetOutcome({ ...sheet, rename: ActionProgress.Done(), close: refusedClose })).toEqual(
+      SheetOutcome.Stay(),
+    )
+  })
+
   it('stays open while the machine state is unknown, as it is after a hub restart', () => {
     const unknown = new HerdMachine(Struct.evolve(laptop, { state: () => Option.none() }))
 
