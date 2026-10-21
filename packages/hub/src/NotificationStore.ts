@@ -2,6 +2,7 @@ import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import type * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as SqlClient from 'effect/sql/SqlClient'
 import type { SqlError } from 'effect/sql/SqlError'
@@ -19,6 +20,7 @@ import {
   dieOnUnencodableRecord,
   storedRowInvalidIn,
 } from '@crook/hub/Database'
+import { LiveActivityRecord } from '@crook/hub/ActivityPlan'
 import { SentNotification } from '@crook/hub/NotificationPlan'
 
 export class NotificationPrefRecord extends Schema.Class<NotificationPrefRecord>(
@@ -59,9 +61,26 @@ const make = Effect.gen(function* () {
         event = excluded.event,
         terminal = excluded.terminal,
         state_change_seq = excluded.state_change_seq,
+        ask = excluded.ask,
         title = excluded.title,
         body = excluded.body,
         hark_id = excluded.hark_id
+    `,
+  })
+
+  const findLiveActivity = SqlSchema.findOneOption({
+    Request: Schema.Void,
+    Result: LiveActivityRecord,
+    execute: () => sql`SELECT last_start_at, shown FROM hark_live_activity WHERE id = 1`,
+  })
+
+  const upsertLiveActivity = SqlSchema.void({
+    Request: LiveActivityRecord,
+    execute: (row) => sql`
+      INSERT INTO hark_live_activity ${sql.insert({ id: 1, ...row })}
+      ON CONFLICT (id) DO UPDATE SET
+        last_start_at = excluded.last_start_at,
+        shown = excluded.shown
     `,
   })
 
@@ -99,7 +118,26 @@ const make = Effect.gen(function* () {
     yield* sql`DELETE FROM hark_notifications WHERE machine = ${machine} AND pane = ${pane}`
   })
 
-  return NotificationStore.of({ prefs, setPref, sent, rememberSent, forgetSent })
+  const liveActivity = findLiveActivity(undefined).pipe(
+    storedRowInvalidIn('hark_live_activity'),
+    Effect.withSpan('NotificationStore.liveActivity'),
+  )
+
+  const rememberLiveActivity = (record: LiveActivityRecord) =>
+    upsertLiveActivity(record).pipe(
+      dieOnUnencodableRecord,
+      Effect.withSpan('NotificationStore.rememberLiveActivity'),
+    )
+
+  return NotificationStore.of({
+    prefs,
+    setPref,
+    sent,
+    rememberSent,
+    forgetSent,
+    liveActivity,
+    rememberLiveActivity,
+  })
 })
 
 export class NotificationStore extends Context.Service<
@@ -110,6 +148,11 @@ export class NotificationStore extends Context.Service<
     readonly sent: Effect.Effect<readonly SentNotification[], SqlError | StoredRowInvalid>
     readonly rememberSent: (notification: SentNotification) => Effect.Effect<void, SqlError>
     readonly forgetSent: (machine: MachineId, pane: PaneId) => Effect.Effect<void, SqlError>
+    readonly liveActivity: Effect.Effect<
+      Option.Option<LiveActivityRecord>,
+      SqlError | StoredRowInvalid
+    >
+    readonly rememberLiveActivity: (record: LiveActivityRecord) => Effect.Effect<void, SqlError>
   }
 >()('@crook/hub/NotificationStore') {
   static readonly layer = Layer.effect(this, make)

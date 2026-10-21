@@ -27,10 +27,12 @@ import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
+import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
 import { findMachine } from '@crook/domain/HerdView'
 import type { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
+  AskId,
   HerdrConnectionId,
   type MachineId,
   PaneId,
@@ -52,6 +54,18 @@ export const OWNER = 'owner@example.com'
 export const HUB_ORIGIN = 'https://my-hub.exe.xyz'
 export const IN_MEMORY = ':memory:'
 export const PANE = PaneId.make('w1:p1')
+export const BASH_COMMAND = 'rm -rf build && bun run build'
+
+export const bashAsk = (id: string) =>
+  new PermissionAsk({
+    id: AskId.make(id),
+    source: 'hook',
+    tool: 'Bash',
+    plugin: Option.none(),
+    action: new RunCommand({ command: BASH_COMMAND }),
+    options: [],
+    dialog: Option.none(),
+  })
 
 export const hello = new Hello({ agentVersion: '0.0.9', label: Option.none() })
 

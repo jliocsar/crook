@@ -18,7 +18,11 @@ import { AuditTrail } from '@crook/hub/AuditTrail'
 import type { TranscriptSource } from '@crook/domain/Transcript'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
+import { HarkClient } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
+import * as HerdActivity from '@crook/hub/HerdActivity'
+import { NotificationStore } from '@crook/hub/NotificationStore'
+import { SeenTracker } from '@crook/hub/SeenTracker'
 import { Herd } from '@crook/hub/Herd'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
@@ -142,13 +146,18 @@ const routes = Effect.gen(function* () {
   ]
 })
 
+const notifications = Layer.provideMerge(
+  HerdActivity.layerWithoutDependencies,
+  HarkNotifier.layerWithoutDependencies,
+).pipe(Layer.provide([HarkClient.layer, NotificationStore.layer, SeenTracker.layer]))
+
+const herdServices = Layer.mergeAll(Herd.layer, CommandRouter.layer, AuditTrail.layer)
+
 export const layer = HttpRouter.addAll(routes).pipe(
   Layer.provide([
-    Layer.provideMerge(HarkNotifier.layer, Herd.layer),
-    CommandRouter.layer,
+    Layer.provideMerge(notifications, herdServices),
     TranscriptRelay.layer,
     ExeDevIdentity.layer,
-    AuditTrail.layer,
     protocolSerialization,
   ]),
 )

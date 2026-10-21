@@ -1,11 +1,13 @@
 import { expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Result from 'effect/Result'
 import * as Stream from 'effect/Stream'
 import type * as HttpClient from 'effect/http/HttpClient'
 import type * as SqlClient from 'effect/sql/SqlClient'
@@ -14,29 +16,48 @@ import * as TestClock from 'effect/testing/TestClock'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { HerdrLink } from '@crook/domain/HerdrLink'
-import { HerdrConnectionId, MachineId, PaneId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import { AnswerAsk, Approve, Decline } from '@crook/domain/Command'
+import {
+  AskId,
+  HerdrConnectionId,
+  MachineId,
+  PaneId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { defaultNotificationPrefs } from '@crook/domain/Notifications'
 import { Workspace } from '@crook/domain/Workspace'
+import { AuditTrail } from '@crook/hub/AuditTrail'
+import { CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
-import { HARK_REQUEST_SPACING, HarkClient, HarkNotificationId } from '@crook/hub/HarkClient'
+import { HARK_REQUEST_SPACING, HarkClient, HarkId } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
 import { SentNotification } from '@crook/hub/NotificationPlan'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
+import { AskNotPending, type RoutedCommand } from '@crook/protocol/Commands'
 import { HarkNotConfigured, HarkReachedNoDevice } from '@crook/protocol/Hark'
 
-import { PANE, agentRow, hello } from './Fixtures'
+import { BASH_COMMAND, PANE, agentRow, bashAsk, encodeJson, hello } from './Fixtures'
 import {
   HARK_TOKEN,
   type HarkCall,
   type HarkScript,
   acceptingHark,
+  advancingClock,
+  callsWithin,
   created,
   fakeHark,
   harkIdFor,
+  interactionCreated,
+  interactionWaited,
+  isAskCreation,
+  isCancel,
+  isWait,
   isWithdrawal,
+  nextCallWhere,
   tokenConfig,
 } from './HarkFakes'
 
@@ -100,6 +121,8 @@ const notifierOver = (
       HarkClient.layerWithoutDependencies,
       NotificationStore.layer,
       SeenTracker.layer,
+      CommandRouter.layer,
+      AuditTrail.layer,
     ),
   ).pipe(Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]))
 
@@ -114,6 +137,7 @@ const withNotifier = Effect.fn('withNotifier')(function* (
     notifier: Context.get(context, HarkNotifier),
     store: Context.get(context, NotificationStore),
     seenTracker: Context.get(context, SeenTracker),
+    router: Context.get(context, CommandRouter),
   }))
 
   return { calls: hark.calls, start }
@@ -355,9 +379,10 @@ it.effect('withdraws at startup what it sent for a machine no longer in the herd
       event: 'finished',
       terminal: TerminalId.make('term_1'),
       stateChangeSeq: 7,
+      ask: Option.none(),
       title: TITLE,
       body: 'Finished · desk / crook',
-      harkId: HarkNotificationId.make('anot_desk'),
+      harkId: HarkId.make('anot_desk'),
     })
 
     yield* Effect.scoped(Effect.flatMap(start, ({ store }) => store.rememberSent(leftOver)))
@@ -377,9 +402,10 @@ it.effect('withdraws at startup what was seen in crook before the hub could with
       event: 'finished',
       terminal: TerminalId.make('term_1'),
       stateChangeSeq: 7,
+      ask: Option.none(),
       title: TITLE,
       body: 'Finished · laptop / crook',
-      harkId: HarkNotificationId.make('anot_seen'),
+      harkId: HarkId.make('anot_seen'),
     })
 
     yield* Effect.scoped(
@@ -455,5 +481,182 @@ it.effect('starts without a token, sends nothing and says it is not configured',
     expect(Option.map(settings, (current) => current.delivery)).toEqual(Option.some('noToken'))
     expect(testFailure).toEqual(new HarkNotConfigured())
     expect(yield* Queue.size(calls)).toBe(0)
+  }).pipe(Effect.scoped),
+)
+
+const INTERACTION_ID = 'int_7MFuml'
+
+const blockedOnBashAt = (version: number) =>
+  new MachineState({
+    machine: LAPTOP,
+    version: MachineStateVersion.make(version),
+    herdrVersion: '0.9.5',
+    herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
+    workspaces: [new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })],
+    tabs: [],
+    panes: [],
+    agents: [
+      agentRow({ status: 'blocked', stateChangeSeq: 7, ask: Option.some(bashAsk('toolu_1')) }),
+    ],
+    places: [],
+  })
+
+const approvingHark =
+  (answer: string): HarkScript =>
+  (call) => {
+    if (isAskCreation(call)) {
+      return interactionCreated(INTERACTION_ID)
+    }
+
+    if (isWait(call)) {
+      return interactionWaited(answer)
+    }
+
+    return isCancel(call) ? interactionWaited('canceled') : acceptingHark(call)
+  }
+
+it.effect(
+  'asks for a permission on the lock screen and routes the answer as AnswerAsk keyed by the interaction',
+  () =>
+    Effect.gen(function* () {
+      const { calls, start } = yield* withNotifier(approvingHark('approved'))
+      const { herd, router } = yield* start
+      const routed = yield* Effect.forkScoped(
+        router.attach(LAPTOP).pipe(Stream.take(2), Stream.runCollect),
+        { startImmediately: true },
+      )
+
+      yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+      yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+      const asked = yield* nextCallWhere(calls, isAskCreation)
+      const waited = yield* nextCallWhere(calls, isWait)
+      const commands = yield* advancingClock(Fiber.join(routed))
+      const answer = new AnswerAsk({
+        pane: PANE,
+        ask: AskId.make('toolu_1'),
+        answer: new Approve(),
+      })
+
+      expect(asked.body).toEqual(
+        Option.some({
+          title: TITLE,
+          prompt: 'Wants to run Bash · laptop / crook',
+          kind: 'approval',
+          presentation: 'notification',
+          expiresInSeconds: 86_400,
+        }),
+      )
+      expect(encodeJson(Option.getOrNull(asked.body))).not.toContain(BASH_COMMAND)
+      expect(asked.idempotencyKey).toEqual(
+        Option.some('crook/laptop/w1:p1/term_1/7/approvals/toolu_1'),
+      )
+      expect(waited.url).toBe(`https://hark.ryan.ceo/api/agent/interactions/${INTERACTION_ID}/wait`)
+      expect(waited.query).toBe('timeout=25')
+      expect(Arr.map(commands, (routedCommand) => routedCommand.key)).toEqual([
+        INTERACTION_ID,
+        INTERACTION_ID,
+      ])
+      expect(Arr.map(commands, (routedCommand) => routedCommand.command)).toEqual([answer, answer])
+    }).pipe(Effect.scoped),
+)
+
+it.effect('cancels the approval as soon as the agent stops waiting some other way', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier(approvingHark('pending'))
+    const { herd } = yield* start
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    yield* nextCallWhere(calls, isAskCreation)
+    yield* nextCallWhere(calls, isWait)
+    yield* herd.markSeen(LAPTOP, PANE)
+    const whileSeen = yield* callsWithin(calls, 3)
+
+    yield* herd.publish(LAPTOP, stateAt(3, 'working', 8))
+    const cancel = yield* nextCallWhere(calls, (call) => !isWait(call))
+    const afterCancel = yield* callsWithin(calls, 3)
+
+    expect(Arr.every(whileSeen, isWait)).toBe(true)
+    expect(cancel.url).toBe(`https://hark.ryan.ceo/api/agent/interactions/${INTERACTION_ID}/cancel`)
+    expect(afterCancel).toEqual([])
+  }).pipe(Effect.scoped),
+)
+
+it.effect(
+  'cancels an approval answered on the lock screen once the agent moves on, and takes the 404 as done',
+  () =>
+    Effect.gen(function* () {
+      const { calls, start } = yield* withNotifier((call) =>
+        isCancel(call)
+          ? { status: 404, body: { error: 'Interaction is not pending' } }
+          : approvingHark('denied')(call),
+      )
+      const { herd } = yield* start
+
+      yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+      yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+      yield* nextCallWhere(calls, isWait)
+      yield* callsWithin(calls, 3)
+      yield* herd.publish(LAPTOP, stateAt(3, 'working', 8))
+      const afterMovingOn = yield* callsWithin(calls, 70)
+
+      expect(Arr.map(afterMovingOn, (call) => call.url)).toEqual([
+        `https://hark.ryan.ceo/api/agent/interactions/${INTERACTION_ID}/cancel`,
+      ])
+    }).pipe(Effect.scoped),
+)
+
+const attachedAgent = Effect.fn('attachedAgent')(function* (router: CommandRouter['Service']) {
+  const inbox = yield* Queue.unbounded<RoutedCommand>()
+
+  yield* Effect.forkScoped(
+    router.attach(LAPTOP).pipe(Stream.runForEach((routed) => Queue.offer(inbox, routed))),
+    { startImmediately: true },
+  )
+
+  return inbox
+})
+
+it.effect('routes a denial on the lock screen as a Decline without a message', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier(approvingHark('denied'))
+    const { herd, router } = yield* start
+    const inbox = yield* attachedAgent(router)
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    yield* nextCallWhere(calls, isWait)
+    const routed = yield* advancingClock(Queue.take(inbox))
+
+    expect(routed.key).toBe(INTERACTION_ID)
+    expect(routed.command).toEqual(
+      new AnswerAsk({
+        pane: PANE,
+        ask: AskId.make('toolu_1'),
+        answer: new Decline({ message: Option.none() }),
+      }),
+    )
+  }).pipe(Effect.scoped),
+)
+
+it.effect('sends a lock-screen answer once when the agent says the ask is no longer pending', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier(approvingHark('approved'))
+    const { herd, router } = yield* start
+    const inbox = yield* attachedAgent(router)
+
+    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    yield* nextCallWhere(calls, isWait)
+    const routed = yield* advancingClock(Queue.take(inbox))
+
+    yield* router.complete(
+      LAPTOP,
+      routed.id,
+      Result.fail(new AskNotPending({ pane: PANE, ask: AskId.make('toolu_1') })),
+    )
+    yield* TestClock.adjust(Duration.times(RECONNECT_GRACE, 2))
+
+    expect(yield* Queue.clear(inbox)).toEqual([])
   }).pipe(Effect.scoped),
 )

@@ -13,7 +13,7 @@ import type { MachineId } from '@crook/domain/Ids'
 import type { Machine } from '@crook/domain/Machine'
 import { agentsIn } from '@crook/domain/MachineState'
 import { bodyFor, SectionBody } from '@crook/web/herd/HerdLayout'
-import { needsYouLabel } from '@crook/web/herd/NeedsYouLabel'
+import { needsYouLabel } from '@crook/domain/NeedsYouLabel'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 
 export interface MachineCardModel {

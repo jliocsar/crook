@@ -8,7 +8,7 @@ import { Dimmed } from '@crook/web/components/Dimmed'
 import { MachineBadge } from '@crook/web/components/MachineBadge'
 import type { MachineSectionModel } from '@crook/web/herd/HerdLayout'
 import { SPRING } from '@crook/web/motion/Springs'
-import { needsYouLabel } from '@crook/web/herd/NeedsYouLabel'
+import { needsYouLabel } from '@crook/domain/NeedsYouLabel'
 
 const COLLAPSED_CHEVRON_DEGREES = -90
 

@@ -303,6 +303,14 @@ An `Atom.fn` result outlives the component that showed it. A sheet that must ope
 reset interrupts the running effect.
 :::
 
+:::warning
+Effect's `Semaphore` is not fair (read in its source, measured on `effect@4.0.5`): a release wakes
+the waiters on a scheduled task, so a fiber that takes the permit again right after releasing it
+gets in first. A loop of instantly answered long polls starved another caller for 300 test-clock
+seconds. Where several fibers share one permit and one of them loops, hand the turn to the oldest
+waiter explicitly.
+:::
+
 :::tip
 A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
 `effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.

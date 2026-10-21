@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from '@effect/vitest'
 
-import { needsYouLabel } from '@crook/web/herd/NeedsYouLabel'
+import { needsYouLabel } from '@crook/domain/NeedsYouLabel'
 
 describe('needsYouLabel', () => {
   it('agrees the verb with the count', () => {

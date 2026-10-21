@@ -18,7 +18,8 @@ import {
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { defaultNotificationPrefs } from '@crook/domain/Notifications'
 import { Workspace } from '@crook/domain/Workspace'
-import { HarkNotificationId } from '@crook/hub/HarkClient'
+import { AskId } from '@crook/domain/Ids'
+import { HarkId } from '@crook/hub/HarkClient'
 import {
   NotificationStep,
   SentNotification,
@@ -33,6 +34,8 @@ import {
   notificationKey,
   raisedBetween,
 } from '@crook/hub/NotificationPlan'
+
+import { bashAsk } from './Fixtures'
 
 const LAPTOP = MachineId.make('laptop')
 const PANE = PaneId.make('w1:p1')
@@ -103,6 +106,7 @@ const FINISHED_FIELDS: ConstructorParameters<typeof WantedNotification>[0] = {
   event: 'finished',
   terminal: TERMINAL,
   stateChangeSeq: 7,
+  ask: Option.none(),
   title: TITLE,
   body: 'Finished · laptop / crook',
 }
@@ -242,7 +246,7 @@ describe('afterPublish and afterSeen', () => {
 describe('nextStep', () => {
   const sentFinished = new SentNotification({
     ...FINISHED_FIELDS,
-    harkId: HarkNotificationId.make('anot_1'),
+    harkId: HarkId.make('anot_1'),
   })
   const wanted = HashMap.make([notificationKey(finished), finished])
   const sent = HashMap.make([notificationKey(sentFinished), sentFinished])
@@ -271,5 +275,68 @@ describe('copy limits', () => {
     expect(harkTitleOf(long)).toBe('a'.repeat(HARK_TITLE_LIMIT - 1))
     expect(harkTitleOf(TITLE)).toBe(TITLE)
     expect(idempotencyKeyOf(finished)).toEqual(Option.some('crook/laptop/w1:p1/term_1/7/finished'))
+  })
+})
+
+describe('approvals', () => {
+  const blockedOnBash = (askId: string) =>
+    rowWith('blocked', 7, { ask: Option.some(bashAsk(askId)) })
+  const approval = new WantedNotification({
+    ...FINISHED_FIELDS,
+    event: 'approvals',
+    ask: Option.some(AskId.make('toolu_1')),
+    body: 'Wants to run Bash · laptop / crook',
+  })
+
+  it('raises a permission ask as an approval naming the tool and never the command', () => {
+    const raised = raisedBetween(
+      stateWith([rowWith('working', 6)]),
+      stateWith([blockedOnBash('toolu_1')]),
+      'laptop',
+    )
+
+    expect(raised).toEqual([approval])
+    expect(idempotencyKeyOf(approval)).toEqual(
+      Option.some('crook/laptop/w1:p1/term_1/7/approvals/toolu_1'),
+    )
+  })
+
+  it('keeps an approval while the agent waits on it, seen in crook or not', () => {
+    const waiting = stateWith([blockedOnBash('toolu_1')])
+    const wanted = HashMap.make([notificationKey(approval), approval])
+
+    expect(isStillWanted(approval, waiting, HashSet.make(PANE))).toBe(true)
+    expect(HashMap.toValues(afterSeen(wanted, LAPTOP, PANE))).toEqual([approval])
+  })
+
+  it('replaces an approval once the agent asks something else under the same state', () => {
+    const replaced = afterPublish(HashMap.make([notificationKey(approval), approval]), {
+      machineLabel: 'laptop',
+      previous: Option.some(stateWith([blockedOnBash('toolu_1')])),
+      next: stateWith([blockedOnBash('toolu_2')]),
+      seen: noneSeen,
+    })
+
+    expect(isStillWanted(approval, stateWith([blockedOnBash('toolu_2')]), noneSeen)).toBe(false)
+    expect(isStillWanted(approval, stateWith([rowWith('working', 8)]), noneSeen)).toBe(false)
+    expect(HashMap.toValues(replaced)).toEqual([
+      new WantedNotification({
+        ...FINISHED_FIELDS,
+        event: 'approvals',
+        ask: Option.some(AskId.make('toolu_2')),
+        body: 'Wants to run Bash · laptop / crook',
+      }),
+    ])
+  })
+
+  it('drops an approval whose switch is off', () => {
+    expect(
+      nextStep(
+        HashMap.make([notificationKey(approval), approval]),
+        HashMap.empty(),
+        HashSet.empty(),
+        { ...defaultNotificationPrefs, approvals: false },
+      ),
+    ).toEqual(Option.some(NotificationStep.Drop({ wanted: approval })))
   })
 })

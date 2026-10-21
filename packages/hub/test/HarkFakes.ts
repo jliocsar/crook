@@ -10,10 +10,15 @@ import * as HttpClient from 'effect/http/HttpClient'
 import { HttpClientError, TransportError } from 'effect/http/HttpClientError'
 import type * as HttpClientRequest from 'effect/http/HttpClientRequest'
 import * as HttpClientResponse from 'effect/http/HttpClientResponse'
+import * as UrlParams from 'effect/http/UrlParams'
+import * as TestClock from 'effect/testing/TestClock'
+
+import { HARK_REQUEST_SPACING } from '@crook/hub/HarkClient'
 
 export interface HarkCall {
   readonly method: string
   readonly url: string
+  readonly query: string
   readonly authorization: Option.Option<string>
   readonly idempotencyKey: Option.Option<string>
   readonly body: Option.Option<Schema.Json>
@@ -25,7 +30,9 @@ export interface HarkAnswer {
   readonly headers?: Record<string, string>
 }
 
-export type HarkScript = (call: HarkCall) => HarkAnswer | 'unreachable' | 'silent' | 'broken'
+export type HarkReply = HarkAnswer | 'unreachable' | 'silent' | 'broken'
+
+export type HarkScript = (call: HarkCall) => HarkReply
 
 const NOT_IN_HARK_ID = /[^A-Za-z0-9_-]/gu
 
@@ -45,15 +52,13 @@ const bodyOf = (request: HttpClientRequest.HttpClientRequest) =>
 const callOf = (request: HttpClientRequest.HttpClientRequest): HarkCall => ({
   method: request.method,
   url: request.url,
+  query: UrlParams.toString(request.urlParams),
   authorization: Headers.get(request.headers, 'authorization'),
   idempotencyKey: Headers.get(request.headers, 'idempotency-key'),
   body: bodyOf(request),
 })
 
-const responseTo = (
-  request: HttpClientRequest.HttpClientRequest,
-  answer: ReturnType<HarkScript>,
-) => {
+const responseTo = (request: HttpClientRequest.HttpClientRequest, answer: HarkReply) => {
   if (answer === 'silent') {
     return Effect.never
   }
@@ -93,6 +98,29 @@ export const withdrawn = (id: string): HarkAnswer => ({
 
 export const isWithdrawal = (call: HarkCall) => call.url.endsWith('/withdraw')
 
+export const isAskCreation = (call: HarkCall) => call.url.endsWith('/interactions')
+
+export const isWait = (call: HarkCall) => call.url.endsWith('/wait')
+
+export const isCancel = (call: HarkCall) => call.url.endsWith('/cancel')
+
+export const isActivityCall = (call: HarkCall) => call.url.includes('/activities')
+
+export const interactionCreated = (id: string): HarkAnswer => ({
+  status: 201,
+  body: { interaction: { id, status: 'pending' }, accepted: 1 },
+})
+
+export const interactionWaited = (status: string): HarkAnswer => ({
+  status: 200,
+  body: { interaction: { status }, timedOut: status === 'pending' },
+})
+
+export const activityChanged: HarkAnswer = {
+  status: 200,
+  body: { activity: { id: 'act_1', key: 'crook-herd' }, accepted: 1, failed: 0 },
+}
+
 const titleOf = (call: HarkCall) =>
   call.body.pipe(
     Option.flatMap(Schema.decodeUnknownOption(TitledBody)),
@@ -104,6 +132,19 @@ export const harkIdFor = (title: string) => `anot_${title.replaceAll(NOT_IN_HARK
 
 export const acceptingHark: HarkScript = (call) =>
   isWithdrawal(call) ? withdrawn('anot_withdrawn') : created(harkIdFor(titleOf(call)))
+
+export const answeringFirst = (
+  isWanted: (call: HarkCall) => boolean,
+  first: readonly HarkReply[],
+  then: HarkScript,
+): HarkScript => {
+  const remaining = [...first]
+
+  return (call) =>
+    isWanted(call)
+      ? Option.getOrElse(Option.fromNullishOr(remaining.shift()), () => then(call))
+      : then(call)
+}
 
 export const tokenConfig = (token: Option.Option<string>) =>
   ConfigProvider.layer(
@@ -125,4 +166,29 @@ export const fakeHark = Effect.fn('fakeHark')(function* (script: HarkScript) {
   })
 
   return { calls, layer: Layer.succeed(HttpClient.HttpClient, client) }
+})
+
+export const advancingClock = <Success, Failure, Requirements>(
+  effect: Effect.Effect<Success, Failure, Requirements>,
+) =>
+  Effect.raceFirst(
+    effect,
+    TestClock.adjust(HARK_REQUEST_SPACING).pipe(Effect.andThen(Effect.yieldNow), Effect.forever),
+  )
+
+export const nextCallWhere = (
+  calls: Queue.Dequeue<HarkCall>,
+  isWanted: (call: HarkCall) => boolean,
+) => advancingClock(Queue.take(calls).pipe(Effect.repeat({ until: isWanted })))
+
+export const callsWithin = Effect.fn('callsWithin')(function* (
+  calls: Queue.Dequeue<HarkCall>,
+  steps: number,
+) {
+  yield* TestClock.adjust(HARK_REQUEST_SPACING).pipe(
+    Effect.andThen(Effect.yieldNow),
+    Effect.repeat({ times: steps }),
+  )
+
+  return yield* Queue.clear(calls)
 })
