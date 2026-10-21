@@ -254,7 +254,11 @@ const makeLive = (socketPath: string) => {
     params: Params,
   ) {
     const line = yield* encodeRequest(method, params)
-    const reply = yield* exchange(socketPath, method.name, Stream.make(line)).pipe(Stream.runHead)
+    const reply = yield* exchange(
+      socketPath,
+      method.name,
+      Stream.concat(Stream.make(line), Stream.never),
+    ).pipe(Stream.runHead)
     const replyLine = yield* Option.match(reply, {
       onNone: () => Effect.fail(new HerdrConnectionClosed({ method: method.name })),
       onSome: Effect.succeed,
