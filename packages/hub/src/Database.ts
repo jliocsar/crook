@@ -35,6 +35,11 @@ export const dieOnUnencodableRecord = <Success, Requirements>(
 ): Effect.Effect<Success, SqlError, Requirements> =>
   write.pipe(Effect.catchTag('SchemaError', (error) => Effect.die(error)))
 
+export const logStorageFailure = (what: string) => (error: SqlError) =>
+  Effect.logError(
+    `The hub could not store ${what} in its database, so it keeps it in memory only and loses it on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
+  )
+
 export const createMachines = Effect.flatMap(
   SqlClient.SqlClient,
   (sql) => sql`

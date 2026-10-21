@@ -2,6 +2,7 @@ import { expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
@@ -10,20 +11,22 @@ import type * as HttpClient from 'effect/http/HttpClient'
 import type * as SqlClient from 'effect/sql/SqlClient'
 import * as TestClock from 'effect/testing/TestClock'
 
+import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { HerdrLink } from '@crook/domain/HerdrLink'
-import { HerdrConnectionId, MachineId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrConnectionId, MachineId, PaneId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { defaultNotificationPrefs } from '@crook/domain/Notifications'
 import { Workspace } from '@crook/domain/Workspace'
 import * as Database from '@crook/hub/Database'
-import { HARK_REQUEST_SPACING, HarkClient } from '@crook/hub/HarkClient'
+import { HARK_REQUEST_SPACING, HarkClient, HarkNotificationId } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
-import { Herd } from '@crook/hub/Herd'
+import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
+import { SentNotification } from '@crook/hub/NotificationPlan'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { HarkNotConfigured, HarkReachedNoDevice } from '@crook/protocol/Hark'
 
-import { PANE, agentRow } from './Fixtures'
+import { PANE, agentRow, hello } from './Fixtures'
 import {
   HARK_TOKEN,
   type HarkCall,
@@ -32,13 +35,43 @@ import {
   created,
   fakeHark,
   harkIdFor,
+  isWithdrawal,
   tokenConfig,
 } from './HarkFakes'
 
 const IN_MEMORY = ':memory:'
 const LAPTOP = MachineId.make('laptop')
 const TITLE = 'EX-253 Example feature'
+const SECOND_PANE = PaneId.make('w1:p2')
+const SECOND_TITLE = 'Port the herd'
 const WITHDRAW_URL = `https://hark.ryan.ceo/api/agent/notifications/${harkIdFor(TITLE)}/withdraw`
+
+const twoAgentsAt = (
+  version: number,
+  first: AgentRow,
+  secondStatus: AgentStatus,
+  secondStateChangeSeq: number,
+  connection = 1,
+) =>
+  new MachineState({
+    machine: LAPTOP,
+    version: MachineStateVersion.make(version),
+    herdrVersion: '0.9.5',
+    herdr: new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt: Option.none() }),
+    workspaces: [new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })],
+    tabs: [],
+    panes: [],
+    agents: [
+      first,
+      agentRow({
+        pane: SECOND_PANE,
+        terminal: TerminalId.make('term_2'),
+        title: SECOND_TITLE,
+        status: secondStatus,
+        stateChangeSeq: secondStateChangeSeq,
+      }),
+    ],
+  })
 
 const stateAt = (version: number, status: AgentStatus, stateChangeSeq: number, connection = 1) =>
   new MachineState({
@@ -118,21 +151,86 @@ it.effect('withdraws Finished when herdr turns done into idle without a new sequ
   }).pipe(Effect.scoped),
 )
 
-it.effect('notifies nothing for a resync or for an event switched off', () =>
+const onlySecondAgentNotified = Effect.fn('onlySecondAgentNotified')(function* (
+  calls: Queue.Dequeue<HarkCall>,
+  herd: Herd['Service'],
+  first: AgentRow,
+  connection: number,
+) {
+  yield* herd.publish(LAPTOP, twoAgentsAt(3, first, 'blocked', 2, connection))
+  const asked = yield* nextCall(calls)
+
+  yield* herd.markSeen(LAPTOP, SECOND_PANE)
+  const withdrawal = yield* nextCall(calls)
+
+  return [asked.body, withdrawal.url]
+})
+
+const SECOND_ASKED = [
+  Option.some({
+    title: SECOND_TITLE,
+    body: 'Has a question · laptop / crook',
+    project: 'crook',
+  }),
+  `https://hark.ryan.ceo/api/agent/notifications/${harkIdFor(SECOND_TITLE)}/withdraw`,
+]
+
+it.effect('notifies nothing when an agent turns up done after a herdr resync', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier(acceptingHark)
+    const { herd } = yield* start
+    const done = agentRow({ status: 'done', stateChangeSeq: 7 })
+
+    yield* herd.publish(
+      LAPTOP,
+      twoAgentsAt(1, agentRow({ status: 'working', stateChangeSeq: 6 }), 'working', 1),
+    )
+    yield* herd.publish(LAPTOP, twoAgentsAt(2, done, 'working', 1, 2))
+
+    expect(yield* onlySecondAgentNotified(calls, herd, done, 2)).toEqual(SECOND_ASKED)
+  }).pipe(Effect.scoped),
+)
+
+it.effect('notifies nothing for an event whose switch is off', () =>
   Effect.gen(function* () {
     const { calls, start } = yield* withNotifier(acceptingHark)
     const { herd, notifier } = yield* start
+    const done = agentRow({ status: 'done', stateChangeSeq: 7 })
 
-    yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
-    yield* herd.publish(LAPTOP, stateAt(2, 'done', 7, 2))
     yield* notifier.setPref('finished', false)
-    yield* herd.publish(LAPTOP, stateAt(3, 'working', 8, 2))
-    yield* herd.publish(LAPTOP, stateAt(4, 'done', 9, 2))
-    yield* herd.publish(LAPTOP, stateAt(5, 'blocked', 10, 2))
-    const first = yield* nextCall(calls)
+    yield* herd.publish(
+      LAPTOP,
+      twoAgentsAt(1, agentRow({ status: 'working', stateChangeSeq: 6 }), 'working', 1),
+    )
+    yield* herd.publish(LAPTOP, twoAgentsAt(2, done, 'working', 1))
 
-    expect(first.body).toEqual(
-      Option.some({ title: TITLE, body: 'Has a question · laptop / crook', project: 'crook' }),
+    expect(yield* onlySecondAgentNotified(calls, herd, done, 1)).toEqual(SECOND_ASKED)
+  }).pipe(Effect.scoped),
+)
+
+it.effect('gives up on a notification that hits a bug in the hub, and keeps notifying', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier((call) =>
+      !isWithdrawal(call) && Option.exists(call.idempotencyKey, (key) => key.includes(PANE))
+        ? 'broken'
+        : acceptingHark(call),
+    )
+    const { herd } = yield* start
+    const working = agentRow({ status: 'working', stateChangeSeq: 6 })
+
+    yield* herd.publish(LAPTOP, twoAgentsAt(1, working, 'working', 1))
+    yield* herd.publish(LAPTOP, twoAgentsAt(2, agentRow({ status: 'done' }), 'blocked', 2))
+    const sends = [yield* nextCall(calls), yield* nextCall(calls)]
+
+    yield* herd.markSeen(LAPTOP, SECOND_PANE)
+    const withdrawal = yield* nextCall(calls)
+
+    expect(Arr.map(sends, (call) => call.url)).toEqual([
+      'https://hark.ryan.ceo/api/agent/notifications',
+      'https://hark.ryan.ceo/api/agent/notifications',
+    ])
+    expect(withdrawal.url).toBe(
+      `https://hark.ryan.ceo/api/agent/notifications/${harkIdFor(SECOND_TITLE)}/withdraw`,
     )
   }).pipe(Effect.scoped),
 )
@@ -166,22 +264,77 @@ it.effect(
     }).pipe(Effect.scoped),
 )
 
-it.effect('tries again after Hark asks it to wait, with the same idempotency key', () =>
+const retriedKeys = Effect.fn('retriedKeys')(function* (script: HarkScript) {
+  const { calls, start } = yield* withNotifier(script)
+  const { herd } = yield* start
+
+  yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
+  yield* herd.publish(LAPTOP, stateAt(2, 'done', 7))
+  const refused = yield* nextCall(calls)
+  const retried = yield* nextCall(calls)
+
+  return [refused.idempotencyKey, retried.idempotencyKey]
+})
+
+it.effect(
+  'tries again after Hark asks it to wait or fails on its side, with the same idempotency key',
+  () =>
+    Effect.gen(function* () {
+      const finishedKey = Option.some('crook/laptop/w1:p1/term_1/7/finished')
+      const limited = yield* retriedKeys(() => ({
+        status: 429,
+        body: { error: 'Rate limited', retryAfterSeconds: 60 },
+        headers: { 'retry-after': '60' },
+      }))
+      const failing = yield* retriedKeys(() => ({
+        status: 503,
+        body: { error: 'Service unavailable' },
+      }))
+
+      expect(limited).toEqual([finishedKey, finishedKey])
+      expect(failing).toEqual([finishedKey, finishedKey])
+    }).pipe(Effect.scoped),
+)
+
+it.effect('withdraws the notifications of a machine forgotten from the herd', () =>
   Effect.gen(function* () {
-    const { calls, start } = yield* withNotifier(() => ({
-      status: 429,
-      body: { error: 'Rate limited', retryAfterSeconds: 60 },
-      headers: { 'retry-after': '60' },
-    }))
+    const { calls, start } = yield* withNotifier(acceptingHark)
     const { herd } = yield* start
+    const attachment = yield* Effect.forkScoped(herd.hold(LAPTOP, hello), {
+      startImmediately: true,
+    })
 
     yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
     yield* herd.publish(LAPTOP, stateAt(2, 'done', 7))
-    const refused = yield* nextCall(calls)
-    const retried = yield* nextCall(calls)
+    yield* nextCall(calls)
+    yield* Fiber.interrupt(attachment)
+    yield* TestClock.adjust(RECONNECT_GRACE)
+    yield* herd.forget(LAPTOP)
+    const withdrawal = yield* nextCall(calls)
 
-    expect(refused.idempotencyKey).toEqual(Option.some('crook/laptop/w1:p1/term_1/7/finished'))
-    expect(retried.idempotencyKey).toEqual(refused.idempotencyKey)
+    expect(withdrawal.url).toBe(WITHDRAW_URL)
+  }).pipe(Effect.scoped),
+)
+
+it.effect('withdraws at startup what it sent for a machine no longer in the herd', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier(acceptingHark)
+    const leftOver = new SentNotification({
+      machine: MachineId.make('desk'),
+      pane: PANE,
+      event: 'finished',
+      terminal: TerminalId.make('term_1'),
+      stateChangeSeq: 7,
+      title: TITLE,
+      body: 'Finished · desk / crook',
+      harkId: HarkNotificationId.make('anot_desk'),
+    })
+
+    yield* Effect.scoped(Effect.flatMap(start, ({ store }) => store.rememberSent(leftOver)))
+    yield* start
+    const withdrawal = yield* nextCall(calls)
+
+    expect(withdrawal.url).toBe('https://hark.ryan.ceo/api/agent/notifications/anot_desk/withdraw')
   }).pipe(Effect.scoped),
 )
 

@@ -19,26 +19,26 @@ import {
   type TestNotificationFailure,
 } from '@crook/protocol/Hark'
 
-import {
-  HARK_RATE_WINDOW,
-  HarkClient,
-  HarkNotification,
-  type HarkNotificationId,
-} from '@crook/hub/HarkClient'
+import { logStorageFailure } from '@crook/hub/Database'
+import { HarkClient, HarkNotification, type HarkNotificationId } from '@crook/hub/HarkClient'
 import { type HerdChange, Herd } from '@crook/hub/Herd'
 import {
   type NotificationStep,
   type NotificationsByPane,
   SentNotification,
   type WantedNotification,
+  afterForgotten,
   afterPublish,
   afterSeen,
   idempotencyKeyOf,
   identityOf,
+  isSameNotification,
   nextStep,
   notificationKey,
 } from '@crook/hub/NotificationPlan'
 import { NotificationStore } from '@crook/hub/NotificationStore'
+
+const HARK_OUTAGE_PAUSE = Duration.seconds(60)
 
 export const TEST_NOTIFICATION = new HarkNotification({
   title: 'crook',
@@ -46,19 +46,28 @@ export const TEST_NOTIFICATION = new HarkNotification({
   idempotencyKey: Option.none(),
 })
 
-const logStorageFailure = (what: string) => (error: SqlError) =>
-  Effect.logError(
-    `The hub could not store ${what} in its database, so it keeps it in memory only and loses it on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
+const pauseFor = (failure: HarkFailure): Option.Option<Duration.Duration> =>
+  Match.value(failure).pipe(
+    Match.tagsExhaustive({
+      HarkUnreachable: () => Option.some(HARK_OUTAGE_PAUSE),
+      HarkServerFailed: () => Option.some(HARK_OUTAGE_PAUSE),
+      HarkStillProcessing: () => Option.some(Duration.zero),
+      HarkRateLimited: (limited) =>
+        Option.map(limited.retryAfterSeconds, (seconds) => Duration.seconds(seconds)),
+      HarkRefused: () => Option.none(),
+      HarkAnswerUnreadable: () => Option.none(),
+      HarkNotConfigured: () => Option.none(),
+    }),
   )
 
-const pauseFor = (failure: HarkFailure) =>
-  Match.value(failure).pipe(
-    Match.tag('HarkUnreachable', () => Option.some(HARK_RATE_WINDOW)),
-    Match.tag('HarkRateLimited', (limited) =>
-      Option.map(limited.retryAfterSeconds, (seconds) => Duration.seconds(seconds)),
-    ),
-    Match.orElse(() => Option.none()),
+const byPane = <Notification extends WantedNotification>(
+  notifications: readonly Notification[],
+): NotificationsByPane<Notification> =>
+  HashMap.fromIterable(
+    Arr.map(notifications, (notification) => [notificationKey(notification), notification]),
   )
+
+const gaveUpOnBug = (what: string) => `The hub gave up on ${what} because of a bug in the hub.`
 
 const make = Effect.gen(function* () {
   const hark = yield* HarkClient
@@ -66,26 +75,28 @@ const make = Effect.gen(function* () {
   const herd = yield* Herd
   const prefs = yield* SubscriptionRef.make(yield* store.prefs)
   const sentAtStart = yield* store.sent
-  const sent = yield* Ref.make<NotificationsByPane<SentNotification>>(
-    HashMap.fromIterable(
-      Arr.map(sentAtStart, (notification) => [notificationKey(notification), notification]),
-    ),
+  const stillInHerd = yield* Effect.filter(sentAtStart, (notification) =>
+    Effect.isSuccess(herd.requireMachine(notification.machine)),
   )
+  const sent = yield* Ref.make(byPane(sentAtStart))
   const wanted = yield* SubscriptionRef.make<NotificationsByPane<WantedNotification>>(
-    HashMap.map(yield* Ref.get(sent), (notification): WantedNotification => notification),
+    byPane(stillInHerd),
   )
   const abandoned = yield* Ref.make(HashSet.empty<string>())
 
   const followHerd = (change: HerdChange) =>
     Effect.flatMap(SubscriptionRef.get(prefs), (current) =>
-      SubscriptionRef.update(wanted, (byPane) =>
+      SubscriptionRef.update(wanted, (notifications) =>
         Match.value(change).pipe(
           Match.tagsExhaustive({
-            MachinePublished: (published) => afterPublish(byPane, published, current),
-            PaneSeen: (seen) => afterSeen(byPane, seen.machine, seen.pane),
+            MachinePublished: (published) => afterPublish(notifications, published, current),
+            PaneSeen: (seen) => afterSeen(notifications, seen.machine, seen.pane),
+            MachineForgotten: (forgotten) => afterForgotten(notifications, forgotten.machine),
           }),
         ),
       ),
+    ).pipe(
+      Effect.catchDefect((defect) => Effect.logError(gaveUpOnBug('a change in the herd'), defect)),
     )
 
   const pauseOrAbandon = (what: string, failure: HarkFailure, abandon: Effect.Effect<void>) =>
@@ -122,6 +133,9 @@ const make = Effect.gen(function* () {
   }
 
   const send = Effect.fn('HarkNotifier.send')(function* (notification: WantedNotification) {
+    const what = `notifying pane ${notification.pane} of machine ${notification.machine}`
+    const abandon = Ref.update(abandoned, HashSet.add(identityOf(notification)))
+
     return yield* hark
       .send(
         new HarkNotification({
@@ -132,12 +146,10 @@ const make = Effect.gen(function* () {
       )
       .pipe(
         Effect.flatMap((created) => rememberSent(notification, created.id)),
-        Effect.catch((failure) =>
-          pauseOrAbandon(
-            `notifying pane ${notification.pane} of machine ${notification.machine}`,
-            failure,
-            Ref.update(abandoned, HashSet.add(identityOf(notification))),
-          ),
+        Effect.uninterruptible,
+        Effect.catch((failure) => pauseOrAbandon(what, failure, abandon)),
+        Effect.catchDefect((defect) =>
+          Effect.andThen(Effect.logError(gaveUpOnBug(what), defect), abandon),
         ),
       )
   })
@@ -152,32 +164,42 @@ const make = Effect.gen(function* () {
     )
 
   const withdraw = Effect.fn('HarkNotifier.withdraw')(function* (notification: SentNotification) {
+    const what = `withdrawing the notification of pane ${notification.pane} of machine ${notification.machine}`
+
     return yield* hark.withdraw(notification.harkId).pipe(
       Effect.andThen(forgetSent(notification)),
-      Effect.catch((failure) =>
-        pauseOrAbandon(
-          `withdrawing the notification of pane ${notification.pane} of machine ${notification.machine}`,
-          failure,
-          forgetSent(notification),
-        ),
+      Effect.catch((failure) => pauseOrAbandon(what, failure, forgetSent(notification))),
+      Effect.catchDefect((defect) =>
+        Effect.andThen(Effect.logError(gaveUpOnBug(what), defect), forgetSent(notification)),
       ),
     )
   })
+
+  const drop = (dropped: WantedNotification) =>
+    SubscriptionRef.update(wanted, (notifications) =>
+      Option.exists(HashMap.get(notifications, notificationKey(dropped)), (current) =>
+        isSameNotification(current, dropped),
+      )
+        ? HashMap.remove(notifications, notificationKey(dropped))
+        : notifications,
+    )
 
   const take = (step: NotificationStep) =>
     Match.value(step).pipe(
       Match.tagsExhaustive({
         Withdraw: (withdrawal) => withdraw(withdrawal.sent),
         Send: (sending) => send(sending.wanted),
-        Drop: (dropping) =>
-          SubscriptionRef.update(wanted, HashMap.remove(notificationKey(dropping.wanted))),
+        Drop: (dropping) => drop(dropping.wanted),
       }),
     )
 
-  const pruneAbandoned = Effect.flatMap(SubscriptionRef.get(wanted), (byPane) =>
+  const pruneAbandoned = Effect.flatMap(SubscriptionRef.get(wanted), (notifications) =>
     Ref.update(abandoned, (identities) =>
       HashSet.filter(identities, (identity) =>
-        Arr.some(HashMap.toValues(byPane), (notification) => identityOf(notification) === identity),
+        Arr.some(
+          HashMap.toValues(notifications),
+          (notification) => identityOf(notification) === identity,
+        ),
       ),
     ),
   )
@@ -195,7 +217,14 @@ const make = Effect.gen(function* () {
     yield* Option.match(step, { onNone: () => Effect.void, onSome: take })
 
     return Option.isSome(step)
-  })
+  }).pipe(
+    Effect.catchDefect((defect) =>
+      Effect.logError(
+        `The hub's notifier hit a bug and pauses ${Duration.format(HARK_OUTAGE_PAUSE)} before its next step.`,
+        defect,
+      ).pipe(Effect.andThen(Effect.sleep(HARK_OUTAGE_PAUSE)), Effect.as(true)),
+    ),
+  )
 
   const reconcile = Effect.repeat(stepOnce, { while: (stepped) => stepped })
 

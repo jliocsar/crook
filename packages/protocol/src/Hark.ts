@@ -4,6 +4,7 @@ import * as Schema from 'effect/Schema'
 
 const STATUS_UNAUTHORIZED = 401
 const STATUS_FORBIDDEN = 403
+const STATUS_BAD_GATEWAY = 502
 
 const refusalHint = (status: number) =>
   Match.value(status).pipe(
@@ -17,8 +18,19 @@ const refusalHint = (status: number) =>
       () =>
         'The token lacks the notifications:send scope: make a new agent token that has it and set CROOK_HUB_HARK_TOKEN on the hub to it.',
     ),
+    Match.when(
+      STATUS_BAD_GATEWAY,
+      () =>
+        'No phone accepted the removal, so the notification may stay on the lock screen until it is cleared there.',
+    ),
     Match.orElse(() => 'The hub log names the request that failed.'),
   )
+
+const quoted = (explanation: Option.Option<string>) =>
+  Option.match(explanation, {
+    onNone: () => '',
+    onSome: (said) => ` ("${said}")`,
+  })
 
 export class HarkNotConfigured extends Schema.TaggedError<HarkNotConfigured>()(
   'HarkNotConfigured',
@@ -34,12 +46,7 @@ export class HarkRefused extends Schema.TaggedError<HarkRefused>()('HarkRefused'
   explanation: Schema.OptionFromNullOr(Schema.String),
 }) {
   override get message(): string {
-    const said = Option.match(this.explanation, {
-      onNone: () => '',
-      onSome: (explanation) => ` ("${explanation}")`,
-    })
-
-    return `Hark refused the request with status ${this.status}${said}. ${refusalHint(this.status)}`
+    return `Hark refused the request with status ${this.status}${quoted(this.explanation)}. ${refusalHint(this.status)}`
   }
 }
 
@@ -53,6 +60,24 @@ export class HarkRateLimited extends Schema.TaggedError<HarkRateLimited>()('Hark
       onSome: (seconds) =>
         `Hark refused the request because its per-minute limit was reached: something besides this hub is sending with the same Hark account. Try again in ${seconds} s.`,
     })
+  }
+}
+
+export class HarkServerFailed extends Schema.TaggedError<HarkServerFailed>()('HarkServerFailed', {
+  status: Schema.Int,
+  explanation: Schema.OptionFromNullOr(Schema.String),
+}) {
+  override get message(): string {
+    return `Hark failed on its side with status ${this.status}${quoted(this.explanation)}. The hub tries its notifications again later; for a test, try again in a few minutes.`
+  }
+}
+
+export class HarkStillProcessing extends Schema.TaggedError<HarkStillProcessing>()(
+  'HarkStillProcessing',
+  {},
+) {
+  override get message(): string {
+    return 'Hark is still processing an identical earlier request with the same idempotency key, so the hub asks again on its next turn.'
   }
 }
 
@@ -86,6 +111,8 @@ export const HarkFailure = Schema.Union([
   HarkNotConfigured,
   HarkRefused,
   HarkRateLimited,
+  HarkServerFailed,
+  HarkStillProcessing,
   HarkUnreachable,
   HarkAnswerUnreadable,
 ])

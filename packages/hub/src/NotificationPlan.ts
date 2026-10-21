@@ -198,7 +198,7 @@ export const isStillWanted = (
 export const afterPublish = (
   wanted: NotificationsByPane<WantedNotification>,
   change: {
-    readonly label: string
+    readonly machineLabel: string
     readonly previous: Option.Option<MachineState>
     readonly next: MachineState
     readonly seen: HashSet.HashSet<PaneId>
@@ -213,7 +213,7 @@ export const afterPublish = (
   )
   const raised = Option.match(change.previous, {
     onNone: (): readonly WantedNotification[] => [],
-    onSome: (previous) => raisedBetween(previous, change.next, change.label),
+    onSome: (previous) => raisedBetween(previous, change.next, change.machineLabel),
   })
 
   return pipe(
@@ -230,6 +230,12 @@ export const afterSeen = (
   machine: MachineId,
   pane: PaneId,
 ): NotificationsByPane<WantedNotification> => HashMap.remove(wanted, toGlobalPaneId(machine, pane))
+
+export const afterForgotten = (
+  wanted: NotificationsByPane<WantedNotification>,
+  machine: MachineId,
+): NotificationsByPane<WantedNotification> =>
+  HashMap.filter(wanted, (notification) => notification.machine !== machine)
 
 export const nextStep = (
   wanted: NotificationsByPane<WantedNotification>,

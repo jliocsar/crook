@@ -119,5 +119,3 @@ export const findAgent = (
       ),
     ),
   )
-
-export { agentTitleOrPane } from '@crook/domain/AgentRow'

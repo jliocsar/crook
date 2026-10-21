@@ -23,6 +23,7 @@ import {
   NotificationStep,
   SentNotification,
   WantedNotification,
+  afterForgotten,
   afterPublish,
   afterSeen,
   harkTitleOf,
@@ -192,7 +193,7 @@ describe('isStillWanted', () => {
 describe('afterPublish and afterSeen', () => {
   it('raises only the events whose switch is on, and drops what was seen', () => {
     const change = {
-      label: 'laptop',
+      machineLabel: 'laptop',
       previous: Option.some(stateWith([rowWith('working', 6)])),
       next: stateWith([rowWith('done', 7)]),
       seen: noneSeen,
@@ -206,6 +207,16 @@ describe('afterPublish and afterSeen', () => {
     expect(HashMap.toValues(raised)).toEqual([finished])
     expect(HashMap.size(muted)).toBe(0)
     expect(HashMap.size(afterSeen(raised, LAPTOP, PANE))).toBe(0)
+  })
+
+  it('drops every notification of a machine forgotten from the herd, and only those', () => {
+    const desk = new WantedNotification({ ...FINISHED_FIELDS, machine: MachineId.make('desk') })
+    const wanted = HashMap.make(
+      [notificationKey(finished), finished],
+      [notificationKey(desk), desk],
+    )
+
+    expect(HashMap.toValues(afterForgotten(wanted, LAPTOP))).toEqual([desk])
   })
 })
 

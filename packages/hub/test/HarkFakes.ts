@@ -25,7 +25,7 @@ export interface HarkAnswer {
   readonly headers?: Record<string, string>
 }
 
-export type HarkScript = (call: HarkCall) => HarkAnswer | 'unreachable'
+export type HarkScript = (call: HarkCall) => HarkAnswer | 'unreachable' | 'silent' | 'broken'
 
 const NOT_IN_HARK_ID = /[^A-Za-z0-9_-]/gu
 
@@ -49,6 +49,37 @@ const callOf = (request: HttpClientRequest.HttpClientRequest): HarkCall => ({
   idempotencyKey: Headers.get(request.headers, 'idempotency-key'),
   body: bodyOf(request),
 })
+
+const responseTo = (
+  request: HttpClientRequest.HttpClientRequest,
+  answer: ReturnType<HarkScript>,
+) => {
+  if (answer === 'silent') {
+    return Effect.never
+  }
+
+  if (answer === 'broken') {
+    return Effect.die(new Error('the fake Hark client broke'))
+  }
+
+  if (answer === 'unreachable') {
+    return Effect.fail(
+      new HttpClientError({
+        reason: new TransportError({ request, description: 'connection refused' }),
+      }),
+    )
+  }
+
+  return Effect.succeed(
+    HttpClientResponse.fromWeb(
+      request,
+      new Response(encodeJson(answer.body), {
+        status: answer.status,
+        headers: { 'content-type': 'application/json', ...answer.headers },
+      }),
+    ),
+  )
+}
 
 export const created = (id: string, accepted = 1): HarkAnswer => ({
   status: 201,
@@ -90,25 +121,7 @@ export const fakeHark = Effect.fn('fakeHark')(function* (script: HarkScript) {
     const call = callOf(request)
     const answer = script(call)
 
-    return Queue.offer(calls, call).pipe(
-      Effect.andThen(
-        answer === 'unreachable'
-          ? Effect.fail(
-              new HttpClientError({
-                reason: new TransportError({ request, description: 'connection refused' }),
-              }),
-            )
-          : Effect.succeed(
-              HttpClientResponse.fromWeb(
-                request,
-                new Response(encodeJson(answer.body), {
-                  status: answer.status,
-                  headers: { 'content-type': 'application/json', ...answer.headers },
-                }),
-              ),
-            ),
-      ),
-    )
+    return Queue.offer(calls, call).pipe(Effect.andThen(responseTo(request, answer)))
   })
 
   return { calls, layer: Layer.succeed(HttpClient.HttpClient, client) }

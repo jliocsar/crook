@@ -140,8 +140,7 @@ const routes = Effect.gen(function* () {
 
 export const layer = HttpRouter.addAll(routes).pipe(
   Layer.provide([
-    Herd.layer,
-    HarkNotifier.layer.pipe(Layer.provide(Herd.layer)),
+    Layer.provideMerge(HarkNotifier.layer, Herd.layer),
     CommandRouter.layer,
     TranscriptRelay.layer,
     ExeDevIdentity.layer,

@@ -34,13 +34,13 @@ import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/p
 
 import packageJson from '../package.json' with { type: 'json' }
 
+import { logStorageFailure } from '@crook/hub/Database'
 import { MachineRecord, MachineRegistry } from '@crook/hub/MachineRegistry'
 import { PinRecord, PinnedAgents } from '@crook/hub/PinnedAgents'
 import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 
 export class MachinePublished extends Data.TaggedClass('MachinePublished')<{
-  readonly machine: MachineId
-  readonly label: string
+  readonly machineLabel: string
   readonly previous: Option.Option<MachineState>
   readonly next: MachineState
   readonly seen: HashSet.HashSet<PaneId>
@@ -51,7 +51,11 @@ export class PaneSeen extends Data.TaggedClass('PaneSeen')<{
   readonly pane: PaneId
 }> {}
 
-export type HerdChange = MachinePublished | PaneSeen
+export class MachineForgotten extends Data.TaggedClass('MachineForgotten')<{
+  readonly machine: MachineId
+}> {}
+
+export type HerdChange = MachinePublished | PaneSeen | MachineForgotten
 
 interface MachineEntry {
   readonly id: MachineId
@@ -217,11 +221,6 @@ const droppedSeenPanes = (previous: MachineEntry, next: MachineEntry) =>
     Arr.filter((pane) => !HashMap.has(next.seen, pane)),
   )
 
-const logStorageFailure = (what: string) => (error: SqlError) =>
-  Effect.logError(
-    `The hub could not store ${what} in its database, so it keeps it in memory only and loses it on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
-  )
-
 const logSeenDropFailure = (id: MachineId) => (error: SqlError) =>
   Effect.logError(
     `The hub could not delete the outdated seen marks of machine ${id} from its database, so it drops them in memory only and loads them again on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
@@ -345,8 +344,7 @@ const make = Effect.gen(function* () {
           PubSub.publish(
             changes,
             new MachinePublished({
-              machine: id,
-              label: next.label,
+              machineLabel: next.label,
               previous: previous.state,
               next: state,
               seen: HashSet.fromIterable(HashMap.keys(next.seen)),
@@ -369,6 +367,7 @@ const make = Effect.gen(function* () {
         const next: MachineEntry = { ...found, forgotten: true }
 
         yield* registry.save(toRecord(next))
+        yield* PubSub.publish(changes, new MachineForgotten({ machine: id }))
 
         return Option.some(next)
       }),
