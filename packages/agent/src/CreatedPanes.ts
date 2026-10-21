@@ -32,7 +32,7 @@ export class CreatedPanesUnreadable extends Schema.TaggedError<CreatedPanesUnrea
   { path: Schema.String, setAsidePath: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return `Could not read the panes crook created from ${this.path}, so it was moved to ${this.setAsidePath} and crook starts as if it had created none, asking for confirmation before closing any pane. Inspect the moved file, and delete it once its record is no longer wanted.`
+    return `Could not read the panes crook created from ${this.path}, so it was moved to ${this.setAsidePath} and crook starts as if it had created none, asking for confirmation before closing any pane. A read can fail for a passing reason too, leaving the moved file intact: inspect it, add back any pane ids still wanted while the agent is stopped, and delete it once its record is no longer wanted.`
   }
 }
 

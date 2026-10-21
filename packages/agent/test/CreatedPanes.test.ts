@@ -9,10 +9,12 @@ import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 
 import { CreatedPanes, CrookCreatedPanesPath } from '@crook/agent/CreatedPanes'
+import { makeEnsureParentDirectory } from '@crook/agent/StateDirectory'
 import { PaneId } from '@crook/domain/Ids'
 
 const PANE = PaneId.make('w1:p1')
 const OTHER_PANE = PaneId.make('w1:p2')
+const CORRUPT_RECORD = '{"panes":'
 
 const StoredPanes = Schema.fromJsonString(Schema.Array(Schema.String))
 
@@ -33,6 +35,17 @@ const scratchFile = Effect.fn('scratchFile')(function* (name: string) {
   const directory = yield* fileSystem.makeTempDirectoryScoped()
 
   return `${directory}/state/crook/${name}`
+})
+
+const corruptScratchFile = Effect.fn('corruptScratchFile')(function* (name: string) {
+  const fileSystem = yield* FileSystem.FileSystem
+  const ensureParentDirectory = yield* makeEnsureParentDirectory
+  const file = yield* scratchFile(name)
+
+  yield* ensureParentDirectory(file)
+  yield* fileSystem.writeFileString(file, CORRUPT_RECORD)
+
+  return file
 })
 
 layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices: true })(
@@ -59,15 +72,8 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
 
     it.effect('starts with no panes when the file is missing or unreadable', () =>
       Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem
         const missing = yield* createdPanesAt(yield* scratchFile('created-panes.json'))
-        const corrupt = yield* scratchFile('created-panes.json')
-
-        yield* fileSystem.makeDirectory(corrupt.slice(0, corrupt.lastIndexOf('/')), {
-          recursive: true,
-        })
-        yield* fileSystem.writeFileString(corrupt, '{"panes":')
-        const unreadable = yield* createdPanesAt(corrupt)
+        const unreadable = yield* createdPanesAt(yield* corruptScratchFile('created-panes.json'))
 
         expect(yield* missing.has(PANE)).toBe(false)
         expect(yield* unreadable.has(PANE)).toBe(false)
@@ -77,10 +83,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
     it.effect('moves an unreadable record aside before the next change writes a new one', () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem
-        const file = yield* scratchFile('created-panes.json')
-
-        yield* fileSystem.makeDirectory(file.slice(0, file.lastIndexOf('/')), { recursive: true })
-        yield* fileSystem.writeFileString(file, '{"panes":')
+        const file = yield* corruptScratchFile('created-panes.json')
         const unreadable = yield* createdPanesAt(file)
 
         yield* unreadable.remember(PANE)
@@ -89,7 +92,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
           .readFileString(file)
           .pipe(Effect.flatMap(Schema.decodeEffect(StoredPanes)))
 
-        expect(setAside).toBe('{"panes":')
+        expect(setAside).toBe(CORRUPT_RECORD)
         expect(stored).toEqual(['w1:p1'])
       }),
     )
