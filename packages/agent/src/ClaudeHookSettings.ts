@@ -4,8 +4,6 @@ import * as Record from 'effect/Record'
 
 import { CLAUDE_HOOK_EVENTS } from '@crook/claude/HookPayload'
 
-export const HOOK_COMMAND = 'crook-agent hook'
-
 export const claudeHookSettings = (command: string) => ({
   hooks: pipe(
     CLAUDE_HOOK_EVENTS,

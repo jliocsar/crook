@@ -6,7 +6,7 @@ import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 
-import { HOOK_COMMAND, claudeHookSettings } from '@crook/agent/ClaudeHookSettings'
+import { claudeHookSettings } from '@crook/agent/ClaudeHookSettings'
 import { forwardHook } from '@crook/agent/HookForwarder'
 
 import packageJson from '../package.json' with { type: 'json' }
@@ -23,8 +23,9 @@ const hookSettings = Command.make(
   'hook-settings',
   {
     command: Flag.String('command').pipe(
-      Flag.withDescription('The command Claude runs for each hook.'),
-      Flag.withDefault(HOOK_COMMAND),
+      Flag.withDescription(
+        'The command Claude runs for each hook, the hook subcommand of this program included, such as "bun /path/to/crook/packages/agent/src/main.ts hook".',
+      ),
     ),
   },
   ({ command }) => Console.log(encodeSettings(claudeHookSettings(command))),
