@@ -471,6 +471,14 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 :::tip
 Checking the web app against real data, measured:
 
+- The agent has no entrypoint yet. A probe script composes its layers and dials the hub directly
+  with the two headers the proxy would add, `X-ExeDev-Email` and `X-ExeDev-Token-Ctx` carrying
+  `{"machine":"<id>"}`; the token header is then not needed. Every herdr-reading layer needs
+  `HerdrClient` under it, not merged beside it.
+- The hub refuses to start on a `CROOK_HUB_ORIGIN` that is not https, a local one included. Any
+  https name works locally, because the Vite proxy sends that same value as the socket's `Origin`.
+- `pkill -f <pattern>` also matches the shell that runs it when the pattern is in its own command
+  line, and kills the call. Stop what you started by its saved pid.
 - A named herdr session runs headless with `herdr --session <name> server`. From inside a herdr
   pane, unset `HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID` and `HERDR_ENV`, and point
   `HERDR_SOCKET_PATH` at the named session's socket, or every command lands in the user's own

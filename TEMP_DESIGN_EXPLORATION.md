@@ -288,6 +288,8 @@ These were bugs or `DESIGN.md` misses in the components as shipped:
 
 ### Machines list (Roster)
 
+**Moved to `DESIGN.md` (Machines)**, with the detail and Add a machine below.
+
 - One card per machine: the name in display 20/28, the connection Status Pill, then "N agents ·
   N need you", then the crook agent and Herdr versions in mono.
 - **"update agent"**, a warn Status Pill, shows when the machine's crook agent is older than the
