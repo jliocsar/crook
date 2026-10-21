@@ -65,11 +65,14 @@ const runLine = (run: SubagentRun, paneClosed: boolean, now: ThreadEnvironment['
   pipe(
     [
       Option.some(runWord[runStatusShown(run, paneClosed)]),
-      Option.map(run.startedAt, (from) =>
-        spanDuration(
-          from,
-          Option.getOrElse(run.finishedAt, () => now),
-        ),
+      Option.map(
+        Option.all({
+          from: run.startedAt,
+          to: Option.orElse(run.finishedAt, () =>
+            Option.liftPredicate(now, () => runStatusShown(run, paneClosed) === 'running'),
+          ),
+        }),
+        ({ from, to }) => spanDuration(from, to),
       ),
       Option.liftPredicate(run.agentType, (type) => type !== ''),
       run.model,

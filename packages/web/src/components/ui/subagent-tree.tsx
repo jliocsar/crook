@@ -24,17 +24,18 @@ export type SubagentTreeProps = Omit<
 
 const CHEVRON_SIZE = 14
 
+const subagentsNoun = (count: number): string => (count === 1 ? 'subagent' : 'subagents')
+
 const summaryOf = (runs: readonly AgentRun[]): string => {
   const running = runs.filter((run) => run.status === 'running').length
   const failed = runs.filter((run) => run.status === 'failed').length
+  const counted = `${runs.length} ${subagentsNoun(runs.length)}`
 
   if (running > 0) {
-    return `${running} of ${runs.length} subagents running`
+    return `${running} of ${counted} running`
   }
 
-  return failed > 0
-    ? `${runs.length} subagents finished, ${failed} failed`
-    : `${runs.length} subagents finished`
+  return failed > 0 ? `${counted} finished, ${failed} failed` : `${counted} finished`
 }
 
 export function RunDot({ status }: { status: AgentRunStatus }) {

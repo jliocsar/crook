@@ -152,6 +152,31 @@ describe('chatItems', () => {
     ).toEqual(['you: review', 'subagents: Review the herd diff done'])
   })
 
+  it('gives a background run no end time from its launch, only from its notification', () => {
+    const runsOf = (messages: readonly TranscriptMessage[]) =>
+      chatItems(
+        linesOf(messages),
+        context('still', [subagent({ toolUseId: 'toolu_1', finished: true })]),
+      ).flatMap((item) => (ChatItem.$is('Subagents')(item) ? item.runs : []))
+    const launched = [
+      prompt(0, 'review'),
+      toolUse(10, 'toolu_1', 'Agent', reviewerInput, 1),
+      toolResult(20, 'toolu_1', 'Async agent launched', {
+        launch: new SubagentLaunch({ subagent: REVIEWER, status: 'async_launched' }),
+        seconds: 2,
+      }),
+    ]
+
+    expect(runsOf(launched).map((run) => [run.status, run.finishedAt])).toEqual([
+      ['done', Option.none()],
+    ])
+    expect(
+      runsOf([...launched, notification(30, 'toolu_1', 'completed')]).map((run) =>
+        Option.isSome(run.finishedAt),
+      ),
+    ).toEqual([true])
+  })
+
   it('keeps one plan per turn with its latest steps', () => {
     expect(
       shown([

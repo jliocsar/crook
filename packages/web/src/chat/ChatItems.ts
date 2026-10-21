@@ -449,7 +449,9 @@ const subagentRun = (
       status === 'running'
         ? Option.none()
         : Option.orElse(stampedAt(notice), () =>
-            stampedAt(Option.fromUndefinedOr(evidence.results.get(use.id))),
+            background
+              ? Option.none()
+              : stampedAt(Option.fromUndefinedOr(evidence.results.get(use.id))),
           ),
   })
 }

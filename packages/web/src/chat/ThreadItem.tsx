@@ -163,7 +163,9 @@ const treeRun = (run: SubagentRun, environment: ThreadEnvironment): AgentRun => 
     duration: pipe(
       Option.all({
         from: run.startedAt,
-        to: Option.orElse(run.finishedAt, () => Option.some(environment.now)),
+        to: Option.orElse(run.finishedAt, () =>
+          Option.liftPredicate(environment.now, () => status === 'running'),
+        ),
       }),
       Option.map(({ from, to }) => spanDuration(from, to)),
       Option.getOrUndefined,
