@@ -461,6 +461,10 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   `useAtomSet` in `promiseExit` mode keeps the call running after the screen unmounts, because
   it holds a subscription until the result settles (read in its source, and a test that leaves
   mid-forget sees the forget land).
+- `Effect.catchTag` does not typecheck over a generic error union such as `Failure | RpcClientError`
+  (measured: TS2345, the tag narrows to `{ readonly _tag: unknown }`). A `Schema.Error` there is
+  caught with `Effect.catchIf(Schema.is(X), …)`; `instanceof` is the other spelling, and
+  `effecttsgo/instance-of-schema` rejects it.
 - Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
   with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
   renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
