@@ -1,4 +1,6 @@
+import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AbsolutePath } from '@crook/domain/AbsolutePath'
@@ -124,6 +126,26 @@ export const targetPane = (command: PaneCommand): PaneId =>
 
 export const hasStarted = (receipt: AgentStarted, agents: readonly AgentRow[]) =>
   agents.some((row) => row.pane === receipt.pane)
+
+export const hasRenamed = (receipt: PaneRenamed, row: AgentRow) =>
+  row.pane === receipt.pane &&
+  Option.match(receipt.label, {
+    onNone: () => Option.isNone(row.label),
+    onSome: (label) => Option.contains(row.label, label),
+  })
+
+export const hasClosed = (receipt: PaneClosed, agents: readonly AgentRow[]) =>
+  !agents.some((row) => row.pane === receipt.pane)
+
+export const isReceiptShown = (receipt: CommandReceipt, agents: readonly AgentRow[]): boolean =>
+  Match.value(receipt).pipe(
+    Match.tagsExhaustive({
+      InputDelivered: (delivered) => Arr.some(agents, (row) => hasMovedSince(delivered, row)),
+      PaneRenamed: (renamed) => Arr.some(agents, (row) => hasRenamed(renamed, row)),
+      PaneClosed: (closed) => hasClosed(closed, agents),
+      AgentStarted: (started) => hasStarted(started, agents),
+    }),
+  )
 
 export const hasMovedSince = (receipt: InputDelivered, row: AgentRow) =>
   row.pane === receipt.pane &&
