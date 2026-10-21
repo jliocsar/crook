@@ -10,30 +10,8 @@ import { SeenTracker } from '@crook/hub/SeenTracker'
 const IN_MEMORY = ':memory:'
 
 const migrationsAsSeenShippedWithoutTerminal = SqliteMigrator.fromRecord({
-  '1_machines': Effect.flatMap(
-    SqlClient.SqlClient,
-    (sql) => sql`
-      CREATE TABLE machines (
-        id TEXT PRIMARY KEY,
-        label TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL,
-        forgotten INTEGER NOT NULL DEFAULT 0,
-        agent_version TEXT,
-        herdr_version TEXT
-      )
-    `,
-  ),
-  '2_seen': Effect.flatMap(
-    SqlClient.SqlClient,
-    (sql) => sql`
-      CREATE TABLE seen (
-        machine TEXT NOT NULL,
-        pane TEXT NOT NULL,
-        state_change_seq INTEGER NOT NULL,
-        PRIMARY KEY (machine, pane)
-      )
-    `,
-  ),
+  '1_machines': Database.createMachines,
+  '2_seen': Database.createSeen,
 })
 
 it.effect('upgrades a database whose seen marks carry no terminal, dropping those marks', () =>
@@ -50,7 +28,7 @@ it.effect('upgrades a database whose seen marks carry no terminal, dropping thos
     const upgraded = yield* Layer.build(
       Layer.provideMerge(
         SeenTracker.layer,
-        Layer.provideMerge(Database.migrated, Layer.succeedContext(client)),
+        Layer.provideMerge(Database.migratorLayer, Layer.succeedContext(client)),
       ),
     )
     const marksAfter = yield* Effect.flatMap(SeenTracker, (seenTracker) => seenTracker.all).pipe(

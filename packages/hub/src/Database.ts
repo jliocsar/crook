@@ -35,7 +35,7 @@ export const dieOnUnencodableRecord = <Success, Requirements>(
 ): Effect.Effect<Success, SqlError, Requirements> =>
   write.pipe(Effect.catchTag('SchemaError', (error) => Effect.die(error)))
 
-const createMachines = Effect.flatMap(
+export const createMachines = Effect.flatMap(
   SqlClient.SqlClient,
   (sql) => sql`
     CREATE TABLE machines (
@@ -49,7 +49,7 @@ const createMachines = Effect.flatMap(
   `,
 )
 
-const createSeen = Effect.flatMap(
+export const createSeen = Effect.flatMap(
   SqlClient.SqlClient,
   (sql) => sql`
     CREATE TABLE seen (
@@ -89,8 +89,9 @@ export const clientAt = (filename: string) =>
     transformResultNames: Str.snakeToCamel,
   })
 
-export const migrated = SqliteMigrator.layer({ loader: migrations })
+export const migratorLayer = SqliteMigrator.layer({ loader: migrations })
 
-export const layerAt = (filename: string) => migrated.pipe(Layer.provideMerge(clientAt(filename)))
+export const layerAt = (filename: string) =>
+  migratorLayer.pipe(Layer.provideMerge(clientAt(filename)))
 
 export const layer = Layer.unwrap(Effect.map(CrookHubDatabasePath, layerAt))
