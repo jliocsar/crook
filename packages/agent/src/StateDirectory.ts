@@ -2,14 +2,13 @@ import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
-import * as Schema from 'effect/Schema'
 
-const ABSOLUTE_PATH_PREFIX = '/'
+import { AbsolutePath } from '@crook/domain/AbsolutePath'
+
+const TEMPORARY_SUFFIX = '.tmp'
 
 export const OWNER_ONLY_FILE_MODE = 0o600
 export const OWNER_ONLY_DIRECTORY_MODE = 0o700
-
-const AbsolutePath = Schema.String.check(Schema.isStartingWith(ABSOLUTE_PATH_PREFIX))
 
 export const CrookStateDirectory = Config.schema(AbsolutePath, 'XDG_STATE_HOME').pipe(
   Config.orElse(() => Config.String('HOME').pipe(Config.map((home) => `${home}/.local/state`))),
@@ -30,4 +29,18 @@ export const makeEnsureParentDirectory = Effect.gen(function* () {
       recursive: true,
       mode: OWNER_ONLY_DIRECTORY_MODE,
     })
+})
+
+export const makeWriteAtomically = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const ensureParentDirectory = yield* makeEnsureParentDirectory
+
+  return (file: string, content: string) => {
+    const temporary = `${file}${TEMPORARY_SUFFIX}`
+
+    return ensureParentDirectory(file).pipe(
+      Effect.andThen(fileSystem.writeFileString(temporary, content)),
+      Effect.andThen(fileSystem.rename(temporary, file)),
+    )
+  }
 })

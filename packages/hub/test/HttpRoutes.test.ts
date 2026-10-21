@@ -52,6 +52,7 @@ import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import {
   AskNotPending,
   type CommandResult,
+  FolderNotFound,
   MachineOffline,
   PaneNotAgent,
   PaneNotCreatedByCrook,
@@ -80,6 +81,7 @@ import {
 const EVIL_ORIGIN = 'https://evil.example'
 const STRANGER = 'someone@example.com'
 const ASK = AskId.make('toolu_01XXC3bash')
+const BUN_IDLE_TIMEOUT_TICK = Duration.seconds(4)
 
 const stateOf = (machine: MachineId, version: number) =>
   machineStateWith(machine, version, [agentRow()])
@@ -248,14 +250,17 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
         const pinging = MachineId.make('pinging')
 
         yield* attachAs(silent, Duration.infinity)
-        yield* attachAs(pinging)
         const silentSince = yield* Clock.currentTimeMillis
+        yield* attachAs(pinging)
         yield* machineShows(silent, 'reconnecting')
         const silentFor = Duration.millis((yield* Clock.currentTimeMillis) - silentSince)
 
-        expect(Duration.isGreaterThanOrEqualTo(silentFor, HttpRoutes.SOCKET_SILENCE_TIMEOUT)).toBe(
-          true,
-        )
+        expect(
+          Duration.isGreaterThanOrEqualTo(
+            silentFor,
+            Duration.subtract(HttpRoutes.SOCKET_SILENCE_TIMEOUT, BUN_IDLE_TIMEOUT_TICK),
+          ),
+        ).toBe(true)
         expect(
           Option.map(
             machineIn(yield* herdWhere(() => true), pinging),
@@ -292,6 +297,8 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
             ClosePane: (close) => Result.fail(new PaneNotCreatedByCrook({ pane: close.pane })),
             AnswerAsk: (answer) =>
               Result.fail(new AskNotPending({ pane: answer.pane, ask: answer.ask })),
+            StartAgent: (start) => Result.fail(new FolderNotFound({ folder: start.folder })),
+            CreateWorktree: (create) => Result.fail(new FolderNotFound({ folder: create.folder })),
           }),
         ),
       )
@@ -388,6 +395,9 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
                     stateChangeSeq: 4,
                   }),
                 ),
+              StartAgent: (start) => Result.fail(new FolderNotFound({ folder: start.folder })),
+              CreateWorktree: (create) =>
+                Result.fail(new FolderNotFound({ folder: create.folder })),
             }),
           ),
         )

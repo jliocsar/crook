@@ -94,6 +94,7 @@ const stateWith = (
     tabs: [],
     panes: [],
     agents,
+    places: [],
   })
 
 const FINISHED_FIELDS: ConstructorParameters<typeof WantedNotification>[0] = {

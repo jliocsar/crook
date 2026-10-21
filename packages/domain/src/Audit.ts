@@ -36,6 +36,9 @@ export const AuditArgumentName = Schema.Literals([
   'ask',
   'answer',
   'choice',
+  'kind',
+  'folder',
+  'branch',
 ])
 export type AuditArgumentName = typeof AuditArgumentName.Type
 
@@ -155,6 +158,19 @@ export const commandAudit = (command: Command): AuditedOperation =>
       AnswerAsk: (answerAsk) => ({
         operation: 'AnswerAsk',
         arguments: { pane: answerAsk.pane, ask: answerAsk.ask, ...answerAudit(answerAsk.answer) },
+      }),
+      StartAgent: (start) => ({
+        operation: 'StartAgent',
+        arguments: { kind: start.kind, folder: start.folder, text: Option.getOrNull(start.task) },
+      }),
+      CreateWorktree: (create) => ({
+        operation: 'CreateWorktree',
+        arguments: {
+          kind: create.kind,
+          folder: create.folder,
+          branch: create.branch,
+          text: Option.getOrNull(create.task),
+        },
       }),
     }),
   )

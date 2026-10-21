@@ -14,6 +14,16 @@ import * as Str from 'effect/String'
 
 import { flatMapSome, orElseSome } from '@crook/agent/OptionEffect'
 
+export interface GitCheckout {
+  readonly root: string
+  readonly branch: Option.Option<string>
+}
+
+interface FoundGitDirectory {
+  readonly root: string
+  readonly gitDirectory: string
+}
+
 const GIT_ENTRY = '.git'
 const HEAD_FILE = 'HEAD'
 const GITDIR_PREFIX = 'gitdir: '
@@ -36,7 +46,7 @@ const afterPrefix = (prefix: string) => (text: string) =>
 
 const branchOfHead = afterPrefix(BRANCH_REF_PREFIX)
 
-const keepOnlyFound = (exit: Exit.Exit<Option.Option<string>, GitMetadataUnreadable>) =>
+const keepOnlyFound = (exit: Exit.Exit<Option.Option<FoundGitDirectory>, GitMetadataUnreadable>) =>
   Exit.match(exit, {
     onSuccess: (found) => (Option.isSome(found) ? Duration.infinity : Duration.zero),
     onFailure: () => Duration.zero,
@@ -71,23 +81,30 @@ const make = Effect.gen(function* () {
       ),
     )
 
-  const gitDirectoryIn = (directory: string) => {
+  const gitDirectoryIn = (
+    directory: string,
+  ): Effect.Effect<Option.Option<FoundGitDirectory>, GitMetadataUnreadable> => {
     const entry = path.join(directory, GIT_ENTRY)
+    const foundIn = (gitDirectory: string): FoundGitDirectory => ({ root: directory, gitDirectory })
 
     return ifPresent(entry, fileSystem.stat(entry)).pipe(
-      flatMapSome((info: FileSystem.File.Info) =>
-        info.type === 'Directory'
-          ? Effect.succeed(Option.some(entry))
-          : pointedGitDirectory(directory, entry),
+      flatMapSome(
+        (
+          info: FileSystem.File.Info,
+        ): Effect.Effect<Option.Option<string>, GitMetadataUnreadable> =>
+          info.type === 'Directory'
+            ? Effect.succeed(Option.some(entry))
+            : pointedGitDirectory(directory, entry),
       ),
+      Effect.map(Option.map(foundIn)),
     )
   }
 
   const firstGitDirectory = (
     directories: readonly string[],
-  ): Effect.Effect<Option.Option<string>, GitMetadataUnreadable> =>
+  ): Effect.Effect<Option.Option<FoundGitDirectory>, GitMetadataUnreadable> =>
     Arr.match(directories, {
-      onEmpty: () => Effect.succeed(Option.none<string>()),
+      onEmpty: () => Effect.succeed(Option.none<FoundGitDirectory>()),
       onNonEmpty: ([directory, ...above]) =>
         gitDirectoryIn(directory).pipe(orElseSome(() => firstGitDirectory(above))),
     })
@@ -103,28 +120,44 @@ const make = Effect.gen(function* () {
     return ifPresent(head, fileSystem.readFileString(head))
   }
 
-  const headAfterLookingAgain = (cwd: string) =>
-    Cache.refresh(gitDirectories, cwd).pipe(flatMapSome(headIn))
+  const checkoutIn = (
+    found: FoundGitDirectory,
+  ): Effect.Effect<Option.Option<GitCheckout>, GitMetadataUnreadable> => {
+    const checkoutAt = (head: string): GitCheckout => ({
+      root: found.root,
+      branch: branchOfHead(head),
+    })
 
-  const branchOf = Effect.fn('GitBranches.branchOf')(function* (cwd: string) {
+    return headIn(found.gitDirectory).pipe(Effect.map(Option.map(checkoutAt)))
+  }
+
+  const checkoutAfterLookingAgain = (cwd: string) =>
+    Cache.refresh(gitDirectories, cwd).pipe(flatMapSome(checkoutIn))
+
+  const checkoutOf = Effect.fn('GitBranches.checkoutOf')(function* (cwd: string) {
     if (!path.isAbsolute(cwd)) {
-      return Option.none()
+      return Option.none<GitCheckout>()
     }
 
     return yield* Cache.get(gitDirectories, cwd).pipe(
-      flatMapSome((directory: string) =>
-        headIn(directory).pipe(orElseSome(() => headAfterLookingAgain(cwd))),
+      flatMapSome((found: FoundGitDirectory) =>
+        checkoutIn(found).pipe(orElseSome(() => checkoutAfterLookingAgain(cwd))),
       ),
-      Effect.map(Option.flatMap(branchOfHead)),
     )
   })
 
-  return GitBranches.of({ branchOf })
+  const branchOf = (cwd: string) =>
+    checkoutOf(cwd).pipe(Effect.map(Option.flatMap((checkout) => checkout.branch)))
+
+  return GitBranches.of({ checkoutOf, branchOf })
 })
 
 export class GitBranches extends Context.Service<
   GitBranches,
   {
+    readonly checkoutOf: (
+      cwd: string,
+    ) => Effect.Effect<Option.Option<GitCheckout>, GitMetadataUnreadable>
     readonly branchOf: (cwd: string) => Effect.Effect<Option.Option<string>, GitMetadataUnreadable>
   }
 >()('@crook/agent/GitBranches') {
@@ -134,6 +167,13 @@ export class GitBranches extends Context.Service<
     Layer.succeed(
       this,
       GitBranches.of({
+        checkoutOf: (cwd) =>
+          Effect.succeed(
+            Option.map(Option.fromNullishOr(branches.get(cwd)), (branch): GitCheckout => ({
+              root: cwd,
+              branch: Option.some(branch),
+            })),
+          ),
         branchOf: (cwd) => Effect.succeed(Option.fromNullishOr(branches.get(cwd))),
       }),
     )

@@ -14,6 +14,19 @@ export class AgentSessionInfo extends Schema.Class<AgentSessionInfo>('AgentSessi
   value: Schema.String,
 }) {}
 
+export class WorkspaceWorktreeInfo extends Schema.Class<WorkspaceWorktreeInfo>(
+  'WorkspaceWorktreeInfo',
+)({
+  repo_root: Schema.String,
+  checkout_path: Schema.String,
+  is_linked_worktree: Schema.Boolean,
+}) {}
+
+export class WorktreeInfo extends Schema.Class<WorktreeInfo>('WorktreeInfo')({
+  path: Schema.String,
+  branch: Schema.OptionFromOptionalNullOr(Schema.String),
+}) {}
+
 export class WorkspaceInfo extends Schema.Class<WorkspaceInfo>('WorkspaceInfo')({
   workspace_id: Schema.String,
   number: Schema.Int,
@@ -23,6 +36,7 @@ export class WorkspaceInfo extends Schema.Class<WorkspaceInfo>('WorkspaceInfo')(
   tab_count: Schema.Int,
   active_tab_id: Schema.String,
   agent_status: AgentStatus,
+  worktree: Schema.OptionFromOptionalNullOr(WorkspaceWorktreeInfo),
 }) {}
 
 export class TabInfo extends Schema.Class<TabInfo>('TabInfo')({

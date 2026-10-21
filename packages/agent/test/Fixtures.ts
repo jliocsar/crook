@@ -9,6 +9,7 @@ import type * as SubscriptionRef from 'effect/SubscriptionRef'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
+import { GitBranches } from '@crook/agent/GitBranches'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
@@ -41,6 +42,7 @@ export const workspaceInfo = new WorkspaceInfo({
   tab_count: 1,
   active_tab_id: 'w1:t1',
   agent_status: 'working',
+  worktree: Option.none(),
 })
 
 export const tabInfo = new TabInfo({
@@ -161,6 +163,7 @@ export const machineStateWith = (agents: readonly AgentRow[]) =>
     tabs: [],
     panes: [],
     agents,
+    places: [],
   })
 
 export const spikeScreenPath = (name: string) =>
@@ -173,6 +176,8 @@ export const AUDIT_EVERYTHING = new AuditPolicy({
 
 export const discardingAudit = Layer.succeed(AuditLog, AuditLog.of({ record: () => Effect.void }))
 
+export const gitBranchesOnDisk = Layer.provide(GitBranches.layer, [BunFileSystem.layer, Path.layer])
+
 export const executorWith = (
   herdr: Layer.Layer<HerdrClient>,
   state: SubscriptionRef.SubscriptionRef<MachineState>,
@@ -183,6 +188,9 @@ export const executorWith = (
     CreatedPanes.layerTest(options.created),
     options.audit ?? discardingAudit,
     herdr,
+    gitBranchesOnDisk,
+    BunFileSystem.layer,
+    Path.layer,
   ])
 
 export const linkedAgentWith = (
@@ -195,6 +203,7 @@ export const linkedAgentWith = (
     CreatedPanes.layerTest(options.created),
     options.audit ?? discardingAudit,
     herdr,
+    gitBranchesOnDisk,
     BunFileSystem.layer,
     Path.layer,
   ])

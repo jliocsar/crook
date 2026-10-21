@@ -1,6 +1,7 @@
 import * as BunSocket from '@effect/platform-bun/BunSocket'
 import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Redacted from 'effect/Redacted'
 import * as Schedule from 'effect/Schedule'
@@ -14,6 +15,7 @@ import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
+import { LaunchCommand } from '@crook/domain/Command'
 import {
   AGENT_PING_INTERVAL,
   AGENT_SOCKET_OPEN_TIMEOUT,
@@ -21,6 +23,7 @@ import {
   Hello,
   hubReconnectSchedule,
 } from '@crook/protocol/AgentLink'
+import type { RoutedCommand } from '@crook/protocol/Commands'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 import packageJson from '../package.json' with { type: 'json' }
@@ -30,6 +33,8 @@ export type AgentLinkClient = RpcClient.FromGroup<typeof AgentLink, RpcClientErr
 export type HubConnect = Effect.Effect<AgentLinkClient, never, Scope.Scope>
 
 const HUB_AUTHORIZATION_HEADER = 'X-Exedev-Authorization'
+
+const isLaunch = Schema.is(LaunchCommand)
 
 export const CrookHubUrl = Config.URL('CROOK_HUB_URL')
 export const CrookHubToken = Config.Redacted('CROOK_HUB_TOKEN')
@@ -77,16 +82,38 @@ const make = (connect: HubConnect, hello: Hello) =>
     const sync = yield* MachineStateSync
     const executor = yield* CommandExecutor
     const transcripts = yield* TranscriptStreams
+    const launches = yield* Effect.scope
+
+    const answer = (client: AgentLinkClient, routed: RoutedCommand) =>
+      executor.execute(routed.key, routed.command).pipe(
+        Effect.result,
+        Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
+        Effect.annotateLogs('command', routed.id),
+      )
+
+    const answerLaunch = (client: AgentLinkClient, routed: RoutedCommand) =>
+      executor.execute(routed.key, routed.command).pipe(
+        Effect.result,
+        Effect.forkIn(launches),
+        Effect.flatMap((launch) =>
+          Fiber.join(launch).pipe(
+            Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
+            Effect.tapError((error) => Effect.logWarning(error.message)),
+            Effect.ignore,
+            Effect.forkScoped,
+          ),
+        ),
+        Effect.annotateLogs('command', routed.id),
+      )
 
     const holdAttach = (client: AgentLinkClient) =>
       client.Attach({ hello }).pipe(
-        Stream.mapEffect((routed) =>
-          executor.execute(routed.key, routed.command).pipe(
-            Effect.result,
-            Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
-            Effect.annotateLogs('command', routed.id),
-          ),
+        Stream.tap((routed) =>
+          isLaunch(routed.command) ? answerLaunch(client, routed) : Effect.void,
         ),
+        Stream.filter((routed) => !isLaunch(routed.command)),
+        Stream.buffer({ capacity: 'unbounded' }),
+        Stream.mapEffect((routed) => answer(client, routed)),
         Stream.runDrain,
         Effect.andThen(Effect.fail(new HubAttachEnded())),
       )

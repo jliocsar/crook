@@ -8,6 +8,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 
+import { AgentLauncher } from '@crook/agent/AgentLauncher'
 import { AskAnswers } from '@crook/agent/AskAnswers'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandPolicy } from '@crook/agent/CommandPolicy'
@@ -20,7 +21,9 @@ import {
   type Command,
   type CommandReceipt,
   InputDelivered,
+  type LaunchCommand,
   PaneClosed,
+  type PaneCommand,
   PaneRenamed,
   targetPane,
 } from '@crook/domain/Command'
@@ -32,6 +35,7 @@ import {
   PaneCloseMethod,
   PaneRenameMethod,
 } from '@crook/herdr/Methods'
+import { LAUNCH_HERDR_WAIT } from '@crook/protocol/AgentLink'
 import {
   type AgentCommandFailure,
   CommandDeliveryUnknown,
@@ -52,14 +56,15 @@ const SLOWEST_MEASURED_PROMPT = Duration.millis(403)
 
 export const COMMAND_REPLAY_CAPACITY = 1024
 export const HERDR_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_PROMPT, 10)
+export const LAUNCH_DELIVERY_TIMEOUT = Duration.sum(LAUNCH_HERDR_WAIT, HERDR_DELIVERY_TIMEOUT)
 
-const answerOf = (command: Command) =>
+const answerOf = (command: PaneCommand) =>
   Match.value(command).pipe(
     Match.tag('AnswerAsk', (answer) => Option.some(answer)),
     Match.orElse(() => Option.none<AnswerAsk>()),
   )
 
-const declineMessageOf = (command: Command) =>
+const declineMessageOf = (command: PaneCommand) =>
   Option.flatMap(answerOf(command), (answer) =>
     Match.value(answer.answer).pipe(
       Match.tag('Decline', (decline) => decline.message),
@@ -81,9 +86,10 @@ const make = Effect.gen(function* () {
   const createdPanes = yield* CreatedPanes
   const audit = yield* AuditLog
   const answers = yield* AskAnswers
+  const launcher = yield* AgentLauncher
 
   const afterDelivery = (
-    command: Command,
+    command: PaneCommand,
     outcome: DeliveryOutcome,
     budget: Duration.Duration,
   ): Effect.Effect<
@@ -103,7 +109,7 @@ const make = Effect.gen(function* () {
       },
     )
 
-  const deliver = (command: Command, row: AgentRow) =>
+  const deliver = (command: PaneCommand, row: AgentRow) =>
     Match.value(command).pipe(
       Match.tagsExhaustive({
         Prompt: (prompt) =>
@@ -138,6 +144,7 @@ const make = Effect.gen(function* () {
       Match.tagsExhaustive({
         InputDelivered: () => Effect.void,
         PaneRenamed: () => sync.invalidate,
+        AgentStarted: () => Effect.void,
         PaneClosed: (closed) =>
           createdPanes
             .forget(closed.pane)
@@ -149,8 +156,22 @@ const make = Effect.gen(function* () {
       }),
     )
 
+  const runLaunch = (command: LaunchCommand) =>
+    launcher.launch(command).pipe(
+      Effect.map(Result.succeed),
+      Effect.timeoutOrElse({
+        duration: LAUNCH_DELIVERY_TIMEOUT,
+        orElse: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
+      }),
+      Effect.catchTags({
+        AgentNotStarted: (notStarted) => Effect.succeed(Result.fail(notStarted)),
+        TaskNotDelivered: (notDelivered) => Effect.succeed(Result.fail(notDelivered)),
+        CommandDeliveryUnknown: (unknown) => Effect.succeed(Result.fail(unknown)),
+      }),
+    )
+
   const delivered = (
-    command: Command,
+    command: PaneCommand,
     row: AgentRow,
   ): Effect.Effect<DeliveryOutcome, AgentCommandFailure> =>
     deliver(command, row).pipe(
@@ -162,16 +183,19 @@ const make = Effect.gen(function* () {
       Effect.catchTags({
         HerdrConnectionClosed: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrResponseInvalid: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
+        HerdrPromptStalled: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrUnreachable: () => Effect.fail(new HerdrUnavailable()),
         HerdrPaneNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
         HerdrAgentNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
+        HerdrPaneBusy: (busy) =>
+          Effect.fail(new HerdrRefusedCommand({ code: 'agent_pane_busy', detail: busy.detail })),
         HerdrRequestRejected: (rejected) =>
           Effect.fail(new HerdrRefusedCommand({ code: rejected.code, detail: rejected.detail })),
         HerdrRequestInvalid: (invalid) => Effect.die(invalid),
       }),
     )
 
-  const runAdmitted = Effect.fn('CommandExecutor.runAdmitted')(function* (command: Command) {
+  const runAdmitted = Effect.fn('CommandExecutor.runAdmitted')(function* (command: PaneCommand) {
     const row = yield* policy.admit(command)
 
     yield* Option.match(answerOf(command), {
@@ -197,12 +221,23 @@ const make = Effect.gen(function* () {
     )
   })
 
-  const run = Effect.fn('CommandExecutor.run')(function* ({ command }: Execution) {
+  const runOnPane = Effect.fn('CommandExecutor.runOnPane')(function* (command: PaneCommand) {
     return yield* Option.match(answerOf(command), {
       onNone: () => runAdmitted(command),
       onSome: (answer) => answers.exclusive(answer.pane, runAdmitted(command)),
     })
   })
+
+  const run = ({
+    command,
+  }: Execution): Effect.Effect<
+    Result.Result<CommandReceipt, AgentCommandFailure>,
+    AgentCommandFailure
+  > =>
+    Match.value(command).pipe(
+      Match.tags({ StartAgent: runLaunch, CreateWorktree: runLaunch }),
+      Match.orElse(runOnPane),
+    )
 
   const outcomes = yield* Cache.makeWith(run, {
     capacity: COMMAND_REPLAY_CAPACITY,
@@ -236,6 +271,6 @@ export class CommandExecutor extends Context.Service<
   }
 >()('@crook/agent/CommandExecutor') {
   static readonly layer = Layer.effect(this, make).pipe(
-    Layer.provide([CommandPolicy.layer, AskAnswers.layer]),
+    Layer.provide([CommandPolicy.layer, AskAnswers.layer, AgentLauncher.layer]),
   )
 }

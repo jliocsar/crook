@@ -185,6 +185,16 @@ A data-last combinator stored in a variable before it meets its input — `const
 — infers `unknown` for the error, and `effecttsgo/any-unknown-in-error-context` reports every effect it
 touches. Apply it inline (measured).
 
+`Effect.filter` with an effectful predicate and a `concurrency` option returns what it keeps in
+the order the predicates finished, not in input order (read in `effect@4.0.5`'s source; a test
+saw a sorted list come back shuffled). Where order matters, `Effect.forEach` into `Option`s and
+`Arr.getSomes` keeps it.
+
+A fiber forked into a scope that closes before the fiber first runs never runs any of its effect
+(measured: a step forked from inside a `forkScoped` fiber never started when the session scope
+closed right after the fork). Work that must happen once it is accepted is forked into the scope
+that owns it directly, by the fiber that accepted it, and only the follow-up goes in a child.
+
 An `Effect<A>` is assignable to `Effect<void>`: a service method typed `Effect<void>` accepts
 `Queue.offer(…)` or `Effect.forkIn(scope)` as they are, and `begone-slop/no-effect-asvoid` rejects
 the `Effect.asVoid` that would only satisfy the signature (measured: removed in three places, the
@@ -494,6 +504,10 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   upgrade with `Host: attacker.example` was proxied). A proxy rule that trusts an upgrade does
   its own host check, and the `Host` it compares against must be a fixed name, never another
   request header: a DNS-rebound page sends a matching `Host` and `Origin`.
+
+:::warning
+A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
+:::
 
 :::tip
 Checking the web app against real data, measured:

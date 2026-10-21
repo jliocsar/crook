@@ -23,18 +23,28 @@ import * as RpcServer from 'effect/rpc/RpcServer'
 import * as RpcTest from 'effect/rpc/RpcTest'
 import * as TestClock from 'effect/testing/TestClock'
 
+import { PANE_BUSY_RETRY_LIMIT } from '@crook/agent/AgentLauncher'
 import * as HubLink from '@crook/agent/HubLink'
-import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
+import { InputDelivered, Prompt, SendKeys, StartAgent } from '@crook/domain/Command'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
   HerdrClient,
   type HerdrSubscriptionError,
+  type ScriptedResponse,
   type SentRequest,
+  scriptedRejection,
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
-import { AgentPromptMethod, AgentSendKeysMethod } from '@crook/herdr/Methods'
+import {
+  AgentPromptMethod,
+  AgentSendKeysMethod,
+  AgentStartMethod,
+  PaneSendInputMethod,
+  SessionSnapshotMethod,
+  WorkspaceCreateMethod,
+} from '@crook/herdr/Methods'
 import {
   AGENT_PING_INTERVAL,
   AgentLink,
@@ -53,12 +63,24 @@ import { protocolSerialization } from '@crook/protocol/Serialization'
 
 import packageJson from '../package.json' with { type: 'json' }
 
-import { LAPTOP, TERMINAL, agentRow, herdrLink, linkedAgentWith } from './Fixtures'
+import {
+  LAPTOP,
+  TERMINAL,
+  agentRow,
+  herdrLink,
+  linkedAgentWith,
+  paneInfo,
+  sessionSnapshot,
+  tabInfo,
+  workspaceInfo,
+} from './Fixtures'
 
 interface HubScript {
   readonly attachLifetime: Option.Option<Duration.Duration>
   readonly reply: (state: MachineState) => Effect.Effect<void, MachineIdMismatch>
   readonly commands: readonly RoutedCommand[]
+  readonly responses: readonly ScriptedResponse[]
+  readonly complete: (completion: Completion) => Effect.Effect<void>
 }
 
 interface Publication {
@@ -95,6 +117,7 @@ const stateAt = (version: number) =>
     tabs: [],
     panes: [],
     agents: [agentRow()],
+    places: [],
   })
 
 const routed = (id: number, key: IdempotencyKey, command: RoutedCommand['command']) =>
@@ -106,19 +129,33 @@ const delivered = Result.succeed(
   new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 4 }),
 )
 
+const inputResponses = [
+  scriptedResult(AgentPromptMethod, { type: 'agent_prompted' }),
+  scriptedResult(AgentSendKeysMethod, { type: 'ok' }),
+]
+
+const launchStuckAtABusyShell = [
+  scriptedResult(SessionSnapshotMethod, {
+    type: 'session_snapshot',
+    snapshot: sessionSnapshot([]),
+  }),
+  scriptedResult(WorkspaceCreateMethod, {
+    type: 'workspace_created',
+    workspace: workspaceInfo,
+    tab: tabInfo,
+    root_pane: paneInfo({ pane_id: 'w1:p9' }),
+  }),
+  scriptedResult(PaneSendInputMethod, { type: 'ok' }),
+  scriptedRejection(AgentStartMethod, 'agent_pane_busy', 'not an available shell'),
+]
+
 const agentWith = (
   state: SubscriptionRef.SubscriptionRef<MachineState>,
   sent: Queue.Queue<SentRequest>,
+  responses: readonly ScriptedResponse[],
 ) =>
   Effect.map(Queue.unbounded<HerdrEvent, HerdrSubscriptionError>(), (events) => {
-    const herdr = HerdrClient.layerTest({
-      responses: [
-        scriptedResult(AgentPromptMethod, { type: 'agent_prompted' }),
-        scriptedResult(AgentSendKeysMethod, { type: 'ok' }),
-      ],
-      events,
-      sent,
-    })
+    const herdr = HerdrClient.layerTest({ responses, events, sent })
 
     return linkedAgentWith(herdr, state)
   })
@@ -127,6 +164,8 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
   const attachLifetime = script.attachLifetime ?? Option.none()
   const reply = script.reply ?? (() => Effect.void)
   const commands = script.commands ?? []
+  const responses = script.responses ?? inputResponses
+  const complete = script.complete ?? (() => Effect.void)
   const state = yield* SubscriptionRef.make(stateAt(0))
   const attempts = yield* Ref.make<readonly number[]>([])
   const received = yield* Queue.unbounded<MachineState>()
@@ -151,7 +190,7 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
         PublishState: ({ state: published }) =>
           Queue.offer(received, published).pipe(Effect.andThen(reply(published))),
         CompleteCommand: (completion) =>
-          Queue.offer(completed, completion).pipe(Effect.andThen(Effect.void)),
+          Queue.offer(completed, completion).pipe(Effect.andThen(complete(completion))),
         TranscriptDemands: () => Stream.never,
         PublishTranscript: () => Effect.void,
       }),
@@ -161,10 +200,17 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
   })
 
   yield* Layer.build(
-    Layer.provide(HubLink.layerWith(connect, hello), yield* agentWith(state, sent)),
+    Layer.provide(HubLink.layerWith(connect, hello), yield* agentWith(state, sent, responses)),
   )
 
-  return { state, received, completed, sent: Queue.clear(sent), attempts: Ref.get(attempts) }
+  return {
+    state,
+    received,
+    completed,
+    requests: sent,
+    sent: Queue.clear(sent),
+    attempts: Ref.get(attempts),
+  }
 })
 
 const backoffTimeline = (failedAttempts: number, attachLifetime: Duration.Duration) =>
@@ -283,6 +329,63 @@ it.effect('runs each command the hub pushes down Attach and answers it with its 
   }),
 )
 
+it.effect('reconnects at once when the link drops while a launch is still running', () =>
+  Effect.gen(function* () {
+    const { attempts } = yield* startLink({
+      attachLifetime: Option.some(TICK),
+      commands: [
+        routed(
+          0,
+          ACTION,
+          new StartAgent({ kind: 'claude', folder: import.meta.dirname, task: Option.none() }),
+        ),
+      ],
+      responses: launchStuckAtABusyShell,
+    })
+
+    yield* TestClock.adjust(Duration.sum(TICK, HUB_RECONNECT_BASE))
+    const reconnected = yield* attempts
+
+    yield* TestClock.adjust(PANE_BUSY_RETRY_LIMIT)
+
+    expect(reconnected).toEqual(backoffTimeline(1, TICK))
+  }),
+)
+
+it.effect('starts a launch that arrives while a pane command is still being answered', () =>
+  Effect.gen(function* () {
+    const firstAnswerAccepted = yield* Deferred.make<void>()
+    const { requests } = yield* startLink({
+      commands: [
+        routed(0, ACTION, continuePrompt),
+        routed(
+          1,
+          OTHER_ACTION,
+          new StartAgent({ kind: 'claude', folder: import.meta.dirname, task: Option.none() }),
+        ),
+      ],
+      complete: (completion) =>
+        completion.id === CommandId.make(0) ? Deferred.await(firstAnswerAccepted) : Effect.void,
+      responses: [...inputResponses, ...launchStuckAtABusyShell],
+    })
+    const sentWhileHeld = yield* Queue.takeN(requests, 2)
+    const untilFirstStart = yield* Queue.takeN(requests, 4)
+
+    yield* Deferred.succeed(firstAnswerAccepted, undefined)
+    yield* TestClock.adjust(Duration.times(PANE_BUSY_RETRY_LIMIT, 2))
+
+    expect(sentWhileHeld.map((request) => request.method)).toEqual(
+      expect.arrayContaining(['agent.prompt', 'session.snapshot']),
+    )
+    expect(untilFirstStart.map((request) => request.method)).toEqual([
+      'workspace.create',
+      'session.snapshot',
+      'pane.send_input',
+      'agent.start',
+    ])
+  }),
+)
+
 it.effect('skips the versions that went stale while a publish was in flight', () =>
   Effect.gen(function* () {
     const accepted = yield* Deferred.make<void>()
@@ -357,7 +460,7 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
 
       yield* Layer.build(
         Layer.provide(HubLink.layer, [
-          yield* agentWith(state, sent),
+          yield* agentWith(state, sent, inputResponses),
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
               CROOK_HUB_URL: `ws://${hub.url.host}${AGENT_PATH}`,
@@ -399,7 +502,7 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
 
       yield* Layer.build(
         Layer.provide(HubLink.layer, [
-          yield* agentWith(state, sent),
+          yield* agentWith(state, sent, inputResponses),
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
               CROOK_HUB_URL: `ws://${hub.url.host}${AGENT_PATH}`,

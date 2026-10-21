@@ -72,6 +72,7 @@ const twoAgentsAt = (
         stateChangeSeq: secondStateChangeSeq,
       }),
     ],
+    places: [],
   })
 
 const stateAt = (version: number, status: AgentStatus, stateChangeSeq: number, connection = 1) =>
@@ -84,6 +85,7 @@ const stateAt = (version: number, status: AgentStatus, stateChangeSeq: number, c
     tabs: [],
     panes: [],
     agents: [agentRow({ status, stateChangeSeq })],
+    places: [],
   })
 
 const notifierOver = (

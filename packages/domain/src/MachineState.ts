@@ -6,6 +6,7 @@ import { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import { MachineId, type PaneId } from '@crook/domain/Ids'
 import { Pane } from '@crook/domain/Pane'
+import { Place } from '@crook/domain/Place'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
 
@@ -25,6 +26,7 @@ export class MachineState extends Schema.Class<MachineState>('MachineState')({
   tabs: Schema.Array(Tab),
   panes: Schema.Array(Pane),
   agents: Schema.Array(AgentRow),
+  places: Schema.Array(Place),
 }) {}
 
 export const agentsIn = (state: Option.Option<MachineState>): readonly AgentRow[] =>

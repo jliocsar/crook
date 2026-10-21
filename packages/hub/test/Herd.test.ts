@@ -106,6 +106,7 @@ const stateOf = (
     tabs: [],
     panes: [],
     agents,
+    places: [],
   })
 
 const machineIn = (view: HerdView, id: MachineId) =>
