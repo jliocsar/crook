@@ -409,6 +409,16 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
   with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
   renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
+- An effect atom re-runs whenever anything it reads changes, and the re-run interrupts the effect
+  still in flight. One that reads the whole herd re-ran its hub call on every herd change from
+  any machine (measured: five calls where one was due). It reads a derived atom that holds only
+  its decision instead; atoms compare values with `Object.is`, so a boolean that did not flip
+  wakes nothing.
+- Vite's dev and preview servers check the `Host` header against `allowedHosts` for HTTP
+  requests and the HMR socket, but not for a proxied WebSocket upgrade (measured on 8.3.4: an
+  upgrade with `Host: attacker.example` was proxied). A proxy rule that trusts an upgrade does
+  its own host check, and the `Host` it compares against must be a fixed name, never another
+  request header: a DNS-rebound page sends a matching `Host` and `Origin`.
 
 :::tip
 Checking the web app against real data, measured:
