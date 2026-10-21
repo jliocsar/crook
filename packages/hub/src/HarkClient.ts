@@ -1,22 +1,23 @@
+import * as Arr from 'effect/Array'
 import * as Clock from 'effect/Clock'
 import * as Config from 'effect/Config'
 import * as Context from 'effect/Context'
 import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
+import * as Deferred from 'effect/Deferred'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Num from 'effect/Number'
 import * as Option from 'effect/Option'
 import type * as Redacted from 'effect/Redacted'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
-import * as Semaphore from 'effect/Semaphore'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as Headers from 'effect/http/Headers'
 import * as HttpClient from 'effect/http/HttpClient'
-import type { HttpClientError } from 'effect/http/HttpClientError'
 import * as HttpClientRequest from 'effect/http/HttpClientRequest'
 import * as HttpClientResponse from 'effect/http/HttpClientResponse'
 
@@ -33,24 +34,49 @@ import {
   STATUS_NO_DEVICE_ACCEPTED,
 } from '@crook/protocol/Hark'
 
+export type HarkApprovalState = 'pending' | 'approved' | 'denied' | 'closed'
+
+interface Turns {
+  readonly busy: boolean
+  readonly waiting: readonly Deferred.Deferred<void>[]
+}
+
 const STATUS_STILL_PROCESSING = 202
+const STATUS_NOT_FOUND = 404
+const STATUS_CONFLICT = 409
 const STATUS_TOO_MANY_REQUESTS = 429
 const HARK_API_URL = 'https://hark.ryan.ceo/api/agent'
 const HARK_PROJECT = 'crook'
 const HARK_REQUESTS_PER_WINDOW = 60
-const HARK_RATE_WINDOW = Duration.minutes(1)
+const HARK_ACTIVITY_KEY = 'crook-herd'
+const HARK_ACTIVITY_TITLE = 'crook'
+const HARK_ACTIVITY_ACCENT = '#EEEBE4'
 
 export const HARK_TITLE_LIMIT = 80
+export const HARK_PROMPT_LIMIT = 2000
+export const HARK_ACTIVITY_STATUS_LIMIT = 60
+export const HARK_ACTIVITY_DETAIL_LIMIT = 240
 export const HARK_IDEMPOTENCY_KEY_LIMIT = 200
+export const HARK_RATE_WINDOW = Duration.minutes(1)
 export const HARK_REQUEST_TIMEOUT = Duration.seconds(10)
+export const HARK_WAIT_LIMIT = Duration.seconds(25)
+export const HARK_APPROVAL_EXPIRY = Duration.days(1)
+export const HARK_ACTIVITY_LIFETIME = Duration.hours(8)
 
 export const HARK_REQUEST_SPACING = Duration.divideUnsafe(
   HARK_RATE_WINDOW,
   HARK_REQUESTS_PER_WINDOW,
 )
 
-export const HarkNotificationId = Schema.NonEmptyString.pipe(Schema.brand('HarkNotificationId'))
-export type HarkNotificationId = typeof HarkNotificationId.Type
+export const HARK_WAIT_REQUEST_TIMEOUT = Duration.sum(HARK_WAIT_LIMIT, HARK_REQUEST_TIMEOUT)
+export const HARK_OUTAGE_PAUSE = Duration.seconds(60)
+export const PAUSE_AFTER_HUB_BUG = HARK_REQUEST_SPACING
+
+export const HarkId = Schema.NonEmptyString.pipe(Schema.brand('HarkId'))
+export type HarkId = typeof HarkId.Type
+
+export const HarkActivitySymbol = Schema.Literals(['warning', 'terminal', 'success'])
+export type HarkActivitySymbol = typeof HarkActivitySymbol.Type
 
 export class HarkNotification extends Data.Class<{
   readonly title: string
@@ -58,24 +84,86 @@ export class HarkNotification extends Data.Class<{
   readonly idempotencyKey: Option.Option<string>
 }> {}
 
+export class HarkApproval extends Data.Class<{
+  readonly title: string
+  readonly prompt: string
+  readonly idempotencyKey: Option.Option<string>
+}> {}
+
 export class HarkSent extends Data.Class<{
-  readonly id: HarkNotificationId
+  readonly id: HarkId
   readonly accepted: number
 }> {}
 
+export class HarkActivityContent extends Schema.Class<HarkActivityContent>('HarkActivityContent')({
+  status: Schema.String,
+  detail: Schema.OptionFromNullOr(Schema.String),
+  symbol: HarkActivitySymbol,
+}) {}
+
+export class HarkActivityGone extends Schema.TaggedError<HarkActivityGone>()('HarkActivityGone', {
+  status: Schema.Int,
+}) {
+  override get message(): string {
+    return `Hark answered ${this.status} to an update of the herd's Live Activity: it has ended or expired, so the hub starts a new one.`
+  }
+}
+
+export const pauseFor = (failure: HarkFailure): Option.Option<Duration.Duration> =>
+  Match.value(failure).pipe(
+    Match.tagsExhaustive({
+      HarkUnreachable: () => Option.some(HARK_OUTAGE_PAUSE),
+      HarkServerFailed: () => Option.some(HARK_OUTAGE_PAUSE),
+      HarkStillProcessing: () => Option.some(Duration.zero),
+      HarkRateLimited: (limited) =>
+        Option.map(limited.retryAfterSeconds, (seconds) => Duration.seconds(seconds)),
+      HarkRefused: () => Option.none(),
+      HarkAnswerUnreadable: () => Option.none(),
+      HarkNotConfigured: () => Option.none(),
+    }),
+  )
+
 const CrookHubHarkToken = Config.option(Config.Redacted('CROOK_HUB_HARK_TOKEN'))
 
+const InteractionStatus = Schema.Literals([
+  'pending',
+  'approved',
+  'denied',
+  'yes',
+  'no',
+  'replied',
+  'canceled',
+  'expired',
+])
+
 const NotificationCreated = Schema.Struct({
-  notification: Schema.Struct({ id: HarkNotificationId }),
+  notification: Schema.Struct({ id: HarkId }),
   accepted: Schema.Int,
 })
 
 const NotificationNamed = Schema.Struct({ notification: Schema.Struct({ id: Schema.String }) })
 
+const InteractionCreated = Schema.Struct({ interaction: Schema.Struct({ id: HarkId }) })
+
+const InteractionWaited = Schema.Struct({
+  interaction: Schema.Struct({ status: InteractionStatus }),
+})
+
 const HarkErrorBody = Schema.Struct({ error: Schema.String })
 
+const APPROVAL_STATES = {
+  pending: 'pending',
+  approved: 'approved',
+  denied: 'denied',
+  yes: 'closed',
+  no: 'closed',
+  replied: 'closed',
+  canceled: 'closed',
+  expired: 'closed',
+} satisfies Record<typeof InteractionStatus.Type, HarkApprovalState>
+
 const NOT_CONFIGURED_WARNING =
-  'Hark notifications are off: CROOK_HUB_HARK_TOKEN is not set, so the hub sends none and the settings screen says so. Set it to a Hark agent token with the notifications:send scope, then restart the hub.'
+  'Hark notifications are off: CROOK_HUB_HARK_TOKEN is not set, so the hub sends no notifications, approvals or Live Activity, and the settings screen says so. Set it to a Hark agent token with the notifications:send, interactions:create, interactions:read and activities:write scopes, then restart the hub.'
 
 const secondsOfRetryAfter = (value: string, now: DateTime.Utc) =>
   pipe(
@@ -123,6 +211,9 @@ const rateLimited = (response: HttpClientResponse.HttpClientResponse) =>
     Effect.fail(new HarkRateLimited({ retryAfterSeconds })),
   )
 
+const activityGone = (response: HttpClientResponse.HttpClientResponse) =>
+  Effect.fail(new HarkActivityGone({ status: response.status }))
+
 const stillProcessing = () => Effect.fail(new HarkStillProcessing())
 
 const unreadable = (error: { readonly message: string }) =>
@@ -150,17 +241,125 @@ const readCreated = Effect.fn('HarkClient.readCreated')(function* (
   return new HarkSent({ id: created.notification.id, accepted: created.accepted })
 })
 
+const readInteraction = (response: HttpClientResponse.HttpClientResponse) =>
+  HttpClientResponse.schemaBodyJson(InteractionCreated)(response).pipe(
+    Effect.map((created) => created.interaction.id),
+    Effect.mapError(unreadable),
+  )
+
+const readApprovalState = (response: HttpClientResponse.HttpClientResponse) =>
+  HttpClientResponse.schemaBodyJson(InteractionWaited)(response).pipe(
+    Effect.map((waited): HarkApprovalState => APPROVAL_STATES[waited.interaction.status]),
+    Effect.mapError(unreadable),
+  )
+
+const withIdempotencyKey =
+  (key: Option.Option<string>) => (request: HttpClientRequest.HttpClientRequest) =>
+    Option.match(key, {
+      onNone: () => request,
+      onSome: (value) => HttpClientRequest.setHeader(request, 'Idempotency-Key', value),
+    })
+
 const notificationBody = (notification: HarkNotification) => ({
   title: notification.title,
   body: notification.body,
   project: HARK_PROJECT,
 })
 
+const approvalBody = (approval: HarkApproval) => ({
+  title: approval.title,
+  prompt: approval.prompt,
+  kind: 'approval',
+  presentation: 'notification',
+  expiresInSeconds: Duration.toSeconds(HARK_APPROVAL_EXPIRY),
+})
+
+const activityStartBody = (content: HarkActivityContent) => ({
+  key: HARK_ACTIVITY_KEY,
+  replace: true,
+  title: HARK_ACTIVITY_TITLE,
+  status: content.status,
+  ...Option.match(content.detail, { onNone: () => ({}), onSome: (detail) => ({ detail }) }),
+  symbol: content.symbol,
+  accentColor: HARK_ACTIVITY_ACCENT,
+  expiresInSeconds: Duration.toSeconds(HARK_ACTIVITY_LIFETIME),
+})
+
+const activityUpdateBody = (content: HarkActivityContent) => ({
+  status: content.status,
+  detail: Option.getOrNull(content.detail),
+  symbol: content.symbol,
+})
+
+const activityEndBody = (content: HarkActivityContent, linger: Duration.Duration) => ({
+  ...activityUpdateBody(content),
+  accentColor: HARK_ACTIVITY_ACCENT,
+  dismissAfterSeconds: Duration.toSeconds(linger),
+})
+
+const interactionUrl = (id: HarkId, action: string) =>
+  `${HARK_API_URL}/interactions/${encodeURIComponent(id)}/${action}`
+
+const activityUrl = `${HARK_API_URL}/activities/${encodeURIComponent(HARK_ACTIVITY_KEY)}`
+
+const unreachableAfter = (timeout: Duration.Duration) => () =>
+  Effect.fail(
+    new HarkUnreachable({ detail: `Hark did not answer within ${Duration.format(timeout)}` }),
+  )
+
+const makeTurns = Effect.gen(function* () {
+  const turns = yield* Ref.make<Turns>({ busy: false, waiting: [] })
+
+  const release = Ref.modify(turns, (state): [Option.Option<Deferred.Deferred<void>>, Turns] =>
+    Option.match(Arr.head(state.waiting), {
+      onNone: () => [Option.none(), { busy: false, waiting: [] }],
+      onSome: (next) => [Option.some(next), { busy: true, waiting: Arr.drop(state.waiting, 1) }],
+    }),
+  ).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.void,
+        onSome: (next) => Deferred.succeed(next, undefined),
+      }),
+    ),
+  )
+
+  const leaveLine = (mine: Deferred.Deferred<void>) =>
+    Ref.modify(turns, (state): [boolean, Turns] =>
+      Arr.some(state.waiting, (waiting) => waiting === mine)
+        ? [
+            false,
+            { busy: state.busy, waiting: Arr.filter(state.waiting, (waiting) => waiting !== mine) },
+          ]
+        : [true, state],
+    ).pipe(Effect.flatMap((wasHandedTheTurn) => (wasHandedTheTurn ? release : Effect.void)))
+
+  const join = (mine: Deferred.Deferred<void>) =>
+    Ref.modify(turns, (state): [boolean, Turns] =>
+      state.busy
+        ? [true, { busy: true, waiting: Arr.append(state.waiting, mine) }]
+        : [false, { busy: true, waiting: state.waiting }],
+    )
+
+  return <Answer, Failure>(request: Effect.Effect<Answer, Failure>) =>
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const mine = yield* Deferred.make<void>()
+
+        if (yield* join(mine)) {
+          yield* restore(Deferred.await(mine)).pipe(Effect.onInterrupt(() => leaveLine(mine)))
+        }
+
+        return yield* restore(request).pipe(Effect.ensuring(release))
+      }),
+    )
+})
+
 const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.Redacted) {
   const client = (yield* HttpClient.HttpClient).pipe(
     HttpClient.mapRequest(HttpClientRequest.bearerToken(token)),
   )
-  const permit = yield* Semaphore.make(1)
+  const inTurn = yield* makeTurns
   const lastFinishedAt = yield* Ref.make(Option.none<number>())
 
   const waitForSpacing = Effect.gen(function* () {
@@ -173,36 +372,16 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
     yield* Effect.sleep(Duration.millis(Math.max(0, Option.getOrElse(earliest, () => now) - now)))
   })
 
-  const execute = <Answer>(
+  const markFinished = Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    Ref.set(lastFinishedAt, Option.some(now)),
+  )
+
+  const answered = <Answer, Failure>(
     request: HttpClientRequest.HttpClientRequest,
-    answer: (
-      response: HttpClientResponse.HttpClientResponse,
-    ) => Effect.Effect<Answer, HarkFailure | HttpClientError>,
+    answer: (response: HttpClientResponse.HttpClientResponse) => Effect.Effect<Answer, Failure>,
+    timeout: Duration.Duration,
   ) =>
-    Semaphore.withPermit(
-      permit,
-      waitForSpacing.pipe(
-        Effect.andThen(
-          client.execute(request).pipe(
-            Effect.flatMap(answer),
-            Effect.timeoutOrElse({
-              duration: HARK_REQUEST_TIMEOUT,
-              orElse: () =>
-                Effect.fail(
-                  new HarkUnreachable({
-                    detail: `Hark did not answer within ${Duration.format(HARK_REQUEST_TIMEOUT)}`,
-                  }),
-                ),
-            }),
-          ),
-        ),
-        Effect.ensuring(
-          Effect.flatMap(Clock.currentTimeMillis, (now) =>
-            Ref.set(lastFinishedAt, Option.some(now)),
-          ),
-        ),
-      ),
-    ).pipe(
+    client.execute(request).pipe(
       Effect.catchReasons(
         'HttpClientError',
         {
@@ -210,16 +389,33 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
         },
         (reason) => Effect.die(reason),
       ),
+      Effect.flatMap(answer),
+      Effect.timeoutOrElse({ duration: timeout, orElse: unreachableAfter(timeout) }),
+    )
+
+  const execute = <Answer, Failure>(
+    request: HttpClientRequest.HttpClientRequest,
+    answer: (response: HttpClientResponse.HttpClientResponse) => Effect.Effect<Answer, Failure>,
+  ) =>
+    inTurn(
+      waitForSpacing.pipe(
+        Effect.andThen(answered(request, answer, HARK_REQUEST_TIMEOUT)),
+        Effect.ensuring(markFinished),
+      ),
+    )
+
+  const executeLongPoll = <Answer, Failure>(
+    request: HttpClientRequest.HttpClientRequest,
+    answer: (response: HttpClientResponse.HttpClientResponse) => Effect.Effect<Answer, Failure>,
+  ) =>
+    inTurn(Effect.andThen(waitForSpacing, markFinished)).pipe(
+      Effect.andThen(answered(request, answer, HARK_WAIT_REQUEST_TIMEOUT)),
     )
 
   const send = Effect.fn('HarkClient.send')(function* (notification: HarkNotification) {
     const request = HttpClientRequest.post(`${HARK_API_URL}/notifications`).pipe(
       HttpClientRequest.bodyJsonUnsafe(notificationBody(notification)),
-      (built) =>
-        Option.match(notification.idempotencyKey, {
-          onNone: () => built,
-          onSome: (key) => HttpClientRequest.setHeader(built, 'Idempotency-Key', key),
-        }),
+      withIdempotencyKey(notification.idempotencyKey),
     )
 
     return yield* execute(
@@ -234,7 +430,7 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
     )
   })
 
-  const withdraw = Effect.fn('HarkClient.withdraw')(function* (id: HarkNotificationId) {
+  const withdraw = Effect.fn('HarkClient.withdraw')(function* (id: HarkId) {
     yield* execute(
       HttpClientRequest.post(`${HARK_API_URL}/notifications/${encodeURIComponent(id)}/withdraw`),
       HttpClientResponse.matchStatus({
@@ -247,16 +443,134 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
     )
   })
 
-  return HarkClient.of({ delivery: 'ready', send, withdraw })
+  const ask = Effect.fn('HarkClient.ask')(function* (approval: HarkApproval) {
+    const request = HttpClientRequest.post(`${HARK_API_URL}/interactions`).pipe(
+      HttpClientRequest.bodyJsonUnsafe(approvalBody(approval)),
+      withIdempotencyKey(approval.idempotencyKey),
+    )
+
+    return yield* execute(
+      request,
+      HttpClientResponse.matchStatus({
+        [STATUS_STILL_PROCESSING]: stillProcessing,
+        '2xx': readInteraction,
+        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
+        '5xx': serverFailed,
+        orElse: refused,
+      }),
+    )
+  })
+
+  const awaitApproval = Effect.fn('HarkClient.awaitApproval')(function* (id: HarkId) {
+    const request = HttpClientRequest.get(interactionUrl(id, 'wait')).pipe(
+      HttpClientRequest.setUrlParam('timeout', String(Duration.toSeconds(HARK_WAIT_LIMIT))),
+    )
+
+    return yield* executeLongPoll(
+      request,
+      HttpClientResponse.matchStatus({
+        '2xx': readApprovalState,
+        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
+        '5xx': serverFailed,
+        orElse: refused,
+      }),
+    )
+  })
+
+  const cancel = Effect.fn('HarkClient.cancel')(function* (id: HarkId) {
+    yield* execute(
+      HttpClientRequest.post(interactionUrl(id, 'cancel')),
+      HttpClientResponse.matchStatus({
+        '2xx': () => Effect.void,
+        [STATUS_NOT_FOUND]: () => Effect.void,
+        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
+        '5xx': serverFailed,
+        orElse: refused,
+      }),
+    )
+  })
+
+  const startActivity = Effect.fn('HarkClient.startActivity')(function* (
+    content: HarkActivityContent,
+  ) {
+    yield* execute(
+      HttpClientRequest.post(`${HARK_API_URL}/activities`).pipe(
+        HttpClientRequest.bodyJsonUnsafe(activityStartBody(content)),
+      ),
+      HttpClientResponse.matchStatus({
+        '2xx': () => Effect.void,
+        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
+        '5xx': serverFailed,
+        orElse: refused,
+      }),
+    )
+  })
+
+  const updateActivity = Effect.fn('HarkClient.updateActivity')(function* (
+    content: HarkActivityContent,
+  ) {
+    yield* execute(
+      HttpClientRequest.patch(activityUrl).pipe(
+        HttpClientRequest.bodyJsonUnsafe(activityUpdateBody(content)),
+      ),
+      HttpClientResponse.matchStatus({
+        '2xx': () => Effect.void,
+        [STATUS_NOT_FOUND]: activityGone,
+        [STATUS_CONFLICT]: activityGone,
+        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
+        '5xx': serverFailed,
+        orElse: refused,
+      }),
+    )
+  })
+
+  const endActivity = Effect.fn('HarkClient.endActivity')(function* (
+    content: HarkActivityContent,
+    linger: Duration.Duration,
+  ) {
+    yield* execute(
+      HttpClientRequest.post(`${activityUrl}/end`).pipe(
+        HttpClientRequest.bodyJsonUnsafe(activityEndBody(content, linger)),
+      ),
+      HttpClientResponse.matchStatus({
+        '2xx': () => Effect.void,
+        [STATUS_NOT_FOUND]: () => Effect.void,
+        [STATUS_CONFLICT]: () => Effect.void,
+        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
+        '5xx': serverFailed,
+        orElse: refused,
+      }),
+    )
+  })
+
+  return HarkClient.of({
+    delivery: 'ready',
+    send,
+    withdraw,
+    ask,
+    awaitApproval,
+    cancel,
+    startActivity,
+    updateActivity,
+    endActivity,
+  })
 })
 
 const notConfigured = Effect.gen(function* () {
   yield* Effect.logWarning(NOT_CONFIGURED_WARNING)
 
+  const fail = () => Effect.fail(new HarkNotConfigured())
+
   return HarkClient.of({
     delivery: 'noToken',
-    send: () => Effect.fail(new HarkNotConfigured()),
-    withdraw: () => Effect.fail(new HarkNotConfigured()),
+    send: fail,
+    withdraw: fail,
+    ask: fail,
+    awaitApproval: fail,
+    cancel: fail,
+    startActivity: fail,
+    updateActivity: fail,
+    endActivity: fail,
   })
 })
 
@@ -270,7 +584,18 @@ export class HarkClient extends Context.Service<
   {
     readonly delivery: HarkDelivery
     readonly send: (notification: HarkNotification) => Effect.Effect<HarkSent, HarkFailure>
-    readonly withdraw: (id: HarkNotificationId) => Effect.Effect<void, HarkFailure>
+    readonly withdraw: (id: HarkId) => Effect.Effect<void, HarkFailure>
+    readonly ask: (approval: HarkApproval) => Effect.Effect<HarkId, HarkFailure>
+    readonly awaitApproval: (id: HarkId) => Effect.Effect<HarkApprovalState, HarkFailure>
+    readonly cancel: (id: HarkId) => Effect.Effect<void, HarkFailure>
+    readonly startActivity: (content: HarkActivityContent) => Effect.Effect<void, HarkFailure>
+    readonly updateActivity: (
+      content: HarkActivityContent,
+    ) => Effect.Effect<void, HarkFailure | HarkActivityGone>
+    readonly endActivity: (
+      content: HarkActivityContent,
+      linger: Duration.Duration,
+    ) => Effect.Effect<void, HarkFailure>
   }
 >()('@crook/hub/HarkClient') {
   static readonly layerWithoutDependencies = Layer.effect(this, make)

@@ -1,5 +1,6 @@
 import { expect, it } from '@effect/vitest'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
@@ -10,9 +11,12 @@ import * as TestClock from 'effect/testing/TestClock'
 import {
   HARK_REQUEST_SPACING,
   HARK_REQUEST_TIMEOUT,
+  HarkActivityContent,
+  HarkActivityGone,
+  HarkApproval,
   HarkClient,
+  HarkId,
   HarkNotification,
-  HarkNotificationId,
 } from '@crook/hub/HarkClient'
 import {
   HarkAnswerUnreadable,
@@ -31,6 +35,9 @@ import {
   created,
   fakeHark,
   harkIdFor,
+  interactionCreated,
+  interactionWaited,
+  isWait,
   tokenConfig,
 } from './HarkFakes'
 
@@ -40,7 +47,7 @@ const FINISHED = new HarkNotification({
   idempotencyKey: Option.some('crook/laptop/w1:p1/term_1/7/finished'),
 })
 
-const NOTIFICATION_ID = HarkNotificationId.make('anot_7MFuml')
+const NOTIFICATION_ID = HarkId.make('anot_7MFuml')
 
 const withHarkClient = Effect.fn('withHarkClient')(function* (
   script: HarkScript,
@@ -116,9 +123,9 @@ it.effect('names why Hark refused, ran out or could not be reached', () =>
     expect(yield* Effect.flip(exhausted.client.send(FINISHED))).toEqual(
       new HarkRateLimited({ retryAfterSeconds: Option.none() }),
     )
-    expect(
-      yield* Effect.flip(unreachable.client.withdraw(HarkNotificationId.make('anot_1'))),
-    ).toBeInstanceOf(HarkUnreachable)
+    expect(yield* Effect.flip(unreachable.client.withdraw(HarkId.make('anot_1')))).toBeInstanceOf(
+      HarkUnreachable,
+    )
   }).pipe(Effect.scoped),
 )
 
@@ -236,5 +243,78 @@ it.effect('spaces its requests so a minute never holds more than Hark allows', (
 
     expect(callsBeforeSpacing).toBe(1)
     expect(yield* Queue.size(calls)).toBe(2)
+  }).pipe(Effect.scoped),
+)
+
+const APPROVAL = new HarkApproval({
+  title: 'EX-253 Example feature',
+  prompt: 'Wants to run Bash · laptop / crook',
+  idempotencyKey: Option.some('crook/laptop/w1:p1/term_1/7/approvals/toolu_1'),
+})
+
+const WORKING = new HarkActivityContent({
+  status: '1 working',
+  detail: Option.none(),
+  symbol: 'terminal',
+})
+
+it.effect('reads an approval as approved, denied, still pending or closed some other way', () =>
+  Effect.gen(function* () {
+    const statesOf = Effect.fn('statesOf')(function* (status: string) {
+      const { client } = yield* withHarkClient(() => interactionWaited(status))
+
+      return yield* client.awaitApproval(HarkId.make('int_1'))
+    })
+    const asked = yield* withHarkClient(() => interactionCreated('int_1'))
+
+    expect(yield* asked.client.ask(APPROVAL)).toBe('int_1')
+    expect(
+      yield* Effect.forEach(['approved', 'denied', 'pending', 'canceled', 'expired'], statesOf),
+    ).toEqual(['approved', 'denied', 'pending', 'closed', 'closed'])
+  }).pipe(Effect.scoped),
+)
+
+it.effect(
+  'takes a cancel of a prompt no longer pending, and an end of an ended activity, as done',
+  () =>
+    Effect.gen(function* () {
+      const answering = (status: number) =>
+        Effect.map(
+          withHarkClient(() => ({ status, body: { error: 'Not pending or terminal' } })),
+          (hark) => hark.client,
+        )
+
+      yield* Effect.flatMap(answering(404), (client) => client.cancel(HarkId.make('int_1')))
+      yield* Effect.flatMap(answering(409), (client) => client.endActivity(WORKING, Duration.zero))
+      const updatedEnded = yield* Effect.flatMap(answering(409), (client) =>
+        Effect.flip(client.updateActivity(WORKING)),
+      )
+      const updatedUnknown = yield* Effect.flatMap(answering(404), (client) =>
+        Effect.flip(client.updateActivity(WORKING)),
+      )
+
+      expect(updatedEnded).toEqual(new HarkActivityGone({ status: 409 }))
+      expect(updatedUnknown).toEqual(new HarkActivityGone({ status: 404 }))
+    }).pipe(Effect.scoped),
+)
+
+it.effect('lets other requests through while a long poll waits on Hark', () =>
+  Effect.gen(function* () {
+    const { calls, client } = yield* withHarkClient((call) =>
+      isWait(call) ? 'silent' : created('anot_1'),
+    )
+    const waiting = yield* Effect.forkScoped(client.awaitApproval(HarkId.make('int_1')), {
+      startImmediately: true,
+    })
+
+    yield* Queue.take(calls)
+    const sending = yield* Effect.forkScoped(client.send(FINISHED), { startImmediately: true })
+
+    yield* TestClock.adjust(HARK_REQUEST_SPACING)
+    const sent = yield* Fiber.join(sending)
+
+    yield* Fiber.interrupt(waiting)
+
+    expect(sent.id).toBe('anot_1')
   }).pipe(Effect.scoped),
 )

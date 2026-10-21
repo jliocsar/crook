@@ -20,12 +20,16 @@ import {
   type TestNotificationFailure,
 } from '@crook/protocol/Hark'
 
+import { makeApprovalAnswers } from '@crook/hub/ApprovalAnswers'
 import { logStorageFailure } from '@crook/hub/Database'
 import {
-  HARK_REQUEST_SPACING,
+  HARK_PROMPT_LIMIT,
+  HarkApproval,
   HarkClient,
+  type HarkId,
   HarkNotification,
-  type HarkNotificationId,
+  PAUSE_AFTER_HUB_BUG,
+  pauseFor,
 } from '@crook/hub/HarkClient'
 import { type HerdChange, Herd } from '@crook/hub/Herd'
 import {
@@ -36,8 +40,10 @@ import {
   afterForgotten,
   afterPublish,
   afterSeen,
+  cutForHark,
   idempotencyKeyOf,
   identityOf,
+  isApproval,
   isSameNotification,
   nextStep,
   notificationKey,
@@ -45,28 +51,11 @@ import {
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { type SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 
-const HARK_OUTAGE_PAUSE = Duration.seconds(60)
-const PAUSE_AFTER_HUB_BUG = HARK_REQUEST_SPACING
-
 const TEST_NOTIFICATION = new HarkNotification({
   title: 'crook',
   body: 'Test · notifications from crook arrive like this',
   idempotencyKey: Option.none(),
 })
-
-const pauseFor = (failure: HarkFailure): Option.Option<Duration.Duration> =>
-  Match.value(failure).pipe(
-    Match.tagsExhaustive({
-      HarkUnreachable: () => Option.some(HARK_OUTAGE_PAUSE),
-      HarkServerFailed: () => Option.some(HARK_OUTAGE_PAUSE),
-      HarkStillProcessing: () => Option.some(Duration.zero),
-      HarkRateLimited: (limited) =>
-        Option.map(limited.retryAfterSeconds, (seconds) => Duration.seconds(seconds)),
-      HarkRefused: () => Option.none(),
-      HarkAnswerUnreadable: () => Option.none(),
-      HarkNotConfigured: () => Option.none(),
-    }),
-  )
 
 const byPane = <Notification extends WantedNotification>(
   notifications: readonly Notification[],
@@ -76,6 +65,7 @@ const byPane = <Notification extends WantedNotification>(
   )
 
 const isSeenIn = (marks: readonly SeenRecord[]) => (notification: WantedNotification) =>
+  !isApproval(notification) &&
   Arr.some(
     marks,
     (mark) =>
@@ -85,6 +75,20 @@ const isSeenIn = (marks: readonly SeenRecord[]) => (notification: WantedNotifica
   )
 
 const gaveUpOnBug = (what: string) => `The hub gave up on ${what} because of a bug in the hub.`
+
+const approvalOf = (notification: WantedNotification) =>
+  new HarkApproval({
+    title: notification.title,
+    prompt: cutForHark(notification.body, HARK_PROMPT_LIMIT),
+    idempotencyKey: idempotencyKeyOf(notification),
+  })
+
+const plainNotificationOf = (notification: WantedNotification) =>
+  new HarkNotification({
+    title: notification.title,
+    body: notification.body,
+    idempotencyKey: idempotencyKeyOf(notification),
+  })
 
 const make = Effect.gen(function* () {
   const hark = yield* HarkClient
@@ -104,6 +108,7 @@ const make = Effect.gen(function* () {
     byPane(stillWantedAtStart),
   )
   const abandoned = yield* Ref.make(HashSet.empty<string>())
+  const approvals = yield* makeApprovalAnswers
 
   const followHerd = (change: HerdChange) =>
     SubscriptionRef.update(wanted, (notifications) =>
@@ -130,13 +135,14 @@ const make = Effect.gen(function* () {
         ).pipe(Effect.andThen(Effect.sleep(pause))),
     })
 
-  const rememberSent = (notification: WantedNotification, harkId: HarkNotificationId) => {
+  const rememberSent = (notification: WantedNotification, harkId: HarkId) => {
     const record = new SentNotification({
       machine: notification.machine,
       pane: notification.pane,
       event: notification.event,
       terminal: notification.terminal,
       stateChangeSeq: notification.stateChangeSeq,
+      ask: notification.ask,
       title: notification.title,
       body: notification.body,
       harkId,
@@ -148,33 +154,32 @@ const make = Effect.gen(function* () {
         'SqlError',
         logStorageFailure(`the Hark notification of pane ${notification.pane}`),
       ),
+      Effect.andThen(isApproval(record) ? approvals.watch(record) : Effect.void),
     )
   }
+
+  const delivered = (notification: WantedNotification) =>
+    isApproval(notification)
+      ? hark.ask(approvalOf(notification))
+      : Effect.map(hark.send(plainNotificationOf(notification)), (created) => created.id)
 
   const send = Effect.fn('HarkNotifier.send')(function* (notification: WantedNotification) {
     const what = `notifying pane ${notification.pane} of machine ${notification.machine}`
     const abandon = Ref.update(abandoned, HashSet.add(identityOf(notification)))
 
-    return yield* hark
-      .send(
-        new HarkNotification({
-          title: notification.title,
-          body: notification.body,
-          idempotencyKey: idempotencyKeyOf(notification),
-        }),
-      )
-      .pipe(
-        Effect.flatMap((created) => rememberSent(notification, created.id)),
-        Effect.uninterruptible,
-        Effect.catch((failure) => pauseOrAbandon(what, failure, abandon)),
-        Effect.catchDefect((defect) =>
-          Effect.andThen(Effect.logError(gaveUpOnBug(what), defect), abandon),
-        ),
-      )
+    return yield* delivered(notification).pipe(
+      Effect.flatMap((harkId) => rememberSent(notification, harkId)),
+      Effect.uninterruptible,
+      Effect.catch((failure) => pauseOrAbandon(what, failure, abandon)),
+      Effect.catchDefect((defect) =>
+        Effect.andThen(Effect.logError(gaveUpOnBug(what), defect), abandon),
+      ),
+    )
   })
 
   const forgetSent = (notification: SentNotification) =>
     Ref.update(sent, HashMap.remove(notificationKey(notification))).pipe(
+      Effect.andThen(approvals.forget(notification)),
       Effect.andThen(store.forgetSent(notification.machine, notification.pane)),
       Effect.catchTag(
         'SqlError',
@@ -182,10 +187,13 @@ const make = Effect.gen(function* () {
       ),
     )
 
+  const retracted = (notification: SentNotification) =>
+    isApproval(notification) ? approvals.cancel(notification) : hark.withdraw(notification.harkId)
+
   const withdraw = Effect.fn('HarkNotifier.withdraw')(function* (notification: SentNotification) {
     const what = `withdrawing the notification of pane ${notification.pane} of machine ${notification.machine}`
 
-    return yield* hark.withdraw(notification.harkId).pipe(
+    return yield* retracted(notification).pipe(
       Effect.andThen(forgetSent(notification)),
       Effect.catch((failure) => pauseOrAbandon(what, failure, forgetSent(notification))),
       Effect.catchDefect((defect) =>
@@ -250,6 +258,7 @@ const make = Effect.gen(function* () {
   if (hark.delivery === 'ready') {
     const changes = yield* herd.subscribeChanges
 
+    yield* Effect.forEach(Arr.filter(stillWantedAtStart, isApproval), approvals.watch)
     yield* changes.pipe(Stream.runForEach(followHerd), Effect.forkScoped)
     yield* SubscriptionRef.changes(wanted).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),

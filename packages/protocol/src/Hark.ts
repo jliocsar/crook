@@ -17,7 +17,7 @@ const refusalHint = (status: number) =>
     Match.when(
       STATUS_FORBIDDEN,
       () =>
-        'The token lacks the notifications:send scope: make a new agent token that has it and set CROOK_HUB_HARK_TOKEN on the hub to it.',
+        'The token lacks a scope the hub needs: make a new agent token with notifications:send, interactions:create, interactions:read and activities:write, and set CROOK_HUB_HARK_TOKEN on the hub to it.',
     ),
     Match.when(
       STATUS_NO_DEVICE_ACCEPTED,
@@ -38,7 +38,7 @@ export class HarkNotConfigured extends Schema.TaggedError<HarkNotConfigured>()(
   {},
 ) {
   override get message(): string {
-    return 'The hub has no Hark token, so it sends no notifications. Set CROOK_HUB_HARK_TOKEN on the hub to a Hark agent token with the notifications:send scope, then restart the hub.'
+    return 'The hub has no Hark token, so it sends no notifications. Set CROOK_HUB_HARK_TOKEN on the hub to a Hark agent token with the notifications:send, interactions:create, interactions:read and activities:write scopes, then restart the hub.'
   }
 }
 

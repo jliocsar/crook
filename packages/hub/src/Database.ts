@@ -142,6 +142,19 @@ const createNotifications = Effect.gen(function* () {
   `
 })
 
+const createLiveActivity = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+
+  yield* sql`ALTER TABLE hark_notifications ADD COLUMN ask TEXT`
+  yield* sql`
+    CREATE TABLE hark_live_activity (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      last_start_at TEXT NOT NULL,
+      shown TEXT
+    )
+  `
+})
+
 const migrations = SqliteMigrator.fromRecord({
   '1_machines': createMachines,
   '2_seen': createSeen,
@@ -149,6 +162,7 @@ const migrations = SqliteMigrator.fromRecord({
   '4_pins': createPins,
   '5_audit': createAudit,
   '6_notifications': createNotifications,
+  '7_approvals_and_live_activity': createLiveActivity,
 })
 
 export const clientAt = (filename: string) =>
