@@ -411,6 +411,8 @@ See "Settings: decided" below.
 
 ## Settings: decided, variant "Ledger"
 
+**Moved to `DESIGN.md` (Settings)** by JC-110. The rest stays as history.
+
 ### Prototype
 
 - The screen is `src/settings/Ledger.tsx`, and the shared sections are in `src/settings/parts.tsx`.

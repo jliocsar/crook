@@ -502,6 +502,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   (measured: TS2345, the tag narrows to `{ readonly _tag: unknown }`). A `Schema.Error` there is
   caught with `Effect.catchIf(Schema.is(X), …)`; `instanceof` is the other spelling, and
   `effecttsgo/instance-of-schema` rejects it.
+- An atom over a `Stream` adds `Cause.NoSuchElementError` to its error channel, for a stream that
+  ends before its first element, even one that never ends (measured: a type error). A prop that
+  takes the atom's result names that error too.
 - Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
   with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
   renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
@@ -543,6 +546,12 @@ Checking the web app against real data, measured:
   OSC 0 escape sets it, and a shell prompt resets it, so hold the pane in a long `sleep` after it.
 - A browser tab shows the install screen. An init script that makes `navigator.standalone` true
   gets past it.
+- Bun's `fetch` goes through `HTTPS_PROXY`. A hub started with it pointing at a local listener
+  that closes every connection reaches no third party: a Hark call arrives there as
+  `CONNECT hark.ryan.ceo:443` and fails as `HarkUnreachable`. That is how a hub with a Hark token
+  is checked without calling Hark, whose base URL is fixed.
+- Vite's dev server answers a POST to `/__exe.dev/logout` with 404, so Log out fails honestly
+  there; a browser route that answers it is what reaches the logged-out screen.
 :::
 
 :::warning

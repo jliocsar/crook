@@ -339,6 +339,37 @@ that adds one.
 Unmeasured knobs, picked in the prototype: a sheet closes when dragged down 96px or flicked at
 500px/s, gives 0.05 of the distance dragged up, and is at most 85% of the screen tall.
 
+## Settings
+
+The Settings tab, variant Ledger: one flat page with three sections, each a Section Label over a
+rule.
+
+- **Notifications**: Approvals, Questions, Finished and Live Activity, each a row with a label, a
+  one-line detail and a switch, `primary` when on. A switch shows what the hub holds: a tap writes
+  to the hub, and the switch moves when the hub's settings come back. It is disabled while its write
+  is in flight, and a refused write shows the hub's sentence under its row. Below the rows:
+  - "Saved on the hub, so every device you log in on shares them."
+  - a full-width secondary "Send a test", which swaps to "Sending" and then "Sent to your phone";
+    a refusal shows its sentence beneath, and the button reads "Send a test" again;
+  - "Notifications name the agent and the machine, never what Claude wrote. Hark delivers them,
+    so they open nothing in crook."
+- **No Hark token**: a muted note under the rule, "Notifications are off", with the hub's own
+  sentence for it and "These switches are saved meanwhile, and apply once it has one." The switches
+  stay usable; "Send a test" is disabled.
+- **Account**: "Logged in as" with the exe.dev email the hub admitted, a full-width destructive "Log
+  out", and "Lost this phone? End its session on exe.dev from another device."
+- **Log out** asks in a sheet: "Log out of crook?", "Your agents keep running.", Log out and
+  Cancel. Log out reads "Logging out" until exe.dev answers, and a refusal stays in the sheet with
+  its sentence. Once logged out, the logged-out screen replaces everything, pushed screens and
+  sheets included.
+- **Hub**: Status (connected, connecting, syncing, unreachable or offline, as a plain Status Pill
+  that follows the banner), Address (the host the page came from, which is the hub's) and Version
+  (the hub's).
+- **Stale**: the switches dim with the rest of the stale content and are disabled with the other
+  hub actions, and so is the test.
+- **Decided against**: quiet hours or pause (iOS Focus covers it), per-machine or per-agent
+  overrides, a confirm before approving from the lock screen, and a theme setting.
+
 ## Connection states
 
 - **The banner** is a 32px strip at the top of every header, tab screens and pushed screens alike,
@@ -363,9 +394,11 @@ Unmeasured knobs, picked in the prototype: a sheet closes when dragged down 96px
 - **Screen readers** hear each state once, from a single status region.
 - **First load** with no cached herd shows skeleton sections (three cards, then two) at the
   card's real height.
-- **Logged out, or the session expired:** one full screen with "Log in with exe.dev": "Your
-  session expired" and "Your agents kept running. Log in again to see them." The phone can't tell
-  the two apart, since the proxy answers both with the same redirect to its login.
+- **Logged out, or the session expired:** one full screen with "Log in with exe.dev". After Log out
+  in Settings it reads "You're logged out" and "Your agents are still running. Log in to see them
+  again." Otherwise it reads "Your session expired" and "Your agents kept running. Log in again to
+  see them.": the phone can't tell an expiry from a logout made on another device, since the proxy
+  answers both with the same redirect to its login.
 
 ## Empty states
 
@@ -549,7 +582,7 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 
 ## Open
 
-- The screens decided in `TEMP_DESIGN_EXPLORATION.md` (chat, New agent, Settings) move
+- The screens decided in `TEMP_DESIGN_EXPLORATION.md` (chat, New agent) move
   here with the ticket that builds each one.
 - The herd's swipe actions, long-press sheet, pins, the order freeze while a card is open, and the
   "Pane closed" toast arrive with JC-112.
