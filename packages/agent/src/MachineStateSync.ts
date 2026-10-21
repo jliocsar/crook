@@ -44,6 +44,7 @@ const STATE_EVENT_KINDS: NonEmptyArray.NonEmptyReadonlyArray<LifecycleEventKind>
   'tab.closed',
   'tab.renamed',
   'tab.moved',
+  'tab.focused',
   'pane.created',
   'pane.closed',
   'pane.updated',

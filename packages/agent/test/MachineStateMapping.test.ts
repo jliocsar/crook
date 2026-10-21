@@ -19,7 +19,7 @@ import {
   WorkspaceId,
 } from '@crook/domain/Ids'
 import { type MachineState, panePresence } from '@crook/domain/MachineState'
-import type { AgentInfo } from '@crook/herdr/Records'
+import { type AgentInfo, TabInfo } from '@crook/herdr/Records'
 
 import { agentInfo, paneInfo, tabInfo, workspaceInfo } from './Fixtures'
 
@@ -32,6 +32,9 @@ const REDETECTED = DateTime.makeUnsafe('2026-10-17T10:05:03Z')
 const MOVED_ON = DateTime.makeUnsafe('2026-10-17T10:09:00Z')
 const TERMINAL_BEFORE_HANDOFF = 'term_65e4959ec32112'
 const TERMINAL_AFTER_HANDOFF = 'term_65e4981ac9ff02'
+const TERMINAL_AFTER_SECOND_HANDOFF = 'term_65e4f25072a7a1'
+const FRONT_TAB = 'w1:t1'
+const BACKGROUND_TAB = 'w1:t2'
 const HERDR_VERSION = '0.9.1'
 const CONNECTION = HerdrConnectionId.make(1)
 const NEXT_CONNECTION = HerdrConnectionId.make(2)
@@ -41,24 +44,45 @@ const reading = (agents: HerdReading['agents'], herdrVersion = HERDR_VERSION): H
   workspaces: [workspaceInfo],
   tabs: [tabInfo],
   panes: agents.map(({ info }) =>
-    paneInfo({ pane_id: info.pane_id, terminal_id: info.terminal_id }),
+    paneInfo({ pane_id: info.pane_id, terminal_id: info.terminal_id, tab_id: info.tab_id }),
   ),
   agents,
 })
+
+const tabViewedIf = (tab_id: string, viewedTab: string) =>
+  new TabInfo({
+    tab_id,
+    workspace_id: 'w1',
+    number: tab_id === FRONT_TAB ? 1 : 2,
+    label: tab_id,
+    focused: tab_id === viewedTab,
+    pane_count: 1,
+    agent_status: 'idle',
+  })
 
 const handoffReading = (
   terminal_id: string,
   agent_status: AgentInfo['agent_status'],
   state_change_seq: number,
   claudeSession: Option.Option<ClaudeSessionId> = Option.some(SESSION),
-) =>
-  reading([
+  viewedTab: string = FRONT_TAB,
+): HerdReading => ({
+  ...reading([
     {
-      info: agentInfo({ pane_id: 'w1:p6', terminal_id, agent_status, state_change_seq }),
+      info: agentInfo({
+        pane_id: 'w1:p6',
+        tab_id: BACKGROUND_TAB,
+        focused: false,
+        terminal_id,
+        agent_status,
+        state_change_seq,
+      }),
       claudeSession,
       branch: Option.none(),
     },
-  ])
+  ]),
+  tabs: [tabViewedIf(FRONT_TAB, viewedTab), tabViewedIf(BACKGROUND_TAB, viewedTab)],
+})
 
 const afterRestart = (claudeSession: Option.Option<ClaudeSessionId>) => {
   const previous = initialMachineState(
@@ -86,8 +110,6 @@ const afterRestart = (claudeSession: Option.Option<ClaudeSessionId>) => {
 
   return { restarted, detected }
 }
-
-const TERMINAL_AFTER_SECOND_HANDOFF = 'term_65e4f25072a7a1'
 
 const nextOf = (previous: MachineState, next: HerdReading, now: DateTime.Utc) =>
   Option.getOrThrow(nextMachineState(previous, NEXT_CONNECTION, next, now))
@@ -395,6 +417,28 @@ describe('MachineStateMapping', () => {
     )
 
     expect(statusOf(working)).toEqual([['working', MOVED_ON, Option.none()]])
+  })
+
+  it('lets a lost completion go once its tab is in view, which is what marks done seen in herdr', () => {
+    const { redetected } = throughHandoff('done', 'idle')
+    const viewed = nextOf(
+      redetected,
+      handoffReading(TERMINAL_AFTER_HANDOFF, 'idle', 2, Option.some(SESSION), BACKGROUND_TAB),
+      MOVED_ON,
+    )
+
+    expect(statusOf(viewed)).toEqual([['idle', MOVED_ON, Option.none()]])
+    expect(viewed.agents.map(seenMarkOf)).toEqual([
+      { terminal: TERMINAL_AFTER_HANDOFF, stateChangeSeq: 2 },
+    ])
+  })
+
+  it('reads a status at sequence 0 as unknown on a first sighting and on an identical re-read', () => {
+    const firstSighting = handoffReading(TERMINAL_AFTER_HANDOFF, 'idle', 0)
+    const state = initialMachineState(MACHINE, CONNECTION, firstSighting, STARTED)
+
+    expect(statusOf(state)).toEqual([['unknown', STARTED, Option.none()]])
+    expect(nextMachineState(state, CONNECTION, firstSighting, LATER)).toEqual(Option.none())
   })
 
   it('keeps the status and seen mark from before the first of two handoffs', () => {

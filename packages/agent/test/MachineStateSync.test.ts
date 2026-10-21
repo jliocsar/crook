@@ -202,6 +202,7 @@ it.effect('subscribes to status changes for every agent pane', () =>
 
     expect(statusPanes(subscription)).toEqual(['w1:p1'])
     expect(subscription.subscriptions).toContainEqual({ type: 'pane.closed' })
+    expect(subscription.subscriptions).toContainEqual({ type: 'tab.focused' })
   }),
 )
 

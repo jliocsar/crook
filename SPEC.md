@@ -50,7 +50,7 @@ State we can read
 - `events.subscribe` — long-lived stream: `workspace.*`, `tab.*`, `pane.created/updated/closed/moved/exited/agent_detected/agent_status_changed/scroll_changed`, `layout.updated`, `worktree.*`.
 - Recovery contract (from docs): subscribe first, wait for `subscription_started`, then `session.snapshot` on a second connection; treat events as invalidation, not replayable deltas. On `events_lost` the server closes the subscription → resubscribe + re-snapshot.
 - Agent record fields seen live: `agent` (`claude`), `agent_status` (`idle|working|blocked|done|unknown`), `pane_id`, `tab_id`, `workspace_id`, `cwd`, `foreground_cwd`, `terminal_title_stripped` (= Claude's session title, e.g. "EX-253 Example feature"), `state_change_seq`, `revision`, `focused`, optional `agent_session` {source, agent, kind, value}, optional `tokens`.
-- `done` = idle and not yet seen. Reads don't mark seen; focus commands do.
+- `done` = idle and not yet seen. Reads don't mark seen; focus commands do. Seen means the agent's tab became the focused tab, whichever pane of it has focus; an agent that finishes in the focused tab goes straight to `idle`, and `done` to `idle` leaves `state_change_seq` unchanged (measured on 0.9.5, see ARCHITECTURE 2.1).
 
 State we can change
 

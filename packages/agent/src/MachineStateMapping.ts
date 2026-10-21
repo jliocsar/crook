@@ -84,22 +84,34 @@ const carriedBeforeHandoff = (previous: Option.Option<AgentRow>, info: AgentInfo
     ),
   )
 
-const isNotYetDetected = (previous: Option.Option<AgentRow>, info: AgentInfo) =>
-  info.agent_status === 'unknown' || (info.state_change_seq === 0 && Option.isSome(previous))
+const isNotYetDetected = (info: AgentInfo) =>
+  info.agent_status === 'unknown' || info.state_change_seq === 0
 
-const isLostCompletion = (carried: Option.Option<StatusBeforeHandoff>, info: AgentInfo) =>
-  info.agent_status === 'idle' && Option.exists(carried, (before) => before.status === 'done')
+const isTabInView = (tabs: readonly TabInfo[], info: AgentInfo) =>
+  Arr.some(tabs, (tab) => tab.tab_id === info.tab_id && tab.focused)
+
+const isLostCompletion = (
+  carried: Option.Option<StatusBeforeHandoff>,
+  tabs: readonly TabInfo[],
+  info: AgentInfo,
+) =>
+  info.agent_status === 'idle' &&
+  Option.exists(carried, (before) => before.status === 'done') &&
+  !isTabInView(tabs, info)
+
+const keptBeforeHandoff = (carried: Option.Option<StatusBeforeHandoff>, status: AgentStatus) =>
+  Option.filter(carried, (before) => status === 'unknown' || status === before.status)
 
 const publishedStatus = (
-  previous: Option.Option<AgentRow>,
   carried: Option.Option<StatusBeforeHandoff>,
+  tabs: readonly TabInfo[],
   info: AgentInfo,
 ): AgentStatus => {
-  if (isNotYetDetected(previous, info)) {
+  if (isNotYetDetected(info)) {
     return 'unknown'
   }
 
-  return isLostCompletion(carried, info) ? 'done' : info.agent_status
+  return isLostCompletion(carried, tabs, info) ? 'done' : info.agent_status
 }
 
 const statusChangedAt = (
@@ -117,11 +129,12 @@ export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
   Option.orElse(info.foreground_cwd, () => info.cwd)
 
 const toAgentRow =
-  (previousAgents: readonly AgentRow[], now: DateTime.Utc) => (resolved: ResolvedAgent) => {
+  (previousAgents: readonly AgentRow[], tabs: readonly TabInfo[], now: DateTime.Utc) =>
+  (resolved: ResolvedAgent) => {
     const { info, claudeSession, branch } = resolved
     const previous = previousRowOf(previousAgents, resolved)
     const carried = carriedBeforeHandoff(previous, info)
-    const status = publishedStatus(previous, carried, info)
+    const status = publishedStatus(carried, tabs, info)
 
     return new AgentRow({
       pane: PaneId.make(info.pane_id),
@@ -137,10 +150,7 @@ const toAgentRow =
       claudeSession,
       stateChangeSeq: info.state_change_seq,
       statusChangedAt: statusChangedAt(previous, carried, status, now),
-      beforeHandoff: Option.filter(
-        carried,
-        (before) => status === 'unknown' || status === before.status,
-      ),
+      beforeHandoff: keptBeforeHandoff(carried, status),
     })
   }
 
@@ -155,7 +165,7 @@ const herdContents = (
   workspaces: reading.workspaces.map(toWorkspace),
   tabs: reading.tabs.map(toTab),
   panes: reading.panes.map(toPane),
-  agents: reading.agents.map(toAgentRow(previousAgents, now)),
+  agents: reading.agents.map(toAgentRow(previousAgents, reading.tabs, now)),
 })
 
 export const initialMachineState = (
