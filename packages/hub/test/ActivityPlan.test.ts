@@ -10,7 +10,7 @@ import { HerdrLink } from '@crook/domain/HerdrLink'
 import { HerdrConnectionId, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import {
-  ACTIVITY_RESTART_MARGIN,
+  ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW,
   ACTIVITY_START_SPACING,
   ALL_DONE,
   ALL_DONE_LINGER,
@@ -349,7 +349,10 @@ describe('nextActivityStep', () => {
   })
 
   it('updates only when the content changes, and restarts a margin before Hark expires it', () => {
-    const restartAfter = Duration.subtract(HARK_ACTIVITY_LIFETIME, ACTIVITY_RESTART_MARGIN)
+    const restartAfter = Duration.subtract(
+      HARK_ACTIVITY_LIFETIME,
+      ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW,
+    )
 
     expect(stepAt(busyHerd, liveSince(STARTED_AT, WORKING), Duration.seconds(5))).toEqual(
       ActivityStep.Wait({

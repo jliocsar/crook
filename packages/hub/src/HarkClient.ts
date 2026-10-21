@@ -64,6 +64,7 @@ export const HARK_REQUEST_TIMEOUT = Duration.seconds(10)
 export const HARK_WAIT_LIMIT = Duration.seconds(25)
 export const HARK_APPROVAL_EXPIRY = Duration.days(1)
 export const HARK_ACTIVITY_LIFETIME = Duration.hours(8)
+export const HARK_ACTIVITY_STALE_WINDOW = Duration.hours(8)
 
 export const HARK_REQUEST_SPACING = Duration.divideUnsafe(
   HARK_RATE_WINDOW,
@@ -309,7 +310,7 @@ const activityStartBody = (content: HarkActivityContent) => ({
   symbol: content.symbol,
   accentColor: HARK_ACTIVITY_ACCENT,
   expiresInSeconds: Duration.toSeconds(HARK_ACTIVITY_LIFETIME),
-  staleAfterSeconds: Duration.toSeconds(HARK_ACTIVITY_LIFETIME),
+  staleAfterSeconds: Duration.toSeconds(HARK_ACTIVITY_STALE_WINDOW),
 })
 
 const activityUpdateBody = (content: HarkActivityContent) => ({
@@ -460,10 +461,8 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
       HttpClientRequest.post(`${HARK_API_URL}/notifications/${encodeURIComponent(id)}/withdraw`),
       HttpClientResponse.matchStatus({
         '2xx': () => Effect.void,
-        [STATUS_TOO_MANY_REQUESTS]: rateLimited,
         [STATUS_NO_DEVICE_ACCEPTED]: refused,
-        '5xx': serverFailed,
-        orElse: refused,
+        ...failureCases,
       }),
     )
   })

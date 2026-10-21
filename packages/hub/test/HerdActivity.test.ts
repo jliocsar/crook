@@ -18,7 +18,7 @@ import { HerdrConnectionId, MachineId, PaneId, TerminalId, WorkspaceId } from '@
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { Workspace } from '@crook/domain/Workspace'
 import {
-  ACTIVITY_RESTART_MARGIN,
+  ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW,
   ACTIVITY_START_SPACING,
   ALL_DONE_LINGER,
 } from '@crook/hub/ActivityPlan'
@@ -267,7 +267,9 @@ it.effect('restarts with its fixed key and replace before Hark expires it', () =
     yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
     const started = yield* nextCallWhere(calls, isActivityCall)
 
-    yield* TestClock.adjust(Duration.subtract(HARK_ACTIVITY_LIFETIME, ACTIVITY_RESTART_MARGIN))
+    yield* TestClock.adjust(
+      Duration.subtract(HARK_ACTIVITY_LIFETIME, ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW),
+    )
     const restarted = yield* nextCallWhere(calls, isActivityCall)
 
     expect([restarted.method, restarted.url]).toEqual(['POST', ACTIVITIES_URL])

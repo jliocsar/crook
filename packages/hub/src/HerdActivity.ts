@@ -13,6 +13,7 @@ import type { HarkFailure } from '@crook/protocol/Hark'
 import {
   type ActivityAttempt,
   type ActivityStep,
+  type FollowedHerd,
   type LiveActivityRecord,
   activityAfterForgotten,
   activityAfterOffline,
@@ -135,7 +136,8 @@ const make = Effect.gen(function* () {
   const take = (
     step: ActivityStep,
     current: Option.Option<LiveActivityRecord>,
-    wakeAtMost: (atMost: Option.Option<Duration.Duration>) => Option.Option<Duration.Duration>,
+    herdNow: FollowedHerd,
+    now: DateTime.Utc,
   ): Effect.Effect<void> =>
     Match.value(step).pipe(
       Match.tagsExhaustive({
@@ -151,7 +153,7 @@ const make = Effect.gen(function* () {
           Option.match(wait.atMost, {
             onNone: () => Ref.set(abandonedAttempt, Option.none()),
             onSome: () => Effect.void,
-          }).pipe(Effect.andThen(awaitWake(wakeAtMost(wait.atMost)))),
+          }).pipe(Effect.andThen(awaitWake(wakeWithin(herdNow, now, wait.atMost)))),
       }),
     )
 
@@ -169,10 +171,9 @@ const make = Effect.gen(function* () {
     const isAbandoned = Option.exists(attemptOf(step), (attempt) =>
       Option.contains(abandoned, attempt),
     )
-    const wakeAtMost = (atMost: Option.Option<Duration.Duration>) =>
-      wakeWithin(herdNow, now, atMost)
-
-    yield* isAbandoned ? awaitWake(wakeAtMost(Option.none())) : take(step, current, wakeAtMost)
+    yield* isAbandoned
+      ? awaitWake(wakeWithin(herdNow, now, Option.none()))
+      : take(step, current, herdNow, now)
   }).pipe(
     Effect.catchDefect((defect) =>
       Effect.logError(pausedOnBug('Live Activity'), defect).pipe(

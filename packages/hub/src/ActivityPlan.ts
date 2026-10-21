@@ -14,6 +14,7 @@ import { type AgentRow, agentTitleOrPane, settledStatusOf } from '@crook/domain/
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { type MachineState, isHerdrLost, isResync } from '@crook/domain/MachineState'
+import { needsYouLabel } from '@crook/domain/NeedsYouLabel'
 
 import {
   HARK_ACTIVITY_DETAIL_LIMIT,
@@ -64,7 +65,7 @@ export const ActivityStep = Data.taggedEnum<ActivityStep>()
 
 export const ACTIVITY_START_SPACING = Duration.minutes(1)
 export const ALL_DONE_LINGER = Duration.seconds(45)
-export const ACTIVITY_RESTART_MARGIN = HARK_RATE_WINDOW
+export const ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW = HARK_RATE_WINDOW
 export const ACTIVITY_START_KEY_PREFIX = 'crook/herd'
 export const WAIT_FOR_A_CHANGE = ActivityStep.Wait({ atMost: Option.none() })
 
@@ -303,8 +304,6 @@ const agentsWith = (herd: ActivityHerd, status: AgentStatus) =>
     Arr.sort(bySince),
   )
 
-const needLine = (count: number) => `${count} ${count === 1 ? 'needs' : 'need'} you`
-
 const workingLine = (count: number) => `${count} working`
 
 const asking = (agent: ActivityAgent) =>
@@ -329,7 +328,7 @@ export const herdContent = (herd: ActivityHerd): HarkActivityContent => {
     Arr.head(blocked),
     Option.map((oldest) =>
       cutContent(
-        [needLine(blocked.length), ...workingPart].join(' · '),
+        [needsYouLabel(blocked.length), ...workingPart].join(' · '),
         `${oldest.title} ${asking(oldest)} · ${oldest.machineLabel}`,
         'warning',
       ),
@@ -350,7 +349,7 @@ export const herdContent = (herd: ActivityHerd): HarkActivityContent => {
 const restartAtOf = (record: LiveActivityRecord) =>
   DateTime.addDuration(
     record.lastStartAt,
-    Duration.subtract(HARK_ACTIVITY_LIFETIME, ACTIVITY_RESTART_MARGIN),
+    Duration.subtract(HARK_ACTIVITY_LIFETIME, ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW),
   )
 
 const startWhenSpaced = (
