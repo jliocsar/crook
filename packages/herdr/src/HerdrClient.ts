@@ -1,13 +1,16 @@
 import * as BunSocket from '@effect/platform-bun/BunSocket'
+import * as Arr from 'effect/Array'
 import type * as NonEmptyArray from 'effect/Array'
 import * as Config from 'effect/Config'
 import * as Context from 'effect/Context'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
+import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
 import * as Socket from 'effect/socket/Socket'
@@ -24,6 +27,7 @@ export type HerdrRequestError =
   | HerdrRequestRejected
   | HerdrPaneNotFound
   | HerdrAgentNotFound
+  | HerdrPaneBusy
   | HerdrResponseInvalid
 
 export type HerdrSubscriptionError = HerdrRequestError | HerdrEventsLost
@@ -42,6 +46,7 @@ const SUBSCRIBE_METHOD = 'events.subscribe'
 const EVENTS_LOST_CODE = 'events_lost'
 const PANE_NOT_FOUND_CODE = 'pane_not_found'
 const AGENT_NOT_FOUND_CODE = 'agent_not_found'
+const PANE_BUSY_CODE = 'agent_pane_busy'
 
 export class HerdrUnreachable extends Schema.TaggedError<HerdrUnreachable>()('HerdrUnreachable', {
   socketPath: Schema.String,
@@ -94,6 +99,15 @@ export class HerdrAgentNotFound extends Schema.TaggedError<HerdrAgentNotFound>()
 ) {
   override get message(): string {
     return `Herdr reported agent_not_found for ${this.method}: ${this.detail}. The pane no longer hosts an agent herdr recognizes, most likely because the agent exited: re-read state with session.snapshot.`
+  }
+}
+
+export class HerdrPaneBusy extends Schema.TaggedError<HerdrPaneBusy>()('HerdrPaneBusy', {
+  method: Schema.String,
+  detail: Schema.String,
+}) {
+  override get message(): string {
+    return `Herdr reported agent_pane_busy for ${this.method}: ${this.detail}. The pane is not at an interactive shell yet, most likely because it was created a moment ago: try again shortly.`
   }
 }
 
@@ -169,6 +183,7 @@ const rejection = (method: string, response: HerdrErrorResponse) =>
       AGENT_NOT_FOUND_CODE,
       () => new HerdrAgentNotFound({ method, detail: response.error.message }),
     ),
+    Match.when(PANE_BUSY_CODE, () => new HerdrPaneBusy({ method, detail: response.error.message })),
     Match.orElse(
       (code) => new HerdrRequestRejected({ method, code, detail: response.error.message }),
     ),
@@ -296,32 +311,46 @@ const makeTest = (script: {
   readonly responses: readonly ScriptedResponse[]
   readonly events: Queue.Dequeue<HerdrEvent, HerdrSubscriptionError>
   readonly sent?: Queue.Enqueue<SentRequest>
-}) => {
-  const request = Effect.fn('HerdrClient.request')(function* <Params, Result>(
-    method: HerdrMethod<Params, Result>,
-    params: Params,
-  ) {
-    const line = yield* encodeRequest(method, params)
+}) =>
+  Effect.gen(function* () {
+    const answered = yield* Ref.make(HashMap.empty<string, number>())
 
-    if (script.sent !== undefined) {
-      yield* Queue.offer(script.sent, { method: method.name, line })
-    }
+    const nextScripted = (method: string) =>
+      Ref.modify(answered, (counts) => {
+        const count = Option.getOrElse(HashMap.get(counts, method), () => 0)
+        const scripted = script.responses.filter((response) => response.method === method)
 
-    const scripted = script.responses.find((response) => response.method === method.name)
+        return [
+          Arr.get(scripted, Math.min(count, scripted.length - 1)),
+          HashMap.set(counts, method, count + 1),
+        ] as const
+      })
 
-    if (scripted === undefined) {
-      return yield* new HerdrConnectionClosed({ method: method.name })
-    }
+    const request = Effect.fn('HerdrClient.request')(function* <Params, Result>(
+      method: HerdrMethod<Params, Result>,
+      params: Params,
+    ) {
+      const line = yield* encodeRequest(method, params)
 
-    return yield* decodeResponse(method, scripted.line)
+      if (script.sent !== undefined) {
+        yield* Queue.offer(script.sent, { method: method.name, line })
+      }
+
+      const scripted = yield* nextScripted(method.name)
+
+      if (Option.isNone(scripted)) {
+        return yield* new HerdrConnectionClosed({ method: method.name })
+      }
+
+      return yield* decodeResponse(method, scripted.value.line)
+    })
+
+    return HerdrClient.of({
+      request,
+      snapshot: Effect.map(request(SessionSnapshotMethod, {}), (result) => result.snapshot),
+      subscribe: () => Effect.succeed(Stream.fromQueue(script.events)),
+    })
   })
-
-  return HerdrClient.of({
-    request,
-    snapshot: Effect.map(request(SessionSnapshotMethod, {}), (result) => result.snapshot),
-    subscribe: () => Effect.succeed(Stream.fromQueue(script.events)),
-  })
-}
 
 export const scriptedResult = <Result>(
   method: HerdrMethod<unknown, Result>,
@@ -373,5 +402,5 @@ export class HerdrClient extends Context.Service<
   static readonly layer = Layer.effect(this, Effect.map(HerdrSocketPath, makeLive))
 
   static readonly layerTest = (script: Parameters<typeof makeTest>[0]) =>
-    Layer.succeed(this, makeTest(script))
+    Layer.effect(this, makeTest(script))
 }

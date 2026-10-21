@@ -18,6 +18,7 @@ import {
   HerdrAgentNotFound,
   HerdrConnectionClosed,
   HerdrEventsLost,
+  HerdrPaneBusy,
   HerdrPaneNotFound,
   HerdrRequestRejected,
   HerdrResponseInvalid,
@@ -28,11 +29,13 @@ import {
 } from '@crook/herdr/HerdrClient'
 import {
   AgentPromptMethod,
+  AgentStartMethod,
   PaneCloseMethod,
   PaneProcessInfoMethod,
   PaneRenameMethod,
   Ping,
   SessionSnapshotMethod,
+  WorktreeCreateMethod,
 } from '@crook/herdr/Methods'
 import { SessionSnapshot } from '@crook/herdr/Records'
 
@@ -118,6 +121,15 @@ const SNAPSHOT_LINE = JSON.stringify({
     },
   },
 })
+
+const WORKTREE_CREATED_LINE =
+  '{"id":"worktree.create","result":{"type":"worktree_created","workspace":{"workspace_id":"w3","number":3,"label":"probe wt","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w3:t1","agent_status":"unknown","worktree":{"repo_key":"/home/jliocsar/probe/repo/.git","repo_name":"repo","repo_root":"/home/jliocsar/probe/repo","checkout_path":"/home/jliocsar/probe/wt","is_linked_worktree":true}},"tab":{"tab_id":"w3:t1","workspace_id":"w3","number":1,"label":"1","focused":false,"pane_count":1,"agent_status":"unknown"},"root_pane":{"pane_id":"w3:p1","terminal_id":"term_65e59abce88da6","workspace_id":"w3","tab_id":"w3:t1","focused":false,"cwd":"/home/jliocsar/probe/wt","foreground_cwd":"/home/jliocsar/probe/wt","agent_status":"unknown","scroll":{"offset_from_bottom":0,"max_offset_from_bottom":0,"viewport_rows":40},"revision":0},"worktree":{"path":"/home/jliocsar/probe/wt","branch":"probe/wt","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"open_workspace_id":"w3","label":"repo"}}}'
+
+const AGENT_STARTED_LINE =
+  '{"id":"agent.start","result":{"type":"agent_started","agent":{"terminal_id":"term_65e59abc3b76a2","name":"crook-1","agent_status":"unknown","workspace_id":"w1","tab_id":"w1:t2","pane_id":"w1:p2","focused":false,"launch_pending":true,"state_change_seq":0,"cwd":"/home/jliocsar/probe/repo","foreground_cwd":"/home/jliocsar/probe/repo","revision":0},"argv":["claude"]}}'
+
+const PANE_BUSY_LINE =
+  '{"id":"agent.start","error":{"code":"agent_pane_busy","message":"agent target pane w1:p2 is not an available shell"}}'
 
 const STARTED_LINE = '{"id":"events.subscribe","result":{"type":"subscription_started"}}'
 
@@ -227,6 +239,58 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
         { pane_id: 'w1:p1', label: null },
         { pane_id: 'w1:p1' },
       ])
+    }),
+  )
+
+  it.effect(
+    'creates a worktree and starts claude in a pane, decoding what herdr 0.9.5 answered',
+    () =>
+      Effect.gen(function* () {
+        const { client, received } = yield* fakeHerdr([
+          replyOnce(WORKTREE_CREATED_LINE),
+          replyOnce(AGENT_STARTED_LINE),
+        ])
+        const created = yield* client.request(WorktreeCreateMethod, {
+          cwd: '/home/jliocsar/probe/repo',
+          branch: 'probe/wt',
+        })
+        const started = yield* client.request(AgentStartMethod, {
+          name: 'crook-1',
+          kind: 'claude',
+          pane_id: 'w1:p2',
+        })
+        const requests = yield* Effect.forEach([1, 2], () =>
+          Queue.take(received).pipe(Effect.flatMap(Schema.decodeEffect(SentRequest))),
+        )
+
+        expect(created.root_pane.pane_id).toBe('w3:p1')
+        expect(created.worktree.path).toBe('/home/jliocsar/probe/wt')
+        expect(created.worktree.branch).toEqual(Option.some('probe/wt'))
+        expect(
+          Option.map(created.workspace.worktree, (worktree) => worktree.checkout_path),
+        ).toEqual(Option.some('/home/jliocsar/probe/wt'))
+        expect(started.agent.agent_status).toBe('unknown')
+        expect(started.argv).toEqual(['claude'])
+        expect(requests.map((request) => request.params)).toEqual([
+          { cwd: '/home/jliocsar/probe/repo', branch: 'probe/wt' },
+          { name: 'crook-1', kind: 'claude', pane_id: 'w1:p2' },
+        ])
+      }),
+  )
+
+  it.effect('fails with HerdrPaneBusy when the pane is not at a shell yet', () =>
+    Effect.gen(function* () {
+      const { client } = yield* fakeHerdr([replyOnce(PANE_BUSY_LINE)])
+      const busy = yield* client
+        .request(AgentStartMethod, { name: 'crook-1', kind: 'claude', pane_id: 'w1:p2' })
+        .pipe(Effect.flip)
+
+      expect(busy).toEqual(
+        new HerdrPaneBusy({
+          method: 'agent.start',
+          detail: 'agent target pane w1:p2 is not an available shell',
+        }),
+      )
     }),
   )
 
@@ -460,6 +524,36 @@ layer(testLayer)('HerdrClient.layerTest', (it) => {
       const first = yield* events.pipe(Stream.take(1), Stream.runCollect)
 
       expect(first).toEqual([scriptedEvent])
+    }),
+  )
+})
+
+const sequencedLayer = Layer.unwrap(
+  Effect.map(Queue.unbounded<HerdrEvent, HerdrSubscriptionError>(), (events) =>
+    HerdrClient.layerTest({
+      responses: [
+        scriptedRejection(AgentStartMethod, 'agent_pane_busy', 'not an available shell'),
+        scriptedRejection(AgentStartMethod, 'invalid_agent_name', 'bad name'),
+      ],
+      events,
+    }),
+  ),
+)
+
+layer(sequencedLayer)('HerdrClient.layerTest with several answers for one method', (it) => {
+  it.effect('answers in the order they are scripted, then keeps giving the last one', () =>
+    Effect.gen(function* () {
+      const client = yield* HerdrClient
+      const start = client
+        .request(AgentStartMethod, { name: 'crook-1', kind: 'claude', pane_id: 'w1:p2' })
+        .pipe(Effect.flip)
+      const answers = yield* Effect.all([start, start, start])
+
+      expect(answers.map((answer) => answer.name)).toEqual([
+        'HerdrPaneBusy',
+        'HerdrRequestRejected',
+        'HerdrRequestRejected',
+      ])
     }),
   )
 })
