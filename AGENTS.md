@@ -536,6 +536,16 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
 :::
 
+- Base UI's Dialog returns focus on close to the element focused before it opened only while that
+  element is still connected; once it is gone, focus lands on the body (measured on 1.9.0, after a
+  close removed the card that opened the sheet). The shared sheet hands Base UI its own return
+  target, falling back to the current tab when the opener is gone or inert, and is told outright
+  when its own action removed the opener, rather than trusting `isConnected` on an element that may
+  still be animating out.
+- A focus test compares `document.activeElement` with the element itself. Focus that fell to the
+  body still passes a check on its `textContent`, which holds every label on the page (measured: a
+  test asserting the tab's text passed with focus on the body).
+
 :::tip
 Checking the web app against real data, measured:
 
