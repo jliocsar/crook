@@ -14,13 +14,18 @@ export type MotionTokens = {
 }
 
 const MILLISECONDS_PER_SECOND = 1000
-const MILLISECONDS = /^\s*(\d+(?:\.\d+)?)ms\s*$/u
+const CSS_TIME = /^\s*(\d*\.?\d+)(ms|s)\s*$/u
 const CUBIC_BEZIER = /^\s*cubic-bezier\(([^)]*)\)\s*$/u
 
-export const parseMilliseconds = (value: string): Option.Option<number> =>
+export const parseCssTime = (value: string): Option.Option<number> =>
   pipe(
-    Option.fromNullishOr(MILLISECONDS.exec(value)?.[1]),
-    Option.map((milliseconds) => Number(milliseconds) / MILLISECONDS_PER_SECOND),
+    Option.fromNullishOr(CSS_TIME.exec(value)),
+    Option.flatMap((match) =>
+      Option.all([Option.fromNullishOr(match[1]), Option.fromNullishOr(match[2])]),
+    ),
+    Option.map(([amount, unit]) =>
+      unit === 'ms' ? Number(amount) / MILLISECONDS_PER_SECOND : Number(amount),
+    ),
   )
 
 export const parseCubicBezier = (value: string): Option.Option<CubicBezier> =>
@@ -33,8 +38,8 @@ export const parseCubicBezier = (value: string): Option.Option<CubicBezier> =>
 
 export const readMotionTokens = (read: (property: string) => string): Option.Option<MotionTokens> =>
   Option.all({
-    fast: parseMilliseconds(read('--motion-fast')),
-    base: parseMilliseconds(read('--motion')),
+    fast: parseCssTime(read('--motion-fast')),
+    base: parseCssTime(read('--motion')),
     ease: parseCubicBezier(read('--ease-out')),
   }).pipe(
     Option.map(({ fast, base, ease }) => ({
@@ -51,7 +56,7 @@ const fromDocument = (): MotionTokens => {
     readMotionTokens((property) => style.getPropertyValue(property)),
     () =>
       new Error(
-        'index.css must define --motion-fast and --motion in milliseconds and --ease-out as a cubic-bezier() on :root.',
+        'index.css must define --motion-fast and --motion as CSS times and --ease-out as a cubic-bezier() on :root.',
       ),
   )
 }

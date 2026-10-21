@@ -4,19 +4,24 @@ import { describe, expect, it } from 'vitest'
 import {
   motionTokens,
   parseCubicBezier,
-  parseMilliseconds,
+  parseCssTime,
   readMotionTokens,
 } from '@crook/web/motion/MotionTokens'
 
-describe('parseMilliseconds', () => {
+describe('parseCssTime', () => {
   it('reads a millisecond token as seconds', () => {
-    expect(parseMilliseconds('180ms')).toStrictEqual(Option.some(0.18))
-    expect(parseMilliseconds(' 120ms ')).toStrictEqual(Option.some(0.12))
+    expect(parseCssTime('180ms')).toStrictEqual(Option.some(0.18))
+    expect(parseCssTime(' 120ms ')).toStrictEqual(Option.some(0.12))
   })
 
-  it('refuses anything that is not milliseconds', () => {
-    expect(parseMilliseconds('0.18s')).toStrictEqual(Option.none())
-    expect(parseMilliseconds('')).toStrictEqual(Option.none())
+  it('reads the seconds a production build minifies the token to', () => {
+    expect(parseCssTime('.18s')).toStrictEqual(Option.some(0.18))
+    expect(parseCssTime('0.12s')).toStrictEqual(Option.some(0.12))
+  })
+
+  it('refuses anything that is not a CSS time', () => {
+    expect(parseCssTime('180')).toStrictEqual(Option.none())
+    expect(parseCssTime('')).toStrictEqual(Option.none())
   })
 })
 

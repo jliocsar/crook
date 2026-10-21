@@ -22,11 +22,9 @@ import { Herd } from '@crook/hub/Herd'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
 import { ClientApi, HubStorageFailed } from '@crook/protocol/ClientApi'
+import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
-export const AGENT_PATH = '/rpc/agent'
-export const CLIENT_PATH = '/rpc/client'
-export const HEALTH_PATH = '/health'
 export const SOCKET_SILENCE_TIMEOUT = Duration.times(AGENT_PING_INTERVAL, 2)
 
 export const CrookWebRoot = Config.String('CROOK_WEB_ROOT')

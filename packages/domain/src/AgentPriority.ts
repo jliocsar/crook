@@ -10,6 +10,7 @@ import * as Schema from 'effect/Schema'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { PaneId } from '@crook/domain/Ids'
+import { isOffline } from '@crook/domain/Machine'
 import { agentsIn } from '@crook/domain/MachineState'
 
 interface RankedAgent {
@@ -100,9 +101,7 @@ export const orderAgents = (machine: HerdMachine): AgentRow[] => {
 }
 
 export const needsYouCount = (machine: HerdMachine): number =>
-  machine.machine.connection === 'offline'
-    ? 0
-    : Arr.filter(agentsIn(machine.state), needsYou(machine)).length
+  isOffline(machine.machine) ? 0 : Arr.filter(agentsIn(machine.state), needsYou(machine)).length
 
 export const herdNeedsYouCount = (view: HerdView): number =>
   sumAll(Arr.map(view.machines, needsYouCount))

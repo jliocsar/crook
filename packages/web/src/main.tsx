@@ -1,3 +1,4 @@
+import { RegistryProvider } from '@effect/atom-react/RegistryContext'
 import { RouterProvider } from '@tanstack/react-router'
 import * as Effect from 'effect/Effect'
 import { StrictMode } from 'react'
@@ -14,7 +15,9 @@ const root = document.getElementById(ROOT_ELEMENT_ID)
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      <RouterProvider router={router} />
+      <RegistryProvider>
+        <RouterProvider router={router} />
+      </RegistryProvider>
     </StrictMode>,
   )
 }

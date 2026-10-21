@@ -10,9 +10,8 @@ import * as HttpServerRespondable from 'effect/http/HttpServerRespondable'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 
 import { MachineId } from '@crook/domain/Ids'
+import { EMAIL_HEADER, TOKEN_CONTEXT_HEADER } from '@crook/protocol/ExeDevHeaders'
 
-const EMAIL_HEADER = 'x-exedev-email'
-const TOKEN_CONTEXT_HEADER = 'x-exedev-token-ctx'
 const ORIGIN_HEADER = 'origin'
 const SECURE_PROTOCOL = 'https:'
 const FORBIDDEN = 403

@@ -15,3 +15,5 @@ export class Machine extends Schema.Class<Machine>('Machine')({
   agentVersion: Schema.OptionFromNullOr(CrookVersion),
   herdrVersion: Schema.OptionFromNullOr(Schema.String),
 }) {}
+
+export const isOffline = (machine: Machine): boolean => machine.connection === 'offline'

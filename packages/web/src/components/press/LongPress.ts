@@ -18,7 +18,7 @@ type LongPressHandlers = Pick<
 
 const PRIMARY_BUTTON = 0
 
-export const useLongPress = (onLongPress: () => void) => {
+export const useLongPress = (onLongPress: (() => void) | undefined) => {
   const timer = React.useRef<Option.Option<() => void>>(Option.none())
   const origin = React.useRef<Option.Option<Point>>(Option.none())
   const fired = React.useRef(false)
@@ -37,12 +37,12 @@ export const useLongPress = (onLongPress: () => void) => {
   const fire = () => {
     timer.current = Option.none()
     fired.current = true
-    onLongPress()
+    onLongPress?.()
   }
 
   const handlers: LongPressHandlers = {
     onPointerDown: (event) => {
-      if (event.button !== PRIMARY_BUTTON) {
+      if (event.button !== PRIMARY_BUTTON || onLongPress === undefined) {
         return
       }
 
@@ -64,6 +64,10 @@ export const useLongPress = (onLongPress: () => void) => {
     onPointerCancel: clear,
     onPointerLeave: clear,
     onContextMenu: (event) => {
+      if (onLongPress === undefined) {
+        return
+      }
+
       event.preventDefault()
       const alreadyFired = fired.current
 

@@ -20,9 +20,9 @@ import {
   type HerdrSubscriptionError,
   type SentRequest,
 } from '@crook/herdr/HerdrClient'
-import * as HttpRoutes from '@crook/hub/HttpRoutes'
 import type { MachineState } from '@crook/domain/MachineState'
 import { ClientApi, MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
+import { CLIENT_PATH } from '@crook/protocol/HubRoutes'
 
 import {
   PANE,
@@ -114,7 +114,7 @@ const watchOnPhone = Effect.fn('watchOnPhone')(function* (
   machine: MachineId,
   from: Option.Option<TranscriptPosition>,
 ) {
-  const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+  const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
   const events = yield* Queue.unbounded<string>()
 
   yield* phone.WatchTranscript({ machine, source: new PaneTranscript({ pane: PANE }), from }).pipe(
@@ -237,7 +237,7 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       const state = yield* SubscriptionRef.make(stateOn(machine, 1, FIRST_SESSION))
 
       yield* startAgent(machine, root, state)
-      const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+      const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
       const watchFirst = (watched: MachineId, pane: PaneId) =>
         phone
           .WatchTranscript({

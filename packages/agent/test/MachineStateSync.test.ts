@@ -16,7 +16,6 @@ import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
-import { RECONNECT_CAP } from '@crook/agent/Reconnect'
 import { StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import { ClaudeSessionId, PaneId } from '@crook/domain/Ids'
 import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
@@ -30,6 +29,7 @@ import {
   HerdrUnreachable,
 } from '@crook/herdr/HerdrClient'
 import { type AgentInfo, type SessionSnapshot, TabInfo } from '@crook/herdr/Records'
+import { RECONNECT_CAP } from '@crook/protocol/AgentLink'
 
 import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from './Fixtures'
 

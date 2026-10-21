@@ -1,3 +1,4 @@
+import { RegistryProvider } from '@effect/atom-react/RegistryContext'
 import { describe, expect, it } from '@effect/vitest'
 import {
   createMemoryHistory,
@@ -8,12 +9,17 @@ import {
 } from '@tanstack/react-router'
 import { render } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
+import * as Atom from 'effect/reactivity/Atom'
 import { beforeEach, vi } from 'vitest'
 
+import { hubRuntime } from '@crook/web/atoms/Hub'
 import { ROUTE_FALLBACKS } from '@crook/web/router/RouteFallbacks'
 import { routeTree } from '@crook/web/routeTree.gen'
 
+import { liveWith } from '../AppRender.tsx'
 import { eventually, findByRole } from '../Dom.ts'
+import { herd } from '../HerdFixtures.ts'
+import { makeFakeHubLink } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 
 const renderAt = Effect.fn('renderAt')(function* (
@@ -26,7 +32,13 @@ const renderAt = Effect.fn('renderAt')(function* (
     ...ROUTE_FALLBACKS,
   })
 
-  render(<RouterProvider router={router} />)
+  const link = yield* makeFakeHubLink(liveWith(herd([])))
+
+  render(
+    <RegistryProvider initialValues={[Atom.initialValue(hubRuntime.layer, link.layer)]}>
+      <RouterProvider router={router} />
+    </RegistryProvider>,
+  )
   yield* Effect.promise(() => router.load())
 
   return router

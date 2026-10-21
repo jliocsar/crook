@@ -23,7 +23,7 @@ import { afterSpring, click, eventually, findByRole, springSettles } from '../Do
 import { stubMediaQueries } from '../MediaQueries.ts'
 
 const makeRouter = (initialEntries: string[]) => {
-  const root = createRootRoute({ component: Shell })
+  const root = createRootRoute({ component: () => <Shell needsYou={0} /> })
   const agents = createRoute({ getParentRoute: () => root, id: 'agents', component: Agents })
   const agentsIndex = createRoute({ getParentRoute: () => agents, path: '/' })
   const detail = createRoute({

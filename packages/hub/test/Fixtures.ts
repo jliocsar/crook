@@ -44,6 +44,7 @@ import * as Database from '@crook/hub/Database'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
 import { AGENT_PING_INTERVAL, AgentLink, Hello } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
+import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 export const OWNER = 'owner@example.com'
@@ -156,7 +157,7 @@ export const machineIn = (view: HerdView, id: MachineId) =>
   Arr.findFirst(view.machines, (entry) => entry.machine.id === id)
 
 export const herdWhere = Effect.fn('herdWhere')(function* (predicate: (view: HerdView) => boolean) {
-  const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+  const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
 
   return yield* phone
     .WatchHerd()
@@ -175,7 +176,7 @@ export const realAgent = Effect.fn('realAgent')(function* (
   claudeRoots: readonly string[],
 ) {
   const server = yield* HttpServer.HttpServer
-  const dialHub = connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(machine)).pipe(
+  const dialHub = connect(AgentLink, AGENT_PATH, agentToken(machine)).pipe(
     Effect.provideService(HttpServer.HttpServer, server),
   )
 

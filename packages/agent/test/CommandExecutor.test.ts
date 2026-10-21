@@ -14,7 +14,6 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { CommandExecutor, HERDR_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
-import { HUB_RECONNECT_BASE } from '@crook/agent/HubLink'
 import { type AgentAuditEntry, AuditLog } from '@crook/agent/AuditLog'
 import { AuditPolicy, REDACTED } from '@crook/domain/Audit'
 import {
@@ -43,7 +42,7 @@ import {
   PaneCloseMethod,
   PaneRenameMethod,
 } from '@crook/herdr/Methods'
-import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
+import { COMMAND_TIMEOUT, HUB_RECONNECT_BASE } from '@crook/protocol/AgentLink'
 import {
   CommandDeliveryUnknown,
   HerdrRefusedCommand,

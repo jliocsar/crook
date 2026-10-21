@@ -9,6 +9,7 @@ import { animate, motion, useMotionValue, useReducedMotion } from 'motion/react'
 import * as React from 'react'
 
 import { Button } from '@crook/web/components/ui/button'
+import { HeaderBanner } from '@crook/web/connection/ConnectionBanner'
 import { GLIDE } from '@crook/web/motion/Springs'
 import { commitsBack } from '@crook/web/navigation/BackGesture'
 import { COLUMN_STYLE, useColumnWidth } from '@crook/web/navigation/Column'
@@ -256,6 +257,7 @@ export function PushedHeader({
 }) {
   return (
     <header className="border-border bg-background/90 relative z-10 border-b pt-[var(--safe-top)] backdrop-blur">
+      <HeaderBanner />
       <div className="flex items-center gap-1 px-1">
         <BackButton label={backLabel} />
         <div className="min-w-0 flex-1 py-1.5">

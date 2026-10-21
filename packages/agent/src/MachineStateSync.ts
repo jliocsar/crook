@@ -28,12 +28,13 @@ import {
   withCreatedPanes,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
-import { reconnectBackoff, trackConnectionHealth } from '@crook/agent/Reconnect'
+import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import type { LifecycleEventKind, Subscription } from '@crook/herdr/Events'
 import { HerdrClient, type HerdrSubscriptionError } from '@crook/herdr/HerdrClient'
 import type { AgentInfo } from '@crook/herdr/Records'
+import { reconnectBackoff } from '@crook/protocol/AgentLink'
 
 const STATE_EVENT_KINDS: NonEmptyArray.NonEmptyReadonlyArray<LifecycleEventKind> = [
   'workspace.created',

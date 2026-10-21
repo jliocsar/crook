@@ -1,6 +1,5 @@
 import * as BunSocket from '@effect/platform-bun/BunSocket'
 import * as Config from 'effect/Config'
-import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Redacted from 'effect/Redacted'
@@ -13,13 +12,14 @@ import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { reconnectBackoff, trackConnectionHealth } from '@crook/agent/Reconnect'
+import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import {
   AGENT_PING_INTERVAL,
   AGENT_SOCKET_OPEN_TIMEOUT,
   AgentLink,
   Hello,
+  hubReconnectSchedule,
 } from '@crook/protocol/AgentLink'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
@@ -30,8 +30,6 @@ export type AgentLinkClient = RpcClient.FromGroup<typeof AgentLink, RpcClientErr
 export type HubConnect = Effect.Effect<AgentLinkClient, never, Scope.Scope>
 
 const HUB_AUTHORIZATION_HEADER = 'X-Exedev-Authorization'
-
-export const HUB_RECONNECT_BASE = Duration.millis(77)
 
 export const CrookHubUrl = Config.URL('CROOK_HUB_URL')
 export const CrookHubToken = Config.Redacted('CROOK_HUB_TOKEN')
@@ -126,11 +124,7 @@ const make = (connect: HubConnect, hello: Hello) =>
       )
     }, Effect.scoped)
 
-    yield* session().pipe(
-      Effect.retry(reconnectBackoff(HUB_RECONNECT_BASE)),
-      Effect.forever,
-      Effect.forkScoped,
-    )
+    yield* session().pipe(Effect.retry(hubReconnectSchedule), Effect.forever, Effect.forkScoped)
   })
 
 export const layerWith = (connect: HubConnect, hello: Hello) =>
