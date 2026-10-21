@@ -65,8 +65,6 @@ const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
   }))
 }
 
-const machineOffline = (herdMachine: HerdMachine) => isOffline(herdMachine.machine)
-
 const hasNoAgents = (herdMachine: HerdMachine) => agentsIn(herdMachine.state).length === 0
 
 const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
@@ -74,7 +72,7 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
     return Option.some('noMachines')
   }
 
-  if (Arr.every(view.machines, machineOffline)) {
+  if (Arr.every(view.machines, (herdMachine) => isOffline(herdMachine.machine))) {
     return Option.some('allOffline')
   }
 
@@ -82,7 +80,7 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
 }
 
 const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
-  if (machineOffline(herdMachine)) {
+  if (isOffline(herdMachine.machine)) {
     return SectionBody.Offline()
   }
 
