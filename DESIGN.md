@@ -282,7 +282,8 @@ The Agents tab: every agent on every machine, one section per machine.
   - line 1: the title (16/24; 620 when it needs you, 500 otherwise), a muted pin icon when it is
     pinned, and the time since its status changed, in mono 12px on the right;
   - line 2: the status dot and word, a `·`, then `workspace · tab` and the branch in mono 12px.
-    The pending ask takes this slot on a blocked agent once the hub carries it (JC-105).
+    On a blocked agent the pending ask's one-line summary takes this slot, in foreground mono
+    12px.
   - The time and status word are foreground when the agent needs you, muted otherwise.
   - A title herdr doesn't know falls back to the pane id.
 - **Tap** opens the agent's chat, and opening it marks a finished agent seen.
@@ -319,6 +320,186 @@ The Agents tab: every agent on every machine, one section per machine.
 - **Live updates** re-sort each list; a card moves to its new place on the reorder spring.
 - **The needs-you badge** on the Agents tab counts the same agents as the sections, and ignores
   offline machines, whose agents are hidden. It is hidden on first load.
+
+## The chat
+
+Tapping an agent pushes its chat, variant Thread: the conversation with one Claude Code agent.
+The chat is the only view of an agent. There's no toggle to the raw terminal, and no "show
+screen" on the Ask.
+
+- **The header** is the pushed screen's: the back button, the agent's title (display, 20/28,
+  620, truncated), and one line under it: the status dot, the status word (blocked reads "needs
+  you"), a `·`, then `machine · workspace` in mono 12px. The status word is a polite live
+  region, so a screen reader hears the agent move on. On the right:
+  - "2 running", a pill shown while any subagent runs. Tapping it scrolls to the running tree;
+  - `…`, which opens the agent's action sheet (The herd), while the agent is live or its machine
+    is offline.
+- **The transcript** follows the live tail. Scrolled up, a "Latest" pill (`bg-foreground`, 44px)
+  shows above the dock and jumps back down.
+  - **Your messages** are Message bubbles at 16/24. One that Claude hasn't written down yet
+    reads "Sent", and one Claude has queued reads "Queued".
+  - **Claude's text** is Response markdown at 16/24, with Code Block for fenced code.
+  - **Tool calls** are one Tool Call card each, collapsed, titled like the terminal
+    (`Read(Herd.ts)`, `Bash(bun run …)`). The whole header is the 44px trigger. Expanded, Edit
+    shows Diff View, Write its content in a Code Block, Bash its command in a Code Block and
+    then its output, Read its output highlighted for the file, and any other tool its input as
+    JSON and then its output.
+  - **Images Claude read** (a `Read` of a png) show as thumbnails on the tool card, visible
+    without expanding it. Images you pasted show in your bubble.
+  - **The plan** (TodoWrite) is a checklist titled "Plan" with "2/5 done" on the right. It
+    updates in place.
+  - **Subagents** (the `Agent` tool) are a Subagent Tree titled "Subagents", one per turn. Each
+    row is 44px: the status dot, the description, a mono line with the agent type and model, the
+    running time and a chevron. When the pane closes, a running subagent reads "failed" with
+    "Pane closed".
+  - **Notes** are centred muted 12px lines: "Interrupted", or an Always grant. "Conversation
+    compacted" (with "Show summary") and "Conversation cleared" are dividers across the thread.
+    History not loaded yet reads "Earlier messages not loaded (N KB)", and tapping it loads it.
+  - **Working** is Thinking State, "Working", timed from the status change. It shows only while
+    no tool is running, so there's never a second spinner.
+  - The tool call an open Ask is about is hidden, so its diff isn't shown twice.
+  - Before anything arrives the thread reads "Loading the conversation", then "No messages yet".
+    A pane that isn't running Claude has no transcript: its chat reads "Not a Claude pane" and
+    nothing else, with no dock.
+- **The dock** sits at the bottom, on `bg-card`, above the home indicator: the Ask over the
+  composer. When the keyboard opens, the dock rises above it from the visual viewport. The
+  thread gives way first, then the Ask scrolls inside what is left, so neither the composer nor
+  the answers sit behind the keyboard.
+- **The Ask** opens above the composer while the agent is blocked on a machine that's online.
+  It reads "Needs you" in `primary`, then a title: "Edit Herd.ts?", "Write Herd.ts?", "Run this
+  command?" or "Use WebFetch?", over the tool's name in mono 12px.
+  - Then the command as a Code Block, the edit as a Diff View, or the file a write would create
+    as a Code Block, capped at 160px and scrolling.
+  - Then 44px buttons in one row: Yes, Always and No, as the dialog offers them. No is always
+    there, since Esc declines any dialog. Under them, "Always: " and what Always grants, in the
+    dialog's own words.
+  - Always leaves a note in the transcript after the call, in the third person: "Commands like
+    this one allowed for the rest of the session", or "File edits like this one allowed without
+    asking again".
+  - An AskUserQuestion with one question and one choice uses Questionnaire: the options,
+    "Something else…" and Answer. Something else declines with your text. Several questions, or
+    a multi-select one, show read-only with "crook can only pick the answer to one question with
+    one choice. Answer this one in the terminal, or tell Claude what to do instead." and Decline.
+  - An ask crook can't read is "Claude is waiting on something crook can't read", its screen,
+    "Decline it here, or tell Claude what to do instead." and Decline.
+  - The tapped button spins until the answer is out, then the Ask reads "Answered. Waiting for
+    Claude to move on.", or "Already answered" when it was answered elsewhere first. A refusal
+    shows its sentence beneath.
+  - Screen readers hear "Needs you" and the title once per ask. An Ask that closes while it
+    holds focus hands it to the composer.
+- **The composer** is Prompt Input at 16px, reading "Message Claude".
+  - A `/` button (on an empty field) and typing `/` both show `/compact`, `/clear` and `/model`
+    as a Suggestions row.
+  - Send turns into Stop while the agent works and the field is empty. Stop is Esc.
+  - While the Ask is open, the placeholder reads "Or tell Claude what to do instead" and Send
+    becomes "Decline and send": sending declines the Ask with your message. Blocked before the
+    ask has arrived, it reads "Waiting for Claude's question" and is disabled.
+  - While the hub can't act it reads "Sending is paused until crook reconnects".
+  - Enter adds a line on a touch keyboard and sends on a hardware one; Ctrl+Enter and Cmd+Enter
+    send on either.
+  - A message that didn't reach Claude comes back into the field when it's empty.
+  - There's no key strip. Stop is the only key the chat sends.
+- **Watching an agent** marks it seen, so it doesn't come back as "done, not opened". A subagent's
+  screen counts as watching its agent.
+
+When the agent ends or its machine drops, the dock becomes a card in its place:
+
+- **The pane closes, or Claude exits:** an icon, "This pane closed" or "Claude exited", how long
+  ago, then "Start Claude here again" and Back. The header status reads "closed" or "exited"
+  with a hollow dot. The restart starts Claude in the same folder and replaces the chat in place,
+  without a push. It needs the hub to be reachable.
+- **The machine drops:** "laptop is offline", with a spinner, "Waiting for it. Last heard from
+  5m ago.", and Back. The transcript dims, and the header status reads "laptop offline".
+- **The chat never pops on its own.** The transcript stays readable until you leave. A machine
+  that comes back with the pane still there resumes silently: the card goes and the composer
+  returns. If the pane is gone, it turns into the closed card.
+- **A draft survives** the card: the composer stays mounted underneath it.
+- **Focus stays in the dock:** when the card replaces a focused composer, focus moves to its
+  first button. Screen readers hear the card's title once.
+- **A close from the `…` sheet** goes back to the herd with a "Pane closed" toast, and never
+  shows the card, because you did it.
+
+A subagent row pushes the subagent's own screen, "Back to" its agent:
+
+- the header shows its description, then its status dot and status, time, type and model in mono;
+- "Claude asked" holds the prompt it was given;
+- its tool calls render like the main chat's, then Working while it runs, then its result;
+- there's no composer, just "Subagents take no messages. Reply to Claude in its chat."
+
+Background subagents keep updating after Claude's turn ends. Sending a message or Stop only ends
+the turn.
+
+Tapping a thumbnail opens a full-screen viewer on black: the file name and a 44px close button at
+the top, pinch to zoom, double-tap to zoom in or out, swipe down to close. Focus returns to the
+thumbnail, with a focus ring only when you closed it from the keyboard.
+
+Motion:
+
+- **New transcript items** fade in and rise 8px on `--motion` with `--ease-out`. The history
+  already there when you open the chat doesn't animate.
+- **The Ask** opens and closes as a height collapse on the `bounce: 0.2` spring.
+- **The status word** swaps the way it does on the herd.
+- **The viewer** fades in on `--motion` while the picture grows from 0.96.
+
+Unmeasured knobs, picked in the prototype; settle them on the phone:
+
+- the Ask's detail is capped at 160px, and a tool's output at 224px;
+- "Latest" shows once you're more than 48px from the bottom;
+- thumbnails are 96px tall on a tool card and 160px in a bubble;
+- double-tap zooms 2.5x within 300ms, and pinch stops at 4x;
+- swipe-down closes past 96px, or at 500px/s over the last 80ms once it has moved 24px;
+- the backdrop fades out over 320px of drag.
+
+Decided against:
+
+- **A terminal view**, and "show screen" on the Ask: the chat is the only view.
+- **A key strip** (Esc, Ctrl C, arrows, Tab, Enter) above the composer.
+- **Subagent rows that expand in place**: the quickest look, but long results stretch the chat.
+- **Subagents in a strip and a sheet**: the cleanest chat, but subagents sit one step further
+  away.
+- **A strip under the header plus a slim dock line** for an ended pane: two places for two
+  events.
+- **A divider written into the transcript** for an ended pane: quietest, but easy to miss when
+  you're scrolled up.
+- **Popping back to the herd** when the pane closes: it yanks you out mid-read.
+
+## New agent
+
+`+` on Agents pushes New agent, variant Brief: a screen shaped like the chat. The header reads
+"New agent" with "Back to Agents". The dock holds the composer, and the body above it is empty
+apart from a summary.
+
+- **The summary** is an Empty State centred in the body: "Claude starts in crook", then the path
+  in mono, the machine, and the branch (", on main", or ", in a new worktree on fix-x").
+- **The dock**, top to bottom:
+  - a scrolling row of chips: machine, folder, branch;
+  - the task field, "What should Claude work on?", whose send is "Start Claude";
+  - a ghost "Start without a task".
+- **Chips** are 44px pills in 14px text, each with an icon and a chevron. The folder chip reads
+  "Pick a folder" in `primary` while there's none. A new-worktree branch chip turns `primary`
+  and reads "new: fix-x" ("new: name the branch" until it has one). The branch chip shows only
+  when the folder is a git checkout.
+- **Each chip opens a sheet** of compact rows (44px; the title, then a mono detail when there is
+  one). The selected row gets `muted` and a `primary` check, and there are no cards and no
+  dividers.
+  - Machine: offline machines are disabled and keep their badge.
+  - Folder: the machine's folders, most recently used first, each with its branch on the right,
+    then "Or type a path" with Use.
+  - Branch: "Work in the checkout" or "New worktree" ("Own branch and folder"), which opens a
+    branch name field with Done.
+- **It defaults to the most recent place:** the folder used last, on an online machine. Picking a
+  machine moves to its most recent folder.
+- **The task comes first.** The worktree branch is suggested from the task's first line, as a
+  lowercase slug, and you can edit it.
+- **Starting** reads "Starting Claude…". The chat replaces this screen once the pane is in the
+  herd, so Back goes to Agents. Until then it reads "Opening the chat…" with "Open the chat".
+- **Empty cases**, each in the summary's place:
+  - "No machines yet", "Add one from Machines, then start Claude on it.";
+  - "Every machine is offline", "Claude can start once one reconnects.";
+  - "laptop is offline", "Pick another machine, or start Claude once it reconnects.";
+  - "Pick a folder on laptop", "Claude has not worked anywhere on it yet."
+- Enter works as in the chat's composer.
+- Kind isn't shown: v1 is Claude only (D8).
 
 ## Machines
 
@@ -426,6 +607,9 @@ rule.
 - **Screen readers** hear each state once, from a single status region.
 - **First load** with no cached herd shows skeleton sections (three cards, then two) at the
   card's real height.
+- **Decided against**: a floating capsule by the tab bar (one more floating thing, and it
+  covered the end of the list), a quiet line under the title (too easy to miss when actions are
+  disabled), and a "Retry now" button (crook already retries on its own).
 - **Logged out, or the session expired:** one full screen with "Log in with exe.dev". After Log out
   in Settings it reads "You're logged out" and "Your agents are still running. Log in to see them
   again." Otherwise it reads "Your session expired" and "Your agents kept running. Log in again to
@@ -477,7 +661,11 @@ Unmeasured knobs, picked in the prototype; settle them on the phone: the 1.5s "B
 - **Approvals** are Hark approval prompts on a normal notification, never on the Live Activity,
   so the herd card keeps the device's one slot. The prompt names the tool only, never the command,
   uses Hark's longest expiry (a day), and is cancelled as soon as the agent stops waiting on that
-  ask. Seeing the agent in crook does not cancel it: it is an action, not an alert.
+  ask. Seeing the agent in crook does not cancel it: it is an action, not an alert. Approve
+  answers the dialog Yes, and Deny declines it.
+- **Questions** can't be answered from Hark, so they're plain notifications.
+- **Every other notification is withdrawn** once you've seen the agent in crook or its state
+  moved on. Tapping one opens nothing (no `url`), per D16.
 - **The Live Activity starts** when the herd goes from idle to busy, because a start makes a
   sound, and never within a minute of the last start (Hark warns iOS drops faster ones). It
   updates on each change of its text, ends on "All done" and lingers 45s (Hark's own example of
@@ -485,6 +673,16 @@ Unmeasured knobs, picked in the prototype; settle them on the phone: the 1.5s "B
 
 Unmeasured knobs: the wordmark is 26% of the icon's width with `-0.03em` tracking, the splash mark
 is 30% of the screen's width, and the install screen staggers its pieces by 50ms.
+
+Decided against:
+
+- **Other icons**: a shepherd's crook in cream on tomato, and a cluster of status dots on the
+  dark ground.
+- **A custom notification avatar**: Hark's `imageUrl` must be a public HTTPS URL, and the hub is
+  private.
+- **Approvals on the Live Activity**: they would take the herd card's slot.
+- **Filing notifications under the machine label**: one `crook` project keeps them together, and
+  the body already names the machine.
 
 ## Components
 
@@ -518,9 +716,9 @@ Some loading states don't use Skeleton. A cached snapshot paints dimmed, with "s
 Mischief ships no Button; each component styles its own. crook's standalone button is shadcn's
 `base-nova` Button, the style Mischief's `components.json` declares.
 
-**There's a gap: the permission Ask card** (SPEC §5.3). It shows a header, the command or diff, and
-the buttons Yes, Yes always and No. Mischief has no component for it, and Questionnaire covers only
-AskUserQuestion. It gets composed from a card surface, Code Block or Diff View, and Buttons.
+**The permission Ask has no Mischief component** (SPEC §5.3), and Questionnaire covers only
+AskUserQuestion. The chat's Ask composes it from a Section Label, Code Block or Diff View, and
+Buttons (The chat).
 
 ## crook overrides
 
@@ -573,6 +771,17 @@ hasn't been checked on the user's phone yet. Raise all three to `text-base`.
 Mischief's `DESIGN.md` says ease-in for exits. crook eases out both ways, because ease-in starts
 slow and delays the moment the user is watching (the animate skill, from Emil Kowalski's rules).
 
+### In crook's copies
+
+These were bugs or misses in the components as shipped:
+
+- **Prompt Input:** Send and Stop are each their own keyed element, so Send can't turn into Stop
+  under your finger, and neither takes focus away from the field.
+- **Tool Call:** the whole header is the 44px trigger.
+- **Subagent Tree:** its rows are tappable 44px rows with a mono meta line.
+- **Motion quirk:** under `AnimatePresence initial={false}`, a child mounted later skips its
+  entrance. Each list that animates needs its own `AnimatePresence`.
+
 ### Phone behavior we get for free
 
 The source already does these on a phone:
@@ -622,6 +831,4 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 
 ## Open
 
-- The screens decided in `TEMP_DESIGN_EXPLORATION.md` (chat, New agent) move
-  here with the ticket that builds each one.
 - The machine sections follow the hub's machine order; no order has been decided.
