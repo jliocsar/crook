@@ -6,10 +6,18 @@ import type * as SubscriptionRef from 'effect/SubscriptionRef'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AgentRow } from '@crook/domain/AgentRow'
-import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  HerdrConnectionId,
+  MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import type { HerdrClient } from '@crook/herdr/HerdrClient'
-import { AgentInfo, SessionSnapshot, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
+import { AgentInfo, PaneInfo, SessionSnapshot, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
 
 export const workspaceInfo = new WorkspaceInfo({
   workspace_id: 'w1',
@@ -55,7 +63,41 @@ export const agentInfo = (fields: Partial<ConstructorParameters<typeof AgentInfo
     ...fields,
   })
 
-export const sessionSnapshot = (agents: readonly AgentInfo[]) =>
+export const paneInfo = (fields: Partial<ConstructorParameters<typeof PaneInfo>[0]> = {}) =>
+  new PaneInfo({
+    pane_id: 'w1:p1',
+    terminal_id: 'term_1',
+    workspace_id: 'w1',
+    tab_id: 'w1:t1',
+    focused: true,
+    revision: 3,
+    agent_status: 'unknown',
+    agent: Option.none(),
+    display_agent: Option.none(),
+    agent_session: Option.none(),
+    label: Option.none(),
+    title: Option.none(),
+    terminal_title: Option.none(),
+    cwd: Option.some('/home/jliocsar/Projects/crook'),
+    foreground_cwd: Option.none(),
+    ...fields,
+  })
+
+const paneOf = (agent: AgentInfo) =>
+  paneInfo({
+    pane_id: agent.pane_id,
+    terminal_id: agent.terminal_id,
+    workspace_id: agent.workspace_id,
+    tab_id: agent.tab_id,
+    agent_status: agent.agent_status,
+    agent: agent.agent,
+  })
+
+export const sessionSnapshot = (
+  agents: readonly AgentInfo[],
+  panes: readonly PaneInfo[] = agents.map(paneOf),
+  tabs: readonly TabInfo[] = [tabInfo],
+) =>
   new SessionSnapshot({
     version: '0.9.1',
     protocol: 22,
@@ -63,18 +105,25 @@ export const sessionSnapshot = (agents: readonly AgentInfo[]) =>
     focused_tab_id: Option.none(),
     focused_pane_id: Option.none(),
     workspaces: [workspaceInfo],
-    tabs: [tabInfo],
-    panes: [],
+    tabs,
+    panes,
     agents,
   })
 
 export const LAPTOP = MachineId.make('laptop')
+export const TERMINAL = TerminalId.make('term_1')
+
+export const herdrLink = new HerdrLink({
+  connection: HerdrConnectionId.make(1),
+  lostAt: Option.none(),
+})
 
 export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[0]> = {}) =>
   new AgentRow({
     pane: PaneId.make('w1:p1'),
     workspace: WorkspaceId.make('w1'),
     tab: TabId.make('w1:t1'),
+    terminal: TERMINAL,
     status: 'idle',
     title: 'EX-253 Example feature',
     cwd: '/home/jliocsar/Projects/crook',
@@ -82,6 +131,7 @@ export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[
     claudeSession: Option.none(),
     stateChangeSeq: 4,
     statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+    beforeHandoff: Option.none(),
     ...fields,
   })
 
@@ -90,8 +140,10 @@ export const machineStateWith = (agents: readonly AgentRow[]) =>
     machine: LAPTOP,
     version: MachineStateVersion.make(0),
     herdrVersion: '0.9.1',
+    herdr: herdrLink,
     workspaces: [],
     tabs: [],
+    panes: [],
     agents,
   })
 

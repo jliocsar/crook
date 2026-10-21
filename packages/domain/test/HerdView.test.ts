@@ -7,17 +7,21 @@ import * as Schema from 'effect/Schema'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
+import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
   ClaudeSessionId,
   GlobalPaneId,
+  HerdrConnectionId,
   MachineId,
   PaneId,
   TabId,
-  WorkspaceId,
+  TerminalId,
   toGlobalPaneId,
+  WorkspaceId,
 } from '@crook/domain/Ids'
 import { Machine } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { Pane } from '@crook/domain/Pane'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
 
@@ -31,6 +35,7 @@ const agentRow = (pane: string, claudeSession: Option.Option<ClaudeSessionId>) =
     pane: PaneId.make(pane),
     workspace,
     tab,
+    terminal: TerminalId.make(`term_${pane}`),
     status: 'blocked',
     title: 'EX-253 Example feature',
     cwd: '/home/jliocsar/Projects/crook',
@@ -38,6 +43,7 @@ const agentRow = (pane: string, claudeSession: Option.Option<ClaudeSessionId>) =
     claudeSession,
     stateChangeSeq: 7,
     statusChangedAt: observedAt,
+    beforeHandoff: Option.none(),
   })
 
 const herd = new HerdView({
@@ -59,8 +65,16 @@ const herd = new HerdView({
           machine: laptop,
           version: MachineStateVersion.make(3),
           herdrVersion: '0.9.1',
+          herdr: new HerdrLink({
+            connection: HerdrConnectionId.make(1),
+            lostAt: Option.some(observedAt),
+          }),
           workspaces: [new Workspace({ id: workspace, label: 'crook' })],
           tabs: [new Tab({ id: tab, workspace, label: 'main' })],
+          panes: [
+            new Pane({ id: PaneId.make('w1:p1'), workspace, tab }),
+            new Pane({ id: PaneId.make('w1:p2'), workspace, tab }),
+          ],
           agents: [
             agentRow('w1:p1', Option.some(ClaudeSessionId.make('session-1'))),
             agentRow('w1:p2', Option.none()),

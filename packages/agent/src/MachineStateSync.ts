@@ -11,7 +11,8 @@ import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Schedule from 'effect/Schedule'
+import * as Random from 'effect/Random'
+import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
@@ -20,17 +21,17 @@ import { GitBranches } from '@crook/agent/GitBranches'
 import {
   type HerdReading,
   type ResolvedAgent,
+  herdrLostState,
   initialMachineState,
   nextMachineState,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
-import { MachineId } from '@crook/domain/Ids'
+import { reconnectBackoff, trackConnectionHealth } from '@crook/agent/Reconnect'
+import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import type { LifecycleEventKind, Subscription } from '@crook/herdr/Events'
 import { HerdrClient, type HerdrSubscriptionError } from '@crook/herdr/HerdrClient'
 import type { AgentInfo } from '@crook/herdr/Records'
-
-const HERDR_RECONNECT_INTERVAL = Duration.millis(100)
 
 const STATE_EVENT_KINDS: NonEmptyArray.NonEmptyReadonlyArray<LifecycleEventKind> = [
   'workspace.created',
@@ -43,6 +44,7 @@ const STATE_EVENT_KINDS: NonEmptyArray.NonEmptyReadonlyArray<LifecycleEventKind>
   'tab.closed',
   'tab.renamed',
   'tab.moved',
+  'tab.focused',
   'pane.created',
   'pane.closed',
   'pane.updated',
@@ -51,7 +53,13 @@ const STATE_EVENT_KINDS: NonEmptyArray.NonEmptyReadonlyArray<LifecycleEventKind>
   'pane.agent_detected',
 ]
 
+export const HERDR_RECONNECT_BASE = Duration.millis(100)
+
 export const CrookMachineId = Config.schema(MachineId, 'CROOK_MACHINE_ID')
+
+const herdrBackoff = reconnectBackoff(HERDR_RECONNECT_BASE)
+
+const mintConnection = Effect.map(Random.nextInt, (value) => HerdrConnectionId.make(value))
 
 const agentPanes = (state: MachineState) =>
   HashSet.fromIterable(state.agents.map((row) => row.pane))
@@ -118,45 +126,84 @@ const make = Effect.gen(function* () {
       herdrVersion: snapshot.version,
       workspaces: snapshot.workspaces,
       tabs: snapshot.tabs,
+      panes: snapshot.panes,
       agents,
     }
 
     return { reading, now: yield* DateTime.now }
   })
 
+  const firstConnection = yield* mintConnection
   const initial = yield* read().pipe(
-    Effect.map(({ reading, now }) => initialMachineState(machine, reading, now)),
+    Effect.map(({ reading, now }) => initialMachineState(machine, firstConnection, reading, now)),
     Effect.tapError(logHerdrFailure),
-    Effect.retry(Schedule.spaced(HERDR_RECONNECT_INTERVAL)),
+    Effect.retry(herdrBackoff),
   )
   const state = yield* SubscriptionRef.make(initial)
+  const resyncPending = yield* Ref.make(false)
+
+  const connectionAfter = (previous: MachineState) =>
+    Effect.flatMap(Ref.getAndSet(resyncPending, false), (pending) =>
+      pending ? mintConnection : Effect.succeed(previous.herdr.connection),
+    )
 
   const refresh = SubscriptionRef.updateSomeAndGetEffect(state, (previous) =>
-    Effect.map(read(), ({ reading, now }) => nextMachineState(previous, reading, now)),
+    Effect.gen(function* () {
+      const { reading, now } = yield* read()
+      const connection = yield* connectionAfter(previous)
+
+      return nextMachineState(previous, connection, reading, now)
+    }),
   )
 
-  const follow = Effect.fn('MachineStateSync.follow')(function* () {
-    const subscribed = agentPanes(yield* SubscriptionRef.get(state))
-    const events = yield* herdr.subscribe(subscriptionsFor(subscribed))
+  const markHerdrLost = Effect.flatMap(DateTime.now, (now) =>
+    SubscriptionRef.updateSome(state, (previous) => herdrLostState(previous, now)),
+  )
 
-    yield* Stream.concat(Stream.succeed(undefined), events).pipe(
-      Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-      Stream.mapEffect(() => refresh),
-      Stream.takeUntil((next) => !Equal.equals(agentPanes(next), subscribed)),
-      Stream.runDrain,
+  const follow = Effect.fn('MachineStateSync.follow')(function* (markHealthy: Effect.Effect<void>) {
+    const subscribed = agentPanes(yield* SubscriptionRef.get(state))
+
+    yield* herdr.subscribe(subscriptionsFor(subscribed)).pipe(
+      Effect.flatMap((events) =>
+        Stream.concat(Stream.succeed(undefined), events).pipe(
+          Stream.buffer({ capacity: 1, strategy: 'sliding' }),
+          Stream.mapEffect(() => refresh),
+          Stream.tap(() => markHealthy),
+          Stream.takeUntil((next) => !Equal.equals(agentPanes(next), subscribed)),
+          Stream.runDrain,
+        ),
+      ),
+      Effect.catchTag('HerdrPaneNotFound', (error) =>
+        Effect.logDebug(error.message).pipe(
+          Effect.andThen(refresh),
+          Effect.flatMap((next) =>
+            Equal.equals(agentPanes(next), subscribed) ? Effect.fail(error) : Effect.void,
+          ),
+        ),
+      ),
     )
   }, Effect.scoped)
 
-  yield* follow().pipe(
-    Effect.catchTags({
-      HerdrEventsLost: (error) => Effect.logDebug(error.message),
-      HerdrPaneNotFound: (error) => Effect.andThen(Effect.logDebug(error.message), refresh),
-    }),
-    Effect.tapError(logHerdrFailure),
-    Effect.retry(Schedule.spaced(HERDR_RECONNECT_INTERVAL)),
-    Effect.forever,
-    Effect.forkScoped,
-  )
+  const herdrSession = Effect.fn('MachineStateSync.herdrSession')(function* () {
+    const health = yield* trackConnectionHealth
+
+    yield* follow(health.markHealthy).pipe(
+      Effect.forever,
+      Effect.catch((error) =>
+        logHerdrFailure(error).pipe(
+          Effect.andThen(Ref.set(resyncPending, true)),
+          Effect.andThen(health.stayedHealthy),
+          Effect.flatMap((healthy) =>
+            healthy
+              ? Effect.sleep(HERDR_RECONNECT_BASE)
+              : Effect.andThen(markHerdrLost, Effect.fail(error)),
+          ),
+        ),
+      ),
+    )
+  })
+
+  yield* herdrSession().pipe(Effect.retry(herdrBackoff), Effect.forever, Effect.forkScoped)
 
   return MachineStateSync.fromRef(state)
 })

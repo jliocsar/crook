@@ -13,7 +13,15 @@ import { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
-import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  HerdrConnectionId,
+  MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import { Machine, type MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 
@@ -24,6 +32,7 @@ const agent = (pane: string, status: AgentStatus, minutesIn: number) =>
     pane: PaneId.make(pane),
     workspace: WorkspaceId.make('w1'),
     tab: TabId.make('w1:t1'),
+    terminal: TerminalId.make(`term_${pane}`),
     status,
     title: pane,
     cwd: '/home/jliocsar/Projects/crook',
@@ -31,6 +40,7 @@ const agent = (pane: string, status: AgentStatus, minutesIn: number) =>
     claudeSession: Option.none(),
     stateChangeSeq: 1,
     statusChangedAt: DateTime.addDuration(START, Duration.minutes(minutesIn)),
+    beforeHandoff: Option.none(),
   })
 
 const machineWith = (
@@ -58,8 +68,10 @@ const machineWith = (
         machine: id,
         version: MachineStateVersion.make(1),
         herdrVersion: '0.9.1',
+        herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
         workspaces: [],
         tabs: [],
+        panes: [],
         agents,
       }),
       () => options.published ?? true,

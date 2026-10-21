@@ -50,7 +50,7 @@ State we can read
 - `events.subscribe` — long-lived stream: `workspace.*`, `tab.*`, `pane.created/updated/closed/moved/exited/agent_detected/agent_status_changed/scroll_changed`, `layout.updated`, `worktree.*`.
 - Recovery contract (from docs): subscribe first, wait for `subscription_started`, then `session.snapshot` on a second connection; treat events as invalidation, not replayable deltas. On `events_lost` the server closes the subscription → resubscribe + re-snapshot.
 - Agent record fields seen live: `agent` (`claude`), `agent_status` (`idle|working|blocked|done|unknown`), `pane_id`, `tab_id`, `workspace_id`, `cwd`, `foreground_cwd`, `terminal_title_stripped` (= Claude's session title, e.g. "EX-253 Example feature"), `state_change_seq`, `revision`, `focused`, optional `agent_session` {source, agent, kind, value}, optional `tokens`.
-- `done` = idle and not yet seen. Reads don't mark seen; focus commands do.
+- `done` = idle and not yet seen. Reads don't mark seen; focus commands do. Seen means the agent's tab became the focused tab, whichever pane of it has focus; an agent that finishes in the focused tab goes straight to `idle`, and `done` to `idle` leaves `state_change_seq` unchanged (measured on 0.9.5, see ARCHITECTURE 2.1).
 
 State we can change
 
@@ -320,6 +320,14 @@ Effect atoms end to end. See `ARCHITECTURE.md` §3.7.
 - Reads (`agent get/read/explain`, `pane read`) don't change seen.
 - No mark-seen method exists in the schema; "seen" appears only as an `agent.view` filter/sort field.
 - Decision (D12): crook tracks seen itself; focus is only called when the user explicitly asks to jump the desktop to a pane.
+
+**S6 — `events.subscribe` across restarts, handoffs and slow readers (verified 2026-10-20 on a 0.9.5 probe session; overnight idle, `herdr update --handoff`, a 0.9.1 → 0.9.5 handoff and the `events_lost` wire shape not run).**
+
+- Stop, `kill -9` and a live handoff all end the subscription with a clean EOF and no error line. A reader that stops reading is cut off the same way once its socket buffer fills; `events_lost` was never seen.
+- Events carry no sequence and no heartbeat is sent. Workspace, tab and pane ids survive every restart and are never reused; `terminal_id` changes and `revision`, `state_change_seq` and `completion_seq` restart.
+- A stop or crash leaves no agents; a handoff keeps the processes and herdr needs about 3 s to re-detect each agent. A real Claude (measured on 6 handoffs, after the spike) reads `idle`/0 for about 300 ms, `unknown`/1, then its status at 2, keeping `agent` and `agent_session` throughout; a `done` one comes back `idle`.
+- Close events are incomplete: a tab can vanish with only its last pane's `pane_exited`.
+- Decision: the agent never resumes, it resyncs from `session.snapshot` on every reconnect, with an exponential backoff from 100 ms to 5 s; seen marks are scoped to `terminal_id`; a state read over a new herdr connection is marked as a resync so notifications skip it (ARCHITECTURE §2.5, §2.6).
 
 **S1 — WebSockets through the exe.dev proxy (partly verified).**
 

@@ -29,7 +29,16 @@ import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import { IdempotencyKey, MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  HerdrConnectionId,
+  IdempotencyKey,
+  MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import {
@@ -74,6 +83,7 @@ const agentAt = (pane: PaneId) =>
     pane,
     workspace: WorkspaceId.make('w1'),
     tab: TabId.make('w1:t1'),
+    terminal: TerminalId.make('term_1'),
     status: 'done',
     title: 'EX-253 Example feature',
     cwd: '/home/jliocsar/Projects/crook',
@@ -81,6 +91,7 @@ const agentAt = (pane: PaneId) =>
     claudeSession: Option.none(),
     stateChangeSeq: 7,
     statusChangedAt: DateTime.makeUnsafe(0),
+    beforeHandoff: Option.none(),
   })
 
 const ownerLogin = { 'X-ExeDev-Email': OWNER, Origin: HUB_ORIGIN }
@@ -94,8 +105,10 @@ const stateOf = (machine: MachineId, version: number) =>
     machine,
     version: MachineStateVersion.make(version),
     herdrVersion: '0.9.1',
+    herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
     workspaces: [],
     tabs: [],
+    panes: [],
     agents: [agentAt(PANE)],
   })
 
@@ -349,7 +362,13 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         Match.value(routed.command).pipe(
           Match.tagsExhaustive({
             Prompt: (prompt) =>
-              Result.succeed(new InputDelivered({ pane: prompt.pane, stateChangeSeq: 4 })),
+              Result.succeed(
+                new InputDelivered({
+                  pane: prompt.pane,
+                  terminal: TerminalId.make('term_1'),
+                  stateChangeSeq: 4,
+                }),
+              ),
             SendKeys: (sendKeys) => Result.fail(new PaneNotAgent({ pane: sendKeys.pane })),
           }),
         ),
@@ -364,7 +383,9 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         .SendCommand({ machine, key, command: new SendKeys({ pane, keys: ['esc'] }) })
         .pipe(Effect.flip)
 
-      expect(receipt).toEqual(new InputDelivered({ pane, stateChangeSeq: 4 }))
+      expect(receipt).toEqual(
+        new InputDelivered({ pane, terminal: TerminalId.make('term_1'), stateChangeSeq: 4 }),
+      )
       expect(refused).toEqual(new PaneNotAgent({ pane }))
     }),
   )
@@ -380,13 +401,16 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
             machine,
             version: MachineStateVersion.make(1),
             herdrVersion: '0.9.1',
+            herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
             workspaces: [],
             tabs: [],
+            panes: [],
             agents: [
               new AgentRow({
                 pane,
                 workspace: WorkspaceId.make('w1'),
                 tab: TabId.make('w1:t1'),
+                terminal: TerminalId.make('term_1'),
                 status: 'idle',
                 title: 'EX-253 Example feature',
                 cwd: '/home/jliocsar/Projects/crook',
@@ -394,6 +418,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
                 claudeSession: Option.none(),
                 stateChangeSeq: 4,
                 statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+                beforeHandoff: Option.none(),
               }),
             ],
           }),
@@ -420,7 +445,9 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         const receipt = yield* phone.SendCommand({ machine, key, command })
         const replayed = yield* phone.SendCommand({ machine, key, command })
 
-        expect(receipt).toEqual(new InputDelivered({ pane, stateChangeSeq: 4 }))
+        expect(receipt).toEqual(
+          new InputDelivered({ pane, terminal: TerminalId.make('term_1'), stateChangeSeq: 4 }),
+        )
         expect(replayed).toEqual(receipt)
         expect((yield* Queue.clear(sent)).map((request) => request.method)).toEqual([
           'agent.prompt',

@@ -1,14 +1,26 @@
 import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
 
-import { AgentRow } from '@crook/domain/AgentRow'
-import { type ClaudeSessionId, type MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
-import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import type { AgentStatus } from '@crook/domain/AgentStatus'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  type ClaudeSessionId,
+  type HerdrConnectionId,
+  type MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
+import { MachineState, MachineStateVersion, isHerdrLost } from '@crook/domain/MachineState'
+import { Pane } from '@crook/domain/Pane'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
-import type { AgentInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
+import type { AgentInfo, PaneInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
 
 export interface ResolvedAgent {
   readonly info: AgentInfo
@@ -20,6 +32,7 @@ export interface HerdReading {
   readonly herdrVersion: string
   readonly workspaces: readonly WorkspaceInfo[]
   readonly tabs: readonly TabInfo[]
+  readonly panes: readonly PaneInfo[]
   readonly agents: readonly ResolvedAgent[]
 }
 
@@ -35,29 +48,100 @@ const toTab = (info: TabInfo) =>
     label: info.label,
   })
 
-const statusChangedAt =
-  (previousAgents: readonly AgentRow[], now: DateTime.Utc) => (info: AgentInfo) =>
-    Arr.findFirst(
-      previousAgents,
-      (row) => row.pane === info.pane_id && row.status === info.agent_status,
-    ).pipe(
-      Option.match({
-        onNone: () => now,
-        onSome: (row) => row.statusChangedAt,
-      }),
-    )
+const toPane = (info: PaneInfo) =>
+  new Pane({
+    id: PaneId.make(info.pane_id),
+    workspace: WorkspaceId.make(info.workspace_id),
+    tab: TabId.make(info.tab_id),
+  })
+
+const isSameAgent =
+  ({ info, claudeSession }: ResolvedAgent) =>
+  (row: AgentRow) =>
+    row.terminal === info.terminal_id ||
+    Option.exists(row.claudeSession, (session) => Option.contains(claudeSession, session))
+
+const previousRowOf = (previousAgents: readonly AgentRow[], resolved: ResolvedAgent) =>
+  Arr.findFirst(previousAgents, (row) => row.pane === resolved.info.pane_id).pipe(
+    Option.filter(isSameAgent(resolved)),
+  )
+
+const isHandedOffFrom = (info: AgentInfo) => (row: AgentRow) =>
+  row.terminal !== info.terminal_id && row.status !== 'unknown'
+
+const statusBeforeHandoffOf = (row: AgentRow) =>
+  new StatusBeforeHandoff({
+    status: row.status,
+    statusChangedAt: row.statusChangedAt,
+    terminal: row.terminal,
+    stateChangeSeq: row.stateChangeSeq,
+  })
+
+const carriedBeforeHandoff = (previous: Option.Option<AgentRow>, info: AgentInfo) =>
+  Option.flatMap(previous, (row) =>
+    Option.orElse(row.beforeHandoff, () =>
+      Option.liftPredicate(row, isHandedOffFrom(info)).pipe(Option.map(statusBeforeHandoffOf)),
+    ),
+  )
+
+const isNotYetDetected = (info: AgentInfo) =>
+  info.agent_status === 'unknown' || info.state_change_seq === 0
+
+const isTabInView = (tabs: readonly TabInfo[], info: AgentInfo) =>
+  Arr.some(tabs, (tab) => tab.tab_id === info.tab_id && tab.focused)
+
+const isLostCompletion = (
+  carried: Option.Option<StatusBeforeHandoff>,
+  tabs: readonly TabInfo[],
+  info: AgentInfo,
+) =>
+  info.agent_status === 'idle' &&
+  Option.exists(carried, (before) => before.status === 'done') &&
+  !isTabInView(tabs, info)
+
+const keptBeforeHandoff = (carried: Option.Option<StatusBeforeHandoff>, status: AgentStatus) =>
+  Option.filter(carried, (before) => status === 'unknown' || status === before.status)
+
+const publishedStatus = (
+  carried: Option.Option<StatusBeforeHandoff>,
+  tabs: readonly TabInfo[],
+  info: AgentInfo,
+): AgentStatus => {
+  if (isNotYetDetected(info)) {
+    return 'unknown'
+  }
+
+  return isLostCompletion(carried, tabs, info) ? 'done' : info.agent_status
+}
+
+const statusChangedAt = (
+  previous: Option.Option<AgentRow>,
+  carried: Option.Option<StatusBeforeHandoff>,
+  status: AgentStatus,
+  now: DateTime.Utc,
+): DateTime.Utc =>
+  Option.firstSomeOf([
+    Option.filter(previous, (previousRow) => previousRow.status === status),
+    Option.filter(carried, (before) => before.status === status),
+  ]).pipe(Option.match({ onNone: () => now, onSome: (since) => since.statusChangedAt }))
 
 export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
   Option.orElse(info.foreground_cwd, () => info.cwd)
 
 const toAgentRow =
-  (since: (info: AgentInfo) => DateTime.Utc) =>
-  ({ info, claudeSession, branch }: ResolvedAgent) =>
-    new AgentRow({
+  (previousAgents: readonly AgentRow[], tabs: readonly TabInfo[], now: DateTime.Utc) =>
+  (resolved: ResolvedAgent) => {
+    const { info, claudeSession, branch } = resolved
+    const previous = previousRowOf(previousAgents, resolved)
+    const carried = carriedBeforeHandoff(previous, info)
+    const status = publishedStatus(carried, tabs, info)
+
+    return new AgentRow({
       pane: PaneId.make(info.pane_id),
       workspace: WorkspaceId.make(info.workspace_id),
       tab: TabId.make(info.tab_id),
-      status: info.agent_status,
+      terminal: TerminalId.make(info.terminal_id),
+      status,
       title: Option.firstSomeOf([info.terminal_title_stripped, info.title, info.name]).pipe(
         Option.getOrElse(() => ''),
       ),
@@ -65,37 +149,44 @@ const toAgentRow =
       branch,
       claudeSession,
       stateChangeSeq: info.state_change_seq,
-      statusChangedAt: since(info),
+      statusChangedAt: statusChangedAt(previous, carried, status, now),
+      beforeHandoff: keptBeforeHandoff(carried, status),
     })
+  }
 
 const herdContents = (
   previousAgents: readonly AgentRow[],
+  connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
 ) => ({
   herdrVersion: reading.herdrVersion,
+  herdr: new HerdrLink({ connection, lostAt: Option.none() }),
   workspaces: reading.workspaces.map(toWorkspace),
   tabs: reading.tabs.map(toTab),
-  agents: reading.agents.map(toAgentRow(statusChangedAt(previousAgents, now))),
+  panes: reading.panes.map(toPane),
+  agents: reading.agents.map(toAgentRow(previousAgents, reading.tabs, now)),
 })
 
 export const initialMachineState = (
   machine: MachineId,
+  connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
 ): MachineState =>
   new MachineState({
     machine,
     version: MachineStateVersion.make(0),
-    ...herdContents([], reading, now),
+    ...herdContents([], connection, reading, now),
   })
 
 export const nextMachineState = (
   previous: MachineState,
+  connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
 ): Option.Option<MachineState> => {
-  const contents = herdContents(previous.agents, reading, now)
+  const contents = herdContents(previous.agents, connection, reading, now)
 
   return Option.liftPredicate(
     new MachineState({ machine: previous.machine, version: previous.version, ...contents }),
@@ -111,3 +202,23 @@ export const nextMachineState = (
     ),
   )
 }
+
+export const herdrLostState = (
+  previous: MachineState,
+  now: DateTime.Utc,
+): Option.Option<MachineState> =>
+  Option.liftPredicate(previous, Predicate.not(isHerdrLost)).pipe(
+    Option.map(
+      (state) =>
+        new MachineState({
+          machine: state.machine,
+          version: MachineStateVersion.make(state.version + 1),
+          herdrVersion: state.herdrVersion,
+          herdr: new HerdrLink({ connection: state.herdr.connection, lostAt: Option.some(now) }),
+          workspaces: state.workspaces,
+          tabs: state.tabs,
+          panes: state.panes,
+          agents: state.agents,
+        }),
+    ),
+  )

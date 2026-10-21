@@ -20,6 +20,7 @@ export type Command = typeof Command.Type
 
 export class InputDelivered extends Schema.TaggedClass<InputDelivered>()('InputDelivered', {
   pane: PaneId,
+  terminal: AgentRow.fields.terminal,
   stateChangeSeq: AgentRow.fields.stateChangeSeq,
 }) {}
 
@@ -29,4 +30,5 @@ export type CommandReceipt = typeof CommandReceipt.Type
 export const interrupt = (pane: PaneId) => new SendKeys({ pane, keys: [INTERRUPT_KEY] })
 
 export const hasMovedSince = (receipt: InputDelivered, row: AgentRow) =>
-  row.pane === receipt.pane && row.stateChangeSeq > receipt.stateChangeSeq
+  row.pane === receipt.pane &&
+  (row.terminal !== receipt.terminal || row.stateChangeSeq > receipt.stateChangeSeq)

@@ -10,9 +10,18 @@ import { SqlError, UnknownError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { AgentRow } from '@crook/domain/AgentRow'
+import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import type { AgentStatus } from '@crook/domain/AgentStatus'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
-import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import {
+  HerdrConnectionId,
+  MachineId,
+  PaneId,
+  TabId,
+  TerminalId,
+  WorkspaceId,
+} from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import * as Database from '@crook/hub/Database'
 import { Herd, RECONNECT_GRACE, hubVersion } from '@crook/hub/Herd'
@@ -31,14 +40,17 @@ const OTHER_PANE = PaneId.make('w1:p2')
 const DETACH_AFTER = Duration.minutes(3)
 const BEFORE_GRACE_ENDS = Duration.seconds(1)
 const DISK_FULL = 'database or disk is full'
+const BEFORE_HANDOFF = TerminalId.make('term_65e4959ec32112')
+const AFTER_HANDOFF = TerminalId.make('term_65e4981ac9ff02')
 
 const hello = new Hello({ agentVersion: '0.0.9', label: Option.none() })
 
-const agentAt = (pane: PaneId, stateChangeSeq: number) =>
+const agentAt = (pane: PaneId, stateChangeSeq: number, terminal: TerminalId = BEFORE_HANDOFF) =>
   new AgentRow({
     pane,
     workspace: WorkspaceId.make('w1'),
     tab: TabId.make('w1:t1'),
+    terminal,
     status: 'done',
     title: 'EX-253 Example feature',
     cwd: '/home/jliocsar/Projects/crook',
@@ -46,15 +58,46 @@ const agentAt = (pane: PaneId, stateChangeSeq: number) =>
     claudeSession: Option.none(),
     stateChangeSeq,
     statusChangedAt: DateTime.makeUnsafe(0),
+    beforeHandoff: Option.none(),
   })
 
-const stateOf = (machine: MachineId, version: number, agents: readonly AgentRow[] = []) =>
+const handedOffAt = (stateChangeSeq: number, status: AgentStatus) =>
+  new AgentRow({
+    pane: PANE,
+    workspace: WorkspaceId.make('w1'),
+    tab: TabId.make('w1:t1'),
+    terminal: AFTER_HANDOFF,
+    status,
+    title: 'EX-253 Example feature',
+    cwd: '/home/jliocsar/Projects/crook',
+    branch: Option.none(),
+    claudeSession: Option.none(),
+    stateChangeSeq,
+    statusChangedAt: DateTime.makeUnsafe(0),
+    beforeHandoff: Option.some(
+      new StatusBeforeHandoff({
+        status: 'done',
+        statusChangedAt: DateTime.makeUnsafe(0),
+        terminal: BEFORE_HANDOFF,
+        stateChangeSeq: 5,
+      }),
+    ),
+  })
+
+const stateOf = (
+  machine: MachineId,
+  version: number,
+  agents: readonly AgentRow[] = [],
+  connection = 1,
+) =>
   new MachineState({
     machine,
     version: MachineStateVersion.make(version),
     herdrVersion: '0.9.1',
+    herdr: new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt: Option.none() }),
     workspaces: [],
     tabs: [],
+    panes: [],
     agents,
   })
 
@@ -392,6 +435,96 @@ it.effect('keeps a restarted state_change_seq unseen as it climbs back past the 
 
     expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([]))
   }).pipe(withFreshHerd),
+)
+
+it.effect('drops a mark once herdr restarts the pane, even if its sequence lands on the mark', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 1, BEFORE_HANDOFF)]))
+    yield* herd.markSeen(LAPTOP, PANE)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [agentAt(PANE, 1, AFTER_HANDOFF)], 2))
+
+    expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([]))
+  }).pipe(withFreshHerd),
+)
+
+it.effect('keeps a mark through a resync that reconnected to the same herdr server', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+    yield* herd.markSeen(LAPTOP, PANE)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [agentAt(PANE, 7)], 2))
+
+    expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([PANE]))
+  }).pipe(withFreshHerd),
+)
+
+it.effect('keeps a mark through a handoff while the agent carries the state it marked', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 5)]))
+    yield* herd.markSeen(LAPTOP, PANE)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [handedOffAt(1, 'unknown')], 2))
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 3, [handedOffAt(2, 'done')], 2))
+    const redetected = seenOf(yield* currentView, LAPTOP)
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 4, [agentAt(PANE, 3, AFTER_HANDOFF)], 2))
+
+    expect(redetected).toEqual(Option.some([PANE]))
+    expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([]))
+  }).pipe(withFreshHerd),
+)
+
+it.effect(
+  'marks a handed-off agent at the state it carries, so the mark outlives re-detection',
+  () =>
+    Effect.gen(function* () {
+      const herd = yield* Herd
+
+      yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [handedOffAt(1, 'unknown')]))
+      yield* herd.markSeen(LAPTOP, PANE)
+      yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [handedOffAt(2, 'done')]))
+
+      expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([PANE]))
+    }).pipe(withFreshHerd),
+)
+
+it.effect(
+  'drops a mark the hub kept while herdr restarted unheard and the sequence came back',
+  () =>
+    Effect.gen(function* () {
+      const hub = yield* restartingHerd()
+
+      yield* hub.run(
+        Effect.gen(function* () {
+          const herd = yield* Herd
+
+          yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 1, BEFORE_HANDOFF)]))
+          yield* herd.markSeen(LAPTOP, PANE)
+        }),
+      )
+      const afterRestart = yield* hub.run(
+        Effect.gen(function* () {
+          const herd = yield* Herd
+
+          yield* herd.publish(LAPTOP, stateOf(LAPTOP, 0, [agentAt(PANE, 1, AFTER_HANDOFF)], 2))
+
+          return yield* currentView
+        }),
+      )
+      const tracker = yield* Layer.build(
+        Layer.provide(SeenTracker.layer, Layer.succeedContext(hub.database)),
+      )
+      const stored = yield* Effect.flatMap(SeenTracker, (seenTracker) => seenTracker.all).pipe(
+        Effect.provide(tracker),
+      )
+
+      expect(seenOf(afterRestart, LAPTOP)).toEqual(Option.some([]))
+      expect(stored).toEqual([])
+    }),
 )
 
 it.effect('refuses to mark seen a pane or a machine the herd does not show', () =>

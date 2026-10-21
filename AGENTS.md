@@ -128,6 +128,17 @@ reported.
 :::
 
 :::warning
+Every member's `test` script passes `--fsModuleCachePath node_modules/.vitest-cache`, and a new
+member copies it. Vitest 5 caches transformed modules on disk by default (`fsModuleCache`), in one
+directory at the workspace root's `node_modules/.vitest-cache`, and a run that finds the lockfile
+hash changed deletes that directory whole. The gate runs the members' tests side by side, so after
+an install one member's delete races another member's writes and fails the gate with
+`ENOTEMPTY: directory not empty, rmdir node_modules/.vitest-cache` (measured: 1 of 6 gate runs
+with the stored hash staled). The flag resolves against the member's own root, so each member
+clears and fills only its own cache (measured: 12 of 12 runs with every member's hash staled).
+:::
+
+:::warning
 A member is created together with its first source and its first test, never empty: `tsc` fails an
 `include` that matches nothing (TS18003) and `vitest run` exits 1 when it finds no test files (both
 measured). A placeholder file or `--passWithNoTests` would make the gate pass on a package that

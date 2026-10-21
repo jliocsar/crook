@@ -46,7 +46,7 @@ import { protocolSerialization } from '@crook/protocol/Serialization'
 
 import packageJson from '../package.json' with { type: 'json' }
 
-import { LAPTOP, agentRow, executorWith } from './Fixtures'
+import { LAPTOP, TERMINAL, agentRow, executorWith, herdrLink } from './Fixtures'
 
 interface HubScript {
   readonly attachLifetime: Option.Option<Duration.Duration>
@@ -84,8 +84,10 @@ const stateAt = (version: number) =>
     machine: LAPTOP,
     version: MachineStateVersion.make(version),
     herdrVersion: '0.9.1',
+    herdr: herdrLink,
     workspaces: [],
     tabs: [],
+    panes: [],
     agents: [agentRow()],
   })
 
@@ -94,7 +96,9 @@ const routed = (id: number, key: IdempotencyKey, command: RoutedCommand['command
 
 const continuePrompt = new Prompt({ pane: AGENT_PANE, text: 'continue' })
 
-const delivered = Result.succeed(new InputDelivered({ pane: AGENT_PANE, stateChangeSeq: 4 }))
+const delivered = Result.succeed(
+  new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 4 }),
+)
 
 const agentWith = (
   state: SubscriptionRef.SubscriptionRef<MachineState>,

@@ -35,7 +35,7 @@ export const dieOnUnencodableRecord = <Success, Requirements>(
 ): Effect.Effect<Success, SqlError, Requirements> =>
   write.pipe(Effect.catchTag('SchemaError', (error) => Effect.die(error)))
 
-const createMachines = Effect.flatMap(
+export const createMachines = Effect.flatMap(
   SqlClient.SqlClient,
   (sql) => sql`
     CREATE TABLE machines (
@@ -49,7 +49,7 @@ const createMachines = Effect.flatMap(
   `,
 )
 
-const createSeen = Effect.flatMap(
+export const createSeen = Effect.flatMap(
   SqlClient.SqlClient,
   (sql) => sql`
     CREATE TABLE seen (
@@ -61,20 +61,37 @@ const createSeen = Effect.flatMap(
   `,
 )
 
+const keySeenOnTerminal = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+
+  yield* sql`DROP TABLE seen`
+  yield* sql`
+    CREATE TABLE seen (
+      machine TEXT NOT NULL,
+      pane TEXT NOT NULL,
+      terminal TEXT NOT NULL,
+      state_change_seq INTEGER NOT NULL,
+      PRIMARY KEY (machine, pane)
+    )
+  `
+})
+
 const migrations = SqliteMigrator.fromRecord({
   '1_machines': createMachines,
   '2_seen': createSeen,
+  '3_seen_terminal': keySeenOnTerminal,
 })
 
+export const clientAt = (filename: string) =>
+  SqliteClient.layer({
+    filename,
+    transformQueryNames: Str.camelToSnake,
+    transformResultNames: Str.snakeToCamel,
+  })
+
+export const migratorLayer = SqliteMigrator.layer({ loader: migrations })
+
 export const layerAt = (filename: string) =>
-  SqliteMigrator.layer({ loader: migrations }).pipe(
-    Layer.provideMerge(
-      SqliteClient.layer({
-        filename,
-        transformQueryNames: Str.camelToSnake,
-        transformResultNames: Str.snakeToCamel,
-      }),
-    ),
-  )
+  migratorLayer.pipe(Layer.provideMerge(clientAt(filename)))
 
 export const layer = Layer.unwrap(Effect.map(CrookHubDatabasePath, layerAt))

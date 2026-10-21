@@ -9,7 +9,7 @@ import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { InputDelivered, Prompt } from '@crook/domain/Command'
-import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import { IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
 import {
@@ -25,7 +25,11 @@ const PANE = PaneId.make('w1:p1')
 const ACTION = IdempotencyKey.make('3f1c8a52-0b7e-4d0a-9a51-6f3f0d2f8e11')
 
 const continuePrompt = new Prompt({ pane: PANE, text: 'continue' })
-const delivered = new InputDelivered({ pane: PANE, stateChangeSeq: 4 })
+const delivered = new InputDelivered({
+  pane: PANE,
+  terminal: TerminalId.make('term_1'),
+  stateChangeSeq: 4,
+})
 
 const startRouter = Effect.map(Layer.build(CommandRouter.layer), (context) =>
   Context.get(context, CommandRouter),

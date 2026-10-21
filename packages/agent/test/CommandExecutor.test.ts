@@ -33,7 +33,7 @@ import {
   PaneNotAgent,
 } from '@crook/protocol/Commands'
 
-import { agentRow, executorWith, machineStateWith } from './Fixtures'
+import { TERMINAL, agentRow, executorWith, machineStateWith } from './Fixtures'
 
 const AGENT_PANE = PaneId.make('w1:p1')
 const SHELL_PANE = PaneId.make('w1:p2')
@@ -43,7 +43,7 @@ const SECOND_ACTION = IdempotencyKey.make('9b2e4d17-5c6a-4f81-8e0d-2a7c1b9f4e63'
 const prompted = scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })
 const keysSent = scriptedResult(AgentSendKeysMethod, { type: 'ok' })
 const continuePrompt = new Prompt({ pane: AGENT_PANE, text: 'continue' })
-const delivered = new InputDelivered({ pane: AGENT_PANE, stateChangeSeq: 4 })
+const delivered = new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 4 })
 
 const SentLine = Schema.fromJsonString(
   Schema.Struct({ id: Schema.String, method: Schema.String, params: Schema.Unknown }),
@@ -114,7 +114,9 @@ it.effect('replays the first outcome for a key it has already run, without sendi
     const fresh = yield* executor.execute(SECOND_ACTION, continuePrompt)
 
     expect(replayed).toEqual(first)
-    expect(fresh).toEqual(new InputDelivered({ pane: AGENT_PANE, stateChangeSeq: 5 }))
+    expect(fresh).toEqual(
+      new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 5 }),
+    )
     expect(yield* sent).toHaveLength(2)
   }),
 )
@@ -159,7 +161,9 @@ it.effect('forgets a refusal, so the same key runs once the pane hosts an agent'
     )
     const receipt = yield* executor.execute(FIRST_ACTION, shellPrompt)
 
-    expect(receipt).toEqual(new InputDelivered({ pane: SHELL_PANE, stateChangeSeq: 1 }))
+    expect(receipt).toEqual(
+      new InputDelivered({ pane: SHELL_PANE, terminal: TERMINAL, stateChangeSeq: 1 }),
+    )
     expect(yield* sent).toHaveLength(1)
   }),
 )

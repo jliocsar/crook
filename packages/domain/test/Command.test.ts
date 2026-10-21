@@ -6,15 +6,18 @@ import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { Command, InputDelivered, SendKeys, hasMovedSince, interrupt } from '@crook/domain/Command'
-import { PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
+import { PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 
 const pane = PaneId.make('w1:p1')
+const terminal = TerminalId.make('term_65e4959ec32112')
+const terminalAfterHandoff = TerminalId.make('term_65e4981ac9ff02')
 
-const rowAt = (rowPane: PaneId, stateChangeSeq: number) =>
+const rowAt = (rowPane: PaneId, stateChangeSeq: number, rowTerminal: TerminalId = terminal) =>
   new AgentRow({
     pane: rowPane,
     workspace: WorkspaceId.make('w1'),
     tab: TabId.make('w1:t1'),
+    terminal: rowTerminal,
     status: 'working',
     title: 'EX-253 Example feature',
     cwd: '/home/jliocsar/Projects/crook',
@@ -22,6 +25,7 @@ const rowAt = (rowPane: PaneId, stateChangeSeq: number) =>
     claudeSession: Option.none(),
     stateChangeSeq,
     statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
+    beforeHandoff: Option.none(),
   })
 
 describe('Command', () => {
@@ -47,7 +51,7 @@ describe('Command', () => {
 })
 
 describe('hasMovedSince', () => {
-  const receipt = new InputDelivered({ pane, stateChangeSeq: 4 })
+  const receipt = new InputDelivered({ pane, terminal, stateChangeSeq: 4 })
 
   it('holds once the pane shows a later state change than the one the agent saw', () => {
     expect(hasMovedSince(receipt, rowAt(pane, 5))).toBe(true)
@@ -55,6 +59,10 @@ describe('hasMovedSince', () => {
 
   it('does not hold while the pane still shows the state the command was sent against', () => {
     expect(hasMovedSince(receipt, rowAt(pane, 4))).toBe(false)
+  })
+
+  it('holds once herdr restarted the pane under a new terminal, whatever its sequence', () => {
+    expect(hasMovedSince(receipt, rowAt(pane, 0, terminalAfterHandoff))).toBe(true)
   })
 
   it('does not hold for another pane', () => {
