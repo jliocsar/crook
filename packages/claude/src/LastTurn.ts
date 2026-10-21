@@ -10,16 +10,14 @@ import type { PlatformError } from 'effect/PlatformError'
 
 import type { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import { parseLine } from '@crook/claude/TranscriptParser'
-import { TAIL_READ_SIZE, TranscriptUnreadable } from '@crook/claude/TranscriptTail'
+import {
+  NEWLINE,
+  TAIL_READ_SIZE,
+  TranscriptUnreadable,
+  completeLines,
+} from '@crook/claude/TranscriptTail'
 import { TranscriptOffset } from '@crook/domain/Ids'
 import type { ToolUseBlock, TranscriptMessage, UserMessage } from '@crook/domain/TranscriptMessage'
-
-interface ByteLine {
-  readonly offset: number
-  readonly bytes: Uint8Array
-}
-
-const NEWLINE = 0x0a
 
 export const CODEMODE_RUN_TOOL = 'mcp__codemode__run'
 
@@ -95,29 +93,19 @@ export const firstUnmatchedToolUse = (
   )
 }
 
-const newlinesFrom = (bytes: Uint8Array, from: number): readonly number[] =>
-  Arr.unfold(bytes.indexOf(NEWLINE, from), (index) =>
-    index < 0 ? Option.none() : Option.some([index, bytes.indexOf(NEWLINE, index + 1)] as const),
-  )
-
-const completeLines = (bytes: Uint8Array, start: number): readonly ByteLine[] => {
-  const firstLine = start === 0 ? 0 : bytes.indexOf(NEWLINE) + 1
-
-  if (start > 0 && firstLine === 0) {
-    return []
-  }
-
-  const ends = newlinesFrom(bytes, firstLine)
-
-  return ends.map((end, index) => {
-    const from = index === 0 ? firstLine : (ends[index - 1] ?? firstLine) + 1
-
-    return { offset: start + from, bytes: bytes.subarray(from, end + 1) }
-  })
-}
+const linesAfterCut = (bytes: Uint8Array, start: number) =>
+  start === 0
+    ? completeLines(bytes, start)
+    : Option.match(
+        Option.liftPredicate(bytes.indexOf(NEWLINE) + 1, (from) => from > 0),
+        {
+          onNone: () => [],
+          onSome: (from) => completeLines(bytes.subarray(from), start + from),
+        },
+      )
 
 const messagesOf = (bytes: Uint8Array, start: number) =>
-  Arr.flatMap(completeLines(bytes, start), (line) =>
+  Arr.flatMap(linesAfterCut(bytes, start), (line) =>
     parseLine(line.bytes, TranscriptOffset.make(line.offset)),
   )
 

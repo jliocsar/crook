@@ -20,7 +20,7 @@ interface TailState {
   readonly pending: Uint8Array
 }
 
-interface CompleteLine {
+export interface CompleteLine {
   readonly offset: number
   readonly bytes: Uint8Array
 }
@@ -31,8 +31,7 @@ export type TailError =
   | TranscriptOffsetMidLine
   | TranscriptShrank
 
-const NEWLINE = 0x0a
-
+export const NEWLINE = 0x0a
 export const TAIL_READ_SIZE = 64 * 1024
 
 export class TranscriptUnreadable extends Schema.TaggedError<TranscriptUnreadable>()(
@@ -81,7 +80,7 @@ const joined = (left: Uint8Array, right: Uint8Array) => {
   return both
 }
 
-const completeLines = (complete: Uint8Array, start: number): readonly CompleteLine[] =>
+export const completeLines = (complete: Uint8Array, start: number): readonly CompleteLine[] =>
   Arr.unfold(0, (from) =>
     Option.map(
       Option.liftPredicate(complete.indexOf(NEWLINE, from), (end) => end >= 0),

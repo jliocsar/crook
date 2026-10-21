@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
+import * as Hash from 'effect/Hash'
 import * as Option from 'effect/Option'
 import * as Str from 'effect/String'
 
@@ -12,10 +13,16 @@ export interface DialogOption {
   readonly details: readonly string[]
 }
 
-export interface PermissionDialog {
+export interface DialogQueue {
+  readonly position: number
+  readonly total: number
+}
+
+export interface ScreenDialog {
   readonly kind: DialogKind
   readonly header: string
   readonly plugin: Option.Option<string>
+  readonly queue: Option.Option<DialogQueue>
   readonly subject: Option.Option<string>
   readonly body: readonly string[]
   readonly prompt: readonly string[]
@@ -26,6 +33,7 @@ export interface PermissionDialog {
 interface HeaderParts {
   readonly title: string
   readonly plugin: Option.Option<string>
+  readonly queue: Option.Option<DialogQueue>
 }
 
 interface DialogSections {
@@ -40,10 +48,14 @@ const TIP_PREFIX = 'Tip:'
 const RULE = /^─+$/u
 const DASHED_RULE = /^╌+$/u
 const OPTION_LINE = /^\s*(?<cursor>❯\s+)?(?<number>\d+)\.\s+(?<label>.*)$/u
-const HEADER = /^(?<title>.*?)(?:\s+·\s+from the (?<plugin>.+?) plugin)?(?:\s+\d+ of \d+)?$/u
+
+const HEADER =
+  /^(?<title>.*?)(?:\s+·\s+from the (?<plugin>.+?) plugin)?(?:\s+(?<position>\d+) of (?<total>\d+))?$/u
+
 const NAVIGATE_DOWN = 'down'
 const NAVIGATE_UP = 'up'
 const CONFIRM = 'enter'
+const FINGERPRINT_SEPARATOR = '\u0000'
 
 const isRule = (line: string) => RULE.test(line.trim())
 
@@ -78,10 +90,17 @@ const parseHeader = (line: string): HeaderParts =>
   pipe(
     Option.fromNullishOr(HEADER.exec(line.trim())?.groups),
     Option.match({
-      onNone: () => ({ title: line.trim(), plugin: Option.none() }),
+      onNone: () => ({ title: line.trim(), plugin: Option.none(), queue: Option.none() }),
       onSome: (groups) => ({
         title: (groups['title'] ?? line).trim(),
         plugin: Option.fromNullishOr(groups['plugin']),
+        queue: Option.map(
+          Option.all([
+            Option.fromNullishOr(groups['position']),
+            Option.fromNullishOr(groups['total']),
+          ]),
+          ([position, total]) => ({ position: Number(position), total: Number(total) }),
+        ),
       }),
     }),
   )
@@ -153,7 +172,7 @@ const promptLines = (rest: readonly string[]) =>
     Arr.map((line) => line.trim()),
   )
 
-const buildDialog = (lines: readonly string[]): Option.Option<PermissionDialog> =>
+const buildDialog = (lines: readonly string[]): Option.Option<ScreenDialog> =>
   pipe(
     Arr.findFirstIndex(lines, (line) => !isBlank(line)),
     Option.map((headerIndex) => {
@@ -168,6 +187,7 @@ const buildDialog = (lines: readonly string[]): Option.Option<PermissionDialog> 
         kind,
         header: header.title,
         plugin: header.plugin,
+        queue: header.queue,
         subject: pipe(
           contentLines(sections.preamble),
           Arr.map((line) => line.trim()),
@@ -182,7 +202,7 @@ const buildDialog = (lines: readonly string[]): Option.Option<PermissionDialog> 
     Option.filter((dialog) => Arr.isReadonlyArrayNonEmpty(dialog.options)),
   )
 
-export const parseDialog = (screen: string): Option.Option<PermissionDialog> => {
+export const parseDialog = (screen: string): Option.Option<ScreenDialog> => {
   const lines = Str.split(screen, '\n')
 
   return pipe(
@@ -194,8 +214,23 @@ export const parseDialog = (screen: string): Option.Option<PermissionDialog> => 
   )
 }
 
+export const dialogFingerprint = (dialog: ScreenDialog): string =>
+  String(
+    Hash.string(
+      [
+        dialog.kind,
+        dialog.header,
+        Option.getOrElse(dialog.plugin, () => ''),
+        Option.getOrElse(dialog.subject, () => ''),
+        ...dialog.body,
+        ...dialog.prompt,
+        ...dialog.options.flatMap((option) => [option.label, ...option.details]),
+      ].join(FINGERPRINT_SEPARATOR),
+    ),
+  )
+
 export const keysToSelect = (
-  dialog: PermissionDialog,
+  dialog: ScreenDialog,
   optionNumber: number,
 ): Option.Option<Arr.NonEmptyReadonlyArray<string>> =>
   pipe(
