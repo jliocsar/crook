@@ -184,22 +184,22 @@ const make = Effect.gen(function* () {
     )
   }).pipe(Effect.withSpan('HubLink.resync'))
 
-  const markSeen = Effect.fn('HubLink.markSeen')(function* (machine: MachineId, pane: PaneId) {
-    const hub = yield* Ref.get(connected)
+  const whenConnected = <Success, Failure>(
+    call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
+  ) =>
+    Effect.flatMap(Ref.get(connected), (hub): Effect.Effect<Success, Failure | HubNotConnected> =>
+      Option.match(hub, {
+        onNone: () => Effect.fail(new HubNotConnected()),
+        onSome: call,
+      }),
+    )
 
-    return yield* Option.match(hub, {
-      onNone: () => Effect.fail(new HubNotConnected()),
-      onSome: (calls) => calls.markSeen(machine, pane),
-    })
+  const markSeen = Effect.fn('HubLink.markSeen')(function* (machine: MachineId, pane: PaneId) {
+    return yield* whenConnected((calls) => calls.markSeen(machine, pane))
   })
 
   const forgetMachine = Effect.fn('HubLink.forgetMachine')(function* (machine: MachineId) {
-    const hub = yield* Ref.get(connected)
-
-    return yield* Option.match(hub, {
-      onNone: () => Effect.fail(new HubNotConnected()),
-      onSome: (calls) => calls.forgetMachine(machine),
-    })
+    return yield* whenConnected((calls) => calls.forgetMachine(machine))
   })
 
   return HubLink.of({

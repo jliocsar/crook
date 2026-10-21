@@ -9,10 +9,9 @@ import { isBehind } from '@crook/domain/CrookVersion'
 import type { CrookVersion } from '@crook/domain/CrookVersion'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId } from '@crook/domain/Ids'
-import { isOffline } from '@crook/domain/Machine'
 import type { Machine } from '@crook/domain/Machine'
 import { agentsIn } from '@crook/domain/MachineState'
-import { agentCards, SectionBody } from '@crook/web/herd/HerdLayout'
+import { bodyFor, SectionBody } from '@crook/web/herd/HerdLayout'
 import { needsYouLabel } from '@crook/web/herd/NeedsYouLabel'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 
@@ -42,6 +41,7 @@ export interface MachineScreenModel {
 export interface InfoRow {
   readonly label: string
   readonly value: string
+  readonly warn: boolean
 }
 
 const UNKNOWN_VERSION = 'unknown'
@@ -55,16 +55,6 @@ const machineCard = (herdMachine: HerdMachine, hubVersion: CrookVersion): Machin
   needsYou: needsYouCount(herdMachine),
   behindHub: agentBehindHub(herdMachine.machine, hubVersion),
 })
-
-const detailBody = (herdMachine: HerdMachine): SectionBody => {
-  if (isOffline(herdMachine.machine)) {
-    return SectionBody.Offline()
-  }
-
-  return Arr.isReadonlyArrayEmpty(agentsIn(herdMachine.state))
-    ? SectionBody.NoAgents()
-    : SectionBody.Agents({ agents: agentCards(herdMachine) })
-}
 
 export const machinesLayout = (view: HerdView): MachinesLayout => ({
   hubVersion: view.hubVersion,
@@ -80,7 +70,7 @@ export const machineDetail = (
     Option.map((herdMachine) => ({
       card: machineCard(herdMachine, view.hubVersion),
       hubVersion: view.hubVersion,
-      body: detailBody(herdMachine),
+      body: bodyFor(herdMachine, false),
     })),
   )
 
@@ -128,14 +118,17 @@ export const connectionRow = (machine: Machine, now: DateTime.Utc): InfoRow =>
     Match.when('online', () => ({
       label: 'Online for',
       value: shortElapsed(now, machine.connectionChangedAt),
+      warn: false,
     })),
     Match.when('reconnecting', () => ({
       label: 'Reconnecting for',
       value: shortElapsed(now, machine.connectionChangedAt),
+      warn: false,
     })),
     Match.when('offline', () => ({
       label: 'Last seen',
       value: `${shortElapsed(now, machine.lastSeenAt)} ago`,
+      warn: false,
     })),
     Match.exhaustive,
   )
@@ -149,3 +142,14 @@ export const agentVersionText = (machine: Machine, hubVersion: CrookVersion): st
 
 export const herdrVersionText = (machine: Machine): string =>
   Option.getOrElse(machine.herdrVersion, () => UNKNOWN_VERSION)
+
+export const aboutRows = (detail: MachineDetailModel, now: DateTime.Utc): readonly InfoRow[] => [
+  connectionRow(detail.card.machine, now),
+  {
+    label: 'crook agent',
+    value: agentVersionText(detail.card.machine, detail.hubVersion),
+    warn: detail.card.behindHub,
+  },
+  { label: 'Herdr', value: herdrVersionText(detail.card.machine), warn: false },
+  { label: 'Machine id', value: detail.card.machine.id, warn: false },
+]

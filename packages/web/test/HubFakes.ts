@@ -1,6 +1,7 @@
 import type * as Cause from 'effect/Cause'
 import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
@@ -112,6 +113,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   const forgetRefusal = yield* Ref.make(
     Option.none<ForgetMachineRefused | HubCallFailed | HubNotConnected>(),
   )
+  const forgetAnswers = yield* Latch.make(true)
 
   const layer = Layer.succeed(
     HubLink,
@@ -120,17 +122,20 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
       resync: Ref.update(resyncs, (count) => count + 1),
       markSeen: (machine, pane) => Ref.update(seen, (calls) => [...calls, { machine, pane }]),
       forgetMachine: (machine) =>
-        Effect.flatMap(
-          Ref.get(forgetRefusal),
-          Option.match({
-            onNone: () => Ref.update(forgotten, (machines) => [...machines, machine]),
-            onSome: Effect.fail,
-          }),
+        Effect.andThen(
+          forgetAnswers.await,
+          Effect.flatMap(
+            Ref.get(forgetRefusal),
+            Option.match({
+              onNone: () => Ref.update(forgotten, (machines) => [...machines, machine]),
+              onSome: Effect.fail,
+            }),
+          ),
         ),
     }),
   )
 
-  return { layer, state, seen, resyncs, forgotten, forgetRefusal }
+  return { layer, state, seen, resyncs, forgotten, forgetRefusal, forgetAnswers }
 })
 
 export const dropSession = (session: FakeSession, error: HubCallFailed) =>

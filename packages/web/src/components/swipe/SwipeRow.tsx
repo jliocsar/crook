@@ -49,7 +49,7 @@ export function SwipeRow({
   row: OpenRow
   actions: readonly SwipeAction[]
   onTap: (opener: HTMLElement) => void
-  onLongPress: () => void
+  onLongPress?: () => void
   children: React.ReactNode
 }) {
   const reduce = useReducedMotion() ?? false

@@ -1,31 +1,35 @@
-import { RegistryContext } from '@effect/atom-react/RegistryContext'
+import { useAtom } from '@effect/atom-react/Hooks'
 import * as Cause from 'effect/Cause'
-import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
+import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
-import { forgetMachine } from '@crook/web/atoms/Machines'
+import { forgetMachineAtom } from '@crook/web/atoms/Machines'
 
-export const useForgetMachine = (onForgotten: () => void) => {
-  const registry = React.useContext(RegistryContext)
-  const [failure, setFailure] = React.useState(Option.none<string>())
+export const useForgetMachine = (machine: MachineId, clearsWhenChanged: string) => {
+  const [result, request] = useAtom(forgetMachineAtom(machine), { mode: 'promiseExit' })
+  const [requested, setRequested] = React.useState(false)
+  const outcome = Option.liftPredicate(result, () => requested)
+  const settled = Option.filter(outcome, (current) => !AsyncResult.isWaiting(current))
 
-  const forget = (machine: MachineId) => {
-    setFailure(Option.none())
-    Effect.runCallback(forgetMachine(registry, machine), {
-      onExit: (exit) => {
-        if (Exit.isSuccess(exit)) {
-          onForgotten()
+  React.useEffect(() => {
+    setRequested(false)
+  }, [clearsWhenChanged])
 
-          return
-        }
-
-        setFailure(Option.map(Cause.findErrorOption(exit.cause), (error) => error.message))
-      },
-    })
+  return {
+    pending: Option.exists(outcome, AsyncResult.isWaiting),
+    forgotten: Option.exists(settled, AsyncResult.isSuccess),
+    failure: pipe(
+      settled,
+      Option.flatMap(AsyncResult.cause),
+      Option.flatMap(Cause.findErrorOption),
+      Option.map((error) => error.message),
+    ),
+    forget: () => {
+      setRequested(true)
+      void request()
+    },
   }
-
-  return { failure, forget }
 }

@@ -6,7 +6,7 @@ import * as Schema from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as RpcClient from 'effect/rpc/RpcClient'
-import type { RpcClientError } from 'effect/rpc/RpcClientError'
+import { RpcClientError } from 'effect/rpc/RpcClientError'
 import * as Socket from 'effect/socket/Socket'
 
 import type { HerdView } from '@crook/domain/HerdView'
@@ -79,21 +79,19 @@ const connectionLost = (error: RpcClientError) => new HubConnectionLost({ detail
 
 const callDefected = (cause: unknown) => new HubCallDefected({ cause })
 
+const hubCall = <Success, Failure>(call: Effect.Effect<Success, Failure | RpcClientError>) =>
+  call.pipe(
+    Effect.catchIf(Schema.is(RpcClientError), (error) => Effect.fail(connectionLost(error))),
+    Effect.catchDefect((cause) => Effect.fail(callDefected(cause))),
+  )
+
 export const callsFrom = (client: ClientApiClient): HubCalls => ({
   watchHerd: client.WatchHerd().pipe(
     Stream.mapError(connectionLost),
     Stream.catchDefect((cause) => Stream.fail(callDefected(cause))),
   ),
-  markSeen: (machine, pane) =>
-    client.MarkSeen({ machine, pane }).pipe(
-      Effect.catchTag('RpcClientError', (error) => Effect.fail(connectionLost(error))),
-      Effect.catchDefect((cause) => Effect.fail(callDefected(cause))),
-    ),
-  forgetMachine: (machine) =>
-    client.ForgetMachine({ machine }).pipe(
-      Effect.catchTag('RpcClientError', (error) => Effect.fail(connectionLost(error))),
-      Effect.catchDefect((cause) => Effect.fail(callDefected(cause))),
-    ),
+  markSeen: (machine, pane) => hubCall(client.MarkSeen({ machine, pane })),
+  forgetMachine: (machine) => hubCall(client.ForgetMachine({ machine })),
 })
 
 export const connectTo = (url: URL): Effect.Effect<HubCalls, never, Scope.Scope> =>

@@ -4,21 +4,21 @@ import { HoldButton } from '@crook/web/components/ui/hold-button'
 
 export function ForgetMachine({
   label,
-  controlsEnabled,
+  disabled,
   failure,
   onForget,
 }: {
   label: string
-  controlsEnabled: boolean
+  disabled: boolean
   failure: Option.Option<string>
   onForget: () => void
 }) {
   return (
     <div data-slot="forget-machine" className="grid gap-2 px-4">
       <HoldButton
-        disabled={!controlsEnabled}
+        disabled={disabled}
         className="w-full text-base"
-        completeLabel="Forgotten"
+        completeLabel="Forgetting…"
         onComplete={onForget}
       >
         Hold to forget {label}

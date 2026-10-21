@@ -3,6 +3,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
@@ -10,9 +11,10 @@ import { afterEach, beforeEach, vi } from 'vitest'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import type { HerdMachine } from '@crook/domain/HerdView'
+import { HubStorageFailed } from '@crook/protocol/ClientApi'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
-import { click, eventually, findByRole } from '../Dom.ts'
+import { click, eventually, findByRole, present, springSettles } from '../Dom.ts'
 import { agent, DESK, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 
@@ -33,8 +35,15 @@ const desk = machine(DESK, [agent('w2:p1', 'working', { title: 'Hidden while off
   agentVersion: '0.1.0',
 })
 
+const OFFLINE_HINT = 'Swipe to forget, or wait for it to reconnect'
+
+const UNKNOWN_MACHINE =
+  "crook doesn't know this machine. A forgotten machine comes back once its agent connects again."
+
 const about = () =>
-  within(screen.getByRole('heading', { name: 'About' }).closest('section') ?? document.body)
+  within(
+    present(screen.getByRole('heading', { name: 'About' }).closest('section'), 'The About section'),
+  )
 
 const valueOf = (label: string) => about().getByText(label).nextElementSibling?.textContent
 
@@ -53,7 +62,7 @@ describe('MachineScreen', () => {
     Effect.gen(function* () {
       yield* renderApp('/machines/laptop', liveWith(viewOf([laptop, desk])))
       const title = yield* findByRole('heading', 'laptop')
-      const header = within(title.closest('header') ?? document.body)
+      const header = within(present(title.closest('header'), 'The machine header'))
 
       expect(header.getByText('online')).toBeDefined()
       expect(header.getByText('update agent')).toBeDefined()
@@ -88,11 +97,7 @@ describe('MachineScreen', () => {
     Effect.gen(function* () {
       const { router, link } = yield* renderApp('/machines', liveWith(viewOf([laptop, desk])))
 
-      yield* click(
-        yield* Effect.promise(() =>
-          screen.findByText('Swipe to forget, or wait for it to reconnect'),
-        ),
-      )
+      yield* click(yield* Effect.promise(() => screen.findByText(OFFLINE_HINT)))
       yield* eventually(() => {
         expect(router.state.location.pathname).toBe('/machines/desk')
       })
@@ -121,17 +126,70 @@ describe('MachineScreen', () => {
     }),
   )
 
+  it.effect('says why a forget failed and stays on the machine', () =>
+    Effect.gen(function* () {
+      const { router, link } = yield* renderApp('/machines/desk', liveWith(viewOf([laptop, desk])))
+      const refusal = new HubStorageFailed({ detail: 'disk full' })
+
+      yield* Ref.set(link.forgetRefusal, Option.some(refusal))
+      fireEvent.click(yield* findByRole('button', 'Hold to forget desk'))
+
+      expect((yield* Effect.promise(() => screen.findByRole('alert'))).textContent).toBe(
+        refusal.message,
+      )
+      expect(router.state.location.pathname).toBe('/machines/desk')
+    }),
+  )
+
+  it.effect('stays where Back went when a slow forget lands', () =>
+    Effect.gen(function* () {
+      const { router, link } = yield* renderApp('/', liveWith(viewOf([laptop, desk])))
+
+      yield* Effect.promise(() => router.navigate({ to: '/machines' }))
+      yield* link.forgetAnswers.close
+      yield* click(yield* Effect.promise(() => screen.findByText(OFFLINE_HINT)))
+      fireEvent.click(yield* findByRole('button', 'Hold to forget desk'))
+      yield* eventually(() => {
+        expect(
+          present(
+            document.querySelector('[data-slot="forget-machine"] button'),
+            'Hold to forget',
+          ).hasAttribute('disabled'),
+        ).toBe(true)
+      })
+      yield* click(screen.getByRole('button', { name: 'Back to machines' }))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/machines')
+      })
+      yield* link.forgetAnswers.open
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.forgotten)).toEqual([DESK])
+      })
+      yield* springSettles
+
+      expect(router.state.location.pathname).toBe('/machines')
+    }),
+  )
+
+  it.effect('says so when the machine leaves the herd while it is open', () =>
+    Effect.gen(function* () {
+      const { router, link } = yield* renderApp('/machines/desk', liveWith(viewOf([laptop, desk])))
+
+      yield* findByRole('button', 'Hold to forget desk')
+      yield* SubscriptionRef.set(link.state, liveWith(viewOf([laptop])))
+
+      expect((yield* Effect.promise(() => screen.findByText(UNKNOWN_MACHINE))).tagName).toBe('P')
+      expect(screen.queryByRole('button', { name: /Hold to forget/u })).toBeNull()
+      expect(screen.getByRole('heading', { name: 'desk' })).toBeDefined()
+      expect(router.state.location.pathname).toBe('/machines/desk')
+    }),
+  )
+
   it.effect('says when it does not know the machine', () =>
     Effect.gen(function* () {
       yield* renderApp('/machines/gone', liveWith(viewOf([laptop])))
 
-      expect(
-        (yield* Effect.promise(() =>
-          screen.findByText(
-            "crook doesn't know this machine. A forgotten machine comes back once its agent connects again.",
-          ),
-        )).tagName,
-      ).toBe('P')
+      expect((yield* Effect.promise(() => screen.findByText(UNKNOWN_MACHINE))).tagName).toBe('P')
     }),
   )
 })

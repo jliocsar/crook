@@ -8,6 +8,7 @@ import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import type { HerdMachine } from '@crook/domain/HerdView'
 import {
+  aboutRows,
   agentsHeading,
   agentSummary,
   agentVersionText,
@@ -78,14 +79,17 @@ describe('machine detail', () => {
     expect(connectionRow(laptop.machine, FIVE_MINUTES_LATER)).toEqual({
       label: 'Online for',
       value: '5m',
+      warn: false,
     })
     expect(connectionRow(reconnecting.machine, FIVE_MINUTES_LATER)).toEqual({
       label: 'Reconnecting for',
       value: '5m',
+      warn: false,
     })
     expect(connectionRow(desk.machine, FIVE_MINUTES_LATER)).toEqual({
       label: 'Last seen',
       value: '2h ago',
+      warn: false,
     })
   })
 
@@ -93,6 +97,11 @@ describe('machine detail', () => {
     expect(agentVersionText(laptop.machine, HUB)).toBe('0.0.9, hub has 0.1.0')
     expect(agentVersionText(desk.machine, HUB)).toBe('0.1.0')
     expect(herdrVersionText(desk.machine)).toBe('unknown')
+    expect(
+      Option.flatMap(machineDetail(viewOf([laptop]), LAPTOP), (detail) =>
+        Arr.get(aboutRows(detail, FIVE_MINUTES_LATER), 1),
+      ),
+    ).toEqual(Option.some({ label: 'crook agent', value: '0.0.9, hub has 0.1.0', warn: true }))
   })
 
   it('hides the agents of an offline machine and counts the rest', () => {

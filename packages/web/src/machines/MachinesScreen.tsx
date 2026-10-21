@@ -9,8 +9,6 @@ import { machinesLayoutAtom } from '@crook/web/atoms/Machines'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
 import { AddMachineButton, AddMachineSheet } from '@crook/web/machines/AddMachineSheet'
-import { useForgetMachine } from '@crook/web/machines/Forget'
-import { ForgetFailure } from '@crook/web/machines/ForgetMachine'
 import { MachineList } from '@crook/web/machines/MachineList'
 import type { OpenMachine } from '@crook/web/machines/MachineList'
 import { NoMachines } from '@crook/web/machines/NoMachines'
@@ -24,7 +22,6 @@ export function MachinesScreen() {
   const navigate = useNavigate()
   const now = useNow()
   const [adding, setAdding] = React.useState(false)
-  const { failure, forget } = useForgetMachine(() => undefined)
 
   const openMachine: OpenMachine = (machine, opener) => {
     void navigate({ to: '/machines/$machine', params: { machine }, state: openedFrom(opener) })
@@ -36,14 +33,6 @@ export function MachinesScreen() {
 
   return (
     <TabScreen title="Machines" action={<AddMachineButton onOpen={openSheet} />}>
-      {Option.match(failure, {
-        onNone: () => null,
-        onSome: (message) => (
-          <div className="px-4 pt-2">
-            <ForgetFailure message={message} />
-          </div>
-        ),
-      })}
       {Option.match(layout, {
         onNone: () => (connection.ready ? <HerdSkeleton label="Loading your machines" /> : null),
         onSome: (machines) => (
@@ -56,7 +45,6 @@ export function MachinesScreen() {
                 now={now}
                 controlsEnabled={connection.controlsEnabled}
                 onOpen={openMachine}
-                onForget={forget}
               />
             )}
           </Dimmed>

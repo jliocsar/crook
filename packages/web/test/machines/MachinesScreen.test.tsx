@@ -1,8 +1,10 @@
 import { describe, expect, it } from '@effect/vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { CrookVersion } from '@crook/domain/CrookVersion'
@@ -13,7 +15,7 @@ import { PLUGIN_INSTALL_COMMAND, TOKEN_CONTEXT } from '@crook/web/machines/AddMa
 import { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
-import { afterSpring, click, dragX, eventually, findByRole } from '../Dom.ts'
+import { afterSpring, click, dragX, eventually, findByRole, present } from '../Dom.ts'
 import { agent, DESK, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 
@@ -32,13 +34,16 @@ const desk = machine(DESK, [], {
   herdrVersion: '0.9.5',
 })
 
-const cardOf = (label: string) =>
-  screen
-    .getAllByText(label)
-    .map((element) => element.closest<HTMLElement>('[data-slot="machine-card"]'))
-    .find((card) => card !== null)
+const cardOf = (label: string): HTMLElement =>
+  Option.getOrThrowWith(
+    Arr.findFirst(screen.getAllByText(label), (element) =>
+      Option.fromNullishOr(element.closest<HTMLElement>('[data-slot="machine-card"]')),
+    ),
+    () => new Error(`No machine card shows ${label}.`),
+  )
 
-const swipeCardOf = (label: string) => cardOf(label)?.closest('[data-slot="swipe-card"]')
+const swipeCardOf = (label: string) =>
+  present(cardOf(label).closest('[data-slot="swipe-card"]'), `The swipe card of ${label}`)
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -57,8 +62,8 @@ describe('MachinesScreen', () => {
 
       expect((yield* findByRole('heading', 'Machines')).tagName).toBe('H1')
 
-      const laptopCard = within(cardOf('laptop') ?? document.body)
-      const deskCard = within(cardOf('desk') ?? document.body)
+      const laptopCard = within(cardOf('laptop'))
+      const deskCard = within(cardOf('desk'))
 
       expect(laptopCard.getByText('online')).toBeDefined()
       expect(laptopCard.getByText('3 agents · 2 need you')).toBeDefined()
@@ -89,7 +94,7 @@ describe('MachinesScreen', () => {
 
       yield* Effect.promise(() => screen.findByText('Swipe to forget, or wait for it to reconnect'))
 
-      expect(within(cardOf('laptop') ?? document.body).queryByText('Forget')).toBeNull()
+      expect(within(cardOf('laptop')).queryByText('Forget')).toBeNull()
 
       fireEvent.click(screen.getByRole('button', { name: 'Forget', hidden: true }))
 
@@ -99,7 +104,7 @@ describe('MachinesScreen', () => {
     }),
   )
 
-  it.effect('says why a forget failed', () =>
+  it.effect('says why a forget failed beside the card, until the link changes', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/machines', liveWith(viewOf([desk])))
       const refusal = new HubStorageFailed({ detail: 'disk full' })
@@ -108,9 +113,18 @@ describe('MachinesScreen', () => {
       yield* Effect.promise(() => screen.findByText('Swipe to forget, or wait for it to reconnect'))
       fireEvent.click(screen.getByRole('button', { name: 'Forget', hidden: true }))
 
-      expect((yield* Effect.promise(() => screen.findByRole('alert'))).textContent).toBe(
-        refusal.message,
+      const alert = yield* Effect.promise(() => screen.findByRole('alert'))
+
+      expect(alert.textContent).toBe(refusal.message)
+      expect(present(alert.closest('li'), 'The desk row').contains(cardOf('desk'))).toBe(true)
+
+      yield* SubscriptionRef.set(
+        link.state,
+        stateWith(LinkStatus.Unreachable(), Option.some(viewOf([desk]))),
       )
+      yield* eventually(() => {
+        expect(screen.queryByRole('alert')).toBeNull()
+      })
     }),
   )
 
@@ -138,7 +152,10 @@ describe('MachinesScreen', () => {
 
       yield* click(
         within(
-          screen.getByText('No machines yet').closest('[data-slot="empty-state"]') ?? document.body,
+          present(
+            screen.getByText('No machines yet').closest('[data-slot="empty-state"]'),
+            'The empty state',
+          ),
         ).getByRole('button', { name: 'Add a machine' }),
       )
       const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
@@ -213,11 +230,7 @@ describe('MachinesScreen swipe', () => {
     Effect.gen(function* () {
       yield* renderApp('/machines', liveWith(viewOf([desk])))
       yield* Effect.promise(() => screen.findByText('Swipe to forget, or wait for it to reconnect'))
-      const card = swipeCardOf('desk')
-
-      if (card !== null && card !== undefined) {
-        yield* dragX(card, [200, 190, 180, 170, 160, 150])
-      }
+      yield* dragX(swipeCardOf('desk'), [200, 190, 180, 170, 160, 150])
 
       yield* afterSpring(() => {
         expect(

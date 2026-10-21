@@ -80,7 +80,7 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
   return Arr.every(view.machines, hasNoAgents) ? Option.some('nothingRunning') : Option.none()
 }
 
-const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
+export const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
   if (isOffline(herdMachine.machine)) {
     return SectionBody.Offline()
   }

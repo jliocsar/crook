@@ -7,6 +7,8 @@ import { isOffline } from '@crook/domain/Machine'
 import { Pressable } from '@crook/web/components/press/Pressable'
 import { SwipeRow, useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import type { OpenRow, SwipeAction } from '@crook/web/components/swipe/SwipeRow'
+import { useForgetMachine } from '@crook/web/machines/Forget'
+import { ForgetFailure } from '@crook/web/machines/ForgetMachine'
 import { MachineHeading } from '@crook/web/machines/MachineHeading'
 import { agentSummary, versionsLine } from '@crook/web/machines/MachineLayout'
 import type { MachineCardModel, MachinesLayout } from '@crook/web/machines/MachineLayout'
@@ -41,20 +43,20 @@ function MachineCardBody({ card, now }: { card: MachineCardModel; now: DateTime.
   )
 }
 
-function MachineRow({
+function MachineCard({
   card,
   now,
   row,
-  controlsEnabled,
+  forgetDisabled,
   onOpen,
   onForget,
 }: {
   card: MachineCardModel
   now: DateTime.Utc
   row: OpenRow
-  controlsEnabled: boolean
+  forgetDisabled: boolean
   onOpen: OpenMachine
-  onForget: (machine: MachineId) => void
+  onForget: () => void
 }) {
   const { id } = card.machine
 
@@ -73,19 +75,45 @@ function MachineRow({
   }
 
   return (
-    <SwipeRow
-      id={id}
-      row={row}
-      actions={[
-        forgetAction(() => {
-          onForget(id)
-        }, !controlsEnabled),
-      ]}
-      onTap={open}
-      onLongPress={() => undefined}
-    >
+    <SwipeRow id={id} row={row} actions={[forgetAction(onForget, forgetDisabled)]} onTap={open}>
       <MachineCardBody card={card} now={now} />
     </SwipeRow>
+  )
+}
+
+function MachineRow({
+  card,
+  now,
+  row,
+  controlsEnabled,
+  onOpen,
+}: {
+  card: MachineCardModel
+  now: DateTime.Utc
+  row: OpenRow
+  controlsEnabled: boolean
+  onOpen: OpenMachine
+}) {
+  const forgetting = useForgetMachine(
+    card.machine.id,
+    `${card.machine.connection} ${String(controlsEnabled)}`,
+  )
+
+  return (
+    <li className="grid gap-2">
+      <MachineCard
+        card={card}
+        now={now}
+        row={row}
+        forgetDisabled={!controlsEnabled || forgetting.pending}
+        onOpen={onOpen}
+        onForget={forgetting.forget}
+      />
+      {Option.match(forgetting.failure, {
+        onNone: () => null,
+        onSome: (message) => <ForgetFailure message={message} />,
+      })}
+    </li>
   )
 }
 
@@ -94,29 +122,25 @@ export function MachineList({
   now,
   controlsEnabled,
   onOpen,
-  onForget,
 }: {
   layout: MachinesLayout
   now: DateTime.Utc
   controlsEnabled: boolean
   onOpen: OpenMachine
-  onForget: (machine: MachineId) => void
 }) {
   const row = useOpenRow()
 
   return (
     <ul data-slot="machine-list" className="grid grid-cols-1 gap-2 px-4 pt-2">
       {layout.machines.map((card) => (
-        <li key={card.machine.id}>
-          <MachineRow
-            card={card}
-            now={now}
-            row={row}
-            controlsEnabled={controlsEnabled}
-            onOpen={onOpen}
-            onForget={onForget}
-          />
-        </li>
+        <MachineRow
+          key={card.machine.id}
+          card={card}
+          now={now}
+          row={row}
+          controlsEnabled={controlsEnabled}
+          onOpen={onOpen}
+        />
       ))}
     </ul>
   )
