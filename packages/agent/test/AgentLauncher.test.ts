@@ -10,6 +10,7 @@ import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as Struct from 'effect/Struct'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -191,6 +192,7 @@ const startLauncher = Effect.fn('startLauncher')(function* (
 ) {
   const state = yield* SubscriptionRef.make(machineStateWith([agentRow()]))
   const sent = yield* Queue.unbounded<SentRequest>()
+  const alreadyTaken = yield* Ref.make<readonly SentRequest[]>([])
   const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
   const context = yield* Layer.build(
     executorWith(HerdrClient.layerTest({ responses, events, sent }), state),
@@ -199,7 +201,14 @@ const startLauncher = Effect.fn('startLauncher')(function* (
   return {
     executor: Context.get(context, CommandExecutor),
     createdPanes: Context.get(context, CreatedPanes),
-    sent: Effect.map(Queue.clear(sent), sentRequests),
+    sent: Effect.zipWith(Ref.getAndSet(alreadyTaken, []), Queue.clear(sent), (taken, rest) =>
+      sentRequests(Arr.appendAll(taken, rest)),
+    ),
+    untilSent: (method: string) =>
+      Queue.take(sent).pipe(
+        Effect.tap((request) => Ref.update(alreadyTaken, Arr.append(request))),
+        Effect.repeat({ until: (request) => request.method === method }),
+      ),
   }
 })
 
@@ -396,7 +405,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
   onDisk.effect('tries agent.start again while the new pane is not at a shell yet', () =>
     Effect.gen(function* () {
       const folder = yield* temporaryFolder
-      const { executor, sent } = yield* startLauncher([
+      const { executor, sent, untilSent } = yield* startLauncher([
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
         inputSent,
@@ -408,6 +417,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         .execute(FIRST_ACTION, new StartAgent({ kind: 'claude', folder, task: Option.none() }))
         .pipe(Effect.forkChild)
 
+      yield* untilSent(AgentStartMethod.name)
       yield* TestClock.adjust(PANE_BUSY_RETRY_LIMIT)
       const receipt = yield* Fiber.join(launching)
       const requests = yield* sent
@@ -420,7 +430,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
   onDisk.effect('gives two launches running at once different agent names', () =>
     Effect.gen(function* () {
       const folder = yield* temporaryFolder
-      const { executor, sent } = yield* startLauncher([
+      const { executor, sent, untilSent } = yield* startLauncher([
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
         tabCreated(OTHER_NEW_PANE, 'w1', folder),
@@ -435,6 +445,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         { concurrency: 'unbounded' },
       ).pipe(Effect.forkChild)
 
+      yield* untilSent(AgentStartMethod.name)
       yield* TestClock.adjust(PANE_BUSY_RETRY_LIMIT)
       const receipts = yield* Fiber.join(launching)
       const names = (yield* sent)
