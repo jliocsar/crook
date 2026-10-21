@@ -27,6 +27,7 @@ import {
   targetPane,
 } from '@crook/domain/Command'
 import { CrookVersion } from '@crook/domain/CrookVersion'
+import { HerdReplaced, MachineLeft } from '@crook/domain/HerdUpdate'
 import { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
@@ -157,7 +158,8 @@ const account = new HubAccount({ email: 'owner@example.com' })
 const emptyHerd = new HerdView({ machines: [], hubVersion: CrookVersion.make('0.0.1') })
 
 const clientApiHandlers = ClientApi.toLayer({
-  WatchHerd: () => Stream.make(emptyHerd, emptyHerd),
+  WatchHerd: () =>
+    Stream.make(new HerdReplaced({ herd: emptyHerd }), new MachineLeft({ machine: laptop })),
   ForgetMachine: ({ machine }) => Effect.fail(new MachineNotInHerd({ machine })),
   MarkSeen: ({ machine, pane: markedPane }) =>
     Effect.fail(new PaneNotInHerd({ machine, pane: markedPane })),
@@ -231,12 +233,15 @@ layer(agentLinkHandlers)('AgentLink', (rpc) => {
 })
 
 layer(clientApiHandlers)('ClientApi', (rpc) => {
-  rpc.effect('streams every HerdView the hub emits', () =>
+  rpc.effect('streams every herd update the hub emits', () =>
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(ClientApi)
-      const views = yield* client.WatchHerd().pipe(Stream.runCollect)
+      const updates = yield* client.WatchHerd().pipe(Stream.runCollect)
 
-      expect(views).toHaveLength(2)
+      expect(updates).toEqual([
+        new HerdReplaced({ herd: emptyHerd }),
+        new MachineLeft({ machine: laptop }),
+      ])
     }),
   )
 

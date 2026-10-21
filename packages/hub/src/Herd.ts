@@ -9,7 +9,6 @@ import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
-import * as Order from 'effect/Order'
 import * as PubSub from 'effect/PubSub'
 import * as Schema from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
@@ -19,7 +18,7 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { type SeenMark, isSameSeenMark, seenMarkOf } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
-import { HerdMachine, HerdView } from '@crook/domain/HerdView'
+import { HerdMachine, HerdView, byMachineId } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { Machine, type MachineConnection } from '@crook/domain/Machine'
 import { type MachineState, agentsIn } from '@crook/domain/MachineState'
@@ -81,8 +80,6 @@ export const hubVersion = CrookVersion.make(packageJson.version)
 
 const readableVersion = Schema.decodeUnknownOption(CrookVersion)
 
-const byMachineId = Order.mapInput(Order.String, (entry: MachineEntry) => entry.id)
-
 const panesInState = (entry: MachineEntry, isKept: (pane: PaneId) => boolean) =>
   pipe(
     agentsIn(entry.state),
@@ -112,8 +109,8 @@ const toView = (entries: HashMap.HashMap<MachineId, MachineEntry>) =>
     machines: pipe(
       HashMap.toValues(entries),
       Arr.filter((entry) => !entry.forgotten),
-      Arr.sort(byMachineId),
       Arr.map(toHerdMachine),
+      Arr.sort(byMachineId),
     ),
   })
 

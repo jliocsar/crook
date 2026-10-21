@@ -3,18 +3,17 @@ import { expect, layer } from '@effect/vitest'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
-import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
-import * as Schema from 'effect/Schema'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { CommandExecutor, HERDR_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
 import { deriveAsk } from '@crook/claude/AskDerivation'
 import { dialogFingerprint, parseDialog } from '@crook/claude/ScreenDialog'
+import { spikeScreen } from '@crook/claude/SpikeScreens'
 import {
   type Ask,
   AskQuestion,
@@ -40,6 +39,7 @@ import {
   type HerdrSubscriptionError,
   type ScriptedResponse,
   type SentRequest,
+  decodeSentRequest,
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { AgentPromptMethod, AgentSendKeysMethod, PaneReadMethod } from '@crook/herdr/Methods'
@@ -51,7 +51,7 @@ import {
   QuestionnaireUnsupported,
 } from '@crook/protocol/Commands'
 
-import { TERMINAL, agentRow, executorWith, machineStateWith, spikeScreenPath } from './Fixtures'
+import { TERMINAL, agentRow, executorWith, machineStateWith } from './Fixtures'
 
 const AGENT_PANE = PaneId.make('w1:p1')
 const ACTION = IdempotencyKey.make('5d0e7c1a-2b3f-4a6d-8c9e-1f2a3b4c5d6e')
@@ -62,18 +62,6 @@ const QUESTION_ASK_ID = AskId.make('toolu_016qcolor')
 const keysSent = scriptedResult(AgentSendKeysMethod, { type: 'ok' })
 const prompted = scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })
 const delivered = new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 4 })
-
-const SentLine = Schema.fromJsonString(
-  Schema.Struct({ method: Schema.String, params: Schema.Unknown }),
-)
-
-const sentRequest = (request: SentRequest) => Schema.decodeSync(SentLine)(request.line)
-
-const screenText = Effect.fn('screenText')(function* (name: string) {
-  const fileSystem = yield* FileSystem.FileSystem
-
-  return yield* fileSystem.readFileString(spikeScreenPath(name))
-})
 
 const screenRead = (text: string) =>
   scriptedResult(PaneReadMethod, {
@@ -147,32 +135,18 @@ const startOverQueuedScreens = Effect.fn('startOverQueuedScreens')(function* (
   const state = yield* SubscriptionRef.make(blocked)
   const sent = yield* Queue.unbounded<SentRequest>()
   const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
-  const clientShowing = (screen: string) =>
-    Effect.map(
-      Layer.build(
-        HerdrClient.layerTest({ responses: [screenRead(screen), keysSent], events, sent }),
-      ),
-      (context) => Context.get(context, HerdrClient),
-    )
-  const shown = yield* Ref.make(yield* clientShowing(answeredScreen))
-  const next = yield* clientShowing(nextScreen)
-  const herdr = Layer.succeed(
-    HerdrClient,
-    HerdrClient.of({
-      request: (method, params) =>
-        Effect.flatMap(Ref.get(shown), (client) => client.request(method, params)),
-      snapshot: Effect.flatMap(Ref.get(shown), (client) => client.snapshot),
-      subscribe: (subscriptions) =>
-        Effect.flatMap(Ref.get(shown), (client) => client.subscribe(subscriptions)),
-    }),
-  )
-  const context = yield* Layer.build(executorWith(herdr, state))
+  const herdr = yield* HerdrClient.makeSwitchingTest({
+    responses: [screenRead(answeredScreen), keysSent],
+    events,
+    sent,
+  })
+  const context = yield* Layer.build(executorWith(herdr.layer, state))
 
   return {
     executor: Context.get(context, CommandExecutor),
     sent,
     state,
-    showNext: Ref.set(shown, next),
+    showNext: herdr.respondWith([screenRead(nextScreen), keysSent]),
   }
 })
 
@@ -180,7 +154,7 @@ const answer = (ask: Ask, given: AskAnswer) =>
   new AnswerAsk({ pane: AGENT_PANE, ask: ask.id, answer: given })
 
 const sentAfter = (sent: Queue.Queue<SentRequest>) =>
-  Effect.map(Queue.clear(sent), (requests) => requests.map(sentRequest))
+  Effect.map(Queue.clear(sent), (requests) => requests.map(decodeSentRequest))
 
 const keysRequest = (keys: readonly string[]) => ({
   method: 'agent.send_keys',
@@ -192,7 +166,7 @@ const READ_REQUEST = { method: 'pane.read', params: { pane_id: 'w1:p1', source: 
 layer(BunFileSystem.layer)('AnswerAsk', (it) => {
   it.effect('approves by confirming the Yes option the cursor already rests on', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const ask = bashAsk(screen)
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
       const receipt = yield* executor.execute(ACTION, answer(ask, new Approve({})))
@@ -204,7 +178,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('approves always by moving down to the always-allow option', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const ask = bashAsk(screen)
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
 
@@ -216,7 +190,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('approves always through a don’t-ask-again option', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('105-npm-dont-ask-again')
+      const screen = yield* spikeScreen('105-npm-dont-ask-again')
       const ask = bashAsk(screen, 'npm --version')
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
 
@@ -228,7 +202,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('declines with Esc once the screen still shows the dialog', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const ask = bashAsk(screen)
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
 
@@ -240,7 +214,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('declines with a message by pressing Esc, then prompting once the dialog is gone', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const ask = bashAsk(screen)
       const { executor, sent, state } = yield* startExecutor(ask, [
         screenRead(screen),
@@ -249,8 +223,8 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
       ])
       const declined = answer(ask, new Decline({ message: Option.some('use printf') }))
       const running = yield* executor.execute(ACTION, declined).pipe(Effect.forkChild)
-      const read = sentRequest(yield* Queue.take(sent))
-      const esc = sentRequest(yield* Queue.take(sent))
+      const read = decodeSentRequest(yield* Queue.take(sent))
+      const esc = decodeSentRequest(yield* Queue.take(sent))
 
       yield* SubscriptionRef.set(state, machineStateWith([agentRow({ status: 'idle' })]))
       const receipt = yield* Fiber.join(running)
@@ -265,7 +239,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('reports an undelivered decline message once, and never presses Esc again for it', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const ask = bashAsk(screen)
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent, prompted])
       const declined = answer(ask, new Decline({ message: Option.some('use printf') }))
@@ -290,7 +264,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('refuses an answer to an ask the agent no longer shows, and sends nothing', () =>
     Effect.gen(function* () {
-      const ask = bashAsk(yield* screenText('12-native-bash-t20'))
+      const ask = bashAsk(yield* spikeScreen('12-native-bash-t20'))
       const { executor, sent } = yield* startExecutor(ask, [keysSent])
       const stale = new AnswerAsk({
         pane: AGENT_PANE,
@@ -306,8 +280,8 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('refuses to approve a dialog that replaced the one the ask was read from', () =>
     Effect.gen(function* () {
-      const ask = bashAsk(yield* screenText('40-parallel-blocked-1'), 'echo par-a > par-a.txt')
-      const replaced = yield* screenText('42-parallel-blocked-2')
+      const ask = bashAsk(yield* spikeScreen('40-parallel-blocked-1'), 'echo par-a > par-a.txt')
+      const replaced = yield* spikeScreen('42-parallel-blocked-2')
       const { executor, sent, invalidations } = yield* startExecutor(ask, [
         screenRead(replaced),
         keysSent,
@@ -324,7 +298,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('answers an ask once, whichever device answers it again', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const ask = bashAsk(screen)
       const { executor, sent, invalidations } = yield* startExecutor(ask, [
         screenRead(screen),
@@ -345,8 +319,8 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('answers the next queued dialog though it shows the command just answered', () =>
     Effect.gen(function* () {
-      const answeredScreen = yield* screenText('112-codemode6-zombie')
-      const nextScreen = yield* screenText('113-codemode6-zombie-declined')
+      const answeredScreen = yield* spikeScreen('112-codemode6-zombie')
+      const nextScreen = yield* spikeScreen('113-codemode6-zombie-declined')
       const answered = screenAsk(answeredScreen)
       const next = screenAsk(nextScreen)
       const { executor, sent, state, showNext } = yield* startOverQueuedScreens(
@@ -376,7 +350,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('re-reads the herd when the agent stays blocked after an answer', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('112-codemode6-zombie')
+      const screen = yield* spikeScreen('112-codemode6-zombie')
       const ask = screenAsk(screen)
       const { executor, invalidations } = yield* startExecutor(ask, [screenRead(screen), keysSent])
 
@@ -391,7 +365,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('leaves the herd to herdr when the agent leaves blocked after an answer', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const ask = bashAsk(screen)
       const { executor, state, invalidations } = yield* startExecutor(ask, [
         screenRead(screen),
@@ -408,7 +382,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('picks the answer to a single-choice question by its label', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('80-ask-blocked')
+      const screen = yield* spikeScreen('80-ask-blocked')
       const ask = questionAsk(screen, false)
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
 
@@ -420,7 +394,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('refuses a multi-select question rather than guess its keys', () =>
     Effect.gen(function* () {
-      const ask = questionAsk(yield* screenText('80-ask-blocked'), true)
+      const ask = questionAsk(yield* spikeScreen('80-ask-blocked'), true)
       const { executor, sent } = yield* startExecutor(ask, [keysSent])
       const refused = yield* executor
         .execute(ACTION, answer(ask, new Choose({ answer: 'Green' })))
@@ -433,7 +407,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('refuses a choice the question does not offer, before reading the screen', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('80-ask-blocked')
+      const screen = yield* spikeScreen('80-ask-blocked')
       const ask = questionAsk(screen, false)
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
       const refused = yield* Effect.all(
@@ -452,7 +426,7 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
   it.effect('offers no choice by label on a permission, so a mode switch cannot be picked', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const ask = bashAsk(screen)
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
       const option = 'Yes, and switch to auto mode · auto mode handles these prompts for you'

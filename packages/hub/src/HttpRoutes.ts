@@ -12,6 +12,7 @@ import * as RpcSerialization from 'effect/rpc/RpcSerialization'
 import * as RpcServer from 'effect/rpc/RpcServer'
 import type { SqlError } from 'effect/sql/SqlError'
 
+import { herdUpdates } from '@crook/domain/HerdUpdate'
 import type { MachineId } from '@crook/domain/Ids'
 import { commandAudit } from '@crook/domain/Audit'
 import { AuditTrail } from '@crook/hub/AuditTrail'
@@ -62,7 +63,7 @@ const routes = Effect.gen(function* () {
 
   const serveClientAs = (actor: string) =>
     ClientApi.toHandlers({
-      WatchHerd: () => herd.view,
+      WatchHerd: () => herdUpdates(herd.view),
       ForgetMachine: ({ machine }) =>
         herd.forget(machine).pipe(
           Effect.catchTag('SqlError', storageFailureToWire),

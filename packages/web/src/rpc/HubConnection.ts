@@ -11,6 +11,7 @@ import { RpcClientError } from 'effect/rpc/RpcClientError'
 import * as Socket from 'effect/socket/Socket'
 
 import type { Command, CommandReceipt } from '@crook/domain/Command'
+import { herdViews } from '@crook/domain/HerdUpdate'
 import type { HerdView } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import type { NotificationEvent, NotificationSettings } from '@crook/domain/Notifications'
@@ -136,7 +137,7 @@ const hubStream = <Success, Failure>(stream: Stream.Stream<Success, Failure | Rp
   )
 
 export const callsFrom = (client: ClientApiClient): HubCalls => ({
-  watchHerd: hubStream(client.WatchHerd()),
+  watchHerd: herdViews(hubStream(client.WatchHerd())),
   markSeen: (machine, pane) => hubCall(client.MarkSeen({ machine, pane })),
   forgetMachine: (machine) => hubCall(client.ForgetMachine({ machine })),
   setPinned: (machine, pane, pinned) => hubCall(client.SetPinned({ machine, pane, pinned })),

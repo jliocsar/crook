@@ -45,6 +45,7 @@ import {
   SessionSnapshotMethod,
   WorkspaceCreateMethod,
 } from '@crook/herdr/Methods'
+import { paneInfo, sessionSnapshot, tabInfo, workspaceInfo } from '@crook/herdr/RecordFixtures'
 import {
   AGENT_PING_INTERVAL,
   AgentLink,
@@ -63,17 +64,7 @@ import { protocolSerialization } from '@crook/protocol/Serialization'
 
 import packageJson from '../package.json' with { type: 'json' }
 
-import {
-  LAPTOP,
-  TERMINAL,
-  agentRow,
-  herdrLink,
-  linkedAgentWith,
-  paneInfo,
-  sessionSnapshot,
-  tabInfo,
-  workspaceInfo,
-} from './Fixtures'
+import { LAPTOP, TERMINAL, agentRow, herdrLink, linkedAgentWith } from './Fixtures'
 
 interface HubScript {
   readonly attachLifetime: Option.Option<Duration.Duration>

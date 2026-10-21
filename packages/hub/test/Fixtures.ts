@@ -5,6 +5,7 @@ import * as ConfigProvider from 'effect/ConfigProvider'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import type * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -28,6 +29,7 @@ import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
+import { herdViews } from '@crook/domain/HerdUpdate'
 import { findMachine } from '@crook/domain/HerdView'
 import type { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
@@ -49,6 +51,15 @@ import { AGENT_PING_INTERVAL, AgentLink, Hello } from '@crook/protocol/AgentLink
 import { ClientApi } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
+
+export type AgentFoundation =
+  | MachineStateSync
+  | CreatedPanes
+  | AuditLog
+  | HerdrClient
+  | GitBranches
+  | FileSystem.FileSystem
+  | Path.Path
 
 export const OWNER = 'owner@example.com'
 export const HUB_ORIGIN = 'https://my-hub.exe.xyz'
@@ -147,7 +158,10 @@ export const testHub = Layer.provideMerge(
   Database.layerAt(IN_MEMORY),
 )
 
-const discardingAgentAudit = Layer.succeed(AuditLog, AuditLog.of({ record: () => Effect.void }))
+export const discardingAgentAudit = Layer.succeed(
+  AuditLog,
+  AuditLog.of({ record: () => Effect.void }),
+)
 
 const socketUrl = (path: string) =>
   HttpServer.addressFormattedWith((address) =>
@@ -175,7 +189,7 @@ export const herdWhere = Effect.fn('herdWhere')(function* (predicate: (view: Her
 
   return yield* phone
     .WatchHerd()
-    .pipe(Stream.filter(predicate), Stream.runHead, Effect.flatMap(Effect.fromOption))
+    .pipe(herdViews, Stream.filter(predicate), Stream.runHead, Effect.flatMap(Effect.fromOption))
 }, Effect.scoped)
 
 export const machineShows = (id: MachineId, connection: MachineConnection) =>
@@ -183,30 +197,43 @@ export const machineShows = (id: MachineId, connection: MachineConnection) =>
     Option.exists(findMachine(view, id), (entry) => entry.machine.connection === connection),
   )
 
-export const realAgent = Effect.fn('realAgent')(function* (
+export const hubDialFor = (machine: MachineId) =>
+  Effect.map(Effect.service(HttpServer.HttpServer), (server) =>
+    connect(AgentLink, AGENT_PATH, agentToken(machine)).pipe(
+      Effect.provideService(HttpServer.HttpServer, server),
+    ),
+  )
+
+export const agentOver = Effect.fn('agentOver')(function* <Failure>(
+  machine: MachineId,
+  foundation: Layer.Layer<AgentFoundation, Failure>,
+  claudeRoots: readonly string[],
+) {
+  return Layer.provide(
+    HubLink.layerWith(yield* hubDialFor(machine), hello),
+    Layer.provideMerge(
+      Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt(claudeRoots)),
+      foundation,
+    ),
+  )
+})
+
+export const realAgent = (
   machine: MachineId,
   state: SubscriptionRef.SubscriptionRef<MachineState>,
   herdr: Layer.Layer<HerdrClient>,
   claudeRoots: readonly string[],
-) {
-  const server = yield* HttpServer.HttpServer
-  const dialHub = connect(AgentLink, AGENT_PATH, agentToken(machine)).pipe(
-    Effect.provideService(HttpServer.HttpServer, server),
-  )
-
-  return Layer.provide(
-    HubLink.layerWith(dialHub, hello),
-    Layer.provideMerge(
-      Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt(claudeRoots)),
-      [
-        MachineStateSync.layerTest(state),
-        CreatedPanes.layerTest(),
-        discardingAgentAudit,
-        herdr,
-        Layer.provide(GitBranches.layer, [BunFileSystem.layer, Path.layer]),
-        BunFileSystem.layer,
-        Path.layer,
-      ],
+) =>
+  agentOver(
+    machine,
+    Layer.mergeAll(
+      MachineStateSync.layerTest(state),
+      CreatedPanes.layerTest(),
+      discardingAgentAudit,
+      herdr,
+      Layer.provide(GitBranches.layer, [BunFileSystem.layer, Path.layer]),
+      BunFileSystem.layer,
+      Path.layer,
     ),
+    claudeRoots,
   )
-})

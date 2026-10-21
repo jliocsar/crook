@@ -48,8 +48,14 @@ import {
   WorktreeCreateMethod,
 } from '@crook/herdr/Methods'
 import {
+  agentInfo,
+  paneInfo,
+  sessionSnapshot,
+  tabInfo,
+  workspaceInfo,
+} from '@crook/herdr/RecordFixtures'
+import {
   type AgentInfo,
-  SessionSnapshot,
   WorkspaceInfo,
   WorkspaceWorktreeInfo,
   WorktreeInfo,
@@ -69,15 +75,7 @@ import {
   TaskNotDelivered,
 } from '@crook/protocol/Commands'
 
-import {
-  agentInfo,
-  agentRow,
-  executorWith,
-  machineStateWith,
-  paneInfo,
-  tabInfo,
-  workspaceInfo,
-} from './Fixtures'
+import { agentRow, executorWith, machineStateWith } from './Fixtures'
 
 const FIRST_ACTION = IdempotencyKey.make('6a0f3c2e-7d41-4b8a-9e15-2c7f0a9d3b61')
 const SECOND_ACTION = IdempotencyKey.make('0c5d8e21-4b3f-4a9e-8d17-5e2f9b6a1c40')
@@ -108,17 +106,7 @@ const snapshotOf = (
 ): ScriptedResponse =>
   scriptedResult(SessionSnapshotMethod, {
     type: 'session_snapshot',
-    snapshot: new SessionSnapshot({
-      version: '0.9.5',
-      protocol: 22,
-      focused_workspace_id: Option.none(),
-      focused_tab_id: Option.none(),
-      focused_pane_id: Option.none(),
-      workspaces,
-      tabs: [tabInfo],
-      panes: [],
-      agents,
-    }),
+    snapshot: sessionSnapshot(agents, [], { version: '0.9.5', workspaces }),
   })
 
 const workspaceAt = (folder: string) =>

@@ -60,8 +60,6 @@ const SpikeHookRecord = Schema.fromJsonString(
 
 const decodeHookPayload = Schema.decodeUnknownOption(HookPayload)
 
-export const spikeScreen = (name: string) => fixtureText(`spike-80/screens/${name}.txt`)
-
 export const spikeHooks = Effect.fn('spikeHooks')(function* (name: string) {
   const text = yield* fixtureText(`spike-80/hooks/${name}.hooks.jsonl`)
 

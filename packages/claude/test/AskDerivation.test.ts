@@ -28,10 +28,11 @@ import {
 } from '@crook/claude/HookPayload'
 import { firstUnmatchedToolUse } from '@crook/claude/LastTurn'
 import { dialogFingerprint, keysToSelect, parseDialog } from '@crook/claude/ScreenDialog'
+import { spikeScreen } from '@crook/claude/SpikeScreens'
 import { Ask } from '@crook/domain/Ask'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 
-import { platform, spikeHooks, spikeScreen, spikeTranscript } from './Fixtures'
+import { platform, spikeHooks, spikeTranscript } from './Fixtures'
 
 const NATIVE_SESSION = ClaudeSessionId.make('84f3659c-7fcf-4280-8580-b82ae5fd8f91')
 const QUESTION_SESSION = ClaudeSessionId.make('dec38383-2aff-4b84-9c66-50da3eeaf74c')

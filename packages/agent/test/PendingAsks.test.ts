@@ -22,6 +22,7 @@ import {
 import { PermissionRequestPayload, PreToolUsePayload } from '@crook/claude/HookPayload'
 import { LastTurn } from '@crook/claude/LastTurn'
 import { dialogFingerprint, parseDialog } from '@crook/claude/ScreenDialog'
+import { spikeScreen } from '@crook/claude/SpikeScreens'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import {
   type Ask,
@@ -34,8 +35,7 @@ import {
 import { AskId, ClaudeSessionId } from '@crook/domain/Ids'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
 import { HerdrConnectionClosed } from '@crook/herdr/HerdrClient'
-
-import { agentInfo, spikeScreenPath } from './Fixtures'
+import { agentInfo } from '@crook/herdr/RecordFixtures'
 
 const SESSION = ClaudeSessionId.make('84f3659c-7fcf-4280-8580-b82ae5fd8f91')
 const SESSION_OPTION = Option.some(SESSION)
@@ -111,16 +111,10 @@ const startAsks = Effect.fn('startAsks')(function* (
   return { asks: Context.get(context, PendingAsks), ledger, reads }
 })
 
-const screenText = Effect.fn('screenText')(function* (name: string) {
-  const fileSystem = yield* FileSystem.FileSystem
-
-  return yield* fileSystem.readFileString(spikeScreenPath(name))
-})
-
 layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) => {
   it.effect("reads a blocked agent's ask from its hook, with the options its dialog shows", () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const { asks } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some(screen)])
       const ask = yield* asks.askOf(BLOCKED, SESSION_OPTION, yield* asks.mark)
 
@@ -156,7 +150,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
 
   it.effect('reads the screen on every refresh, and keeps the ask while the dialog stays', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const { asks, reads } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some(screen)])
       const first = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
       const again = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
@@ -168,8 +162,8 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
 
   it.effect('follows a dialog that changes while herdr reports the same blocked episode', () =>
     Effect.gen(function* () {
-      const first = yield* screenText('40-parallel-blocked-1')
-      const second = yield* screenText('42-parallel-blocked-2')
+      const first = yield* spikeScreen('40-parallel-blocked-1')
+      const second = yield* spikeScreen('42-parallel-blocked-2')
       const { asks } = yield* startAsks([], [Option.some(first), Option.some(second)])
       const before = yield* asks.askOf(BLOCKED, Option.none(), 0)
       const after = yield* asks.askOf(BLOCKED, Option.none(), 0)
@@ -180,8 +174,8 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
 
   it.effect('gives the next queued dialog its own ask though it shows the same command', () =>
     Effect.gen(function* () {
-      const answered = yield* screenText('112-codemode6-zombie')
-      const next = yield* screenText('113-codemode6-zombie-declined')
+      const answered = yield* spikeScreen('112-codemode6-zombie')
+      const next = yield* spikeScreen('113-codemode6-zombie-declined')
       const { asks } = yield* startAsks([], [Option.some(answered), Option.some(next)])
       const before = yield* asks.askOf(BLOCKED, Option.none(), 0)
       const after = yield* asks.askOf(BLOCKED, Option.none(), 0)
@@ -195,7 +189,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
 
   it.effect('reads the screen again after a failed read instead of keeping what it lacked', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const { asks } = yield* startAsks(bashCall('toolu_01XXC3'), [
         Option.none(),
         Option.some(screen),
@@ -216,7 +210,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
 
   it.effect('forgets a declined permission once the agent is idle, but not while it works', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const { asks } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some(screen)])
       const mark = yield* asks.mark
 
@@ -280,7 +274,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
 
   it.effect('has no ask for an agent that is not blocked', () =>
     Effect.gen(function* () {
-      const screen = yield* screenText('12-native-bash-t20')
+      const screen = yield* spikeScreen('12-native-bash-t20')
       const { asks, reads } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some(screen)])
 
       expect(yield* asks.askOf(agentInfo(), SESSION_OPTION, 0)).toEqual(Option.none())

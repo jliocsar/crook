@@ -32,10 +32,9 @@ import {
   type HerdrSubscriptionError,
   HerdrUnreachable,
 } from '@crook/herdr/HerdrClient'
+import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from '@crook/herdr/RecordFixtures'
 import { type AgentInfo, type SessionSnapshot, TabInfo } from '@crook/herdr/Records'
 import { RECONNECT_CAP } from '@crook/protocol/AgentLink'
-
-import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from './Fixtures'
 
 interface FakeSubscription {
   readonly subscriptions: readonly Subscription[]
@@ -582,7 +581,7 @@ it.effect('drops a tab that vanished with only the pane_exited of its last pane'
     const twoTabs = sessionSnapshot(
       [agentInfo()],
       [paneInfo(), paneInfo({ pane_id: 'w1:p7', terminal_id: 'term_7', tab_id: 'w1:t4' })],
-      [tabInfo, exitTestTab],
+      { tabs: [tabInfo, exitTestTab] },
     )
     const { sync, subscriptions, answerRead } = yield* startSync(twoTabs)
     const subscription = yield* Queue.take(subscriptions)
