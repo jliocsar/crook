@@ -8,11 +8,17 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
 
-import { type AgentRow, StateChangeSeq, agentTitleOrPane, seenMarkOf } from '@crook/domain/AgentRow'
+import {
+  type AgentRow,
+  StateChangeSeq,
+  agentTitleOrPane,
+  isSameSeenMark,
+  seenMarkOf,
+} from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { type GlobalPaneId, MachineId, PaneId, TerminalId, toGlobalPaneId } from '@crook/domain/Ids'
 import { type MachineState, isHerdrLost, isResync } from '@crook/domain/MachineState'
-import type { NotificationPrefs } from '@crook/domain/Notifications'
+import { NotificationEvent, type NotificationPrefs } from '@crook/domain/Notifications'
 
 import {
   HARK_IDEMPOTENCY_KEY_LIMIT,
@@ -28,7 +34,7 @@ export type NotificationStep = Data.TaggedEnum<{
   Drop: { readonly wanted: WantedNotification }
 }>
 
-export const PlainNotificationEvent = Schema.Literals(['questions', 'finished'])
+export const PlainNotificationEvent = NotificationEvent.pick(['questions', 'finished'])
 export type PlainNotificationEvent = typeof PlainNotificationEvent.Type
 
 export class WantedNotification extends Schema.Class<WantedNotification>('WantedNotification')({
@@ -134,16 +140,21 @@ const wantedFor = (
   })
 }
 
+const hasMovedOn = (before: AgentRow, row: AgentRow) => {
+  const status = settledStatus(before)
+
+  return (
+    status !== 'unknown' &&
+    (status !== row.status || !isSameSeenMark(seenMarkOf(before), seenMarkOf(row)))
+  )
+}
+
 const raisedEvent = (previous: MachineState, row: AgentRow) =>
   pipe(
     Option.liftPredicate(row, (candidate) => Option.isNone(candidate.beforeHandoff)),
     Option.flatMap((candidate) => eventOfStatus(candidate.status)),
     Option.filter(() =>
-      Option.exists(rowIn(previous, row.pane), (before) => {
-        const status = settledStatus(before)
-
-        return status !== 'unknown' && status !== row.status
-      }),
+      Option.exists(rowIn(previous, row.pane), (before) => hasMovedOn(before, row)),
     ),
   )
 
@@ -184,13 +195,7 @@ export const isStillWanted = (
         return true
       }
 
-      const mark = seenMarkOf(row)
-
-      return (
-        row.status === statusOfEvent(wanted.event) &&
-        mark.terminal === wanted.terminal &&
-        mark.stateChangeSeq === wanted.stateChangeSeq
-      )
+      return row.status === statusOfEvent(wanted.event) && isSameSeenMark(seenMarkOf(row), wanted)
     },
   })
 }
@@ -203,7 +208,6 @@ export const afterPublish = (
     readonly next: MachineState
     readonly seen: HashSet.HashSet<PaneId>
   },
-  prefs: NotificationPrefs,
 ): NotificationsByPane<WantedNotification> => {
   const kept = HashMap.filter(
     wanted,
@@ -218,7 +222,6 @@ export const afterPublish = (
 
   return pipe(
     raised,
-    Arr.filter((notification) => prefs[notification.event]),
     Arr.reduce(kept, (byPane, notification) =>
       HashMap.set(byPane, notificationKey(notification), notification),
     ),

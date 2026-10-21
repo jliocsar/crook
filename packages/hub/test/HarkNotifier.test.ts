@@ -24,6 +24,7 @@ import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
 import { SentNotification } from '@crook/hub/NotificationPlan'
 import { NotificationStore } from '@crook/hub/NotificationStore'
+import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 import { HarkNotConfigured, HarkReachedNoDevice } from '@crook/protocol/Hark'
 
 import { PANE, agentRow, hello } from './Fixtures'
@@ -92,7 +93,12 @@ const notifierOver = (
 ) =>
   Layer.provideMerge(
     HarkNotifier.layerWithoutDependencies,
-    Layer.mergeAll(Herd.layer, HarkClient.layerWithoutDependencies, NotificationStore.layer),
+    Layer.mergeAll(
+      Herd.layer,
+      HarkClient.layerWithoutDependencies,
+      NotificationStore.layer,
+      SeenTracker.layer,
+    ),
   ).pipe(Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]))
 
 const withNotifier = Effect.fn('withNotifier')(function* (
@@ -105,6 +111,7 @@ const withNotifier = Effect.fn('withNotifier')(function* (
     herd: Context.get(context, Herd),
     notifier: Context.get(context, HarkNotifier),
     store: Context.get(context, NotificationStore),
+    seenTracker: Context.get(context, SeenTracker),
   }))
 
   return { calls: hark.calls, start }
@@ -149,6 +156,27 @@ it.effect('withdraws Finished when herdr turns done into idle without a new sequ
 
     expect(withdrawal.url).toBe(WITHDRAW_URL)
   }).pipe(Effect.scoped),
+)
+
+it.effect(
+  'withdraws a question and asks again when a new one follows with nothing published between',
+  () =>
+    Effect.gen(function* () {
+      const { calls, start } = yield* withNotifier(acceptingHark)
+      const { herd } = yield* start
+
+      yield* herd.publish(LAPTOP, stateAt(1, 'working', 4))
+      yield* herd.publish(LAPTOP, stateAt(2, 'blocked', 5))
+      yield* nextCall(calls)
+      yield* herd.publish(LAPTOP, stateAt(3, 'blocked', 7))
+      const withdrawal = yield* nextCall(calls)
+      const askedAgain = yield* nextCall(calls)
+
+      expect(withdrawal.url).toBe(WITHDRAW_URL)
+      expect(askedAgain.idempotencyKey).toEqual(
+        Option.some('crook/laptop/w1:p1/term_1/7/questions'),
+      )
+    }).pipe(Effect.scoped),
 )
 
 const onlySecondAgentNotified = Effect.fn('onlySecondAgentNotified')(function* (
@@ -335,6 +363,43 @@ it.effect('withdraws at startup what it sent for a machine no longer in the herd
     const withdrawal = yield* nextCall(calls)
 
     expect(withdrawal.url).toBe('https://hark.ryan.ceo/api/agent/notifications/anot_desk/withdraw')
+  }).pipe(Effect.scoped),
+)
+
+it.effect('withdraws at startup what was seen in crook before the hub could withdraw it', () =>
+  Effect.gen(function* () {
+    const { calls, start } = yield* withNotifier(acceptingHark)
+    const seenBeforeRestart = new SentNotification({
+      machine: LAPTOP,
+      pane: PANE,
+      event: 'finished',
+      terminal: TerminalId.make('term_1'),
+      stateChangeSeq: 7,
+      title: TITLE,
+      body: 'Finished · laptop / crook',
+      harkId: HarkNotificationId.make('anot_seen'),
+    })
+
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const { herd, store, seenTracker } = yield* start
+
+        yield* herd.publish(LAPTOP, stateAt(1, 'done', 7))
+        yield* store.rememberSent(seenBeforeRestart)
+        yield* seenTracker.mark(
+          new SeenRecord({
+            machine: LAPTOP,
+            pane: PANE,
+            terminal: TerminalId.make('term_1'),
+            stateChangeSeq: 7,
+          }),
+        )
+      }),
+    )
+    yield* start
+    const withdrawal = yield* nextCall(calls)
+
+    expect(withdrawal.url).toBe('https://hark.ryan.ceo/api/agent/notifications/anot_seen/withdraw')
   }).pipe(Effect.scoped),
 )
 

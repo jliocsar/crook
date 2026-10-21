@@ -30,11 +30,11 @@ import {
   HarkServerFailed,
   HarkStillProcessing,
   HarkUnreachable,
+  STATUS_NO_DEVICE_ACCEPTED,
 } from '@crook/protocol/Hark'
 
 const STATUS_STILL_PROCESSING = 202
 const STATUS_TOO_MANY_REQUESTS = 429
-const STATUS_NO_DEVICE_TOOK_WITHDRAWAL = 502
 const HARK_API_URL = 'https://hark.ryan.ceo/api/agent'
 const HARK_PROJECT = 'crook'
 const HARK_REQUESTS_PER_WINDOW = 60
@@ -84,7 +84,12 @@ const secondsOfRetryAfter = (value: string, now: DateTime.Utc) =>
     Option.orElse(() =>
       Option.map(DateTime.make(value), (date) => Duration.toSeconds(DateTime.distance(now, date))),
     ),
-    Option.map((seconds) => Math.max(0, Math.ceil(seconds))),
+    Option.map((seconds) =>
+      Num.clamp(Math.ceil(seconds), {
+        minimum: 0,
+        maximum: Duration.toSeconds(HARK_RATE_WINDOW),
+      }),
+    ),
   )
 
 const retryAfterOf = Effect.fn('HarkClient.retryAfterOf')(function* (
@@ -235,7 +240,7 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
       HttpClientResponse.matchStatus({
         '2xx': () => Effect.void,
         [STATUS_TOO_MANY_REQUESTS]: rateLimited,
-        [STATUS_NO_DEVICE_TOOK_WITHDRAWAL]: refused,
+        [STATUS_NO_DEVICE_ACCEPTED]: refused,
         '5xx': serverFailed,
         orElse: refused,
       }),

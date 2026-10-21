@@ -4,7 +4,6 @@ import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as Equivalence from 'effect/Equivalence'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
@@ -18,7 +17,7 @@ import type { SqlError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { type SeenMark, seenMarkOf } from '@crook/domain/AgentRow'
+import { type SeenMark, isSameSeenMark, seenMarkOf } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
@@ -190,11 +189,6 @@ const detached = (entry: MachineEntry, now: DateTime.Utc): MachineEntry =>
         lastSeenAt: now,
       }
 
-const isSameMark: Equivalence.Equivalence<SeenMark> = Equivalence.Struct({
-  terminal: Equivalence.String,
-  stateChangeSeq: Equivalence.Number,
-})
-
 const published = (state: MachineState) => {
   const currentMarks = HashMap.fromIterable(
     Arr.map(state.agents, (row): [PaneId, SeenMark] => [row.pane, seenMarkOf(row)]),
@@ -206,7 +200,7 @@ const published = (state: MachineState) => {
     herdrVersion: Option.some(state.herdrVersion),
     state: Option.some(state),
     seen: HashMap.filter(entry.seen, (mark, pane) =>
-      Option.exists(HashMap.get(currentMarks, pane), (current) => isSameMark(mark, current)),
+      Option.exists(HashMap.get(currentMarks, pane), (current) => isSameSeenMark(mark, current)),
     ),
   })
 }

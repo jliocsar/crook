@@ -12,6 +12,7 @@ import type { SqlError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import { isSameSeenMark } from '@crook/domain/AgentRow'
 import { type NotificationEvent, NotificationSettings, withPref } from '@crook/domain/Notifications'
 import {
   type HarkFailure,
@@ -20,7 +21,12 @@ import {
 } from '@crook/protocol/Hark'
 
 import { logStorageFailure } from '@crook/hub/Database'
-import { HarkClient, HarkNotification, type HarkNotificationId } from '@crook/hub/HarkClient'
+import {
+  HARK_REQUEST_SPACING,
+  HarkClient,
+  HarkNotification,
+  type HarkNotificationId,
+} from '@crook/hub/HarkClient'
 import { type HerdChange, Herd } from '@crook/hub/Herd'
 import {
   type NotificationStep,
@@ -37,8 +43,10 @@ import {
   notificationKey,
 } from '@crook/hub/NotificationPlan'
 import { NotificationStore } from '@crook/hub/NotificationStore'
+import { type SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 
 const HARK_OUTAGE_PAUSE = Duration.seconds(60)
+const PAUSE_AFTER_HUB_BUG = HARK_REQUEST_SPACING
 
 export const TEST_NOTIFICATION = new HarkNotification({
   title: 'crook',
@@ -67,16 +75,29 @@ const byPane = <Notification extends WantedNotification>(
     Arr.map(notifications, (notification) => [notificationKey(notification), notification]),
   )
 
+const isSeenIn = (marks: readonly SeenRecord[]) => (notification: WantedNotification) =>
+  Arr.some(
+    marks,
+    (mark) =>
+      mark.machine === notification.machine &&
+      mark.pane === notification.pane &&
+      isSameSeenMark(mark, notification),
+  )
+
 const gaveUpOnBug = (what: string) => `The hub gave up on ${what} because of a bug in the hub.`
 
 const make = Effect.gen(function* () {
   const hark = yield* HarkClient
   const store = yield* NotificationStore
   const herd = yield* Herd
+  const seenTracker = yield* SeenTracker
   const prefs = yield* SubscriptionRef.make(yield* store.prefs)
   const sentAtStart = yield* store.sent
+  const isSeenAtStart = isSeenIn(yield* seenTracker.all)
   const stillInHerd = yield* Effect.filter(sentAtStart, (notification) =>
-    Effect.isSuccess(herd.requireMachine(notification.machine)),
+    isSeenAtStart(notification)
+      ? Effect.succeed(false)
+      : Effect.isSuccess(herd.requireMachine(notification.machine)),
   )
   const sent = yield* Ref.make(byPane(sentAtStart))
   const wanted = yield* SubscriptionRef.make<NotificationsByPane<WantedNotification>>(
@@ -85,15 +106,13 @@ const make = Effect.gen(function* () {
   const abandoned = yield* Ref.make(HashSet.empty<string>())
 
   const followHerd = (change: HerdChange) =>
-    Effect.flatMap(SubscriptionRef.get(prefs), (current) =>
-      SubscriptionRef.update(wanted, (notifications) =>
-        Match.value(change).pipe(
-          Match.tagsExhaustive({
-            MachinePublished: (published) => afterPublish(notifications, published, current),
-            PaneSeen: (seen) => afterSeen(notifications, seen.machine, seen.pane),
-            MachineForgotten: (forgotten) => afterForgotten(notifications, forgotten.machine),
-          }),
-        ),
+    SubscriptionRef.update(wanted, (notifications) =>
+      Match.value(change).pipe(
+        Match.tagsExhaustive({
+          MachinePublished: (published) => afterPublish(notifications, published),
+          PaneSeen: (seen) => afterSeen(notifications, seen.machine, seen.pane),
+          MachineForgotten: (forgotten) => afterForgotten(notifications, forgotten.machine),
+        }),
       ),
     ).pipe(
       Effect.catchDefect((defect) => Effect.logError(gaveUpOnBug('a change in the herd'), defect)),
@@ -220,9 +239,9 @@ const make = Effect.gen(function* () {
   }).pipe(
     Effect.catchDefect((defect) =>
       Effect.logError(
-        `The hub's notifier hit a bug and pauses ${Duration.format(HARK_OUTAGE_PAUSE)} before its next step.`,
+        `The hub's notifier hit a bug and pauses ${Duration.format(PAUSE_AFTER_HUB_BUG)} before its next step.`,
         defect,
-      ).pipe(Effect.andThen(Effect.sleep(HARK_OUTAGE_PAUSE)), Effect.as(true)),
+      ).pipe(Effect.andThen(Effect.sleep(PAUSE_AFTER_HUB_BUG)), Effect.as(true)),
     ),
   )
 
@@ -278,6 +297,6 @@ export class HarkNotifier extends Context.Service<
   static readonly layerWithoutDependencies = Layer.effect(this, make)
 
   static readonly layer = this.layerWithoutDependencies.pipe(
-    Layer.provide([HarkClient.layer, NotificationStore.layer]),
+    Layer.provide([HarkClient.layer, NotificationStore.layer, SeenTracker.layer]),
   )
 }

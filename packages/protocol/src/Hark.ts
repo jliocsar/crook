@@ -4,7 +4,8 @@ import * as Schema from 'effect/Schema'
 
 const STATUS_UNAUTHORIZED = 401
 const STATUS_FORBIDDEN = 403
-const STATUS_BAD_GATEWAY = 502
+
+export const STATUS_NO_DEVICE_ACCEPTED = 502
 
 const refusalHint = (status: number) =>
   Match.value(status).pipe(
@@ -19,7 +20,7 @@ const refusalHint = (status: number) =>
         'The token lacks the notifications:send scope: make a new agent token that has it and set CROOK_HUB_HARK_TOKEN on the hub to it.',
     ),
     Match.when(
-      STATUS_BAD_GATEWAY,
+      STATUS_NO_DEVICE_ACCEPTED,
       () =>
         'No phone accepted the removal, so the notification may stay on the lock screen until it is cleared there.',
     ),

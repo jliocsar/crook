@@ -1,3 +1,4 @@
+import * as Equivalence from 'effect/Equivalence'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
@@ -39,6 +40,11 @@ export const seenMarkOf = (row: AgentRow): SeenMark =>
     onNone: () => ({ terminal: row.terminal, stateChangeSeq: row.stateChangeSeq }),
     onSome: (before) => ({ terminal: before.terminal, stateChangeSeq: before.stateChangeSeq }),
   })
+
+export const isSameSeenMark: Equivalence.Equivalence<SeenMark> = Equivalence.Struct({
+  terminal: Equivalence.String,
+  stateChangeSeq: Equivalence.Number,
+})
 
 export const agentTitle = (row: AgentRow): string => Option.getOrElse(row.label, () => row.title)
 

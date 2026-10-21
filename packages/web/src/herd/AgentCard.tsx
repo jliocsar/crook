@@ -2,8 +2,8 @@ import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 
-import { StatusWord } from '@crook/web/components/StatusWord'
 import { agentTitleOrPane } from '@crook/domain/AgentRow'
+import { StatusWord } from '@crook/web/components/StatusWord'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 

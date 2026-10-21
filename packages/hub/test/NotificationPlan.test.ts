@@ -133,7 +133,7 @@ describe('raisedBetween', () => {
     ])
   })
 
-  it('raises nothing across a resync, while herdr is lost, or for a status that did not change', () => {
+  it('raises nothing across a resync, while herdr is lost, or for a state that did not change', () => {
     const working = stateWith([rowWith('working', 6)])
 
     expect(
@@ -144,7 +144,7 @@ describe('raisedBetween', () => {
     ).toEqual([])
     expect(
       raisedBetween(
-        stateWith([rowWith('blocked', 6)]),
+        stateWith([rowWith('blocked', 7)]),
         stateWith([rowWith('blocked', 7)]),
         'laptop',
       ),
@@ -153,6 +153,28 @@ describe('raisedBetween', () => {
     expect(
       raisedBetween(stateWith([rowWith('unknown', 0)]), stateWith([rowWith('done', 1)]), 'laptop'),
     ).toEqual([])
+  })
+
+  it('raises again for a new state of the same status, as when the one between was never published', () => {
+    const askedAgain = raisedBetween(
+      stateWith([rowWith('blocked', 5)]),
+      stateWith([rowWith('blocked', 7)]),
+      'laptop',
+    )
+    const finishedAgain = raisedBetween(
+      stateWith([rowWith('done', 5)]),
+      stateWith([rowWith('done', 7)]),
+      'laptop',
+    )
+
+    expect(askedAgain).toEqual([
+      new WantedNotification({
+        ...FINISHED_FIELDS,
+        event: 'questions',
+        body: 'Has a question · laptop / crook',
+      }),
+    ])
+    expect(finishedAgain).toEqual([finished])
   })
 
   it('judges a handoff re-detection against the status from before the handoff', () => {
@@ -191,21 +213,16 @@ describe('isStillWanted', () => {
 })
 
 describe('afterPublish and afterSeen', () => {
-  it('raises only the events whose switch is on, and drops what was seen', () => {
+  it('raises what the publish brought, and drops what was seen', () => {
     const change = {
       machineLabel: 'laptop',
       previous: Option.some(stateWith([rowWith('working', 6)])),
       next: stateWith([rowWith('done', 7)]),
       seen: noneSeen,
     }
-    const raised = afterPublish(HashMap.empty(), change, defaultNotificationPrefs)
-    const muted = afterPublish(HashMap.empty(), change, {
-      ...defaultNotificationPrefs,
-      finished: false,
-    })
+    const raised = afterPublish(HashMap.empty(), change)
 
     expect(HashMap.toValues(raised)).toEqual([finished])
-    expect(HashMap.size(muted)).toBe(0)
     expect(HashMap.size(afterSeen(raised, LAPTOP, PANE))).toBe(0)
   })
 

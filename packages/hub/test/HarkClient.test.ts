@@ -146,7 +146,7 @@ it.effect('tells a passing failure on Hark side and a request still in flight fr
   }).pipe(Effect.scoped),
 )
 
-it.effect('reads Retry-After as whole seconds in either form HTTP allows, rounding up', () =>
+it.effect('reads Retry-After as whole seconds in either form HTTP allows, at most the window', () =>
   Effect.gen(function* () {
     const limitedFor = (retryAfter: string) =>
       withHarkClient(() => ({
@@ -157,6 +157,8 @@ it.effect('reads Retry-After as whole seconds in either form HTTP allows, roundi
     const fractional = yield* limitedFor('1.5')
     const dated = yield* limitedFor('Thu, 01 Jan 1970 00:01:00 GMT')
     const garbled = yield* limitedFor('soon')
+    const absurd = yield* limitedFor('1e16')
+    const farOff = yield* limitedFor('Fri, 31 Dec 9999 23:59:59 GMT')
 
     expect(yield* Effect.flip(fractional.client.send(FINISHED))).toEqual(
       new HarkRateLimited({ retryAfterSeconds: Option.some(2) }),
@@ -166,6 +168,12 @@ it.effect('reads Retry-After as whole seconds in either form HTTP allows, roundi
     )
     expect(yield* Effect.flip(garbled.client.send(FINISHED))).toEqual(
       new HarkRateLimited({ retryAfterSeconds: Option.none() }),
+    )
+    expect(yield* Effect.flip(absurd.client.send(FINISHED))).toEqual(
+      new HarkRateLimited({ retryAfterSeconds: Option.some(60) }),
+    )
+    expect(yield* Effect.flip(farOff.client.send(FINISHED))).toEqual(
+      new HarkRateLimited({ retryAfterSeconds: Option.some(60) }),
     )
   }).pipe(Effect.scoped),
 )
