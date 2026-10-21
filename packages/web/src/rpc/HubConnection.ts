@@ -11,14 +11,17 @@ import * as Socket from 'effect/socket/Socket'
 
 import type { HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { NotificationEvent, NotificationSettings } from '@crook/domain/Notifications'
 import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import type {
+  HubAccount,
   HubStorageFailed,
   MachineNotInHerd,
   MachineStillConnected,
   PaneNotInHerd,
 } from '@crook/protocol/ClientApi'
+import type { TestNotificationFailure } from '@crook/protocol/Hark'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
@@ -39,6 +42,13 @@ export interface HubCalls {
   readonly forgetMachine: (
     machine: MachineId,
   ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed>
+  readonly watchNotificationSettings: Stream.Stream<NotificationSettings, HubCallFailed>
+  readonly setNotificationPref: (
+    event: NotificationEvent,
+    enabled: boolean,
+  ) => Effect.Effect<void, HubStorageFailed | HubCallFailed>
+  readonly sendTestNotification: Effect.Effect<void, TestNotificationFailure | HubCallFailed>
+  readonly account: Effect.Effect<HubAccount, HubCallFailed>
 }
 
 const SECURE_PAGE_PROTOCOL = 'https:'
@@ -85,6 +95,12 @@ const hubCall = <Success, Failure>(call: Effect.Effect<Success, Failure | RpcCli
     Effect.catchDefect((cause) => Effect.fail(callDefected(cause))),
   )
 
+const hubStream = <Success, Failure>(stream: Stream.Stream<Success, Failure | RpcClientError>) =>
+  stream.pipe(
+    Stream.catchIf(Schema.is(RpcClientError), (error) => Stream.fail(connectionLost(error))),
+    Stream.catchDefect((cause) => Stream.fail(callDefected(cause))),
+  )
+
 export const callsFrom = (client: ClientApiClient): HubCalls => ({
   watchHerd: client.WatchHerd().pipe(
     Stream.mapError(connectionLost),
@@ -92,6 +108,10 @@ export const callsFrom = (client: ClientApiClient): HubCalls => ({
   ),
   markSeen: (machine, pane) => hubCall(client.MarkSeen({ machine, pane })),
   forgetMachine: (machine) => hubCall(client.ForgetMachine({ machine })),
+  watchNotificationSettings: hubStream(client.WatchNotificationSettings()),
+  setNotificationPref: (event, enabled) => hubCall(client.SetNotificationPref({ event, enabled })),
+  sendTestNotification: hubCall(client.SendTestNotification()),
+  account: hubCall(client.GetAccount()),
 })
 
 export const connectTo = (url: URL): Effect.Effect<HubCalls, never, Scope.Scope> =>

@@ -20,6 +20,7 @@ const cacheOverMemory = Effect.fn('cacheOverMemory')(function* (initial: Option.
     HerdCache.layerOver({
       read: Effect.map(Ref.get(stored), Option.getOrUndefined),
       write: (value) => Ref.set(stored, Option.some(structuredClone(value))),
+      remove: Ref.set(stored, Option.none()),
     }),
   )
 
@@ -39,6 +40,17 @@ describe('HerdCache', () => {
     }),
   )
 
+  it.effect('forgets the saved snapshot on clear', () =>
+    Effect.gen(function* () {
+      const { cache } = yield* cacheOverMemory(Option.none())
+
+      yield* cache.save(snapshot)
+      yield* cache.clear
+
+      expect(yield* cache.load).toEqual(Option.none())
+    }),
+  )
+
   it.effect('ignores a cached herd from an older build', () =>
     Effect.gen(function* () {
       const { cache } = yield* cacheOverMemory(Option.some({ machines: [], syncedAt: 0 }))
@@ -48,18 +60,23 @@ describe('HerdCache', () => {
   )
 
   it.effect(
-    'opens with no snapshot and keeps saving quietly when the browser refuses storage',
+    'opens with no snapshot and keeps saving and clearing quietly when the browser refuses storage',
     () =>
       Effect.gen(function* () {
         const refused = new HerdCacheUnavailable({ cause: 'quota exceeded' })
         const context = yield* Layer.build(
-          HerdCache.layerOver({ read: Effect.fail(refused), write: () => Effect.fail(refused) }),
+          HerdCache.layerOver({
+            read: Effect.fail(refused),
+            write: () => Effect.fail(refused),
+            remove: Effect.fail(refused),
+          }),
         )
         const cache = Context.get(context, HerdCache)
 
         expect(yield* cache.load).toEqual(Option.none())
 
         yield* cache.save(snapshot)
+        yield* cache.clear
       }),
   )
 })

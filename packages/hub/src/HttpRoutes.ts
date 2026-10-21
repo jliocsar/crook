@@ -22,7 +22,7 @@ import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import { Herd } from '@crook/hub/Herd'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
-import { ClientApi, HubStorageFailed } from '@crook/protocol/ClientApi'
+import { ClientApi, HubAccount, HubStorageFailed } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
@@ -100,6 +100,7 @@ const routes = Effect.gen(function* () {
       SetNotificationPref: ({ event, enabled }) =>
         notifier.setPref(event, enabled).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
       SendTestNotification: () => notifier.sendTest,
+      GetAccount: () => Effect.succeed(new HubAccount({ email: actor })),
     }).pipe(
       Effect.flatMap((handlers) =>
         RpcServer.toHttpEffectWebsocket(ClientApi).pipe(Effect.flatten, Effect.provide(handlers)),

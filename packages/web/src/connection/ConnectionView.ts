@@ -13,6 +13,7 @@ export interface ConnectionView {
   readonly canAct: boolean
   readonly controlsEnabled: boolean
   readonly expired: boolean
+  readonly loggedOut: boolean
   readonly syncedAt: Option.Option<DateTime.Utc>
 }
 
@@ -23,6 +24,7 @@ export const STARTING_VIEW: ConnectionView = {
   canAct: false,
   controlsEnabled: false,
   expired: false,
+  loggedOut: false,
   syncedAt: Option.none(),
 }
 
@@ -52,6 +54,7 @@ export const connectionView = (state: HubLinkState): ConnectionView => {
     }),
     Offline: (): ConnectionView => ({ ...base, notice: Option.some('offline'), stale: true }),
     Expired: (): ConnectionView => ({ ...base, stale: true, expired: true }),
+    LoggedOut: (): ConnectionView => ({ ...base, stale: true, loggedOut: true }),
   })
 }
 

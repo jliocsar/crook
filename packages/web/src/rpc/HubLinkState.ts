@@ -14,6 +14,7 @@ export type LinkStatus = Data.TaggedEnum<{
   Unreachable: Record<never, never>
   Offline: Record<never, never>
   Expired: Record<never, never>
+  LoggedOut: Record<never, never>
 }>
 
 export const LinkStatus = Data.taggedEnum<LinkStatus>()
@@ -41,6 +42,7 @@ export const beginAttempt = LinkStatus.$match({
   Offline: (): LinkStatus =>
     LinkStatus.Dialing({ announced: true, afterFailure: true, coldStart: false }),
   Expired: (expired): LinkStatus => expired,
+  LoggedOut: (loggedOut): LinkStatus => loggedOut,
 })
 
 export const announce = LinkStatus.$match({
@@ -50,6 +52,7 @@ export const announce = LinkStatus.$match({
   Unreachable: (unreachable): LinkStatus => unreachable,
   Offline: (offline): LinkStatus => offline,
   Expired: (expired): LinkStatus => expired,
+  LoggedOut: (loggedOut): LinkStatus => loggedOut,
 })
 
 export const goLive = LinkStatus.$match({
@@ -58,6 +61,7 @@ export const goLive = LinkStatus.$match({
   Unreachable: (): LinkStatus => LinkStatus.Live({ recovered: true }),
   Offline: (): LinkStatus => LinkStatus.Live({ recovered: true }),
   Expired: (): LinkStatus => LinkStatus.Live({ recovered: false }),
+  LoggedOut: (loggedOut): LinkStatus => loggedOut,
 })
 
 export const settleRecovered = LinkStatus.$match({
@@ -66,6 +70,7 @@ export const settleRecovered = LinkStatus.$match({
   Unreachable: (unreachable): LinkStatus => unreachable,
   Offline: (offline): LinkStatus => offline,
   Expired: (expired): LinkStatus => expired,
+  LoggedOut: (loggedOut): LinkStatus => loggedOut,
 })
 
 export const isRecovering = LinkStatus.$match({
@@ -74,6 +79,7 @@ export const isRecovering = LinkStatus.$match({
   Unreachable: () => false,
   Offline: () => false,
   Expired: () => false,
+  LoggedOut: () => false,
 })
 
 export const settledSince =
@@ -86,4 +92,5 @@ export const settledSince =
       Unreachable: () => true,
       Offline: () => true,
       Expired: () => true,
+      LoggedOut: () => true,
     })

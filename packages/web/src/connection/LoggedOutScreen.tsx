@@ -5,7 +5,22 @@ import { Button } from '@crook/web/components/ui/button'
 import { EmptyStateIcon } from '@crook/web/components/ui/empty-state'
 import { COLUMN_MAX_WIDTH } from '@crook/web/navigation/Column'
 
-export function LoggedOutScreen({ onLogIn }: { onLogIn: () => void }) {
+export interface LoggedOutCopy {
+  readonly title: string
+  readonly body: string
+}
+
+export const SESSION_EXPIRED: LoggedOutCopy = {
+  title: 'Your session expired',
+  body: 'Your agents kept running. Log in again to see them.',
+}
+
+export const LOGGED_OUT: LoggedOutCopy = {
+  title: "You're logged out",
+  body: 'Your agents are still running. Log in to see them again.',
+}
+
+export function LoggedOutScreen({ copy, onLogIn }: { copy: LoggedOutCopy; onLogIn: () => void }) {
   const heading = React.useRef<HTMLHeadingElement>(null)
 
   React.useEffect(() => {
@@ -21,11 +36,9 @@ export function LoggedOutScreen({ onLogIn }: { onLogIn: () => void }) {
         <LogIn className="size-5" />
       </EmptyStateIcon>
       <h1 ref={heading} tabIndex={-1} className="text-base font-medium outline-none">
-        Your session expired
+        {copy.title}
       </h1>
-      <p className="text-muted-foreground max-w-[42ch] text-sm leading-relaxed">
-        Your agents kept running. Log in again to see them.
-      </p>
+      <p className="text-muted-foreground max-w-[42ch] text-sm leading-relaxed">{copy.body}</p>
       <Button size="touch" className="mt-2 text-base" onClick={onLogIn}>
         Log in with exe.dev
       </Button>

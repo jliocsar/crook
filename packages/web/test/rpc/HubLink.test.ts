@@ -12,7 +12,9 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
+import { defaultNotificationPrefs, NotificationSettings } from '@crook/domain/Notifications'
 import { AGENT_PING_INTERVAL, HUB_RECONNECT_BASE } from '@crook/protocol/AgentLink'
+import { HubAccount } from '@crook/protocol/ClientApi'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { connectionView } from '@crook/web/connection/ConnectionView'
 import { HubCallDefected, HubConnectionLost } from '@crook/web/rpc/HubConnection'
@@ -24,10 +26,10 @@ import {
 } from '@crook/web/rpc/HubLink'
 import { COLD_START, LinkStatus, QUIET_DIALING } from '@crook/web/rpc/HubLinkState'
 import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
-import { SESSION_CHECK_TIMEOUT } from '@crook/web/rpc/SessionCheck'
+import { LogOutRefused, SESSION_CHECK_TIMEOUT } from '@crook/web/rpc/SessionCheck'
 
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
-import { dropSession, makeFakeBrowser } from '../HubFakes.ts'
+import { dropSession, makeFakeBrowser, OWNER_EMAIL, readySettings } from '../HubFakes.ts'
 import type { FakeSession } from '../HubFakes.ts'
 
 const SETTLE_STEPS = 50
@@ -336,6 +338,115 @@ describe('HubLink', () => {
       const exit = watching.pollUnsafe()
 
       expect(exit !== undefined && Exit.hasDies(exit)).toBe(true)
+    }),
+  )
+
+  it.effect('follows the notification switches across a reconnect, never failing on a drop', () =>
+    Effect.gen(function* () {
+      const { link, nextSession, settle } = yield* start()
+      const watched = yield* Ref.make<readonly NotificationSettings[]>([])
+      const noToken = new NotificationSettings({
+        prefs: { ...defaultNotificationPrefs, finished: false },
+        delivery: 'noToken',
+      })
+
+      yield* link.notificationSettings.pipe(
+        Stream.runForEach((settings) => Ref.update(watched, (all) => [...all, settings])),
+        Effect.forkScoped,
+      )
+      const first = yield* nextSession
+
+      yield* Queue.offer(first.views, liveView)
+      yield* settle
+      yield* Queue.offer(first.settings, readySettings)
+      yield* settle
+      yield* dropSession(first, refused)
+      yield* TestClock.adjust(HUB_RECONNECT_BASE)
+      const second = yield* nextSession
+
+      yield* Queue.offer(second.views, liveView)
+      yield* settle
+      yield* Queue.offer(second.settings, noToken)
+      yield* settle
+
+      expect(yield* Ref.get(watched)).toEqual([readySettings, noToken])
+    }),
+  )
+
+  it.effect('reads the account once the connection is live', () =>
+    Effect.gen(function* () {
+      const { link, nextSession, settle } = yield* start()
+      const account = yield* Effect.forkChild(link.account.pipe(Stream.runHead))
+      const session = yield* nextSession
+
+      yield* Queue.offer(session.views, liveView)
+      yield* settle
+
+      expect(account.pollUnsafe()).toEqual(
+        Exit.succeed(Option.some(new HubAccount({ email: OWNER_EMAIL }))),
+      )
+    }),
+  )
+
+  it.effect('writes a switch and sends a test only over a live connection', () =>
+    Effect.gen(function* () {
+      const { browser, link, nextSession, settle } = yield* start()
+      const session = yield* nextSession
+      const prefBeforeTheHerd = yield* Effect.flip(link.setNotificationPref('finished', false))
+      const testBeforeTheHerd = yield* Effect.flip(link.sendTestNotification)
+
+      yield* Queue.offer(session.views, liveView)
+      yield* settle
+      yield* link.setNotificationPref('finished', false)
+      yield* link.sendTestNotification
+
+      expect(prefBeforeTheHerd).toBeInstanceOf(HubNotConnected)
+      expect(testBeforeTheHerd).toBeInstanceOf(HubNotConnected)
+      expect(yield* Ref.get(browser.prefWrites)).toEqual([{ event: 'finished', enabled: false }])
+    }),
+  )
+
+  it.effect('logs out: ends the exe.dev session, closes the socket and forgets the herd', () =>
+    Effect.gen(function* () {
+      const { browser, link, current, nextSession, settle } = yield* start()
+      const session = yield* nextSession
+
+      yield* Queue.offer(session.views, liveView)
+      yield* current
+      yield* link.logOut
+      const state = yield* current
+
+      expect(state.status).toEqual(LinkStatus.LoggedOut())
+      expect(state.herd).toEqual(Option.none())
+      expect(yield* Ref.get(browser.logOuts)).toBe(1)
+      expect(yield* Ref.get(browser.closed)).toBe(1)
+      expect(yield* Ref.get(browser.saved)).toEqual(Option.none())
+
+      yield* SubscriptionRef.set(browser.visible, false)
+      yield* SubscriptionRef.set(browser.visible, true)
+      yield* TestClock.adjust(AGENT_PING_INTERVAL)
+      yield* settle
+
+      expect(yield* Ref.get(browser.opened)).toBe(1)
+      expect((yield* current).status).toEqual(LinkStatus.LoggedOut())
+    }),
+  )
+
+  it.effect('stays connected with the herd cached when exe.dev refuses the logout', () =>
+    Effect.gen(function* () {
+      const { browser, link, current, nextSession } = yield* start()
+      const session = yield* nextSession
+      const refusal = new LogOutRefused({ status: 404 })
+
+      yield* Ref.set(browser.logOutRefusal, Option.some(refusal))
+      yield* Queue.offer(session.views, liveView)
+      yield* current
+      const failure = yield* Effect.flip(link.logOut)
+
+      expect(failure).toEqual(refusal)
+      expect(isLive((yield* current).status)).toBe(true)
+      expect(Option.isSome(yield* Ref.get(browser.saved))).toBe(true)
+      expect(yield* Ref.get(browser.closed)).toBe(0)
     }),
   )
 

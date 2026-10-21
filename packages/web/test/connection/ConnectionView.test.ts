@@ -57,4 +57,13 @@ describe('connectionView', () => {
     expect(viewOf(LinkStatus.Expired()).expired).toBe(true)
     expect(viewOf(LinkStatus.Expired()).notice).toEqual(Option.none())
   })
+
+  it('flags a logout apart from an expired session, with every hub action off', () => {
+    const view = viewOf(LinkStatus.LoggedOut())
+
+    expect(view.loggedOut).toBe(true)
+    expect(view.expired).toBe(false)
+    expect(view.canAct).toBe(false)
+    expect(view.notice).toEqual(Option.none())
+  })
 })

@@ -4,13 +4,14 @@ import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import { get, set } from 'idb-keyval'
+import { del, get, set } from 'idb-keyval'
 
 import { HerdView } from '@crook/domain/HerdView'
 
 export interface HerdStore {
   readonly read: Effect.Effect<unknown, HerdCacheUnavailable>
   readonly write: (stored: typeof HerdSnapshot.Encoded) => Effect.Effect<void, HerdCacheUnavailable>
+  readonly remove: Effect.Effect<void, HerdCacheUnavailable>
 }
 
 const HERD_SNAPSHOT_KEY = 'crook.herd'
@@ -42,6 +43,10 @@ const indexedDbStore: HerdStore = {
       try: () => set(HERD_SNAPSHOT_KEY, stored),
       catch: (cause) => new HerdCacheUnavailable({ cause }),
     }),
+  remove: Effect.tryPromise({
+    try: () => del(HERD_SNAPSHOT_KEY),
+    catch: (cause) => new HerdCacheUnavailable({ cause }),
+  }),
 }
 
 const loadFrom = (store: HerdStore) =>
@@ -75,15 +80,25 @@ const saveTo = (store: HerdStore) =>
       .pipe(Effect.catchTag('HerdCacheUnavailable', (error) => Effect.logWarning(error.message)))
   })
 
+const clearFrom = (store: HerdStore) =>
+  store.remove.pipe(
+    Effect.catchTag('HerdCacheUnavailable', (error) => Effect.logWarning(error.message)),
+    Effect.withSpan('HerdCache.clear'),
+  )
+
 export class HerdCache extends Context.Service<
   HerdCache,
   {
     readonly load: Effect.Effect<Option.Option<HerdSnapshot>>
     readonly save: (snapshot: HerdSnapshot) => Effect.Effect<void>
+    readonly clear: Effect.Effect<void>
   }
 >()('@crook/web/HerdCache') {
   static readonly layerOver = (store: HerdStore) =>
-    Layer.succeed(this, HerdCache.of({ load: loadFrom(store), save: saveTo(store) }))
+    Layer.succeed(
+      this,
+      HerdCache.of({ load: loadFrom(store), save: saveTo(store), clear: clearFrom(store) }),
+    )
 
   static readonly layer = HerdCache.layerOver(indexedDbStore)
 }
