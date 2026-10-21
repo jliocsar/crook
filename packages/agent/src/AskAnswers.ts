@@ -50,6 +50,7 @@ export type AnswerFailure =
   | HerdrRequestError
 
 const DECLINE_KEY = 'esc'
+const SLOWEST_MEASURED_UNBLOCK = Duration.millis(380)
 
 const isBlockedIn = (state: MachineState, pane: PaneId) =>
   Arr.some(state.agents, (agent) => agent.pane === pane && agent.status === 'blocked')
@@ -80,6 +81,7 @@ const make = Effect.gen(function* () {
   const sync = yield* MachineStateSync
   const screens = yield* PaneScreens
   const answered = yield* Ref.make(HashMap.empty<PaneId, AnsweredAsk>())
+  const scope = yield* Effect.scope
   const locks = yield* SynchronizedRef.make(HashMap.empty<PaneId, Semaphore.Semaphore>())
 
   const pressKeys = (pane: PaneId, keys: readonly string[]) =>
@@ -105,8 +107,22 @@ const make = Effect.gen(function* () {
   const refuseAnswered = (answer: AnswerAsk, row: AgentRow) =>
     Effect.flatMap(Ref.get(answered), (current) =>
       Option.exists(HashMap.get(current, answer.pane), isSameAnswer(row, answer.ask))
-        ? Effect.fail(new AskNotPending({ pane: answer.pane, ask: answer.ask }))
+        ? Effect.andThen(
+            sync.invalidate,
+            Effect.fail(new AskNotPending({ pane: answer.pane, ask: answer.ask })),
+          )
         : Effect.void,
+    )
+
+  const refreshWhileBlocked = (pane: PaneId) =>
+    sync.changes.pipe(
+      Stream.filter((state) => !isBlockedIn(state, pane)),
+      Stream.runHead,
+      Effect.timeoutOrElse({
+        duration: SLOWEST_MEASURED_UNBLOCK,
+        orElse: () => Effect.as(sync.invalidate, Option.none()),
+      }),
+      Effect.forkIn(scope),
     )
 
   const remember = (answer: AnswerAsk, row: AgentRow) =>
@@ -188,6 +204,8 @@ const make = Effect.gen(function* () {
           ),
       }),
     )
+
+    yield* refreshWhileBlocked(given.pane)
   })
 
   const promptAfterDecline = Effect.fn('AskAnswers.promptAfterDecline')(function* (

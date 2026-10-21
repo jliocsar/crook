@@ -13,6 +13,7 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { CommandExecutor, HERDR_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
+import { deriveAsk } from '@crook/claude/AskDerivation'
 import { dialogFingerprint, parseDialog } from '@crook/claude/ScreenDialog'
 import {
   type Ask,
@@ -110,6 +111,15 @@ const questionAsk = (screen: string, multiSelect: boolean) =>
     dialog: dialogOf(screen),
   })
 
+const screenAsk = (screen: string) =>
+  deriveAsk({
+    episode: { terminal: TERMINAL, stateChangeSeq: 4 },
+    screen: Option.some(screen),
+    dialog: parseDialog(screen),
+    pending: [],
+    toolUse: Option.none(),
+  })
+
 const startExecutor = Effect.fn('startExecutor')(function* (
   ask: Ask,
   responses: readonly ScriptedResponse[],
@@ -126,6 +136,44 @@ const startExecutor = Effect.fn('startExecutor')(function* (
   )
 
   return { executor: Context.get(context, CommandExecutor), sent, state, invalidations }
+})
+
+const startOverQueuedScreens = Effect.fn('startOverQueuedScreens')(function* (
+  ask: Ask,
+  answeredScreen: string,
+  nextScreen: string,
+) {
+  const blocked = machineStateWith([agentRow({ status: 'blocked', ask: Option.some(ask) })])
+  const state = yield* SubscriptionRef.make(blocked)
+  const sent = yield* Queue.unbounded<SentRequest>()
+  const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
+  const clientShowing = (screen: string) =>
+    Effect.map(
+      Layer.build(
+        HerdrClient.layerTest({ responses: [screenRead(screen), keysSent], events, sent }),
+      ),
+      (context) => Context.get(context, HerdrClient),
+    )
+  const shown = yield* Ref.make(yield* clientShowing(answeredScreen))
+  const next = yield* clientShowing(nextScreen)
+  const herdr = Layer.succeed(
+    HerdrClient,
+    HerdrClient.of({
+      request: (method, params) =>
+        Effect.flatMap(Ref.get(shown), (client) => client.request(method, params)),
+      snapshot: Effect.flatMap(Ref.get(shown), (client) => client.snapshot),
+      subscribe: (subscriptions) =>
+        Effect.flatMap(Ref.get(shown), (client) => client.subscribe(subscriptions)),
+    }),
+  )
+  const context = yield* Layer.build(executorWith(herdr, state))
+
+  return {
+    executor: Context.get(context, CommandExecutor),
+    sent,
+    state,
+    showNext: Ref.set(shown, next),
+  }
 })
 
 const answer = (ask: Ask, given: AskAnswer) =>
@@ -278,7 +326,10 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
     Effect.gen(function* () {
       const screen = yield* screenText('12-native-bash-t20')
       const ask = bashAsk(screen)
-      const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
+      const { executor, sent, invalidations } = yield* startExecutor(ask, [
+        screenRead(screen),
+        keysSent,
+      ])
       const first = executor.execute(ACTION, answer(ask, new Approve({})))
       const second = executor.execute(OTHER_DEVICE_ACTION, answer(ask, new Approve({})))
       const [approved, refused] = yield* Effect.all([first, Effect.flip(second)], {
@@ -288,6 +339,70 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
       expect(approved).toEqual(delivered)
       expect(refused).toEqual(new AskNotPending({ pane: AGENT_PANE, ask: ask.id }))
       expect(yield* sentAfter(sent)).toEqual([READ_REQUEST, keysRequest(['enter'])])
+      expect(yield* Ref.get(invalidations)).toBe(1)
+    }),
+  )
+
+  it.effect('answers the next queued dialog though it shows the command just answered', () =>
+    Effect.gen(function* () {
+      const answeredScreen = yield* screenText('112-codemode6-zombie')
+      const nextScreen = yield* screenText('113-codemode6-zombie-declined')
+      const answered = screenAsk(answeredScreen)
+      const next = screenAsk(nextScreen)
+      const { executor, sent, state, showNext } = yield* startOverQueuedScreens(
+        answered,
+        answeredScreen,
+        nextScreen,
+      )
+
+      yield* executor.execute(ACTION, answer(answered, new Approve({})))
+      yield* showNext
+      yield* SubscriptionRef.set(
+        state,
+        machineStateWith([agentRow({ status: 'blocked', ask: Option.some(next) })]),
+      )
+      const receipt = yield* executor.execute(OTHER_DEVICE_ACTION, answer(next, new Approve({})))
+
+      expect(next.id).not.toBe(answered.id)
+      expect(receipt).toEqual(delivered)
+      expect(yield* sentAfter(sent)).toEqual([
+        READ_REQUEST,
+        keysRequest(['enter']),
+        READ_REQUEST,
+        keysRequest(['enter']),
+      ])
+    }),
+  )
+
+  it.effect('re-reads the herd when the agent stays blocked after an answer', () =>
+    Effect.gen(function* () {
+      const screen = yield* screenText('112-codemode6-zombie')
+      const ask = screenAsk(screen)
+      const { executor, invalidations } = yield* startExecutor(ask, [screenRead(screen), keysSent])
+
+      yield* executor.execute(ACTION, answer(ask, new Approve({})))
+      const beforeRedraw = yield* Ref.get(invalidations)
+      yield* TestClock.adjust(HERDR_DELIVERY_TIMEOUT)
+      const afterRedraw = yield* Ref.get(invalidations)
+
+      expect([beforeRedraw, afterRedraw]).toEqual([0, 1])
+    }),
+  )
+
+  it.effect('leaves the herd to herdr when the agent leaves blocked after an answer', () =>
+    Effect.gen(function* () {
+      const screen = yield* screenText('12-native-bash-t20')
+      const ask = bashAsk(screen)
+      const { executor, state, invalidations } = yield* startExecutor(ask, [
+        screenRead(screen),
+        keysSent,
+      ])
+
+      yield* executor.execute(ACTION, answer(ask, new Approve({})))
+      yield* SubscriptionRef.set(state, machineStateWith([agentRow({ status: 'working' })]))
+      yield* TestClock.adjust(HERDR_DELIVERY_TIMEOUT)
+
+      expect(yield* Ref.get(invalidations)).toBe(0)
     }),
   )
 

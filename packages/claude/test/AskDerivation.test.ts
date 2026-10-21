@@ -234,6 +234,21 @@ layer(platform)('the permission dialog on the screen', (it) => {
       )
     }),
   )
+
+  it.effect('fingerprints a queued dialog by its place in the queue, not by the queue length', () =>
+    Effect.gen(function* () {
+      const answered = yield* spikeScreen('112-codemode6-zombie')
+      const fingerprintOf = (text: string) =>
+        Option.map(parseDialog(text), (dialog) => dialogFingerprint(dialog))
+      const longerQueue = answered.replace('1 of 2', '1 of 3')
+
+      expect(longerQueue).not.toBe(answered)
+      expect(fingerprintOf(longerQueue)).toEqual(fingerprintOf(answered))
+      expect(fingerprintOf(yield* spikeScreen('113-codemode6-zombie-declined'))).not.toEqual(
+        fingerprintOf(answered),
+      )
+    }),
+  )
 })
 
 layer(platform)('the hook ledger', (it) => {

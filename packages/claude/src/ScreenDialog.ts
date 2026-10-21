@@ -221,6 +221,7 @@ export const dialogFingerprint = (dialog: ScreenDialog): string =>
         dialog.kind,
         dialog.header,
         Option.getOrElse(dialog.plugin, () => ''),
+        Option.match(dialog.queue, { onNone: () => '', onSome: (queue) => String(queue.position) }),
         Option.getOrElse(dialog.subject, () => ''),
         ...dialog.body,
         ...dialog.prompt,

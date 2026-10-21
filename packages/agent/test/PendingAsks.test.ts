@@ -23,7 +23,14 @@ import { PermissionRequestPayload, PreToolUsePayload } from '@crook/claude/HookP
 import { LastTurn } from '@crook/claude/LastTurn'
 import { dialogFingerprint, parseDialog } from '@crook/claude/ScreenDialog'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
-import { type Ask, AskOption, EditFile, PermissionAsk, RunCommand } from '@crook/domain/Ask'
+import {
+  type Ask,
+  AskOption,
+  EditFile,
+  PermissionAsk,
+  RunCommand,
+  askDialog,
+} from '@crook/domain/Ask'
 import { AskId, ClaudeSessionId } from '@crook/domain/Ids'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
 import { HerdrConnectionClosed } from '@crook/herdr/HerdrClient'
@@ -168,6 +175,21 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
       const after = yield* asks.askOf(BLOCKED, Option.none(), 0)
 
       expect(Option.map(before, (ask) => ask.id)).not.toEqual(Option.map(after, (ask) => ask.id))
+    }),
+  )
+
+  it.effect('gives the next queued dialog its own ask though it shows the same command', () =>
+    Effect.gen(function* () {
+      const answered = yield* screenText('112-codemode6-zombie')
+      const next = yield* screenText('113-codemode6-zombie-declined')
+      const { asks } = yield* startAsks([], [Option.some(answered), Option.some(next)])
+      const before = yield* asks.askOf(BLOCKED, Option.none(), 0)
+      const after = yield* asks.askOf(BLOCKED, Option.none(), 0)
+
+      expect(Option.map(before, (ask) => ask.id)).not.toEqual(Option.map(after, (ask) => ask.id))
+      expect(Option.flatMap(after, askDialog)).toEqual(
+        Option.map(parseDialog(next), dialogFingerprint),
+      )
     }),
   )
 
