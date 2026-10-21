@@ -2,7 +2,7 @@ import * as Duration from 'effect/Duration'
 import * as Schema from 'effect/Schema'
 
 import { Command, CommandReceipt } from '@crook/domain/Command'
-import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import { AskId, IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 
 export const CommandId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
   Schema.brand('CommandId'),
@@ -59,6 +59,51 @@ export class CommandDeliveryUnknown extends Schema.TaggedError<CommandDeliveryUn
   }
 }
 
+export class AskNotPending extends Schema.TaggedError<AskNotPending>()('AskNotPending', {
+  pane: PaneId,
+  ask: AskId,
+}) {
+  override get message(): string {
+    return `Pane ${this.pane} is no longer waiting on the ask you answered (${this.ask}): Claude moved on, or it is asking something else now. Nothing was sent; look at what the agent asks now and answer that.`
+  }
+}
+
+export class AskDialogUnreadable extends Schema.TaggedError<AskDialogUnreadable>()(
+  'AskDialogUnreadable',
+  { pane: PaneId },
+) {
+  override get message(): string {
+    return `crook could not read the dialog's options from pane ${this.pane}'s screen, so it did not guess which key answers it. Nothing was sent; decline the ask, or answer it in the terminal.`
+  }
+}
+
+export class AskOptionUnavailable extends Schema.TaggedError<AskOptionUnavailable>()(
+  'AskOptionUnavailable',
+  { pane: PaneId, option: Schema.String },
+) {
+  override get message(): string {
+    return `The dialog on pane ${this.pane} offers no "${this.option}" option, so nothing was sent. Pick one of the options it shows.`
+  }
+}
+
+export class QuestionnaireUnsupported extends Schema.TaggedError<QuestionnaireUnsupported>()(
+  'QuestionnaireUnsupported',
+  { pane: PaneId },
+) {
+  override get message(): string {
+    return `crook can only pick the answer to a single question with a single choice, and the questionnaire on pane ${this.pane} is not one. Nothing was sent; answer it in the terminal, or decline it with a message.`
+  }
+}
+
+export class DeclineMessageUndelivered extends Schema.TaggedError<DeclineMessageUndelivered>()(
+  'DeclineMessageUndelivered',
+  { pane: PaneId, reason: Schema.String },
+) {
+  override get message(): string {
+    return `The ask on pane ${this.pane} was declined, but your message did not reach Claude: ${this.reason}. Send the message again as a prompt.`
+  }
+}
+
 export class MachineOffline extends Schema.TaggedError<MachineOffline>()('MachineOffline', {
   machine: MachineId,
 }) {
@@ -82,6 +127,11 @@ export const AgentCommandFailure = Schema.Union([
   HerdrRefusedCommand,
   HerdrUnavailable,
   CommandDeliveryUnknown,
+  AskNotPending,
+  AskDialogUnreadable,
+  AskOptionUnavailable,
+  QuestionnaireUnsupported,
+  DeclineMessageUndelivered,
 ])
 export type AgentCommandFailure = typeof AgentCommandFailure.Type
 
