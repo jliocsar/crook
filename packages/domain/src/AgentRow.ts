@@ -1,5 +1,8 @@
+import * as Equivalence from 'effect/Equivalence'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
+import * as Str from 'effect/String'
 
 import { AgentStatus } from '@crook/domain/AgentStatus'
 import { ClaudeSessionId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
@@ -38,4 +41,16 @@ export const seenMarkOf = (row: AgentRow): SeenMark =>
     onSome: (before) => ({ terminal: before.terminal, stateChangeSeq: before.stateChangeSeq }),
   })
 
+export const isSameSeenMark: Equivalence.Equivalence<SeenMark> = Equivalence.Struct({
+  terminal: Equivalence.String,
+  stateChangeSeq: Equivalence.Number,
+})
+
 export const agentTitle = (row: AgentRow): string => Option.getOrElse(row.label, () => row.title)
+
+export const agentTitleOrPane = (row: AgentRow): string =>
+  pipe(
+    agentTitle(row),
+    Option.liftPredicate(Str.isNonEmpty),
+    Option.getOrElse(() => row.pane),
+  )

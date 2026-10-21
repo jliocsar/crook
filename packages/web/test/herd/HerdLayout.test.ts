@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Option from 'effect/Option'
 
-import { agentTitleOrPane, findAgent, herdLayout, SectionBody } from '@crook/web/herd/HerdLayout'
+import { findAgent, herdLayout, SectionBody } from '@crook/web/herd/HerdLayout'
 import type { MachineSectionModel } from '@crook/web/herd/HerdLayout'
 
 import { agent, DESK, herd, LAPTOP, machine } from '../HerdFixtures.ts'
@@ -103,18 +103,5 @@ describe('herdLayout', () => {
       Option.some(idle.pane),
     )
     expect(findAgent(view, DESK, idle.pane)).toEqual(Option.none())
-  })
-
-  it('titles an agent herdr knows no title for by its pane id', () => {
-    expect(agentTitleOrPane(agent('w1:p1', 'idle', { title: 'Port the herd' }))).toBe(
-      'Port the herd',
-    )
-    expect(agentTitleOrPane(agent('w1:p2', 'idle', { title: '' }))).toBe('w1:p2')
-  })
-
-  it('titles an agent by the name its pane was given in herdr over its own title', () => {
-    expect(
-      agentTitleOrPane(agent('w1:p3', 'idle', { title: 'Port the herd', label: 'Payments' })),
-    ).toBe('Payments')
   })
 })

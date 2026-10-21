@@ -1,4 +1,5 @@
 import { describe, expect, it, layer } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -29,6 +30,7 @@ import {
   TranscriptOffset,
 } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { NotificationSettings, defaultNotificationPrefs } from '@crook/domain/Notifications'
 import {
   PaneTranscript,
   TranscriptChunk,
@@ -46,6 +48,12 @@ import {
   PaneNotCreatedByCrook,
   RoutedCommand,
 } from '@crook/protocol/Commands'
+import {
+  HarkNotConfigured,
+  HarkRateLimited,
+  HarkRefused,
+  TestNotificationFailure,
+} from '@crook/protocol/Hark'
 import {
   TranscriptDemand,
   TranscriptOutOfStep,
@@ -146,6 +154,10 @@ const clientApiHandlers = ClientApi.toLayer({
     machine === laptop
       ? Stream.make(opened, firstChunk)
       : Stream.fail(new TranscriptReadFailed({ detail: 'EACCES' })),
+  WatchNotificationSettings: () =>
+    Stream.make(new NotificationSettings({ prefs: defaultNotificationPrefs, delivery: 'noToken' })),
+  SetNotificationPref: () => Effect.void,
+  SendTestNotification: () => Effect.fail(new HarkNotConfigured()),
 })
 
 layer(agentLinkHandlers)('AgentLink', (rpc) => {
@@ -306,4 +318,41 @@ describe('Command wire shapes', () => {
     expect(roundTrip(CommandResult, closed)).toEqual(closed)
     expect(roundTrip(CommandResult, notOurs)).toEqual(notOurs)
   })
+})
+
+describe('Notification wire shapes', () => {
+  it('carries the notification settings and each test-notification failure through JSON', () => {
+    const settings = new NotificationSettings({
+      prefs: { ...defaultNotificationPrefs, finished: false },
+      delivery: 'ready',
+    })
+    const failures = [
+      new HarkNotConfigured(),
+      new HarkRefused({ status: 403, explanation: Option.some('Missing scope') }),
+      new HarkRateLimited({ retryAfterSeconds: Option.some(60) }),
+      new HarkRateLimited({ retryAfterSeconds: Option.none() }),
+    ]
+
+    expect(roundTrip(NotificationSettings, settings)).toEqual(settings)
+    expect(Arr.map(failures, (failure) => roundTrip(TestNotificationFailure, failure))).toEqual(
+      failures,
+    )
+  })
+})
+
+layer(clientApiHandlers)('ClientApi notification settings', (rpc) => {
+  rpc.effect('streams the settings and carries why a test notification failed', () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(ClientApi)
+      const settings = yield* client.WatchNotificationSettings().pipe(Stream.runCollect)
+      const testFailure = yield* client.SendTestNotification().pipe(Effect.flip)
+
+      yield* client.SetNotificationPref({ event: 'finished', enabled: false })
+
+      expect(settings).toEqual([
+        new NotificationSettings({ prefs: defaultNotificationPrefs, delivery: 'noToken' }),
+      ])
+      expect(testFailure).toBeInstanceOf(HarkNotConfigured)
+    }),
+  )
 })

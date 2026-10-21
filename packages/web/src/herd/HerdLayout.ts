@@ -2,10 +2,9 @@ import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
-import * as Str from 'effect/String'
 
 import { needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
-import { type AgentRow, agentTitle } from '@crook/domain/AgentRow'
+import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
@@ -105,13 +104,6 @@ export const herdLayout = (view: HerdView): HerdLayout => {
     })),
   }
 }
-
-export const agentTitleOrPane = (row: AgentRow): string =>
-  pipe(
-    agentTitle(row),
-    Option.liftPredicate(Str.isNonEmpty),
-    Option.getOrElse(() => row.pane),
-  )
 
 export const findAgent = (
   view: HerdView,

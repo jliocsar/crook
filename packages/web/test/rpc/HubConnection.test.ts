@@ -22,6 +22,10 @@ const handlers = ClientApi.toLayer({
   SetPinned: () => Effect.die('SetPinned is not part of this test.'),
   SendCommand: () => Effect.die('SendCommand is not part of this test.'),
   WatchTranscript: () => Stream.die('WatchTranscript is not part of this test.'),
+  WatchNotificationSettings: () =>
+    Stream.die('WatchNotificationSettings is not part of this test.'),
+  SetNotificationPref: () => Effect.die('SetNotificationPref is not part of this test.'),
+  SendTestNotification: () => Effect.die('SendTestNotification is not part of this test.'),
 })
 
 const dyingHandlers = ClientApi.toLayer({
@@ -31,6 +35,10 @@ const dyingHandlers = ClientApi.toLayer({
   SetPinned: () => Effect.die('SetPinned is not part of this test.'),
   SendCommand: () => Effect.die('SendCommand is not part of this test.'),
   WatchTranscript: () => Stream.die('WatchTranscript is not part of this test.'),
+  WatchNotificationSettings: () =>
+    Stream.die('WatchNotificationSettings is not part of this test.'),
+  SetNotificationPref: () => Effect.die('SetNotificationPref is not part of this test.'),
+  SendTestNotification: () => Effect.die('SendTestNotification is not part of this test.'),
 })
 
 describe('hubSocketUrl', () => {
