@@ -30,35 +30,30 @@ import {
 } from '@crook/agent/ServiceDefinition'
 import { ServiceManager, launchctl, systemctl } from '@crook/agent/ServiceManager'
 import {
+  CrookStateDirectory,
+  HomeDirectory,
   OWNER_ONLY_FILE_MODE,
   type WriteAtomicallyOptions,
   makeWriteAtomically,
   xdgHome,
 } from '@crook/agent/StateDirectory'
-import { claudeRoots } from '@crook/claude/ClaudeRoots'
+import { ClaudeRootSettings, claudeRoots } from '@crook/claude/ClaudeRoots'
 import { HerdrSocketPath } from '@crook/herdr/HerdrClient'
 
 export type ServiceTarget = Systemd | Launchd
 
 export type ServiceLogs = Journal | LogFile
 
+interface CarriedSetting {
+  readonly variables: readonly string[]
+  readonly readAs: Config.Config<unknown>
+}
+
 const ENVIRONMENT_FILE_NAME = 'agent.env'
 const CLAUDE_SETTINGS_FILE_NAME = 'settings.json'
 const HOOK_SUBCOMMAND = 'hook'
 const LINUX = 'linux'
 const MACOS = 'darwin'
-
-const CARRIED_VARIABLES = [
-  'HERDR_SOCKET_PATH',
-  'CROOK_CLAUDE_ROOTS',
-  'CLAUDE_CONFIG_DIR',
-  'XDG_STATE_HOME',
-  'CROOK_AUDIT_LOG_PATH',
-  'CROOK_AUDIT_ARGUMENT_LIMIT',
-  'CROOK_AUDIT_REDACT',
-  'CROOK_CREATED_PANES_PATH',
-  'CROOK_RECENT_PLACES_PATH',
-] as const
 
 const ServicePaths = Schema.Struct({
   definitionFile: Schema.String,
@@ -125,16 +120,34 @@ const SystemdUserUnitDirectory = Config.map(
 )
 
 const LaunchdLogFile = Config.map(
-  Config.String('HOME'),
+  HomeDirectory,
   (home) => `${home}/Library/Logs/${LAUNCHD_LABEL}.log`,
 )
 
-const CarriedSettings = Config.all(
-  Arr.map(CARRIED_VARIABLES, (name) =>
-    Config.option(Config.String(name)).pipe(
-      Config.map(Option.map((value): EnvironmentEntry => ({ name, value }))),
-    ),
-  ),
+const carriedSettings: readonly CarriedSetting[] = [
+  { variables: ['HERDR_SOCKET_PATH'], readAs: HerdrSocketPath },
+  { variables: ['CROOK_CLAUDE_ROOTS', 'CLAUDE_CONFIG_DIR'], readAs: ClaudeRootSettings },
+  { variables: ['XDG_STATE_HOME'], readAs: CrookStateDirectory },
+  { variables: ['CROOK_AUDIT_LOG_PATH'], readAs: CrookAuditLogPath },
+  { variables: ['CROOK_AUDIT_ARGUMENT_LIMIT', 'CROOK_AUDIT_REDACT'], readAs: CrookAuditPolicy },
+  { variables: ['CROOK_CREATED_PANES_PATH'], readAs: CrookCreatedPanesPath },
+  { variables: ['CROOK_RECENT_PLACES_PATH'], readAs: CrookRecentPlacesPath },
+]
+
+const carriedEntry = (name: string) =>
+  Config.option(Config.String(name)).pipe(
+    Config.map(Option.map((value): EnvironmentEntry => ({ name, value }))),
+  )
+
+const carriedEntries = ({ variables, readAs }: CarriedSetting) =>
+  Config.map(
+    Config.all({ readAs, entries: Config.all(Arr.map(variables, carriedEntry)) }),
+    ({ entries }) => Arr.getSomes(entries),
+  )
+
+const CarriedSettings = Config.map(
+  Config.all(Arr.map(carriedSettings, carriedEntries)),
+  Arr.flatten,
 )
 
 const AgentSettings = Config.all({
@@ -144,13 +157,6 @@ const AgentSettings = Config.all({
   label: CrookMachineLabel,
   hookSocket: CrookHookSocketPath,
   carried: CarriedSettings,
-  carriedAsTheAgentReadsThem: Config.all([
-    HerdrSocketPath,
-    CrookAuditLogPath,
-    CrookAuditPolicy,
-    CrookCreatedPanesPath,
-    CrookRecentPlacesPath,
-  ]),
 })
 
 export const serviceTargetOf = (
@@ -190,7 +196,7 @@ const servicePaths = Effect.fn('ServiceInstaller.servicePaths')(function* (targe
           environmentFile,
         })),
       Launchd: () =>
-        Effect.map(Config.String('HOME'), (home): ServicePaths => ({
+        Effect.map(HomeDirectory, (home): ServicePaths => ({
           definitionFile: `${home}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist`,
           environmentFile,
         })),
@@ -213,7 +219,7 @@ const environmentOf = (
       ),
     ),
     Arr.append({ name: 'CROOK_HOOK_SOCKET_PATH', value: settings.hookSocket }),
-    Arr.appendAll(Arr.getSomes(settings.carried)),
+    Arr.appendAll(settings.carried),
   )
 
 const definitionOf = (target: ServiceTarget, program: readonly string[], paths: ServicePaths) =>

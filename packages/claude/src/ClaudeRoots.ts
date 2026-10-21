@@ -34,7 +34,7 @@ const listedRoots = (list: string) =>
     Arr.filter((root) => root.length > 0),
   )
 
-const ClaudeRootSettings = Config.all({
+export const ClaudeRootSettings = Config.all({
   listed: Config.option(Config.String('CROOK_CLAUDE_ROOTS')),
   configDirectory: Config.option(Config.NonEmptyString('CLAUDE_CONFIG_DIR')),
 })

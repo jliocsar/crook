@@ -15,9 +15,11 @@ const TEMPORARY_SUFFIX = '.tmp'
 export const OWNER_ONLY_FILE_MODE = 0o600
 export const OWNER_ONLY_DIRECTORY_MODE = 0o700
 
+export const HomeDirectory = Config.String('HOME')
+
 export const xdgHome = (variable: string, homeSuffix: string) =>
   Config.schema(AbsolutePath, variable).pipe(
-    Config.orElse(() => Config.String('HOME').pipe(Config.map((home) => `${home}/${homeSuffix}`))),
+    Config.orElse(() => Config.map(HomeDirectory, (home) => `${home}/${homeSuffix}`)),
   )
 
 export const CrookStateDirectory = Config.map(
