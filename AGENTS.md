@@ -219,6 +219,12 @@ the code.
 :::
 
 :::tip
+A layer named in a `Layer.provide` list and again inside another listed layer's own
+`Layer.provide` is built once per build: layers are memoized by reference (measured). A service
+that must share the routes' `Herd` can therefore carry `Layer.provide(Herd.layer)` itself.
+:::
+
+:::tip
 `@effect/vitest`'s `layer(L)(name, (it) => …)` hands out an `it` without `.live`. A test that needs
 the real clock or real IO (sockets, temp dirs) passes `layer(L, { excludeTestServices: true })` and
 keeps writing `it.effect`.

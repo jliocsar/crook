@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -10,7 +11,9 @@ import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
+import * as PubSub from 'effect/PubSub'
 import * as Schema from 'effect/Schema'
+import type * as Scope from 'effect/Scope'
 import type { SqlError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -34,6 +37,21 @@ import packageJson from '../package.json' with { type: 'json' }
 import { MachineRecord, MachineRegistry } from '@crook/hub/MachineRegistry'
 import { PinRecord, PinnedAgents } from '@crook/hub/PinnedAgents'
 import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
+
+export class MachinePublished extends Data.TaggedClass('MachinePublished')<{
+  readonly machine: MachineId
+  readonly label: string
+  readonly previous: Option.Option<MachineState>
+  readonly next: MachineState
+  readonly seen: HashSet.HashSet<PaneId>
+}> {}
+
+export class PaneSeen extends Data.TaggedClass('PaneSeen')<{
+  readonly machine: MachineId
+  readonly pane: PaneId
+}> {}
+
+export type HerdChange = MachinePublished | PaneSeen
 
 interface MachineEntry {
   readonly id: MachineId
@@ -214,6 +232,7 @@ const make = Effect.gen(function* () {
   const seenTracker = yield* SeenTracker
   const pinnedAgents = yield* PinnedAgents
   const scope = yield* Effect.scope
+  const changes = yield* PubSub.unbounded<HerdChange>()
   const records = yield* registry.all
   const marks = yield* seenTracker.all
   const pins = yield* pinnedAgents.all
@@ -321,7 +340,20 @@ const make = Effect.gen(function* () {
           seenTracker
             .dropPanes(id, panes)
             .pipe(Effect.catchTag('SqlError', logSeenDropFailure(id))),
-      }),
+      }).pipe(
+        Effect.andThen(
+          PubSub.publish(
+            changes,
+            new MachinePublished({
+              machine: id,
+              label: next.label,
+              previous: previous.state,
+              next: state,
+              seen: HashSet.fromIterable(HashMap.keys(next.seen)),
+            }),
+          ),
+        ),
+      ),
     )
   })
 
@@ -356,6 +388,7 @@ const make = Effect.gen(function* () {
         const mark = seenMarkOf(row)
 
         yield* seenTracker.mark(new SeenRecord({ machine: id, pane, ...mark }))
+        yield* PubSub.publish(changes, new PaneSeen({ machine: id, pane }))
 
         return Option.some({ ...found, seen: HashMap.set(found.seen, pane, mark) })
       }),
@@ -407,6 +440,7 @@ const make = Effect.gen(function* () {
     setPinned,
     requireMachine,
     requirePane,
+    subscribeChanges: Effect.map(PubSub.subscribe(changes), Stream.fromSubscription),
     view: SubscriptionRef.changes(entries).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
       Stream.map(toView),
@@ -436,6 +470,7 @@ export class Herd extends Context.Service<
       id: MachineId,
       pane: PaneId,
     ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd>
+    readonly subscribeChanges: Effect.Effect<Stream.Stream<HerdChange>, never, Scope.Scope>
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {
