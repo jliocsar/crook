@@ -18,7 +18,7 @@ import {
 } from '@crook/domain/Command'
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
-import { PendingAction } from '@crook/web/atoms/Commands'
+import { ActionProgress } from '@crook/web/atoms/ActionProgress'
 import { isUserPrompt } from '@crook/web/chat/ChatItems'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { activityOf } from '@crook/web/chat/ChatModel'
@@ -64,15 +64,15 @@ const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, awaited: 0 }
 
 export const STOP_SETTLE = Duration.millis(512)
 
-const isSending = PendingAction.$is('Sending')
-const isSent = PendingAction.$is('Sent')
-const isDone = PendingAction.$is('Done')
-const isFailed = PendingAction.$is('Failed')
+const isSending = ActionProgress.$is('Sending')
+const isSent = ActionProgress.$is('Sent')
+const isDone = ActionProgress.$is('Done')
+const isFailed = ActionProgress.$is('Failed')
 
 const decodeFolder = Schema.decodeUnknownOption(FolderPath)
 
 export const failureOf = (action: CommandAction): Option.Option<string> =>
-  PendingAction.$match(action.state, {
+  ActionProgress.$match(action.state, {
     Failed: (failed) => Option.some(failed.message),
     Idle: () => Option.none(),
     Sending: () => Option.none(),
@@ -223,7 +223,7 @@ const useStopLock = (stop: CommandAction): boolean => {
 
 const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
   const navigate = useNavigate()
-  const started = PendingAction.$match(action.state, {
+  const started = ActionProgress.$match(action.state, {
     Done: (done) => startedPane(done.receipt),
     Idle: () => Option.none<PaneId>(),
     Sending: () => Option.none<PaneId>(),

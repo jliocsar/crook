@@ -17,10 +17,8 @@ import {
   PaneNotCreatedByCrook,
 } from '@crook/protocol/Commands'
 import {
-  ActionProgress,
   CLAUDE_EXITED_NOTICE,
   closeNeedsConfirmation,
-  commandProgress,
   endedNotice,
   failureOf,
   InvalidPaneLabel,
@@ -36,6 +34,7 @@ import {
 import type { SetPinnedFailure } from '@crook/web/actions/PaneActions'
 import { UNEXPECTED_FAILURE_MESSAGE } from '@crook/web/atoms/ActionFailure'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
+import { ActionProgress, commandProgress } from '@crook/web/atoms/ActionProgress'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
 
 import { agent, LAPTOP, machine } from '../HerdFixtures.ts'
@@ -54,9 +53,15 @@ describe('commandProgress', () => {
   it('is idle before the action, sending while it waits, sent once acked, done once shown', () => {
     expect(commandProgress(AsyncResult.initial(), [])).toEqual(ActionProgress.Idle())
     expect(commandProgress(AsyncResult.initial(true), [])).toEqual(ActionProgress.Sending())
-    expect(commandProgress(acked(renamed), [agent('w1:p1', 'idle')])).toEqual(ActionProgress.Sent())
-    expect(commandProgress(acked(renamed), [named])).toEqual(ActionProgress.Done())
-    expect(commandProgress(acked(new PaneClosed({ pane })), [])).toEqual(ActionProgress.Done())
+    expect(commandProgress(acked(renamed), [agent('w1:p1', 'idle')])).toEqual(
+      ActionProgress.Sent({ receipt: renamed }),
+    )
+    expect(commandProgress(acked(renamed), [named])).toEqual(
+      ActionProgress.Done({ receipt: renamed }),
+    )
+    expect(commandProgress(acked(new PaneClosed({ pane })), [])).toEqual(
+      ActionProgress.Done({ receipt: new PaneClosed({ pane }) }),
+    )
   })
 
   it('names a refusal and asks to confirm a foreign pane', () => {
@@ -121,8 +126,8 @@ describe('pinProgress', () => {
   it('is done once the herd shows the pin the hub was asked for', () => {
     const pinned = AsyncResult.success<boolean, SetPinnedFailure>(true)
 
-    expect(pinProgress(pinned, false)).toEqual(ActionProgress.Sent())
-    expect(pinProgress(pinned, true)).toEqual(ActionProgress.Done())
+    expect(pinProgress(pinned, false)).toEqual(ActionProgress.Sent({ receipt: true }))
+    expect(pinProgress(pinned, true)).toEqual(ActionProgress.Done({ receipt: true }))
     expect(
       failureOf(
         pinProgress(
@@ -172,7 +177,7 @@ describe('sheetOutcome', () => {
 
   it('stays open, finishes after a rename or pin, and ends when the agent goes on its own', () => {
     expect(sheetOutcome(sheet)).toEqual(SheetOutcome.Stay())
-    expect(sheetOutcome({ ...sheet, rename: ActionProgress.Done() })).toEqual(
+    expect(sheetOutcome({ ...sheet, rename: ActionProgress.Done({ receipt: renamed }) })).toEqual(
       SheetOutcome.Finished(),
     )
     expect(sheetOutcome({ ...sheet, herdMachine: Option.some(emptied) })).toEqual(
@@ -183,31 +188,55 @@ describe('sheetOutcome', () => {
   it('stays open after a rename or pin while a failed close is still on screen', () => {
     const refusedClose = ActionProgress.Failed({ message: 'Refused.', asksConfirmation: true })
 
-    expect(sheetOutcome({ ...sheet, pin: ActionProgress.Done(), close: refusedClose })).toEqual(
-      SheetOutcome.Stay(),
-    )
-    expect(sheetOutcome({ ...sheet, rename: ActionProgress.Done(), close: refusedClose })).toEqual(
-      SheetOutcome.Stay(),
-    )
+    expect(
+      sheetOutcome({ ...sheet, pin: ActionProgress.Done({ receipt: true }), close: refusedClose }),
+    ).toEqual(SheetOutcome.Stay())
+    expect(
+      sheetOutcome({
+        ...sheet,
+        rename: ActionProgress.Done({ receipt: renamed }),
+        close: refusedClose,
+      }),
+    ).toEqual(SheetOutcome.Stay())
   })
 
   it('stays open after a rename or pin while the other one is still out or failed', () => {
     const refusedRename = ActionProgress.Failed({ message: 'Refused.', asksConfirmation: false })
 
     expect(
-      sheetOutcome({ ...sheet, pin: ActionProgress.Done(), rename: ActionProgress.Sending() }),
+      sheetOutcome({
+        ...sheet,
+        pin: ActionProgress.Done({ receipt: true }),
+        rename: ActionProgress.Sending(),
+      }),
     ).toEqual(SheetOutcome.Stay())
     expect(
-      sheetOutcome({ ...sheet, pin: ActionProgress.Done(), rename: ActionProgress.Sent() }),
-    ).toEqual(SheetOutcome.Stay())
-    expect(sheetOutcome({ ...sheet, pin: ActionProgress.Done(), rename: refusedRename })).toEqual(
-      SheetOutcome.Stay(),
-    )
-    expect(
-      sheetOutcome({ ...sheet, rename: ActionProgress.Done(), pin: ActionProgress.Sending() }),
+      sheetOutcome({
+        ...sheet,
+        pin: ActionProgress.Done({ receipt: true }),
+        rename: ActionProgress.Sent({ receipt: renamed }),
+      }),
     ).toEqual(SheetOutcome.Stay())
     expect(
-      sheetOutcome({ ...sheet, rename: ActionProgress.Done(), pin: ActionProgress.Done() }),
+      sheetOutcome({
+        ...sheet,
+        pin: ActionProgress.Done({ receipt: true }),
+        rename: refusedRename,
+      }),
+    ).toEqual(SheetOutcome.Stay())
+    expect(
+      sheetOutcome({
+        ...sheet,
+        rename: ActionProgress.Done({ receipt: renamed }),
+        pin: ActionProgress.Sending(),
+      }),
+    ).toEqual(SheetOutcome.Stay())
+    expect(
+      sheetOutcome({
+        ...sheet,
+        rename: ActionProgress.Done({ receipt: renamed }),
+        pin: ActionProgress.Done({ receipt: true }),
+      }),
     ).toEqual(SheetOutcome.Finished())
   })
 
@@ -229,7 +258,11 @@ describe('sheetOutcome', () => {
       }),
     ).toEqual(SheetOutcome.Stay())
     expect(
-      sheetOutcome({ ...sheet, herdMachine: Option.some(emptied), close: ActionProgress.Done() }),
+      sheetOutcome({
+        ...sheet,
+        herdMachine: Option.some(emptied),
+        close: ActionProgress.Done({ receipt: new PaneClosed({ pane }) }),
+      }),
     ).toEqual(SheetOutcome.Closed())
   })
 })

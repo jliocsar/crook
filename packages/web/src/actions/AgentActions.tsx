@@ -14,7 +14,6 @@ import { type AgentRow, agentTitle, agentTitleOrPane } from '@crook/domain/Agent
 import { toGlobalPaneId } from '@crook/domain/Ids'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import {
-  type ActionProgress,
   closeNeedsConfirmation,
   failureOf,
   isInFlightOrDone,
@@ -31,6 +30,7 @@ import {
   PaneAddress,
 } from '@crook/web/atoms/AgentActions'
 import type { ActionsOrigin, AgentActionsView } from '@crook/web/atoms/AgentActions'
+import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { ToastIntent, toastAtom } from '@crook/web/atoms/Toast'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
@@ -121,7 +121,7 @@ function RenameField({
   onRename,
 }: {
   row: AgentRow
-  progress: ActionProgress
+  progress: CommandProgress
   disabled: boolean
   onRename: (label: Option.Option<string>) => void
 }) {

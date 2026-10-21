@@ -5,9 +5,12 @@ import * as React from 'react'
 
 import type { Command } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
+import { settledError } from '@crook/web/atoms/ActionFailure'
+import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
+import { ActionProgress } from '@crook/web/atoms/ActionProgress'
+import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import {
   CommandRequest,
-  PendingAction,
   pendingActionAtom,
   PendingActionKey,
   sendCommandAtom,
@@ -15,7 +18,8 @@ import {
 import { mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
 
 export interface CommandAction {
-  readonly state: PendingAction
+  readonly state: CommandProgress
+  readonly refusal: Option.Option<SendCommandFailure>
   readonly last: Option.Option<Command>
   readonly send: (command: Command) => void
 }
@@ -30,8 +34,8 @@ const freshKeys = (): ActionKeys => ({
   spare: mintIdempotencyKey(),
 })
 
-const isIdle = PendingAction.$is('Idle')
-const isFailed = PendingAction.$is('Failed')
+const isIdle = ActionProgress.$is('Idle')
+const isFailed = ActionProgress.$is('Failed')
 
 export const useCommandAction = (machine: MachineId): CommandAction => {
   const [keys, setKeys] = React.useState(freshKeys)
@@ -39,6 +43,7 @@ export const useCommandAction = (machine: MachineId): CommandAction => {
   const state = useAtomValue(
     pendingActionAtom(new PendingActionKey({ key: keys.current, machine })),
   )
+  const refusal = settledError(useAtomValue(sendCommandAtom(keys.current)))
   const sendCurrent = useAtomSet(sendCommandAtom(keys.current))
   const sendSpare = useAtomSet(sendCommandAtom(keys.spare))
 
@@ -59,5 +64,5 @@ export const useCommandAction = (machine: MachineId): CommandAction => {
     setKeys({ current: keys.spare, spare: mintIdempotencyKey() })
   }
 
-  return { state, last, send }
+  return { state, refusal, last, send }
 }
