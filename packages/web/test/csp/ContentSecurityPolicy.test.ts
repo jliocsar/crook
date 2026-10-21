@@ -7,7 +7,15 @@ import {
 
 describe('CONTENT_SECURITY_POLICY', () => {
   it('allows no inline or evaluated code', () => {
-    expect(CONTENT_SECURITY_POLICY).not.toMatch(/unsafe-|data:|blob:|\*/u)
+    expect(CONTENT_SECURITY_POLICY).not.toMatch(/unsafe-|data:|\*/u)
+  })
+
+  it('admits blob URLs for images and nothing else', () => {
+    const withBlob = Object.entries(CONTENT_SECURITY_POLICY_DIRECTIVES)
+      .filter(([, sources]) => sources.some((source) => source === 'blob:'))
+      .map(([directive]) => directive)
+
+    expect(withBlob).toStrictEqual(['img-src'])
   })
 
   it('serialises every directive once, in a header-ready string', () => {
