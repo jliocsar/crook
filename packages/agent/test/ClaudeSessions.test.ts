@@ -18,9 +18,8 @@ import {
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { PaneProcessInfoMethod } from '@crook/herdr/Methods'
+import { agentInfo } from '@crook/herdr/RecordFixtures'
 import { AgentSessionInfo, PaneProcess, PaneProcessInfo } from '@crook/herdr/Records'
-
-import { agentInfo } from './Fixtures'
 
 interface ProcessFixture {
   readonly environ: (root: string) => string

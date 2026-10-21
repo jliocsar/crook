@@ -34,8 +34,9 @@ import {
 import { AskId, ClaudeSessionId } from '@crook/domain/Ids'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
 import { HerdrConnectionClosed } from '@crook/herdr/HerdrClient'
+import { agentInfo } from '@crook/herdr/RecordFixtures'
 
-import { agentInfo, spikeScreenPath } from './Fixtures'
+import { spikeScreenPath } from './Fixtures'
 
 const SESSION = ClaudeSessionId.make('84f3659c-7fcf-4280-8580-b82ae5fd8f91')
 const SESSION_OPTION = Option.some(SESSION)

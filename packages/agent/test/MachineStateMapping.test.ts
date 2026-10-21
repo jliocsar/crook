@@ -25,8 +25,7 @@ import {
 } from '@crook/domain/Ids'
 import { type MachineState, panePresence } from '@crook/domain/MachineState'
 import { type AgentInfo, TabInfo } from '@crook/herdr/Records'
-
-import { agentInfo, paneInfo, tabInfo, workspaceInfo } from './Fixtures'
+import { agentInfo, paneInfo, tabInfo, workspaceInfo } from '@crook/herdr/RecordFixtures'
 
 const MACHINE = MachineId.make('laptop')
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')

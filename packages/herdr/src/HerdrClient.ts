@@ -43,6 +43,17 @@ export interface SentRequest {
   readonly line: string
 }
 
+export interface TestScript {
+  readonly responses: readonly ScriptedResponse[]
+  readonly events: Queue.Dequeue<HerdrEvent, HerdrSubscriptionError>
+  readonly sent?: Queue.Enqueue<SentRequest>
+}
+
+export interface SwitchingTestClient {
+  readonly layer: Layer.Layer<HerdrClient>
+  readonly respondWith: (responses: readonly ScriptedResponse[]) => Effect.Effect<void>
+}
+
 const SUBSCRIBE_METHOD = 'events.subscribe'
 const EVENTS_LOST_CODE = 'events_lost'
 const PANE_NOT_FOUND_CODE = 'pane_not_found'
@@ -165,6 +176,10 @@ const RequestLine = Schema.fromJsonString(
 
 const ResponseLine = Schema.fromJsonString(
   Schema.Union([Schema.Struct({ id: Schema.String, result: Schema.Unknown }), HerdrErrorResponse]),
+)
+
+const SentRequestLine = Schema.fromJsonString(
+  Schema.Struct({ method: Schema.String, params: Schema.Unknown }),
 )
 
 const encodeRequest = Effect.fn('HerdrClient.encodeRequest')(function* <Params>(
@@ -317,11 +332,7 @@ const makeLive = (socketPath: string) => {
   })
 }
 
-const makeTest = (script: {
-  readonly responses: readonly ScriptedResponse[]
-  readonly events: Queue.Dequeue<HerdrEvent, HerdrSubscriptionError>
-  readonly sent?: Queue.Enqueue<SentRequest>
-}) =>
+const makeTest = (script: TestScript) =>
   Effect.gen(function* () {
     const answered = yield* Ref.make(HashMap.empty<string, number>())
 
@@ -384,6 +395,9 @@ export const scriptedRejection = (
   ),
 })
 
+export const decodeSentRequest = (request: SentRequest) =>
+  Schema.decodeSync(SentRequestLine)(request.line)
+
 export const HerdrSocketPath = Config.String('HERDR_SOCKET_PATH').pipe(
   Config.orElse(() =>
     Config.String('HOME').pipe(Config.map((home) => `${home}/.config/herdr/herdr.sock`)),
@@ -411,6 +425,25 @@ export class HerdrClient extends Context.Service<
 
   static readonly layer = Layer.effect(this, Effect.map(HerdrSocketPath, makeLive))
 
-  static readonly layerTest = (script: Parameters<typeof makeTest>[0]) =>
-    Layer.effect(this, makeTest(script))
+  static readonly layerTest = (script: TestScript) => Layer.effect(this, makeTest(script))
+
+  static readonly makeSwitchingTest = Effect.fn('HerdrClient.makeSwitchingTest')(function* (
+    script: TestScript,
+  ) {
+    const current = yield* Ref.make(yield* makeTest(script))
+    const forwarding = HerdrClient.of({
+      request: (method, params) =>
+        Effect.flatMap(Ref.get(current), (client) => client.request(method, params)),
+      snapshot: Effect.flatMap(Ref.get(current), (client) => client.snapshot),
+      subscribe: (subscriptions) =>
+        Effect.flatMap(Ref.get(current), (client) => client.subscribe(subscriptions)),
+    })
+    const switching: SwitchingTestClient = {
+      layer: Layer.succeed(HerdrClient, forwarding),
+      respondWith: (responses) =>
+        Effect.flatMap(makeTest({ ...script, responses }), (client) => Ref.set(current, client)),
+    }
+
+    return switching
+  })
 }

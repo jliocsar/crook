@@ -32,10 +32,9 @@ import {
   type HerdrSubscriptionError,
   HerdrUnreachable,
 } from '@crook/herdr/HerdrClient'
+import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from '@crook/herdr/RecordFixtures'
 import { type AgentInfo, type SessionSnapshot, TabInfo } from '@crook/herdr/Records'
 import { RECONNECT_CAP } from '@crook/protocol/AgentLink'
-
-import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from './Fixtures'
 
 interface FakeSubscription {
   readonly subscriptions: readonly Subscription[]

@@ -47,6 +47,7 @@ import {
   WorkspaceCreateMethod,
   WorktreeCreateMethod,
 } from '@crook/herdr/Methods'
+import { agentInfo, paneInfo, tabInfo, workspaceInfo } from '@crook/herdr/RecordFixtures'
 import {
   type AgentInfo,
   SessionSnapshot,
@@ -69,15 +70,7 @@ import {
   TaskNotDelivered,
 } from '@crook/protocol/Commands'
 
-import {
-  agentInfo,
-  agentRow,
-  executorWith,
-  machineStateWith,
-  paneInfo,
-  tabInfo,
-  workspaceInfo,
-} from './Fixtures'
+import { agentRow, executorWith, machineStateWith } from './Fixtures'
 
 const FIRST_ACTION = IdempotencyKey.make('6a0f3c2e-7d41-4b8a-9e15-2c7f0a9d3b61')
 const SECOND_ACTION = IdempotencyKey.make('0c5d8e21-4b3f-4a9e-8d17-5e2f9b6a1c40')

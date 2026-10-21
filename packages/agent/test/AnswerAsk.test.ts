@@ -8,7 +8,6 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
-import * as Schema from 'effect/Schema'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
@@ -40,6 +39,7 @@ import {
   type HerdrSubscriptionError,
   type ScriptedResponse,
   type SentRequest,
+  decodeSentRequest,
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { AgentPromptMethod, AgentSendKeysMethod, PaneReadMethod } from '@crook/herdr/Methods'
@@ -62,12 +62,6 @@ const QUESTION_ASK_ID = AskId.make('toolu_016qcolor')
 const keysSent = scriptedResult(AgentSendKeysMethod, { type: 'ok' })
 const prompted = scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })
 const delivered = new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 4 })
-
-const SentLine = Schema.fromJsonString(
-  Schema.Struct({ method: Schema.String, params: Schema.Unknown }),
-)
-
-const sentRequest = (request: SentRequest) => Schema.decodeSync(SentLine)(request.line)
 
 const screenText = Effect.fn('screenText')(function* (name: string) {
   const fileSystem = yield* FileSystem.FileSystem
@@ -147,32 +141,18 @@ const startOverQueuedScreens = Effect.fn('startOverQueuedScreens')(function* (
   const state = yield* SubscriptionRef.make(blocked)
   const sent = yield* Queue.unbounded<SentRequest>()
   const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
-  const clientShowing = (screen: string) =>
-    Effect.map(
-      Layer.build(
-        HerdrClient.layerTest({ responses: [screenRead(screen), keysSent], events, sent }),
-      ),
-      (context) => Context.get(context, HerdrClient),
-    )
-  const shown = yield* Ref.make(yield* clientShowing(answeredScreen))
-  const next = yield* clientShowing(nextScreen)
-  const herdr = Layer.succeed(
-    HerdrClient,
-    HerdrClient.of({
-      request: (method, params) =>
-        Effect.flatMap(Ref.get(shown), (client) => client.request(method, params)),
-      snapshot: Effect.flatMap(Ref.get(shown), (client) => client.snapshot),
-      subscribe: (subscriptions) =>
-        Effect.flatMap(Ref.get(shown), (client) => client.subscribe(subscriptions)),
-    }),
-  )
-  const context = yield* Layer.build(executorWith(herdr, state))
+  const herdr = yield* HerdrClient.makeSwitchingTest({
+    responses: [screenRead(answeredScreen), keysSent],
+    events,
+    sent,
+  })
+  const context = yield* Layer.build(executorWith(herdr.layer, state))
 
   return {
     executor: Context.get(context, CommandExecutor),
     sent,
     state,
-    showNext: Ref.set(shown, next),
+    showNext: herdr.respondWith([screenRead(nextScreen), keysSent]),
   }
 })
 
@@ -180,7 +160,7 @@ const answer = (ask: Ask, given: AskAnswer) =>
   new AnswerAsk({ pane: AGENT_PANE, ask: ask.id, answer: given })
 
 const sentAfter = (sent: Queue.Queue<SentRequest>) =>
-  Effect.map(Queue.clear(sent), (requests) => requests.map(sentRequest))
+  Effect.map(Queue.clear(sent), (requests) => requests.map(decodeSentRequest))
 
 const keysRequest = (keys: readonly string[]) => ({
   method: 'agent.send_keys',
@@ -249,8 +229,8 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
       ])
       const declined = answer(ask, new Decline({ message: Option.some('use printf') }))
       const running = yield* executor.execute(ACTION, declined).pipe(Effect.forkChild)
-      const read = sentRequest(yield* Queue.take(sent))
-      const esc = sentRequest(yield* Queue.take(sent))
+      const read = decodeSentRequest(yield* Queue.take(sent))
+      const esc = decodeSentRequest(yield* Queue.take(sent))
 
       yield* SubscriptionRef.set(state, machineStateWith([agentRow({ status: 'idle' })]))
       const receipt = yield* Fiber.join(running)
