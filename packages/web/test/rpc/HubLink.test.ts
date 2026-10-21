@@ -24,6 +24,7 @@ import {
 } from '@crook/web/rpc/HubLink'
 import { COLD_START, LinkStatus, QUIET_DIALING } from '@crook/web/rpc/HubLinkState'
 import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
+import { SESSION_CHECK_TIMEOUT } from '@crook/web/rpc/SessionCheck'
 
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { dropSession, makeFakeBrowser } from '../HubFakes.ts'
@@ -107,6 +108,28 @@ describe('HubLink', () => {
       expect((yield* current).status).toEqual(
         LinkStatus.Dialing({ announced: true, afterFailure: false, coldStart: true }),
       )
+    }),
+  )
+
+  it.effect('keeps the sync notice timer running while a failed dial checks the session', () =>
+    Effect.gen(function* () {
+      const { browser, current, nextSession } = yield* start()
+      const first = yield* nextSession
+
+      yield* Ref.set(browser.sessionCheckTakes, Option.some(SESSION_CHECK_TIMEOUT))
+      yield* dropSession(first, refused)
+
+      expect((yield* current).status).toEqual(COLD_START)
+
+      yield* TestClock.adjust(SYNC_NOTICE_DELAY)
+
+      expect((yield* current).status).toEqual(
+        LinkStatus.Dialing({ announced: true, afterFailure: false, coldStart: true }),
+      )
+
+      yield* TestClock.adjust(SESSION_CHECK_TIMEOUT)
+
+      expect((yield* current).status).toEqual(LinkStatus.Unreachable())
     }),
   )
 

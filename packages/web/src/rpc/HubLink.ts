@@ -78,14 +78,11 @@ const make = Effect.gen(function* () {
     }
 
     const snapshot = new HerdSnapshot({ view, syncedAt: yield* DateTime.now })
-    const next = yield* SubscriptionRef.modify(state, (current) => {
-      const updated = new HubLinkState({
-        status: goLive(current.status),
-        herd: Option.some(snapshot),
-      })
-
-      return [updated, updated]
-    })
+    const next = yield* SubscriptionRef.updateAndGet(
+      state,
+      (current) =>
+        new HubLinkState({ status: goLive(current.status), herd: Option.some(snapshot) }),
+    )
 
     if (firstOfSession && isRecovering(next.status)) {
       yield* Effect.sleep(RECOVERED_NOTICE_DURATION).pipe(
@@ -100,12 +97,6 @@ const make = Effect.gen(function* () {
   const attempt = Effect.fn('HubLink.attempt')(function* (
     liveSince: Ref.Ref<Option.Option<number>>,
   ) {
-    yield* updateStatus(beginAttempt)
-    yield* Effect.sleep(SYNC_NOTICE_DELAY).pipe(
-      Effect.andThen(updateStatus(announce)),
-      Effect.forkScoped,
-    )
-
     const hub = yield* connection.open
 
     yield* Effect.addFinalizer(() => Ref.set(connected, Option.none()))
@@ -132,6 +123,11 @@ const make = Effect.gen(function* () {
     const liveSince = yield* Ref.make(Option.none<number>())
     const healthy = Effect.zipWith(Ref.get(liveSince), Clock.currentTimeMillis, stayedHealthy)
 
+    yield* updateStatus(beginAttempt)
+    yield* Effect.sleep(SYNC_NOTICE_DELAY).pipe(
+      Effect.andThen(updateStatus(announce)),
+      Effect.forkScoped,
+    )
     yield* attempt(liveSince).pipe(
       Effect.catch((error) =>
         Effect.flatMap(healthy, (stayed) =>
@@ -139,7 +135,7 @@ const make = Effect.gen(function* () {
         ),
       ),
     )
-  })
+  }).pipe(Effect.scoped, Effect.withSpan('HubLink.session'))
 
   const stayConnected = session.pipe(
     Effect.retry(hubReconnectSchedule),

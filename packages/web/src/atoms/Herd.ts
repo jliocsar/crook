@@ -48,18 +48,20 @@ const unseenWhileLive = (opened: OpenedAgent, get: Atom.AtomContext) =>
     Option.filter(({ herdMachine, row }) => !isSeen(herdMachine)(row)),
   )
 
+const unseenWhileLiveAtom = Atom.family((opened: OpenedAgent) =>
+  Atom.make((get) => Option.isSome(unseenWhileLive(opened, get))),
+)
+
 export const seenWhileOpenAtom = Atom.family((opened: OpenedAgent) =>
   hubRuntime.atom((get) =>
-    Option.match(unseenWhileLive(opened, get), {
-      onNone: () => Effect.void,
-      onSome: () =>
-        Effect.gen(function* () {
+    get(unseenWhileLiveAtom(opened))
+      ? Effect.gen(function* () {
           const link = yield* HubLink
 
           yield* link
             .markSeen(opened.machine, opened.pane)
             .pipe(Effect.catch((error) => Effect.logWarning(error.message)))
-        }),
-    }),
+        })
+      : Effect.void,
   ),
 )

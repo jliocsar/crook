@@ -1,4 +1,5 @@
 import type * as Cause from 'effect/Cause'
+import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
@@ -38,6 +39,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const visible = yield* SubscriptionRef.make(true)
   const online = yield* SubscriptionRef.make(true)
   const expired = yield* Ref.make(false)
+  const sessionCheckTakes = yield* Ref.make(Option.none<Duration.Duration>())
 
   const open = Effect.gen(function* () {
     const views = yield* Queue.unbounded<HerdView, HubCallFailed | Cause.Done>()
@@ -69,10 +71,32 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
         online: SubscriptionRef.changes(online),
       }),
     ),
-    Layer.succeed(SessionCheck, SessionCheck.of({ expired: Ref.get(expired) })),
+    Layer.succeed(
+      SessionCheck,
+      SessionCheck.of({
+        expired: Effect.andThen(
+          Effect.flatMap(
+            Ref.get(sessionCheckTakes),
+            Option.match({ onNone: () => Effect.void, onSome: Effect.sleep }),
+          ),
+          Ref.get(expired),
+        ),
+      }),
+    ),
   )
 
-  return { layer, sessions, opened, closed, seen, saved, visible, online, expired }
+  return {
+    layer,
+    sessions,
+    opened,
+    closed,
+    seen,
+    saved,
+    visible,
+    online,
+    expired,
+    sessionCheckTakes,
+  }
 })
 
 export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: HubLinkState) {

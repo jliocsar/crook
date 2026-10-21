@@ -9,7 +9,7 @@ import { afterEach, beforeEach, vi } from 'vitest'
 import { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
-import { click, eventually, findByRole } from '../Dom.ts'
+import { click, eventually, findByRole, wait } from '../Dom.ts'
 import { agent, DESK, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 
@@ -187,6 +187,28 @@ describe('HerdScreen', () => {
           pane: agent('w1:p3', 'done').pane,
         })
       })
+    }),
+  )
+
+  it.effect('marks an open agent seen once while the rest of the herd keeps changing', () =>
+    Effect.gen(function* () {
+      const quietDesk = machine(DESK, [agent('w2:p1', 'working', { secondsAgo: 5 })])
+      const busierDesk = machine(DESK, [agent('w2:p1', 'blocked', { secondsAgo: 1 })])
+      const { link } = yield* renderApp(
+        '/m/laptop/p/w1%3Ap3',
+        liveWith(herd([busyLaptop, quietDesk])),
+      )
+      const opened = { machine: LAPTOP, pane: agent('w1:p3', 'done').pane }
+
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.seen)).toEqual([opened])
+      })
+      yield* SubscriptionRef.set(link.state, liveWith(herd([busyLaptop, busierDesk])))
+      yield* wait(0)
+      yield* SubscriptionRef.set(link.state, liveWith(herd([busyLaptop, quietDesk])))
+      yield* wait(0)
+
+      expect(Ref.getUnsafe(link.seen)).toEqual([opened])
     }),
   )
 
