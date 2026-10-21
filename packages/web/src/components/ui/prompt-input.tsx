@@ -2,6 +2,7 @@ import { cn } from 'cn'
 import { ArrowUp, Square } from 'lucide-react'
 import * as React from 'react'
 
+import { keepFocus } from '@crook/web/components/KeepFocus'
 import { isSendKey } from '@crook/web/components/SendKey'
 
 export type PromptInputStatus = 'ready' | 'working'
@@ -31,12 +32,8 @@ const DEFAULT_MAX_ROWS = 6
 const STOP_ICON_SIZE = 13
 const SEND_ICON_SIZE = 16
 
-const ROUND_BUTTON =
-  'bg-foreground text-background focus-visible:ring-ring ml-auto inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-opacity duration-150 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none'
-
-const keepFocus = (event: React.PointerEvent) => {
-  event.preventDefault()
-}
+export const ROUND_BUTTON =
+  'bg-foreground text-background focus-visible:ring-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-opacity duration-150 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none'
 
 const fitToContent = (field: HTMLTextAreaElement, maxRows: number) => {
   const styles = window.getComputedStyle(field)
@@ -137,7 +134,7 @@ export function PromptInput({
             aria-label={stopLabel}
             aria-busy={stopping || undefined}
             disabled={disabled || stopping}
-            className={cn(ROUND_BUTTON, 'disabled:opacity-50')}
+            className={cn(ROUND_BUTTON, 'ml-auto disabled:opacity-50')}
             onPointerDown={keepFocus}
             onClick={onStop}
           >
@@ -151,7 +148,7 @@ export function PromptInput({
             aria-label={submitLabel}
             aria-busy={sending || undefined}
             disabled={!canSend}
-            className={cn(ROUND_BUTTON, 'disabled:opacity-40')}
+            className={cn(ROUND_BUTTON, 'ml-auto disabled:opacity-40')}
             onPointerDown={keepFocus}
           >
             <ArrowUp aria-hidden="true" size={SEND_ICON_SIZE} />

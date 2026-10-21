@@ -4,6 +4,7 @@ import * as Option from 'effect/Option'
 import type * as React from 'react'
 
 import type { ChatItem } from '@crook/web/chat/ChatItems'
+import { RowAction } from '@crook/web/chat/RowAction'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import { ThreadItem } from '@crook/web/chat/ThreadItem'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -40,18 +41,11 @@ export const failureRows = (
     Option.map((failure) => ({
       key: FAILURE_KEY,
       content: (
-        <div className="grid justify-items-center gap-1 py-1">
+        <RowAction label="Try again" onAction={onRetry}>
           <p role="alert" className="text-destructive px-1 text-center text-sm leading-5">
             {failure.message}
           </p>
-          <button
-            type="button"
-            className="text-primary inline-flex min-h-11 items-center px-3 text-sm font-semibold"
-            onClick={onRetry}
-          >
-            Try again
-          </button>
-        </div>
+        </RowAction>
       ),
     })),
     Option.toArray,

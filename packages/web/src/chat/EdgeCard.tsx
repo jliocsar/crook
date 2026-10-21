@@ -26,7 +26,7 @@ export interface EdgeCardProps {
   readonly takeFocus: boolean
 }
 
-const ICON_CLASS = 'size-5'
+const EDGE_ICON_SIZE = 20
 
 const ENDED_TITLE = { closed: 'This pane closed', exited: 'Claude exited' } satisfies Record<
   Exclude<EdgeKind, 'away'>,
@@ -51,13 +51,13 @@ const detailOf = ({ kind, since, now }: EdgeCardProps): Option.Option<string> =>
 
 function EdgeIcon({ kind }: { kind: EdgeKind }) {
   if (kind === 'away') {
-    return <Spinner size={20} className="text-muted-foreground" />
+    return <Spinner size={EDGE_ICON_SIZE} className="text-muted-foreground" />
   }
 
   return kind === 'closed' ? (
-    <SquareX aria-hidden="true" className={ICON_CLASS} />
+    <SquareX aria-hidden="true" size={EDGE_ICON_SIZE} />
   ) : (
-    <CircleOff aria-hidden="true" className={ICON_CLASS} />
+    <CircleOff aria-hidden="true" size={EDGE_ICON_SIZE} />
   )
 }
 

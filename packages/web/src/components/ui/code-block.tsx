@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 import { Check, ChevronDown, Clipboard, WrapText } from 'lucide-react'
 import * as React from 'react'
 
+import { useRowFlag } from '@crook/web/components/RowMemory'
 import { useHighlightedLines } from '@crook/web/highlight/Highlighter'
 
 type CopyState = 'idle' | 'copied' | 'error'
@@ -23,6 +24,8 @@ export type CodeBlockProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'childre
 }
 
 const COPY_FEEDBACK_MS = 1400
+const BAR_ICON_SIZE = 14
+const TOGGLE_ICON_SIZE = 13
 
 const BAR_BUTTON =
   'hit-area text-muted-foreground hover:bg-card hover:text-foreground relative inline-flex size-8 items-center justify-center rounded-md transition-colors duration-150 motion-reduce:transition-none'
@@ -172,7 +175,7 @@ function CodeBlockBar({
             className={cn(BAR_BUTTON, 'aria-pressed:bg-card aria-pressed:text-foreground')}
             onClick={onWrap}
           >
-            <WrapText aria-hidden="true" size={14} />
+            <WrapText aria-hidden="true" size={BAR_ICON_SIZE} />
           </button>
         ) : null}
 
@@ -185,9 +188,9 @@ function CodeBlockBar({
             onClick={onCopy}
           >
             {copyState === 'copied' ? (
-              <Check aria-hidden="true" size={14} />
+              <Check aria-hidden="true" size={BAR_ICON_SIZE} />
             ) : (
-              <Clipboard aria-hidden="true" size={14} />
+              <Clipboard aria-hidden="true" size={BAR_ICON_SIZE} />
             )}
           </button>
         ) : null}
@@ -214,7 +217,7 @@ export function ExpandToggle({
     >
       <ChevronDown
         aria-hidden="true"
-        size={13}
+        size={TOGGLE_ICON_SIZE}
         className={cn(
           'transition-transform duration-200 motion-reduce:transition-none',
           expanded && 'rotate-180',
@@ -240,7 +243,7 @@ export function CodeBlock({
   ...rootProps
 }: CodeBlockProps) {
   const { copyState, copy } = useCopy(code)
-  const [expanded, setExpanded] = React.useState(false)
+  const [expanded, setExpanded] = useRowFlag('code', false)
   const [override, setOverride] = React.useState<Option.Option<boolean>>(Option.none())
   const wrapped = Option.getOrElse(override, () => wrap)
   const lines = React.useMemo(() => code.replace(/\n$/u, '').split('\n'), [code])
@@ -312,7 +315,7 @@ export function CodeBlock({
           expanded={expanded}
           hidden={lines.length - shown.length}
           onToggle={() => {
-            setExpanded((open) => !open)
+            setExpanded(!expanded)
           }}
         />
       ) : null}

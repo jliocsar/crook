@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -23,9 +24,10 @@ import { PaneTranscript, SubagentsChanged, SubagentTranscript } from '@crook/dom
 import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
 import { PaneNotInHerd } from '@crook/protocol/ClientApi'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
+import { STOP_SETTLE } from '@crook/web/chat/ChatCommands'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
-import { click, eventually, findByRole, present } from '../Dom.ts'
+import { click, eventually, findByRole, present, wait } from '../Dom.ts'
 import { agent, CROOK_TAB, CROOK_WORKSPACE, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered, STARTED_PANE } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
@@ -46,6 +48,9 @@ const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
 const VIEWPORT_WIDTH = 375
 const VIEWPORT_HEIGHT = 812
+const TALL_SCROLL_HEIGHT = 100_000
+const MANY_LINES = 120
+const LINE_BYTES = 10
 
 const ask = new PermissionAsk({
   id: AskId.make('toolu_01XXC3'),
@@ -82,6 +87,31 @@ const withShellPane = (entry: HerdMachine, pane: string): HerdMachine =>
 const live = (rows: readonly AgentRow[]) => liveWith(herd([laptopWith(rows)]))
 
 const field = () => present(screen.queryByRole('textbox'), 'The composer')
+
+const tallViewport = () => {
+  const viewport = present(
+    document.querySelector<HTMLElement>('[data-slot="conversation-viewport"]'),
+    'The thread',
+  )
+
+  Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: TALL_SCROLL_HEIGHT })
+
+  return viewport
+}
+
+const followedToBottom = Effect.fn('followedToBottom')(function* (viewport: HTMLElement) {
+  yield* eventually(() => {
+    expect(viewport.scrollTop).toBe(TALL_SCROLL_HEIGHT)
+  })
+  fireEvent.scroll(viewport)
+})
+
+const manyLines = (from: number) =>
+  chunk(
+    from,
+    from + MANY_LINES * LINE_BYTES,
+    Arr.makeBy(MANY_LINES, (index) => said(from + index * LINE_BYTES, `Line ${index}`)),
+  )
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -484,7 +514,7 @@ describe('AgentChatScreen', () => {
     }),
   )
 
-  it.effect('sends one Esc for Stop until the herd shows it landed', () =>
+  it.effect('sends one Esc for Stop while the first one may still be landing', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
 
@@ -581,6 +611,121 @@ describe('AgentChatScreen', () => {
       yield* click(yield* Effect.promise(() => screen.findByText('Port the herd')))
 
       expect(yield* findByRole('button', 'Back to laptop')).toBeDefined()
+    }),
+  )
+
+  it.effect('keeps the image open while the live tail pushes its card out of the thread', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        chunk(0, 20, [
+          toolUse(0, 'toolu_1', 'Read', { file_path: `${CWD}/shots/herd.png` }),
+          toolResult(10, 'toolu_1', 'Read an image', { image: true }),
+        ]),
+      ])
+      yield* click(yield* findByRole('button', 'View herd.png'))
+      yield* findByRole('button', 'Close image')
+
+      const viewport = tallViewport()
+
+      yield* Queue.offer(transcript, manyLines(20))
+      yield* followedToBottom(viewport)
+      yield* eventually(() => {
+        expect(document.querySelector('[aria-label="View herd.png"]')).toBeNull()
+      })
+
+      expect(screen.getByRole('dialog').textContent).toContain('herd.png')
+      expect(screen.getByRole('button', { name: 'Close image' })).toBeDefined()
+    }),
+  )
+
+  it.effect('keeps a tool call open after it scrolls out of the thread and back', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        chunk(0, 20, [
+          toolUse(0, 'toolu_1', 'Read', { file_path: `${CWD}/src/Herd.ts` }),
+          toolResult(10, 'toolu_1', 'export const herd = 1'),
+        ]),
+      ])
+      yield* click(yield* Effect.promise(() => screen.findByRole('button', { name: /^Read\(/u })))
+
+      const viewport = tallViewport()
+
+      yield* Queue.offer(transcript, manyLines(20))
+      yield* followedToBottom(viewport)
+      yield* eventually(() => {
+        expect(screen.queryByRole('button', { name: /^Read\(/u })).toBeNull()
+      })
+      viewport.scrollTop = 0
+      fireEvent.scroll(viewport)
+
+      const tool = yield* Effect.promise(() => screen.findByRole('button', { name: /^Read\(/u }))
+
+      expect(tool.getAttribute('aria-expanded')).toBe('true')
+    }),
+  )
+
+  it.effect('shows no Sent bubble again once its prompt arrived and the thread reloads', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const source = new PaneTranscript({ pane: PANE })
+      const transcript = yield* link.transcriptFor(source)
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'second' }))),
+      )
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'first')])])
+      yield* Effect.promise(() => screen.findByText('first'))
+      yield* Effect.promise(() => userEvent.type(field(), 'second{Enter}'))
+      yield* eventually(() => {
+        expect(screen.getByText('Sent')).toBeDefined()
+      })
+      yield* Queue.offer(transcript, chunk(10, 20, [prompt(10, 'second')]))
+      yield* eventually(() => {
+        expect(screen.queryByText('Sent')).toBeNull()
+      })
+      yield* link.endTranscript(source, new TranscriptResumeRejected({ detail: 'it shrank' }))
+      yield* Queue.offer(yield* link.transcriptFor(source), opened())
+      yield* Effect.promise(() => screen.findByText('No messages yet'))
+
+      expect(screen.queryByText('Sent')).toBeNull()
+    }),
+  )
+
+  it.effect('lets Stop send another Esc when the first one did not stop Claude', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new SendKeys({ pane: PANE, keys: ['esc'] }))),
+      )
+
+      const stop = yield* findByRole('button', 'Stop (Esc)')
+
+      yield* click(stop)
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent)).toHaveLength(1)
+      })
+      yield* wait(Duration.toMillis(STOP_SETTLE))
+      yield* eventually(() => {
+        expect(stop).toHaveProperty('disabled', false)
+      })
+      yield* click(stop)
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent).map((call) => call.command)).toMatchObject([
+          { _tag: 'SendKeys', keys: ['esc'] },
+          { _tag: 'SendKeys', keys: ['esc'] },
+        ])
+      })
     }),
   )
 })

@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 import { FileDiff } from 'lucide-react'
 import * as React from 'react'
 
+import { useRowFlag } from '@crook/web/components/RowMemory'
 import { ExpandToggle } from '@crook/web/components/ui/code-block'
 import { languageOfPath, useHighlightedLines } from '@crook/web/highlight/Highlighter'
 
@@ -47,7 +48,7 @@ const rowsOf = (hunks: readonly DiffHunk[]): readonly DiffRow[] =>
 const SIGN = { context: ' ', add: '+', remove: '-' } satisfies Record<DiffLineKind, string>
 
 export function DiffView({ hunks, filename, maxLines, className, ...rootProps }: DiffViewProps) {
-  const [expanded, setExpanded] = React.useState(false)
+  const [expanded, setExpanded] = useRowFlag('diff', false)
   const rows = React.useMemo(() => rowsOf(hunks), [hunks])
   const collapsible = maxLines !== undefined && rows.length > maxLines
   const shown = collapsible && !expanded ? rows.slice(0, maxLines) : rows
@@ -120,7 +121,7 @@ export function DiffView({ hunks, filename, maxLines, className, ...rootProps }:
           expanded={expanded}
           hidden={rows.length - shown.length}
           onToggle={() => {
-            setExpanded((open) => !open)
+            setExpanded(!expanded)
           }}
         />
       ) : null}

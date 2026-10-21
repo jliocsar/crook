@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
+import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -18,7 +19,8 @@ import {
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { PendingAction } from '@crook/web/atoms/Commands'
-import { ChatItem } from '@crook/web/chat/ChatItems'
+import { isUserPrompt } from '@crook/web/chat/ChatItems'
+import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { activityOf } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 import { useCommandAction } from '@crook/web/chat/CommandAction'
@@ -47,12 +49,19 @@ export interface ChatCommandsInput {
   readonly setDraft: (draft: string) => void
 }
 
+export interface PromptWait {
+  readonly promptsAtSend: number
+  readonly arrived: boolean
+}
+
 const SLASH = '/'
+const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, arrived: true }
+
+export const STOP_SETTLE = Duration.millis(512)
 
 const isSending = PendingAction.$is('Sending')
 const isSent = PendingAction.$is('Sent')
 const isDone = PendingAction.$is('Done')
-const isUserPrompt = ChatItem.$is('UserPrompt')
 
 const decodeFolder = Schema.decodeUnknownOption(FolderPath)
 
@@ -94,15 +103,18 @@ export const sentText = (action: CommandAction): Option.Option<string> =>
 export const promptCount = (items: readonly ChatItem[]): number =>
   Arr.filter(items, isUserPrompt).length
 
+const hasArrived = (wait: PromptWait, items: readonly ChatItem[]): boolean =>
+  wait.arrived || promptCount(items) > wait.promptsAtSend
+
 export const pendingPromptText = (
   action: CommandAction,
-  promptsAtSend: number,
+  wait: PromptWait,
   items: readonly ChatItem[],
 ): Option.Option<string> =>
   pipe(
     sentText(action),
     Option.filter((text) => !text.startsWith(SLASH)),
-    Option.filter(() => promptCount(items) <= promptsAtSend),
+    Option.filter(() => !hasArrived(wait, items)),
   )
 
 const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
@@ -144,6 +156,47 @@ const useClearSentDraft = (
   }, [sent])
 }
 
+const usePromptWait = (items: readonly ChatItem[]) => {
+  const [wait, setWait] = React.useState<PromptWait>(NOTHING_AWAITED)
+  const arrived = hasArrived(wait, items)
+
+  React.useEffect(() => {
+    if (arrived && !wait.arrived) {
+      setWait({ promptsAtSend: wait.promptsAtSend, arrived: true })
+    }
+  }, [arrived, wait])
+
+  return {
+    wait,
+    awaitPrompt: () => {
+      setWait({ promptsAtSend: promptCount(items), arrived: false })
+    },
+  }
+}
+
+const useStopLock = (stop: CommandAction): boolean => {
+  const acknowledged = isSent(stop.state)
+  const [settled, setSettled] = React.useState(false)
+
+  React.useEffect(() => {
+    setSettled(false)
+
+    if (!acknowledged) {
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      setSettled(true)
+    }, Duration.toMillis(STOP_SETTLE))
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [acknowledged])
+
+  return isSending(stop.state) || (acknowledged && !settled)
+}
+
 const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
   const navigate = useNavigate()
   const started = PendingAction.$match(action.state, {
@@ -179,17 +232,17 @@ export const useChatCommands = ({
   const prompt = useCommandAction(machine)
   const stop = useCommandAction(machine)
   const restart = useCommandAction(machine)
-  const [promptsAtSend, setPromptsAtSend] = React.useState(0)
+  const prompted = usePromptWait(items)
   const activity = activityOf(model)
   const blocked = activity === 'blocked'
   const mode = composerMode(model.row, blocked)
-  const stopping = isInFlight(stop)
+  const stopping = useStopLock(stop)
 
   useClearSentDraft(prompt, draft, setDraft)
   useRestartInPlace(machine, restart)
 
   const sendPrompt = (command: Command) => {
-    setPromptsAtSend(promptCount(items))
+    prompted.awaitPrompt()
     prompt.send(command)
   }
 
@@ -246,6 +299,6 @@ export const useChatCommands = ({
         failure: failureOf(restart),
       }),
     ),
-    pendingPrompt: pendingPromptText(prompt, promptsAtSend, items),
+    pendingPrompt: pendingPromptText(prompt, prompted.wait, items),
   }
 }

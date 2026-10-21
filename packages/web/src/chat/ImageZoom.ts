@@ -4,6 +4,7 @@ import type { AnimationPlaybackControls } from 'motion/react'
 import * as React from 'react'
 
 import { MOVE_SLOP } from '@crook/web/components/press/PressGesture'
+import { SWIPE_DISMISS_DISTANCE, SWIPE_DISMISS_VELOCITY } from '@crook/web/components/SwipeDismiss'
 import { GLIDE } from '@crook/web/motion/Springs'
 
 export type View = {
@@ -22,8 +23,8 @@ export type Pan = {
   readonly origin: Point
   readonly start: View
   readonly afterPinch: boolean
-  moved: boolean
-  readonly samples: Sample[]
+  readonly moved: boolean
+  readonly samples: readonly Sample[]
 }
 
 export type Pinch = {
@@ -47,8 +48,6 @@ export type Frame = {
 const MAX_ZOOM = 4
 const DOUBLE_TAP_ZOOM = 2.5
 const DOUBLE_TAP_MS = 300
-const DISMISS_DISTANCE = 96
-const DISMISS_VELOCITY = 500
 const FADE_DISTANCE = 320
 const VELOCITY_WINDOW_MS = 80
 const MIN_FLICK_DISTANCE = 24
@@ -81,8 +80,11 @@ const frameOf = (stage: HTMLElement, shown: HTMLElement): Frame => {
   }
 }
 
+const recentSamples = (samples: readonly Sample[], now: number): readonly Sample[] =>
+  samples.filter((sample) => now - sample.at <= VELOCITY_WINDOW_MS)
+
 const releaseVelocity = (samples: readonly Sample[], now: number): number => {
-  const recent = samples.filter((sample) => now - sample.at <= VELOCITY_WINDOW_MS)
+  const recent = recentSamples(samples, now)
   const first = recent.at(0)
   const last = recent.at(-1)
 
@@ -96,11 +98,11 @@ const releaseVelocity = (samples: readonly Sample[], now: number): number => {
 export const isDismissal = (drop: number, samples: readonly Sample[], now: number): boolean => {
   const velocity = releaseVelocity(samples, now)
   const flicked =
-    Math.abs(velocity) > DISMISS_VELOCITY &&
+    Math.abs(velocity) > SWIPE_DISMISS_VELOCITY &&
     Math.abs(drop) > MIN_FLICK_DISTANCE &&
     Math.sign(velocity) === Math.sign(drop)
 
-  return Math.abs(drop) > DISMISS_DISTANCE || flicked
+  return Math.abs(drop) > SWIPE_DISMISS_DISTANCE || flicked
 }
 
 const relativeTo = (frame: Option.Option<Frame>, point: Point): Point =>
@@ -269,11 +271,13 @@ export function useZoom(onDismiss: () => void) {
   }
 
   const movePan = (current: Pan, point: Point) => {
-    if (distanceBetween(point, current.origin) > MOVE_SLOP) {
-      current.moved = true
-    }
+    const at = performance.now()
 
-    current.samples.push({ top: point.top, at: performance.now() })
+    gesture.current = Option.some({
+      ...current,
+      moved: current.moved || distanceBetween(point, current.origin) > MOVE_SLOP,
+      samples: [...recentSamples(current.samples, at), { top: point.top, at }],
+    })
     show(pannedView(frame(), current, point))
   }
 

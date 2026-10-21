@@ -40,11 +40,13 @@ export function ChatStatusLine({
         Ended: () => <HollowDot />,
         Quiet: () => null,
       })}
-      {word === '' ? null : (
-        <Swap id={word} className="text-foreground font-semibold">
-          {word}
-        </Swap>
-      )}
+      <span role="status" className={word === '' ? 'sr-only' : 'inline-flex'}>
+        {word === '' ? null : (
+          <Swap id={word} className="text-foreground font-semibold">
+            {word}
+          </Swap>
+        )}
+      </span>
       {Option.match(place, {
         onNone: () => null,
         onSome: (text) => (

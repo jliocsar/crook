@@ -2,6 +2,7 @@ import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Struct from 'effect/Struct'
 
 import type { ClaudeSessionId } from '@crook/domain/Ids'
 import type { Subagent } from '@crook/domain/Subagent'
@@ -66,12 +67,7 @@ const subagentsAfter = (view: TranscriptView, event: TranscriptEvent): readonly 
 const recovered = (view: TranscriptView): TranscriptView =>
   Option.isNone(view.failure)
     ? view
-    : new TranscriptView({
-        position: view.position,
-        lines: view.lines,
-        subagents: view.subagents,
-        failure: Option.none(),
-      })
+    : new TranscriptView(Struct.evolve(view, { failure: () => Option.none() }))
 
 export const applyTranscriptEvent = (
   view: TranscriptView,
@@ -92,12 +88,7 @@ export const applyTranscriptEvent = (
   )
 
 export const failedWith = (view: TranscriptView, failure: TranscriptWatchFailure): TranscriptView =>
-  new TranscriptView({
-    position: view.position,
-    lines: view.lines,
-    subagents: view.subagents,
-    failure: Option.some(failure),
-  })
+  new TranscriptView(Struct.evolve(view, { failure: () => Option.some(failure) }))
 
 export const resumeOf =
   (tail: Option.Option<TranscriptTailBytes>) =>

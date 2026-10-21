@@ -1,0 +1,2 @@
+export const SWIPE_DISMISS_DISTANCE = 96
+export const SWIPE_DISMISS_VELOCITY = 500

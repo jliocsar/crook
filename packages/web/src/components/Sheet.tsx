@@ -3,12 +3,11 @@ import { cn } from 'cn'
 import { AnimatePresence, motion, useDragControls, useIsPresent } from 'motion/react'
 import * as React from 'react'
 
+import { SWIPE_DISMISS_DISTANCE, SWIPE_DISMISS_VELOCITY } from '@crook/web/components/SwipeDismiss'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { GLIDE } from '@crook/web/motion/Springs'
 import { COLUMN_STYLE } from '@crook/web/navigation/Column'
 
-export const SHEET_DISMISS_DISTANCE = 96
-export const SHEET_DISMISS_VELOCITY = 500
 export const SHEET_ELASTIC_ABOVE = 0.05
 
 function SheetLayer({
@@ -62,8 +61,8 @@ function SheetLayer({
             dragElastic={{ top: SHEET_ELASTIC_ABOVE, bottom: 1 }}
             onDragEnd={(_event, info) => {
               if (
-                info.offset.y > SHEET_DISMISS_DISTANCE ||
-                info.velocity.y > SHEET_DISMISS_VELOCITY
+                info.offset.y > SWIPE_DISMISS_DISTANCE ||
+                info.velocity.y > SWIPE_DISMISS_VELOCITY
               ) {
                 onClose()
               }

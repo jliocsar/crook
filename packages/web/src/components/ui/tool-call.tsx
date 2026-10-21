@@ -2,6 +2,8 @@ import { cn } from 'cn'
 import { Check, ChevronRight, Circle, CircleDot, Loader, TriangleAlert, Wrench } from 'lucide-react'
 import * as React from 'react'
 
+import { useRowFlag } from '@crook/web/components/RowMemory'
+
 export type ToolCallStatus = 'running' | 'waiting' | 'success' | 'error' | 'stopped'
 
 export type ToolCallProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
@@ -115,7 +117,7 @@ export function ToolCall({
   ...rootProps
 }: ToolCallProps) {
   const panelId = `${React.useId()}-panel`
-  const [open, setOpen] = React.useState(defaultOpen)
+  const [open, setOpen] = useRowFlag('tool-call', defaultOpen)
   const expandable = panel !== undefined && panel !== null
   const content = (
     <HeaderContent

@@ -49,6 +49,7 @@ import {
 import { Composer } from '@crook/web/chat/Composer'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
 import type { Restart } from '@crook/web/chat/EdgeCard'
+import { ImageViewer } from '@crook/web/chat/Images'
 import { useKeyboardInset } from '@crook/web/chat/KeyboardInset'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
@@ -293,7 +294,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
 export function AgentChatScreen({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   return (
     <PushedScreen>
-      <ChatBody machine={machine} pane={pane} />
+      <ImageViewer>
+        <ChatBody machine={machine} pane={pane} />
+      </ImageViewer>
     </PushedScreen>
   )
 }

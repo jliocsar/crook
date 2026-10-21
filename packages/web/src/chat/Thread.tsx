@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from 'motion/react'
 import * as React from 'react'
 
 import { Dimmed } from '@crook/web/components/Dimmed'
+import { RowMemoryScope } from '@crook/web/components/RowMemory'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { translate, useTransformString } from '@crook/web/motion/TransformString'
 
@@ -55,17 +56,21 @@ const useSettled = (rowCount: number): boolean => {
 }
 
 function Appear({
+  rowKey,
   rise,
   onShown,
   children,
 }: {
+  rowKey: string
   rise: boolean
-  onShown: () => void
+  onShown: (rowKey: string) => void
   children: React.ReactNode
 }) {
   const transform = useTransformString()
 
-  React.useEffect(onShown, [onShown])
+  React.useEffect(() => {
+    onShown(rowKey)
+  }, [rowKey, onShown])
 
   return (
     <motion.div
@@ -92,6 +97,7 @@ export function Thread({
 }) {
   const viewport = React.useRef<HTMLDivElement>(null)
   const rises = React.useRef(new Map<string, boolean>())
+  const memory = React.useRef(new Map<string, boolean>())
   const [following, setFollowing] = React.useState(true)
   const followingRef = React.useRef(true)
   const reduce = useReducedMotion() ?? false
@@ -183,12 +189,9 @@ export function Thread({
     return settled
   }
 
-  const shown = React.useCallback(
-    (key: string) => () => {
-      rises.current.set(key, false)
-    },
-    [],
-  )
+  const shown = React.useCallback((key: string) => {
+    rises.current.set(key, false)
+  }, [])
 
   return (
     <Dimmed dimmed={dimmed} className="relative h-full min-h-0">
@@ -221,9 +224,11 @@ export function Thread({
                   className="absolute inset-x-0 top-0 px-4"
                   style={{ transform: translate('Y', virtual.start) }}
                 >
-                  <Appear rise={risesFirstTime(row.key)} onShown={shown(row.key)}>
-                    {row.content}
-                  </Appear>
+                  <RowMemoryScope store={memory.current} rowKey={row.key}>
+                    <Appear rowKey={row.key} rise={risesFirstTime(row.key)} onShown={shown}>
+                      {row.content}
+                    </Appear>
+                  </RowMemoryScope>
                 </div>
               )
             })}

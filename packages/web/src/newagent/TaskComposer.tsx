@@ -1,7 +1,10 @@
+import { cn } from 'cn'
 import { ArrowUp } from 'lucide-react'
 import * as React from 'react'
 
+import { keepFocus } from '@crook/web/components/KeepFocus'
 import { isSendKey } from '@crook/web/components/SendKey'
+import { ROUND_BUTTON } from '@crook/web/components/ui/prompt-input'
 import { Spinner } from '@crook/web/components/ui/spinner'
 
 const SEND_SPINNER_SIZE = 16
@@ -74,10 +77,8 @@ export function TaskComposer({
           type="submit"
           aria-label="Start Claude"
           disabled={!sendable}
-          className="bg-foreground text-background focus-visible:ring-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-opacity duration-150 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-40 motion-reduce:transition-none"
-          onPointerDown={(event) => {
-            event.preventDefault()
-          }}
+          className={cn(ROUND_BUTTON, 'disabled:opacity-40')}
+          onPointerDown={keepFocus}
         >
           {sending ? (
             <Spinner size={SEND_SPINNER_SIZE} />

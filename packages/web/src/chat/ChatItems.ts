@@ -658,6 +658,8 @@ const isPlan = ChatItem.$is('Plan')
 const isCompacted = ChatItem.$is('Compacted')
 const isTool = ChatItem.$is('Tool')
 
+export const isUserPrompt = ChatItem.$is('UserPrompt')
+
 const merge = (first: ChatItem, later: ChatItem): ChatItem => {
   if (isSubagents(first) && isSubagents(later)) {
     return ChatItem.Subagents({ key: first.key, runs: [...first.runs, ...later.runs] })

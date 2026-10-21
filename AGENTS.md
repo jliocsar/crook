@@ -293,6 +293,10 @@ a terminal — make the `get` uninterruptible, so a started lookup always finish
 A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
 `effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
 
+`Effect.andThen(effect, f)` runs what `f` returns as an effect: an `f` that only does a side
+effect and returns nothing dies with `Not a valid effect: undefined` (measured on `effect@4.0.5`).
+Write the step in an `Effect.gen` body, or map with `Effect.map`.
+
 `Arr.filterMap` takes a function returning a `Result`, not an `Option`, in `effect@4.0.5` (measured: a
 type error). Keep an `Option` pipeline on `Arr.flatMap` or `Arr.getSomes`. `Arr.replicate` and
 `Arr.makeBy` clamp the count to at least 1 (read in their source), so a count that can be zero is
@@ -592,6 +596,10 @@ happy-dom, measured:
 - It does not resolve custom properties from stylesheets. Code that reads a CSS token at runtime
   gets nothing unless the setup copies the tokens onto the root element from the raw stylesheet.
   Vitest empties CSS imports, a `?raw` one included, unless its `css.include` names that file.
+- It does no layout, so nothing scrolls on its own. TanStack Virtual takes the viewport's size
+  from `clientHeight` and its offset from `scrollTop` on a `scroll` event, so a test that needs
+  rows to leave the range defines `scrollHeight` on the viewport, lets the thread follow the
+  bottom, and dispatches `scroll` itself once `scrollTop` has moved.
 :::
 
 :::tip

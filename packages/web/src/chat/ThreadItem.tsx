@@ -18,7 +18,7 @@ import {
   SquareTerminal,
   Wrench,
 } from 'lucide-react'
-import * as React from 'react'
+import type * as React from 'react'
 
 import { relativeToFolder } from '@crook/domain/Ask'
 import type { ImageBlock, PatchHunk, ToolResultBlock } from '@crook/domain/TranscriptMessage'
@@ -26,7 +26,9 @@ import type { ChatItem, PlanStep, SubagentRun, ToolCallModel } from '@crook/web/
 import { ChatItem as ChatItems, stringField, toolTitle } from '@crook/web/chat/ChatItems'
 import { Thumbs } from '@crook/web/chat/Images'
 import type { Picture } from '@crook/web/chat/Images'
+import { RowAction } from '@crook/web/chat/RowAction'
 import { Collapse } from '@crook/web/components/Collapse'
+import { useRowFlag } from '@crook/web/components/RowMemory'
 import { CodeBlock } from '@crook/web/components/ui/code-block'
 import { DiffView } from '@crook/web/components/ui/diff-view'
 import type { DiffHunk } from '@crook/web/components/ui/diff-view'
@@ -46,7 +48,7 @@ export interface ThreadEnvironment {
   readonly onOpenRun: (run: SubagentRun) => void
 }
 
-const TOOL_ICON_SIZE = 15
+const INLINE_ICON_SIZE = 15
 const OUTPUT_CLASS = 'max-h-56 overflow-y-auto'
 const PATH_FIELD = 'file_path'
 const SHELL_LANGUAGE = 'shellscript'
@@ -133,8 +135,8 @@ const inputHunks = (call: ToolCallModel): Option.Option<readonly DiffHunk[]> =>
       oldStart: 1,
       newStart: 1,
       lines: [
-        ...edit.old_string.split('\n').map((line) => `-${line}`),
-        ...edit.new_string.split('\n').map((line) => `+${line}`),
+        ...edit.old_string.split(LINE_BREAK).map((line) => `-${line}`),
+        ...edit.new_string.split(LINE_BREAK).map((line) => `+${line}`),
       ],
     },
   ])
@@ -297,7 +299,7 @@ function ToolCard({ call, environment }: { call: ToolCallModel; environment: Thr
     <ToolCall
       name={toolTitle(call)}
       status={call.status}
-      icon={<Icon size={TOOL_ICON_SIZE} />}
+      icon={<Icon size={INLINE_ICON_SIZE} />}
       duration={toolDuration(call, environment.now)}
       panel={<ToolPanel call={call} cwd={environment.cwd} />}
       footer={<Thumbs pictures={picturesOf(call)} place="tool" />}
@@ -348,7 +350,7 @@ function PlanChecklist({ steps }: { steps: readonly PlanStep[] }) {
             >
               <StepIcon
                 aria-hidden="true"
-                size={TOOL_ICON_SIZE}
+                size={INLINE_ICON_SIZE}
                 className={cn(
                   'mt-0.5 shrink-0',
                   step.status === 'in_progress' ? 'text-primary' : 'text-muted-foreground',
@@ -390,7 +392,7 @@ function Divider({ children }: { children: React.ReactNode }) {
 }
 
 function CompactedDivider({ summary }: { summary: Option.Option<string> }) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = useRowFlag('summary', false)
 
   return (
     <div className="grid gap-2">
@@ -410,7 +412,7 @@ function CompactedDivider({ summary }: { summary: Option.Option<string> }) {
               {open ? 'Hide summary' : 'Show summary'}
               <ChevronDown
                 aria-hidden="true"
-                size={TOOL_ICON_SIZE}
+                size={INLINE_ICON_SIZE}
                 className={cn(
                   'transition-transform duration-200 motion-reduce:transition-none',
                   open && 'rotate-180',
@@ -459,16 +461,9 @@ export function ThreadItem({
     Compacted: (compacted) => <CompactedDivider summary={compacted.summary} />,
     Cleared: () => <Divider>Conversation cleared</Divider>,
     Omitted: (omitted) => (
-      <div className="grid justify-items-center gap-1 py-1">
+      <RowAction label="Show earlier messages" onAction={environment.onShowEarlier}>
         <Note>{omittedLabel(omitted.byteLength)}</Note>
-        <button
-          type="button"
-          className="text-primary inline-flex min-h-11 items-center px-3 text-sm font-semibold"
-          onClick={environment.onShowEarlier}
-        >
-          Show earlier messages
-        </button>
-      </div>
+      </RowAction>
     ),
     Unreadable: (unreadable) => (
       <Note>{`A line crook could not read (${unreadable.byteLength} bytes)`}</Note>

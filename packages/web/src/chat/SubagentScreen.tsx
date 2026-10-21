@@ -17,7 +17,7 @@ import {
   subagentTranscriptWholeAtom,
   transcriptRetryAtom,
 } from '@crook/web/atoms/Transcript'
-import { ChatItem, chatItems, hasToolRunning, runsIn } from '@crook/web/chat/ChatItems'
+import { chatItems, hasToolRunning, isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import { activityOf, cwdOf, titleOf } from '@crook/web/chat/ChatModel'
 import {
@@ -28,6 +28,7 @@ import {
   QuietThread,
   workingRow,
 } from '@crook/web/chat/ChatRows'
+import { ImageViewer } from '@crook/web/chat/Images'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import { runStatusShown } from '@crook/web/chat/ThreadItem'
@@ -48,8 +49,6 @@ export interface SubagentScreenProps {
 
 const ASKED_KEY = 'claude asked'
 const SUBAGENT_TITLE = 'Subagent'
-
-const isUserPrompt = ChatItem.$is('UserPrompt')
 
 const runWord = { running: 'running', done: 'done', failed: 'failed' } satisfies Record<
   SubagentRun['status'],
@@ -164,35 +163,39 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
 
   return (
     <PushedScreen>
-      <PushedHeader
-        title={Option.match(run, {
-          onNone: () => SUBAGENT_TITLE,
-          onSome: (found) => found.description,
-        })}
-        subtitle={Option.match(run, {
-          onNone: () => undefined,
-          onSome: (found) => (
-            <>
-              <RunDot status={runStatusShown(found, paneClosed)} />
-              <span className="truncate font-mono">{runLine(found, paneClosed, now)}</span>
-            </>
-          ),
-        })}
-        backLabel={`Back to ${parentTitle}`}
-      />
-      <div className="min-h-0 flex-1">
-        <Thread
-          rows={rows}
-          dimmed={model.presence === 'away' || connection.stale}
-          empty={Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>}
+      <ImageViewer>
+        <PushedHeader
+          title={Option.match(run, {
+            onNone: () => SUBAGENT_TITLE,
+            onSome: (found) => found.description,
+          })}
+          subtitle={Option.match(run, {
+            onNone: () => undefined,
+            onSome: (found) => (
+              <>
+                <RunDot status={runStatusShown(found, paneClosed)} />
+                <span className="truncate font-mono">{runLine(found, paneClosed, now)}</span>
+              </>
+            ),
+          })}
+          backLabel={`Back to ${parentTitle}`}
         />
-      </div>
-      <div
-        data-slot="chat-dock"
-        className="border-border bg-card text-muted-foreground border-t px-4 pt-3 pb-[max(var(--safe-bottom),0.75rem)] text-center text-sm"
-      >
-        Subagents take no messages. Reply to Claude in its chat.
-      </div>
+        <div className="min-h-0 flex-1">
+          <Thread
+            rows={rows}
+            dimmed={model.presence === 'away' || connection.stale}
+            empty={
+              Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>
+            }
+          />
+        </div>
+        <div
+          data-slot="chat-dock"
+          className="border-border bg-card text-muted-foreground border-t px-4 pt-3 pb-[max(var(--safe-bottom),0.75rem)] text-center text-sm"
+        >
+          Subagents take no messages. Reply to Claude in its chat.
+        </div>
+      </ImageViewer>
     </PushedScreen>
   )
 }
