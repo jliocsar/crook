@@ -491,6 +491,10 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   script hung until killed (measured).
 - The router percent-encodes a path param, so a herdr pane id like `w1:p3` sits in the URL as
   `w1%3Ap3`, and the route's params hand it back decoded (measured).
+- A grid with no column template gives each item an `auto` column, which grows to the item's
+  min-content, so a `truncate` inside it never truncates and a long agent title pushed its card
+  past the screen on real data (measured). A grid whose items must shrink takes `grid-cols-1`,
+  whose `minmax(0, 1fr)` lets them.
 - A production build minifies the CSS, so a custom property read back at runtime is not what
   `index.css` spells: `180ms` comes back as `.18s` and `cubic-bezier(0.22, …)` as
   `cubic-bezier(.22, …)` (measured). The dev server and the tests serve the source, so only
@@ -540,7 +544,9 @@ Checking the web app against real data, measured:
   `HERDR_SOCKET_PATH` at the named session's socket, or every command lands in the user's own
   session. Never use the default one.
 - `herdr pane report-agent` puts an agent with a chosen status in any shell pane, and
-  `release-agent` takes it out, so a herd in every state needs no running Claude. Such a fake
+  `release-agent` takes it out, so a herd in every state needs no running Claude.
+  `release-agent` takes the pane id before its options, `release-agent <pane> --agent claude
+  --source <name>`; options first is refused. Such a fake
   takes no keys: `agent.send_keys` answers it `agent_not_ready`, so key delivery is tested
   against scripted herdr responses instead.
 - The agent takes an agent's title from the pane's terminal title before herdr's own `title`. An

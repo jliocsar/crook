@@ -279,13 +279,37 @@ The Agents tab: every agent on every machine, one section per machine.
   spinner, and offline is `idle`, reading "offline · 2h ago".
 - **Each agent is its own card** (`bg-card`, border, `rounded-xl`, 8px apart), 72px tall
   (measured against the real herd):
-  - line 1: the title (16/24; 620 when it needs you, 500 otherwise) and the time since its
-    status changed, in mono 12px on the right;
+  - line 1: the title (16/24; 620 when it needs you, 500 otherwise), a muted pin icon when it is
+    pinned, and the time since its status changed, in mono 12px on the right;
   - line 2: the status dot and word, a `·`, then `workspace · tab` and the branch in mono 12px.
     The pending ask takes this slot on a blocked agent once the hub carries it (JC-105).
   - The time and status word are foreground when the agent needs you, muted otherwise.
   - A title herdr doesn't know falls back to the pane id.
 - **Tap** opens the agent's chat, and opening it marks a finished agent seen.
+- **Pinned agents sort first** in their machine, ahead of what needs you (`AgentPriority`).
+- **Swipe left** reveals Pin (Unpin on a pinned card) and Close, on the swipe row's knobs. Close
+  only opens the action sheet; nothing closes without the Hold Button. A refused pin shows the
+  hub's sentence beneath its card.
+- **Long-press** opens the action sheet, the same on a machine's screen and from the chat's `…`:
+  - the agent's title, over `machine · workspace · tab` in mono 12px;
+  - **Rename** opens an inline field, "Agent name", with Save. A blank name clears the label, so
+    herdr's own title shows again; a name with a tab or a line break is refused in the field;
+  - **Pin to top** or **Unpin**;
+  - **Hold to close agent**, a Hold Button. A pane crook didn't open says so above it, "crook
+    didn't open this pane. Closing it ends whatever runs there, not just Claude.", and the
+    button reads "Hold to close anyway".
+  - Save reads "Saving…" and the Hold Button "Closing…" until the herd shows the change; then the
+    sheet closes by itself. A refusal shows its sentence in the sheet, under the action.
+  - Rename and Close are disabled while the hub can't act or the machine isn't online. Pin needs
+    only the hub, which stores it.
+- **The order freezes** while a card is swiped open or being dragged. A card that arrives
+  meanwhile goes last until the order thaws.
+- **An ended agent leaves the herd**, which lists only live agents. When it ends while its sheet
+  is open, the sheet closes with a toast: "Pane closed" when its pane went, "Claude exited" when
+  the pane is still there. A close from the chat goes back to the herd with "Pane closed"; a
+  close from a card needs no toast, since the card leaves.
+- **The toast** is a pill in `bg-foreground text-background` above the tab bar. It rises 8px on
+  the fade and stays 3s, an unmeasured knob to settle on the phone.
 - **Pull down** resyncs: it arms at 48px, rests at 40px while syncing and stops at 96px. It is
   off while the hub can't act, since crook is already retrying.
 - **Live updates** re-sort each list; a card moves to its new place on the reorder spring.
@@ -310,7 +334,8 @@ that adds one.
 - **The machine screen** is pushed, "Back to machines". Its header is the label over the badge and
   the update pill.
   - **Agents · N**: the machine's agents as the herd's cards, in the same order; tap opens the
-    chat. Offline reads "–" and "Offline, so its agents are unknown until it reconnects." None
+    chat, and swipe and long-press act on them as on the herd. Offline reads "–" and "Offline,
+    so its agents are unknown until it reconnects." None
     reads "No agents running. Start one from Agents." Reconnecting dims them, like the herd.
   - **About** is a flat info list: Online for, Reconnecting for or Last seen (from the hub's last
     connection change), crook agent (a warn pill reading "0.0.9, hub has 0.1.0" when behind),
@@ -551,6 +576,4 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 
 - The screens decided in `TEMP_DESIGN_EXPLORATION.md` (chat, New agent, Settings) move
   here with the ticket that builds each one.
-- The herd's swipe actions, long-press sheet, pins, the order freeze while a card is open, and the
-  "Pane closed" toast arrive with JC-112.
 - The machine sections follow the hub's machine order; no order has been decided.
