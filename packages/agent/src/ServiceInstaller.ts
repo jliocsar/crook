@@ -11,7 +11,7 @@ import * as Redacted from 'effect/Redacted'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import { claudeHookSettings } from '@crook/agent/ClaudeHookSettings'
+import { hooksBlock } from '@crook/agent/ClaudeHookSettings'
 import { CrookHookSocketPath } from '@crook/agent/HookInbox'
 import { CrookHubToken, CrookHubUrl, CrookMachineLabel } from '@crook/agent/HubLink'
 import { CrookMachineId } from '@crook/agent/MachineStateSync'
@@ -27,8 +27,8 @@ import {
 } from '@crook/agent/ServiceDefinition'
 import { ServiceManager, launchctl, systemctl } from '@crook/agent/ServiceManager'
 import {
-  OWNER_ONLY_DIRECTORY_MODE,
   OWNER_ONLY_FILE_MODE,
+  type WriteAtomicallyOptions,
   makeWriteAtomically,
 } from '@crook/agent/StateDirectory'
 import { claudeRoots } from '@crook/claude/ClaudeRoots'
@@ -36,21 +36,15 @@ import { AbsolutePath } from '@crook/domain/AbsolutePath'
 
 export type ServiceTarget = Systemd | Launchd
 
-export interface ServicePaths {
-  readonly definitionFile: string
-  readonly environmentFile: string
-  readonly logs: string
-}
+export type ServiceLogs = Journal | LogFile
 
-const TEMPORARY_SUFFIX = '.tmp'
 const ENVIRONMENT_FILE_NAME = 'agent.env'
 const CLAUDE_SETTINGS_FILE_NAME = 'settings.json'
 const HOOK_SUBCOMMAND = 'hook'
 const LINUX = 'linux'
 const MACOS = 'darwin'
-const SETTINGS_INDENT = 2
 
-export const CARRIED_VARIABLES = [
+const CARRIED_VARIABLES = [
   'HERDR_SOCKET_PATH',
   'CROOK_CLAUDE_ROOTS',
   'CLAUDE_CONFIG_DIR',
@@ -62,9 +56,20 @@ export const CARRIED_VARIABLES = [
   'CROOK_RECENT_PLACES_PATH',
 ] as const
 
+const ServicePaths = Schema.Struct({
+  definitionFile: Schema.String,
+  environmentFile: Schema.String,
+})
+
+type ServicePaths = typeof ServicePaths.Type
+
 export class Systemd extends Schema.TaggedClass<Systemd>()('Systemd', {}) {}
 
 export class Launchd extends Schema.TaggedClass<Launchd>()('Launchd', { userId: Schema.Int }) {}
+
+export class Journal extends Schema.TaggedClass<Journal>()('Journal', {}) {}
+
+export class LogFile extends Schema.TaggedClass<LogFile>()('LogFile', { file: Schema.String }) {}
 
 export class ServicePlatformUnsupported extends Schema.TaggedError<ServicePlatformUnsupported>()(
   'ServicePlatformUnsupported',
@@ -95,32 +100,31 @@ export class ServiceFileUnwritable extends Schema.TaggedError<ServiceFileUnwrita
 
 export class InstalledService extends Schema.Class<InstalledService>('InstalledService')({
   target: Schema.Union([Systemd, Launchd]),
-  paths: Schema.Struct({
-    definitionFile: Schema.String,
-    environmentFile: Schema.String,
-    logs: Schema.String,
-  }),
+  paths: ServicePaths,
+  logs: Schema.Union([Journal, LogFile]),
   hookCommand: Schema.String,
   claudeSettingsFiles: Schema.Array(Schema.String),
 }) {}
 
 export class UninstalledService extends Schema.Class<UninstalledService>('UninstalledService')({
+  stopped: Schema.Boolean,
   removed: Schema.Array(Schema.String),
 }) {}
-
-const encodeSettings = Schema.encodeSync(
-  Schema.fromJsonString(Schema.Json, { space: SETTINGS_INDENT }),
-)
 
 const ConfigHome = Config.schema(AbsolutePath, 'XDG_CONFIG_HOME').pipe(
   Config.orElse(() => Config.String('HOME').pipe(Config.map((home) => `${home}/.config`))),
 )
 
-export const CrookConfigDirectory = Config.map(ConfigHome, (configHome) => `${configHome}/crook`)
+const CrookConfigDirectory = Config.map(ConfigHome, (configHome) => `${configHome}/crook`)
 
 const SystemdUserUnitDirectory = Config.map(
   ConfigHome,
   (configHome) => `${configHome}/systemd/user`,
+)
+
+const LaunchdLogFile = Config.map(
+  Config.String('HOME'),
+  (home) => `${home}/Library/Logs/${LAUNCHD_LABEL}.log`,
 )
 
 const CarriedSettings = Config.all(
@@ -165,9 +169,7 @@ const launchdDomain = (target: Launchd) => `gui/${target.userId}`
 
 const launchdService = (target: Launchd) => `${launchdDomain(target)}/${LAUNCHD_LABEL}`
 
-export const servicePaths = Effect.fn('ServiceInstaller.servicePaths')(function* (
-  target: ServiceTarget,
-) {
+const servicePaths = Effect.fn('ServiceInstaller.servicePaths')(function* (target: ServiceTarget) {
   const configDirectory = yield* CrookConfigDirectory
   const environmentFile = `${configDirectory}/${ENVIRONMENT_FILE_NAME}`
 
@@ -177,13 +179,11 @@ export const servicePaths = Effect.fn('ServiceInstaller.servicePaths')(function*
         Effect.map(SystemdUserUnitDirectory, (unitDirectory): ServicePaths => ({
           definitionFile: `${unitDirectory}/${SYSTEMD_UNIT_NAME}`,
           environmentFile,
-          logs: `journalctl --user -u ${SYSTEMD_UNIT_NAME}`,
         })),
       Launchd: () =>
         Effect.map(Config.String('HOME'), (home): ServicePaths => ({
           definitionFile: `${home}/Library/LaunchAgents/${LAUNCHD_LABEL}.plist`,
           environmentFile,
-          logs: `${home}/Library/Logs/${LAUNCHD_LABEL}.log`,
         })),
     }),
   )
@@ -210,15 +210,21 @@ const environmentOf = (
 const definitionOf = (target: ServiceTarget, program: readonly string[], paths: ServicePaths) =>
   Match.value(target).pipe(
     Match.tagsExhaustive({
-      Systemd: () => systemdUnit({ program, environmentFile: paths.environmentFile }),
+      Systemd: () =>
+        Effect.succeed({
+          definition: systemdUnit({ program, environmentFile: paths.environmentFile }),
+          logs: new Journal(),
+        }),
       Launchd: () =>
-        launchdPlist({ program, environmentFile: paths.environmentFile, logFile: paths.logs }),
+        Effect.map(LaunchdLogFile, (logFile) => ({
+          definition: launchdPlist({ program, environmentFile: paths.environmentFile, logFile }),
+          logs: new LogFile({ file: logFile }),
+        })),
     }),
   )
 
 const makeFiles = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
-  const path = yield* Path.Path
   const writeAtomically = yield* makeWriteAtomically
 
   const unwritable = (file: string) =>
@@ -226,38 +232,21 @@ const makeFiles = Effect.gen(function* () {
       (error: PlatformError) => new ServiceFileUnwritable({ path: file, detail: error.message }),
     )
 
-  const writeOwnerOnly = (file: string, content: string) => {
-    const temporary = `${file}${TEMPORARY_SUFFIX}`
-
-    return fileSystem
-      .makeDirectory(path.dirname(file), { recursive: true, mode: OWNER_ONLY_DIRECTORY_MODE })
-      .pipe(
-        Effect.andThen(fileSystem.remove(temporary, { force: true })),
-        Effect.andThen(
-          fileSystem.writeFileString(temporary, content, { mode: OWNER_ONLY_FILE_MODE }),
-        ),
-        Effect.andThen(fileSystem.chmod(temporary, OWNER_ONLY_FILE_MODE)),
-        Effect.andThen(fileSystem.rename(temporary, file)),
-        unwritable(file),
-      )
-  }
-
-  const write = (file: string, content: string) =>
-    writeAtomically(file, content).pipe(unwritable(file))
-
-  const removeIfPresent = (file: string) =>
-    fileSystem.exists(file).pipe(
-      Effect.flatMap((present) =>
-        present
-          ? fileSystem.remove(file).pipe(Effect.as(Option.some(file)))
-          : Effect.succeed(Option.none<string>()),
-      ),
-      unwritable(file),
-    )
+  const write = (file: string, content: string, options: WriteAtomicallyOptions = {}) =>
+    writeAtomically(file, content, options).pipe(unwritable(file))
 
   const present = (file: string) => fileSystem.exists(file).pipe(unwritable(file))
 
-  return { writeOwnerOnly, write, removeIfPresent, present }
+  const remove = (file: string) => fileSystem.remove(file).pipe(unwritable(file))
+
+  const removeIfPresent = (file: string) =>
+    present(file).pipe(
+      Effect.flatMap((found) =>
+        found ? remove(file).pipe(Effect.as(Option.some(file))) : Effect.succeedNone,
+      ),
+    )
+
+  return { write, present, remove, removeIfPresent }
 })
 
 const startCalls = (target: ServiceTarget, paths: ServicePaths) =>
@@ -279,12 +268,21 @@ const stopLaunchdAgent = Effect.fn('ServiceInstaller.stopLaunchdAgent')(function
   launchd: Launchd,
 ) {
   const manager = yield* ServiceManager
+  const service = launchdService(launchd)
+  const stillLoaded = manager.run(launchctl('print', service)).pipe(
+    Effect.as(true),
+    Effect.catchTag('ServiceManagerRefused', () => Effect.succeed(false)),
+  )
 
   yield* manager
-    .run(launchctl('bootout', launchdService(launchd)))
+    .run(launchctl('bootout', service))
     .pipe(
       Effect.catchTag('ServiceManagerRefused', (refused) =>
-        Effect.logDebug('launchd had no crook-agent loaded to stop', refused.message),
+        Effect.flatMap(stillLoaded, (loaded) =>
+          loaded
+            ? Effect.fail(refused)
+            : Effect.logDebug('launchd had no crook-agent loaded to stop', refused.message),
+        ),
       ),
     )
 })
@@ -301,20 +299,21 @@ export const installService = Effect.fn('ServiceInstaller.installService')(funct
   )
   const roots = yield* claudeRoots
   const paths = yield* servicePaths(target)
+  const { definition, logs } = yield* definitionOf(target, program, paths)
 
-  yield* files.writeOwnerOnly(
-    paths.environmentFile,
-    environmentFileContents(environmentOf(settings)),
-  )
+  yield* files.write(paths.environmentFile, environmentFileContents(environmentOf(settings)), {
+    mode: OWNER_ONLY_FILE_MODE,
+  })
   yield* Match.value(target).pipe(
     Match.tagsExhaustive({ Systemd: () => Effect.void, Launchd: stopLaunchdAgent }),
   )
-  yield* files.write(paths.definitionFile, definitionOf(target, program, paths))
+  yield* files.write(paths.definitionFile, definition)
   yield* Effect.forEach(startCalls(target, paths), manager.run, { discard: true })
 
   return new InstalledService({
     target,
     paths,
+    logs,
     hookCommand: `CROOK_HOOK_SOCKET_PATH=${shellWord(settings.hookSocket)} ${shellCommand([...program, HOOK_SUBCOMMAND])}`,
     claudeSettingsFiles: Arr.map(roots, (root) => path.join(root, CLAUDE_SETTINGS_FILE_NAME)),
   })
@@ -327,24 +326,37 @@ export const uninstallService = Effect.fn('ServiceInstaller.uninstallService')(f
   const files = yield* makeFiles
   const paths = yield* servicePaths(target)
   const installed = yield* files.present(paths.definitionFile)
-  const removeDefinition = Match.value(target).pipe(
+  const stopAndRemoveDefinition = Match.value(target).pipe(
     Match.tagsExhaustive({
       Systemd: () =>
-        manager.run(systemctl('disable', '--now', SYSTEMD_UNIT_NAME)).pipe(
-          Effect.andThen(files.removeIfPresent(paths.definitionFile)),
-          Effect.tap(() => manager.run(systemctl('daemon-reload'))),
-        ),
+        manager
+          .run(systemctl('disable', '--now', SYSTEMD_UNIT_NAME))
+          .pipe(
+            Effect.andThen(files.remove(paths.definitionFile)),
+            Effect.andThen(manager.run(systemctl('daemon-reload'))),
+          ),
       Launchd: (launchd) =>
-        stopLaunchdAgent(launchd).pipe(Effect.andThen(files.removeIfPresent(paths.definitionFile))),
+        stopLaunchdAgent(launchd).pipe(Effect.andThen(files.remove(paths.definitionFile))),
     }),
   )
-  const removedDefinition = yield* installed ? removeDefinition : Effect.succeedNone
+  const removedDefinition = yield* installed
+    ? stopAndRemoveDefinition.pipe(Effect.as(Option.some(paths.definitionFile)))
+    : Effect.succeedNone
   const removedEnvironment = yield* files.removeIfPresent(paths.environmentFile)
 
   return new UninstalledService({
+    stopped: Option.isSome(removedDefinition),
     removed: Arr.getSomes([removedDefinition, removedEnvironment]),
   })
 })
+
+const logsLine = (logs: ServiceLogs) =>
+  Match.value(logs).pipe(
+    Match.tagsExhaustive({
+      Journal: () => `journalctl --user -u ${SYSTEMD_UNIT_NAME}`,
+      LogFile: (logFile) => logFile.file,
+    }),
+  )
 
 const startedLines = (installed: InstalledService) =>
   Match.value(installed.target).pipe(
@@ -353,14 +365,14 @@ const startedLines = (installed: InstalledService) =>
         `Installed ${SYSTEMD_UNIT_NAME} as a systemd user unit, enabled it and started it.`,
         `  Unit: ${installed.paths.definitionFile}`,
         `  Settings, hub token included, readable by you only: ${installed.paths.environmentFile}`,
-        `  Logs: ${installed.paths.logs}`,
+        `  Logs: ${logsLine(installed.logs)}`,
         'A user unit stops when your last session ends. To keep crook running while you are logged out, run: loginctl enable-linger',
       ],
       Launchd: () => [
         `Installed ${LAUNCHD_LABEL} as a launchd agent and started it.`,
         `  Agent: ${installed.paths.definitionFile}`,
         `  Settings, hub token included, readable by you only: ${installed.paths.environmentFile}`,
-        `  Logs: ${installed.paths.logs}`,
+        `  Logs: ${logsLine(installed.logs)}`,
       ],
     }),
   )
@@ -372,7 +384,7 @@ export const installReport = (installed: InstalledService) =>
     "To send Claude's tool and permission events to crook, merge this hooks block into each of these files yourself; crook never edits them:",
     ...Arr.map(installed.claudeSettingsFiles, (file) => `  ${file}`),
     '',
-    encodeSettings(claudeHookSettings(installed.hookCommand)),
+    hooksBlock(installed.hookCommand),
   ].join('\n')
 
 export const uninstallReport = (uninstalled: UninstalledService) =>
@@ -380,7 +392,9 @@ export const uninstallReport = (uninstalled: UninstalledService) =>
     onEmpty: () => 'crook-agent was not installed as a service, so nothing changed.',
     onNonEmpty: (removed) =>
       [
-        'Stopped crook-agent and removed:',
+        uninstalled.stopped
+          ? 'Stopped crook-agent and removed:'
+          : 'No crook-agent service was installed to stop. Removed what an earlier install left behind:',
         ...Arr.map(removed, (file) => `  ${file}`),
         "Claude's settings still name the crook hook; remove that hooks block yourself if you no longer want it.",
       ].join('\n'),

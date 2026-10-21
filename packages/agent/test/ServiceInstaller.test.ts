@@ -1,20 +1,25 @@
 import * as BunServices from '@effect/platform-bun/BunServices'
 import { expect, it, layer } from '@effect/vitest'
 import * as ConfigProvider from 'effect/ConfigProvider'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Record from 'effect/Record'
 import * as Result from 'effect/Result'
 
 import { programFrom } from '@crook/agent/RunningProgram'
 import { systemdUnit } from '@crook/agent/ServiceDefinition'
 import {
   Launchd,
+  LogFile,
   ServicePlatformUnsupported,
   ServiceSettingsMissing,
   Systemd,
+  UninstalledService,
   type ServiceTarget,
   installReport,
   installService,
@@ -30,6 +35,8 @@ import {
 } from '@crook/agent/ServiceManager'
 import { OWNER_ONLY_DIRECTORY_MODE, OWNER_ONLY_FILE_MODE } from '@crook/agent/StateDirectory'
 
+import packageJson from '../package.json' with { type: 'json' }
+
 interface Run {
   readonly target?: ServiceTarget
   readonly environment?: Record<string, string>
@@ -42,6 +49,50 @@ const HUB_URL = 'wss://my-hub.exe.xyz/rpc/agent'
 const PERMISSION_BITS = 0o777
 const WORLD_READABLE_FILE_MODE = 0o644
 const MAC_USER = 501
+const REFUSED_EXIT_CODE = 1
+const WORKSPACE_SCOPE = '@crook/'
+const INSTALLER_MODULE = 'ServiceInstaller.ts'
+const SETTING_NAME = /'((?:CROOK|HERDR|XDG)_[A-Z_]+|CLAUDE_CONFIG_DIR)'/gu
+
+const refusing =
+  (...verbs: readonly string[]) =>
+  (call: ServiceManagerCall) =>
+    Arr.some(verbs, (verb) => call.args.includes(verb))
+      ? Effect.fail(
+          new ServiceManagerRefused({
+            command: commandLine(call),
+            exitCode: REFUSED_EXIT_CODE,
+            detail: `${call.program} refused`,
+          }),
+        )
+      : Effect.void
+
+const settingsTheAgentReads = Effect.fn('settingsTheAgentReads')(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const members = pipe(
+    Record.keys(packageJson.dependencies),
+    Arr.filter((name) => name.startsWith(WORKSPACE_SCOPE)),
+    Arr.map((name) => name.slice(WORKSPACE_SCOPE.length)),
+    Arr.prepend('agent'),
+  )
+  const sources = yield* Effect.forEach(members, (member) => {
+    const directory = `${import.meta.dirname}/../../${member}/src`
+
+    return fileSystem
+      .readDirectory(directory, { recursive: true })
+      .pipe(
+        Effect.map(Arr.filter((file) => file.endsWith('.ts') && !file.endsWith(INSTALLER_MODULE))),
+        Effect.flatMap(Effect.forEach((file) => fileSystem.readFileString(`${directory}/${file}`))),
+      )
+  })
+
+  return pipe(
+    Arr.flatten(sources),
+    Arr.flatMap((source) => Arr.map(Array.from(source.matchAll(SETTING_NAME)), ([, name]) => name)),
+    Arr.filter((name): name is string => name !== undefined),
+    Arr.dedupe,
+  )
+})
 
 const scratchHome = Effect.fn('scratchHome')(function* () {
   const fileSystem = yield* FileSystem.FileSystem
@@ -221,6 +272,11 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem
         const home = yield* scratchHome()
+        const settingsFile = `${home}/.claude/settings.json`
+        const userSettings = '{\n  "model": "opus"\n}\n'
+
+        yield* fileSystem.makeDirectory(`${home}/.claude`)
+        yield* fileSystem.writeFileString(settingsFile, userSettings)
         const { installed } = yield* install(home)
         const report = installReport(installed)
 
@@ -231,7 +287,8 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
         expect(report).toContain('"PermissionRequest"')
         expect(report).toContain('loginctl enable-linger')
         expect(report).not.toContain(TOKEN)
-        expect(yield* fileSystem.exists(`${home}/.claude`)).toBe(false)
+        expect(yield* fileSystem.readFileString(settingsFile)).toBe(userSettings)
+        expect(yield* fileSystem.readDirectory(`${home}/.claude`)).toEqual(['settings.json'])
       }),
   )
 
@@ -289,27 +346,22 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
         const target = new Launchd({ userId: MAC_USER })
         const { installed, calls } = yield* install(home, {
           target,
-          answer: (call) =>
-            call.args.includes('bootout')
-              ? Effect.fail(
-                  new ServiceManagerRefused({
-                    command: commandLine(call),
-                    exitCode: 3,
-                    detail: 'Boot-out failed: 3: No such process',
-                  }),
-                )
-              : Effect.void,
+          answer: refusing('bootout', 'print'),
         })
         const plist = yield* fileSystem.readFileString(installed.paths.definitionFile)
 
         expect(installed.paths.definitionFile).toBe(
           `${home}/Library/LaunchAgents/crook-agent.plist`,
         )
-        expect(installed.paths.logs).toBe(`${home}/Library/Logs/crook-agent.log`)
+        expect(installed.logs).toEqual(
+          new LogFile({ file: `${home}/Library/Logs/crook-agent.log` }),
+        )
+        expect(plist).toContain(`<string>${home}/Library/Logs/crook-agent.log</string>`)
         expect(plist).toContain(`<string>${home}/config/crook/agent.env</string>`)
         expect(plist).not.toContain(TOKEN)
         expect(calls).toEqual([
           'launchctl bootout gui/501/crook-agent',
+          'launchctl print gui/501/crook-agent',
           'launchctl enable gui/501/crook-agent',
           `launchctl bootstrap gui/501 ${home}/Library/LaunchAgents/crook-agent.plist`,
         ])
@@ -347,6 +399,106 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
 
       expect(calls).toEqual(['launchctl bootout gui/501/crook-agent'])
       expect(yield* fileSystem.exists(installed.paths.definitionFile)).toBe(false)
+    }),
+  )
+
+  onDisk.effect('keeps the unit and the settings file when systemd refuses to stop it', () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem
+      const home = yield* scratchHome()
+      const { installed } = yield* install(home)
+      const failure = yield* uninstall(home, { answer: refusing('disable') }).pipe(Effect.flip)
+
+      expect(failure).toBeInstanceOf(ServiceManagerRefused)
+      expect(yield* fileSystem.exists(installed.paths.definitionFile)).toBe(true)
+      expect(yield* fileSystem.exists(installed.paths.environmentFile)).toBe(true)
+    }),
+  )
+
+  onDisk.effect(
+    'keeps the plist and the settings file when launchd refuses to unload an agent it still runs',
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const home = yield* scratchHome()
+        const target = new Launchd({ userId: MAC_USER })
+        const { installed } = yield* install(home, { target })
+        const calls = yield* Queue.unbounded<ServiceManagerCall>()
+        const context = yield* Layer.build(
+          Layer.mergeAll(
+            ServiceManager.layerTest(calls, refusing('bootout')),
+            ConfigProvider.layer(ConfigProvider.fromUnknown(environmentOf(home))),
+          ),
+        )
+        const failure = yield* uninstallService(target).pipe(Effect.provide(context), Effect.flip)
+
+        expect(failure).toBeInstanceOf(ServiceManagerRefused)
+        expect(Arr.map(yield* Queue.clear(calls), commandLine)).toEqual([
+          'launchctl bootout gui/501/crook-agent',
+          'launchctl print gui/501/crook-agent',
+        ])
+        expect(yield* fileSystem.exists(installed.paths.definitionFile)).toBe(true)
+        expect(yield* fileSystem.exists(installed.paths.environmentFile)).toBe(true)
+      }),
+  )
+
+  onDisk.effect('removes the plist when launchd had already unloaded the agent', () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem
+      const home = yield* scratchHome()
+      const target = new Launchd({ userId: MAC_USER })
+      const { installed } = yield* install(home, { target })
+      const { uninstalled, calls } = yield* uninstall(home, {
+        target,
+        answer: refusing('bootout', 'print'),
+      })
+
+      expect(calls).toEqual([
+        'launchctl bootout gui/501/crook-agent',
+        'launchctl print gui/501/crook-agent',
+      ])
+      expect(uninstalled.stopped).toBe(true)
+      expect(yield* fileSystem.exists(installed.paths.definitionFile)).toBe(false)
+    }),
+  )
+
+  onDisk.effect(
+    'removes a settings file an earlier install left behind without claiming to stop anything',
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const home = yield* scratchHome()
+        const { installed } = yield* install(home)
+
+        yield* fileSystem.remove(installed.paths.definitionFile)
+        const { uninstalled, calls } = yield* uninstall(home)
+
+        expect(calls).toEqual([])
+        expect(uninstalled).toEqual(
+          new UninstalledService({ stopped: false, removed: [installed.paths.environmentFile] }),
+        )
+        expect(uninstallReport(uninstalled)).not.toContain('Stopped')
+        expect(yield* fileSystem.exists(installed.paths.environmentFile)).toBe(false)
+      }),
+  )
+
+  onDisk.effect('carries every setting the agent reads into the service', () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem
+      const home = yield* scratchHome()
+      const names = yield* settingsTheAgentReads()
+      const { installed } = yield* install(home, {
+        environment: pipe(
+          Arr.difference(names, Record.keys(environmentOf(home))),
+          Arr.map((name) => [name, `${home}/settings/${name}`] as const),
+          Record.fromEntries,
+        ),
+      })
+      const written = yield* fileSystem.readFileString(installed.paths.environmentFile)
+      const writtenNames = Arr.map(written.split('\n'), (line) => line.split('=')[0] ?? '')
+
+      expect(names).toContain('HERDR_SOCKET_PATH')
+      expect(Arr.difference(names, writtenNames)).toEqual([])
     }),
   )
 

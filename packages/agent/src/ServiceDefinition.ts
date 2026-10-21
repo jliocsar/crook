@@ -17,8 +17,8 @@ export interface LaunchdDefinitionInput extends ServiceDefinitionInput {
 
 const RUN_SUBCOMMAND = 'run'
 const SAFE_SHELL_WORD = /^[\w./:=@+,-]+$/u
+const SERVICE_NAME = 'crook-agent'
 
-export const SERVICE_NAME = 'crook-agent'
 export const SYSTEMD_UNIT_NAME = `${SERVICE_NAME}.service`
 export const LAUNCHD_LABEL = SERVICE_NAME
 export const LAUNCHD_ENVIRONMENT_WRAPPER = 'set -a && . "$0" && exec "$@"'

@@ -5,24 +5,15 @@ import * as Flag from 'effect/cli/Flag'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as Schema from 'effect/Schema'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
-import { claudeHookSettings } from '@crook/agent/ClaudeHookSettings'
+import { hooksBlock } from '@crook/agent/ClaudeHookSettings'
 import { forwardHook } from '@crook/agent/HookForwarder'
 import { runningProgram } from '@crook/agent/RunningProgram'
-import {
-  installReport,
-  installService,
-  runningServiceTarget,
-  uninstallReport,
-  uninstallService,
-} from '@crook/agent/ServiceInstaller'
+import * as ServiceInstaller from '@crook/agent/ServiceInstaller'
 import { ServiceManager } from '@crook/agent/ServiceManager'
 
 import packageJson from '../package.json' with { type: 'json' }
-
-const encodeSettings = Schema.encodeSync(Schema.fromJsonString(Schema.Json))
 
 const hook = Command.make('hook', {}, () => forwardHook).pipe(
   Command.withDescription(
@@ -39,7 +30,7 @@ const hookSettings = Command.make(
       ),
     ),
   },
-  ({ command }) => Console.log(encodeSettings(claudeHookSettings(command))),
+  ({ command }) => Console.log(hooksBlock(command)),
 ).pipe(
   Command.withDescription(
     "Print the hooks block that sends Claude's tool and permission events to crook. Merge it into a Claude settings file yourself; crook never edits one.",
@@ -52,13 +43,13 @@ const run = Command.make('run', {}, () => Layer.launch(AgentDaemon.layer)).pipe(
   ),
 )
 
-const installServiceCommand = Command.make('install-service', {}, () =>
+const installService = Command.make('install-service', {}, () =>
   Effect.gen(function* () {
-    const target = yield* runningServiceTarget
+    const target = yield* ServiceInstaller.runningServiceTarget
     const program = yield* runningProgram
-    const installed = yield* installService(target, program)
+    const installed = yield* ServiceInstaller.installService(target, program)
 
-    yield* Console.log(installReport(installed))
+    yield* Console.log(ServiceInstaller.installReport(installed))
   }),
 ).pipe(
   Command.withDescription(
@@ -66,12 +57,12 @@ const installServiceCommand = Command.make('install-service', {}, () =>
   ),
 )
 
-const uninstallServiceCommand = Command.make('uninstall-service', {}, () =>
+const uninstallService = Command.make('uninstall-service', {}, () =>
   Effect.gen(function* () {
-    const target = yield* runningServiceTarget
-    const uninstalled = yield* uninstallService(target)
+    const target = yield* ServiceInstaller.runningServiceTarget
+    const uninstalled = yield* ServiceInstaller.uninstallService(target)
 
-    yield* Console.log(uninstallReport(uninstalled))
+    yield* Console.log(ServiceInstaller.uninstallReport(uninstalled))
   }),
 ).pipe(
   Command.withDescription(
@@ -80,13 +71,7 @@ const uninstallServiceCommand = Command.make('uninstall-service', {}, () =>
 )
 
 const crookAgent = Command.make('crook-agent').pipe(
-  Command.withSubcommands([
-    run,
-    installServiceCommand,
-    uninstallServiceCommand,
-    hook,
-    hookSettings,
-  ]),
+  Command.withSubcommands([run, installService, uninstallService, hook, hookSettings]),
 )
 
 BunRuntime.runMain(
