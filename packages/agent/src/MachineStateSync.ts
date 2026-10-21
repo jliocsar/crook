@@ -134,6 +134,11 @@ const make = Effect.gen(function* () {
     const agents = yield* Effect.forEach(snapshot.agents, resolveAgent(mark), {
       concurrency: 'unbounded',
     })
+
+    yield* asks.retain(
+      Arr.flatMap(agents, (agent) => Option.toArray(agent.claudeSession)),
+      mark,
+    )
     const reading: HerdReading = {
       herdrVersion: snapshot.version,
       workspaces: snapshot.workspaces,

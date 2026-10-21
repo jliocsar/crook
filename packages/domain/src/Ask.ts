@@ -58,6 +58,7 @@ export class PermissionAsk extends Schema.TaggedClass<PermissionAsk>()('Permissi
   plugin: Schema.OptionFromNullOr(Schema.String),
   action: AskedAction,
   options: Schema.Array(AskOption),
+  dialog: Schema.OptionFromNullOr(Schema.String),
 }) {}
 
 export class QuestionChoice extends Schema.Class<QuestionChoice>('QuestionChoice')({
@@ -76,6 +77,7 @@ export class QuestionAsk extends Schema.TaggedClass<QuestionAsk>()('QuestionAsk'
   id: AskId,
   source: AskSource,
   questions: Schema.NonEmptyArray(AskQuestion),
+  dialog: Schema.OptionFromNullOr(Schema.String),
 }) {}
 
 export class UnknownAsk extends Schema.TaggedClass<UnknownAsk>()('UnknownAsk', {
@@ -126,3 +128,12 @@ export const askSummary = (ask: Ask, folder: string): Option.Option<string> =>
 
 export const askOption = (ask: PermissionAsk, choice: AskChoice): Option.Option<AskOption> =>
   Arr.findFirst(ask.options, (option) => option.choice === choice)
+
+export const askDialog = (ask: Ask): Option.Option<string> =>
+  Match.value(ask).pipe(
+    Match.tagsExhaustive({
+      PermissionAsk: (permission) => permission.dialog,
+      QuestionAsk: (question) => question.dialog,
+      UnknownAsk: () => Option.none(),
+    }),
+  )

@@ -37,6 +37,7 @@ const permission = (tool: string, action: PermissionAsk['action']) =>
       new AskOption({ number: 2, label: 'Yes, and always allow access', choice: 'always' }),
       new AskOption({ number: 3, label: 'No', choice: 'no' }),
     ],
+    dialog: Option.some('bash-ls-dialog'),
   })
 
 const question = new QuestionAsk({
@@ -50,6 +51,7 @@ const question = new QuestionAsk({
       choices: [new QuestionChoice({ label: 'Red', description: Option.some('warm') })],
     }),
   ],
+  dialog: Option.none(),
 })
 
 const rowAsking = (status: AgentStatus, ask: Option.Option<Ask>) =>
@@ -120,9 +122,8 @@ describe('askSummary', () => {
 describe('pendingAskSummary', () => {
   const ask = Option.some<Ask>(permission('Bash', new RunCommand({ command: 'ls' })))
 
-  it('summarises the ask of a blocked agent only', () => {
+  it('summarises the ask the row carries', () => {
     expect(pendingAskSummary(rowAsking('blocked', ask))).toEqual(Option.some('Bash ls'))
-    expect(pendingAskSummary(rowAsking('working', ask))).toEqual(Option.none())
     expect(pendingAskSummary(rowAsking('blocked', Option.none()))).toEqual(Option.none())
   })
 

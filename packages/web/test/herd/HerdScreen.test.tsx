@@ -61,6 +61,7 @@ describe('HerdScreen', () => {
         plugin: Option.none(),
         action: new RunCommand({ command: 'bun run lint' }),
         options: [],
+        dialog: Option.none(),
       })
 
       yield* renderApp(

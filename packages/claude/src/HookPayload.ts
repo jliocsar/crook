@@ -30,6 +30,8 @@ export class PermissionRequestPayload extends Schema.Class<PermissionRequestPayl
 export class PostToolUsePayload extends Schema.Class<PostToolUsePayload>('PostToolUsePayload')({
   hook_event_name: Schema.Literal('PostToolUse'),
   session_id: ClaudeSessionId,
+  tool_name: Schema.String,
+  tool_input: Schema.Json,
   tool_use_id: Schema.String,
 }) {}
 
@@ -38,6 +40,14 @@ export class PostToolUseFailurePayload extends Schema.Class<PostToolUseFailurePa
 )({
   hook_event_name: Schema.Literal('PostToolUseFailure'),
   session_id: ClaudeSessionId,
+  tool_name: Schema.String,
+  tool_input: Schema.Json,
+  tool_use_id: Schema.String,
+}) {}
+
+export class FinishedToolCall extends Schema.Class<FinishedToolCall>('FinishedToolCall')({
+  tool_name: Schema.String,
+  tool_input: Schema.Json,
   tool_use_id: Schema.String,
 }) {}
 
@@ -46,7 +56,7 @@ export class PostToolBatchPayload extends Schema.Class<PostToolBatchPayload>(
 )({
   hook_event_name: Schema.Literal('PostToolBatch'),
   session_id: ClaudeSessionId,
-  tool_calls: Schema.Array(Schema.Struct({ tool_use_id: Schema.String })),
+  tool_calls: Schema.Array(FinishedToolCall),
 }) {}
 
 export const HookPayload = Schema.Union([

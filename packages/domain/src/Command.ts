@@ -42,7 +42,7 @@ export class Decline extends Schema.TaggedClass<Decline>()('Decline', {
 }) {}
 
 export class Choose extends Schema.TaggedClass<Choose>()('Choose', {
-  answers: Schema.NonEmptyArray(Schema.NonEmptyString),
+  answer: Schema.NonEmptyString,
 }) {}
 
 export const AskAnswer = Schema.Union([Approve, ApproveAlways, Decline, Choose])

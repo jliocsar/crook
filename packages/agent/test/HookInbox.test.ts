@@ -71,11 +71,11 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
 
         expect(yield* inbox.position).toBe(2)
         expect(
-          Option.map(yield* inbox.pendingFor(SESSION), (pending) => [
+          (yield* inbox.pendingFor(SESSION)).map((pending) => [
             pending.toolName,
             pending.toolUseId,
           ]),
-        ).toEqual(Option.some(['Bash', Option.some('toolu_01XXC3')]))
+        ).toEqual([['Bash', Option.some('toolu_01XXC3')]])
       }).pipe(Effect.scoped),
     )
 

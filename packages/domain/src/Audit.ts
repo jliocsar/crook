@@ -35,7 +35,7 @@ export const AuditArgumentName = Schema.Literals([
   'pinned',
   'ask',
   'answer',
-  'choices',
+  'choice',
 ])
 export type AuditArgumentName = typeof AuditArgumentName.Type
 
@@ -129,7 +129,7 @@ const answerAudit = (answer: AskAnswer): AuditArguments =>
       Approve: () => ({ answer: 'Approve' }),
       ApproveAlways: () => ({ answer: 'ApproveAlways' }),
       Decline: (decline) => ({ answer: 'Decline', text: Option.getOrNull(decline.message) }),
-      Choose: (choose) => ({ answer: 'Choose', choices: choose.answers }),
+      Choose: (choose) => ({ answer: 'Choose', choice: choose.answer }),
     }),
   )
 

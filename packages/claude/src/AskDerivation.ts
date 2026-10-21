@@ -1,6 +1,5 @@
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
-import * as Hash from 'effect/Hash'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
@@ -8,7 +7,7 @@ import * as Struct from 'effect/Struct'
 
 import { editPatch } from '@crook/claude/EditPatch'
 import type { PendingPermission } from '@crook/claude/HookLedger'
-import type { PermissionDialog } from '@crook/claude/PermissionDialog'
+import { type DialogQueue, type ScreenDialog, dialogFingerprint } from '@crook/claude/ScreenDialog'
 import {
   type Ask,
   type AskChoice,
@@ -37,9 +36,14 @@ export interface BlockedEpisode {
 export interface AskEvidence {
   readonly episode: BlockedEpisode
   readonly screen: Option.Option<string>
-  readonly dialog: Option.Option<PermissionDialog>
-  readonly pending: Option.Option<PendingPermission>
+  readonly dialog: Option.Option<ScreenDialog>
+  readonly pending: readonly PendingPermission[]
   readonly toolUse: Option.Option<ToolUseBlock>
+}
+
+export interface PendingEdit {
+  readonly permission: PermissionAsk
+  readonly edit: EditFile
 }
 
 interface ToolCall {
@@ -51,8 +55,23 @@ interface ToolCall {
 
 const YES_LABEL = 'Yes'
 const NO_LABEL = 'No'
+const ALWAYS_DESCRIPTION = 'always allow'
+const OTHER_DESCRIPTION = 'other'
 const LINE_BREAK = '\n'
-const ALWAYS_PREFIXES = ['Yes, and always allow', 'Yes, and switch to accept edits']
+const PATH_SEPARATOR = '/'
+const WHITESPACE = /\s+/gu
+
+const ALWAYS_PREFIXES = [
+  'Yes, and always allow',
+  "Yes, and don't ask again",
+  'Yes, and don’t ask again',
+  'Yes, and allow ',
+  'Yes, and remember this directory',
+  'Yes, and keep allowing',
+  'Yes, allow reading from',
+  'Yes, and switch to accept edits',
+]
+
 const DIALOG_EXTRA_CHOICES = ['Type something.', 'Chat about this']
 
 export const QUESTION_TOOL = 'AskUserQuestion'
@@ -89,6 +108,15 @@ const QuestionInput = Schema.Struct({
 
 const decodeInput = <Decoded>(schema: Schema.Decoder<Decoded>) => Schema.decodeUnknownOption(schema)
 
+export const choiceLabel = (choice: AskChoice): string =>
+  Match.value(choice).pipe(
+    Match.when('yes', () => YES_LABEL),
+    Match.when('always', () => ALWAYS_DESCRIPTION),
+    Match.when('no', () => NO_LABEL),
+    Match.when('other', () => OTHER_DESCRIPTION),
+    Match.exhaustive,
+  )
+
 export const optionChoice = (label: string): AskChoice => {
   if (label === YES_LABEL) {
     return 'yes'
@@ -101,7 +129,7 @@ export const optionChoice = (label: string): AskChoice => {
   return Arr.some(ALWAYS_PREFIXES, (prefix) => label.startsWith(prefix)) ? 'always' : 'other'
 }
 
-const askOptionsOf = (dialog: Option.Option<PermissionDialog>): readonly AskOption[] =>
+const askOptionsOf = (dialog: Option.Option<ScreenDialog>): readonly AskOption[] =>
   Option.match(dialog, {
     onNone: () => [],
     onSome: (found) =>
@@ -149,7 +177,9 @@ const actionOf = (toolName: string, input: Schema.Json): AskedAction =>
     Option.getOrElse((): AskedAction => new UseTool({ input })),
   )
 
-const questionAskOf = (call: ToolCall): Option.Option<Ask> =>
+const fingerprintOf = (dialog: Option.Option<ScreenDialog>) => Option.map(dialog, dialogFingerprint)
+
+const questionAskOf = (call: ToolCall, dialog: Option.Option<ScreenDialog>): Option.Option<Ask> =>
   Option.map(
     decodeInput(QuestionInput)(call.toolInput),
     (input) =>
@@ -172,10 +202,11 @@ const questionAskOf = (call: ToolCall): Option.Option<Ask> =>
               ),
             }),
         ),
+        dialog: fingerprintOf(dialog),
       }),
   )
 
-const permissionAskOf = (call: ToolCall, dialog: Option.Option<PermissionDialog>): Ask =>
+const permissionAskOf = (call: ToolCall, dialog: Option.Option<ScreenDialog>): Ask =>
   new PermissionAsk({
     id: call.id,
     source: call.source,
@@ -183,28 +214,69 @@ const permissionAskOf = (call: ToolCall, dialog: Option.Option<PermissionDialog>
     plugin: Option.flatMap(dialog, (found) => found.plugin),
     action: actionOf(call.toolName, call.toolInput),
     options: askOptionsOf(dialog),
+    dialog: fingerprintOf(dialog),
   })
 
-const askOfCall = (call: ToolCall, dialog: Option.Option<PermissionDialog>): Ask =>
+const askOfCall = (call: ToolCall, dialog: Option.Option<ScreenDialog>): Ask =>
   call.toolName === QUESTION_TOOL
-    ? Option.getOrElse(questionAskOf(call), () => permissionAskOf(call, dialog))
+    ? Option.getOrElse(questionAskOf(call, dialog), () => permissionAskOf(call, dialog))
     : permissionAskOf(call, dialog)
 
 export const toolOfHeader = (header: string): Option.Option<string> =>
   Option.fromUndefinedOr(HEADER_TOOLS.get(header))
 
-const isConsistent = (dialog: Option.Option<PermissionDialog>) => (call: ToolCall) =>
+const withoutWhitespace = (text: string) => text.replace(WHITESPACE, '')
+
+const namesFile = (dialog: ScreenDialog, filePath: string) =>
+  Option.exists(
+    dialog.subject,
+    (subject) => filePath === subject || filePath.endsWith(`${PATH_SEPARATOR}${subject}`),
+  )
+
+const showsAction = (dialog: ScreenDialog, call: ToolCall) =>
+  Match.value(actionOf(call.toolName, call.toolInput)).pipe(
+    Match.tagsExhaustive({
+      RunCommand: (run) =>
+        withoutWhitespace(dialog.body.join(LINE_BREAK)) === withoutWhitespace(run.command),
+      EditFile: (edit) => namesFile(dialog, edit.filePath),
+      WriteFile: (write) => namesFile(dialog, write.filePath),
+      UseTool: () => true,
+      ScreenDetail: () => true,
+    }),
+  )
+
+const showsQuestion = (dialog: ScreenDialog, call: ToolCall) =>
+  call.toolName === QUESTION_TOOL &&
+  Option.match(decodeInput(QuestionInput)(call.toolInput), {
+    onNone: () => true,
+    onSome: (input) => Arr.some(input.questions, (question) => question.header === dialog.header),
+  })
+
+const showsPermission = (dialog: ScreenDialog, call: ToolCall) =>
+  call.toolName !== QUESTION_TOOL &&
+  Option.match(toolOfHeader(dialog.header), {
+    onNone: () => true,
+    onSome: (tool) => tool === call.toolName && showsAction(dialog, call),
+  })
+
+const isConsistent = (dialog: Option.Option<ScreenDialog>) => (call: ToolCall) =>
   Option.match(dialog, {
     onNone: () => true,
     onSome: (found) =>
-      found.kind === 'question'
-        ? call.toolName === QUESTION_TOOL
-        : call.toolName !== QUESTION_TOOL &&
-          Option.match(toolOfHeader(found.header), {
-            onNone: () => true,
-            onSome: (tool) => tool === call.toolName,
-          }),
+      found.kind === 'question' ? showsQuestion(found, call) : showsPermission(found, call),
   })
+
+const queuedPending = (
+  pending: readonly PendingPermission[],
+  dialog: Option.Option<ScreenDialog>,
+): Option.Option<PendingPermission> => {
+  const queue = Option.getOrElse(
+    Option.flatMap(dialog, (found) => found.queue),
+    (): DialogQueue => ({ position: 1, total: 1 }),
+  )
+
+  return Arr.get(pending, pending.length - queue.total + queue.position - 1)
+}
 
 const hookCall = (pending: PendingPermission): ToolCall => ({
   source: 'hook',
@@ -220,9 +292,9 @@ const transcriptCall = (toolUse: ToolUseBlock): ToolCall => ({
   toolInput: toolUse.input,
 })
 
-const screenAskId = (dialog: PermissionDialog) => AskId.make(`screen-${Hash.string(dialog.text)}`)
+const screenAskId = (dialog: ScreenDialog) => AskId.make(`screen-${dialogFingerprint(dialog)}`)
 
-const questionFromDialog = (dialog: PermissionDialog): Ask =>
+const questionFromDialog = (dialog: ScreenDialog): Ask =>
   new QuestionAsk({
     id: screenAskId(dialog),
     source: 'screen',
@@ -247,9 +319,10 @@ const questionFromDialog = (dialog: PermissionDialog): Ask =>
         ),
       }),
     ],
+    dialog: Option.some(dialogFingerprint(dialog)),
   })
 
-const permissionFromDialog = (dialog: PermissionDialog): Ask => {
+const permissionFromDialog = (dialog: ScreenDialog): Ask => {
   const tool = Option.getOrElse(toolOfHeader(dialog.header), () => dialog.header)
   const body = dialog.body.join(LINE_BREAK)
 
@@ -263,10 +336,11 @@ const permissionFromDialog = (dialog: PermissionDialog): Ask => {
         ? new RunCommand({ command: body.trim() })
         : new ScreenDetail({ subject: dialog.subject, text: body }),
     options: askOptionsOf(Option.some(dialog)),
+    dialog: Option.some(dialogFingerprint(dialog)),
   })
 }
 
-const askFromDialog = (dialog: PermissionDialog): Ask =>
+const askFromDialog = (dialog: ScreenDialog): Ask =>
   dialog.kind === 'question' ? questionFromDialog(dialog) : permissionFromDialog(dialog)
 
 const unknownAsk = (evidence: AskEvidence): Ask =>
@@ -278,7 +352,7 @@ const unknownAsk = (evidence: AskEvidence): Ask =>
 export const deriveAsk = (evidence: AskEvidence): Ask =>
   pipe(
     Option.firstSomeOf([
-      Option.map(evidence.pending, hookCall),
+      Option.map(queuedPending(evidence.pending, evidence.dialog), hookCall),
       Option.map(evidence.toolUse, transcriptCall),
     ]),
     Option.filter(isConsistent(evidence.dialog)),
@@ -287,42 +361,30 @@ export const deriveAsk = (evidence: AskEvidence): Ask =>
     Option.getOrElse(() => unknownAsk(evidence)),
   )
 
-export const editToPatch = (ask: Ask): Option.Option<EditFile> =>
+export const pendingEdit = (ask: Ask): Option.Option<PendingEdit> =>
   Match.value(ask).pipe(
     Match.tag('PermissionAsk', (permission) =>
       Match.value(permission.action).pipe(
-        Match.tag('EditFile', (edit) => Option.some(edit)),
+        Match.tag('EditFile', (edit) => Option.some({ permission, edit })),
         Match.orElse(() => Option.none()),
       ),
     ),
     Match.orElse(() => Option.none()),
   )
 
-export const withEditPatch = (ask: Ask, content: string): Ask =>
-  Match.value(ask).pipe(
-    Match.tag('PermissionAsk', (permission): Ask =>
-      Match.value(permission.action).pipe(
-        Match.tag(
-          'EditFile',
-          (edit) =>
-            new PermissionAsk(
-              Struct.evolve(permission, {
-                action: () =>
-                  new EditFile(
-                    Struct.evolve(edit, {
-                      patch: () =>
-                        editPatch(content, {
-                          oldString: edit.oldString,
-                          newString: edit.newString,
-                          replaceAll: edit.replaceAll,
-                        }),
-                    }),
-                  ),
+export const withEditPatch = ({ permission, edit }: PendingEdit, content: string): Ask =>
+  new PermissionAsk(
+    Struct.evolve(permission, {
+      action: () =>
+        new EditFile(
+          Struct.evolve(edit, {
+            patch: () =>
+              editPatch(content, {
+                oldString: edit.oldString,
+                newString: edit.newString,
+                replaceAll: edit.replaceAll,
               }),
-            ),
+          }),
         ),
-        Match.orElse(() => permission),
-      ),
-    ),
-    Match.orElse((other) => other),
+    }),
   )

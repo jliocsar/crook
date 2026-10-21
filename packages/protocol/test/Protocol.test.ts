@@ -323,7 +323,7 @@ describe('Command wire shapes', () => {
       new Approve({}),
       new Decline({ message: Option.some('use printf') }),
       new Decline({ message: Option.none() }),
-      new Choose({ answers: ['Green'] }),
+      new Choose({ answer: 'Green' }),
     ].map(
       (answer, index) =>
         new RoutedCommand({

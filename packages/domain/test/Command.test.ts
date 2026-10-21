@@ -91,7 +91,7 @@ describe('AnswerAsk', () => {
   it('rejects a decline with an empty message and a choice of nothing', () => {
     const decode = Schema.decodeUnknownResult(Command)
     const emptyDecline = { _tag: 'Decline', message: '' }
-    const emptyChoice = { _tag: 'Choose', answers: [] }
+    const emptyChoice = { _tag: 'Choose', answer: '' }
 
     expect(
       [emptyDecline, emptyChoice].map((answer) =>

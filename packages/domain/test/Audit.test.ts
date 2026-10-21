@@ -69,11 +69,11 @@ describe('commandAudit', () => {
       answer: 'Decline',
       text: null,
     })
-    expect(answered(new Choose({ answers: ['Green'] }))).toEqual({
+    expect(answered(new Choose({ answer: 'Green' }))).toEqual({
       pane,
       ask,
       answer: 'Choose',
-      choices: ['Green'],
+      choice: 'Green',
     })
   })
 

@@ -43,6 +43,4 @@ export const seenMarkOf = (row: AgentRow): SeenMark =>
 export const agentTitle = (row: AgentRow): string => Option.getOrElse(row.label, () => row.title)
 
 export const pendingAskSummary = (row: AgentRow): Option.Option<string> =>
-  row.status === 'blocked'
-    ? Option.flatMap(row.ask, (ask) => askSummary(ask, row.cwd))
-    : Option.none()
+  Option.flatMap(row.ask, (ask) => askSummary(ask, row.cwd))

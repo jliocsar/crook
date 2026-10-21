@@ -4,30 +4,31 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { HookInbox } from '@crook/agent/HookInbox'
+import { PaneScreens } from '@crook/agent/PaneScreens'
 import { PendingAsks } from '@crook/agent/PendingAsks'
-import { editToPatch } from '@crook/claude/AskDerivation'
-import { type HookLedger, emptyHookLedger, recordHook } from '@crook/claude/HookLedger'
+import { pendingEdit } from '@crook/claude/AskDerivation'
+import {
+  type HookLedger,
+  emptyHookLedger,
+  pendingPermissions,
+  recordHook,
+} from '@crook/claude/HookLedger'
 import { PermissionRequestPayload, PreToolUsePayload } from '@crook/claude/HookPayload'
 import { LastTurn } from '@crook/claude/LastTurn'
+import { dialogFingerprint, parseDialog } from '@crook/claude/ScreenDialog'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
-import { AskOption, EditFile, PermissionAsk, RunCommand } from '@crook/domain/Ask'
+import { type Ask, AskOption, EditFile, PermissionAsk, RunCommand } from '@crook/domain/Ask'
 import { AskId, ClaudeSessionId } from '@crook/domain/Ids'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
-import type { HerdrEvent } from '@crook/herdr/Events'
-import {
-  HerdrClient,
-  type HerdrSubscriptionError,
-  type SentRequest,
-  scriptedResult,
-} from '@crook/herdr/HerdrClient'
-import { PaneReadMethod } from '@crook/herdr/Methods'
+import { HerdrConnectionClosed } from '@crook/herdr/HerdrClient'
 
-import { agentInfo } from './Fixtures'
+import { agentInfo, spikeScreenPath } from './Fixtures'
 
 const SESSION = ClaudeSessionId.make('84f3659c-7fcf-4280-8580-b82ae5fd8f91')
 const SESSION_OPTION = Option.some(SESSION)
@@ -62,41 +63,58 @@ const editCall = (filePath: string) => [
 const ledgerOf = (payloads: readonly (PreToolUsePayload | PermissionRequestPayload)[]) =>
   payloads.reduce<HookLedger>(recordHook, emptyHookLedger)
 
+const scriptedScreens = Effect.fn('scriptedScreens')(function* (
+  screens: readonly Option.Option<string>[],
+) {
+  const remaining = yield* Ref.make(screens)
+  const reads = yield* Ref.make(0)
+
+  const read = (_pane: string) =>
+    Ref.modify(remaining, (current) => [
+      current[0] ?? Option.none<string>(),
+      current.length > 1 ? current.slice(1) : current,
+    ]).pipe(
+      Effect.tap(() => Ref.update(reads, (count) => count + 1)),
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.fail(new HerdrConnectionClosed({ method: 'pane.read' })),
+          onSome: (screen) => Effect.succeed({ screen, dialog: parseDialog(screen) }),
+        }),
+      ),
+    )
+
+  return { read, reads: Ref.get(reads) }
+})
+
 const startAsks = Effect.fn('startAsks')(function* (
   payloads: readonly (PreToolUsePayload | PermissionRequestPayload)[],
-  screen: string,
+  screens: readonly Option.Option<string>[],
 ) {
   const ledger = yield* SubscriptionRef.make(ledgerOf(payloads))
-  const sent = yield* Queue.unbounded<SentRequest>()
-  const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
-  const read = scriptedResult(PaneReadMethod, {
-    type: 'pane_read',
-    read: { pane_id: BLOCKED.pane_id, text: screen, truncated: false },
-  })
+  const { read, reads } = yield* scriptedScreens(screens)
   const context = yield* Layer.build(
     Layer.provide(PendingAsks.layerFromServices, [
       HookInbox.layerTest(ledger),
-      HerdrClient.layerTest({ responses: [read], events, sent }),
+      Layer.mock(PaneScreens, { read }),
       Layer.mock(TranscriptLocator, { locate: () => Effect.succeedNone }),
       Layer.mock(LastTurn, { read: () => Effect.succeed([]) }),
     ]),
   )
 
-  return { asks: Context.get(context, PendingAsks), ledger, reads: Queue.clear(sent) }
+  return { asks: Context.get(context, PendingAsks), ledger, reads }
 })
 
-const bashScreen = Effect.fn('bashScreen')(function* () {
+const screenText = Effect.fn('screenText')(function* (name: string) {
   const fileSystem = yield* FileSystem.FileSystem
 
-  return yield* fileSystem.readFileString(
-    `${import.meta.dirname}/fixtures/spike-80/screens/12-native-bash-t20.txt`,
-  )
+  return yield* fileSystem.readFileString(spikeScreenPath(name))
 })
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) => {
   it.effect("reads a blocked agent's ask from its hook, with the options its dialog shows", () =>
     Effect.gen(function* () {
-      const { asks } = yield* startAsks(bashCall('toolu_01XXC3'), yield* bashScreen())
+      const screen = yield* screenText('12-native-bash-t20')
+      const { asks } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some(screen)])
       const ask = yield* asks.askOf(BLOCKED, SESSION_OPTION, yield* asks.mark)
 
       expect(ask).toEqual(
@@ -122,26 +140,62 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
               }),
               new AskOption({ number: 4, label: 'No', choice: 'no' }),
             ],
+            dialog: Option.map(parseDialog(screen), dialogFingerprint),
           }),
         ),
       )
     }),
   )
 
-  it.effect('keeps the ask it derived while the agent stays in the same blocked episode', () =>
+  it.effect('reads the screen on every refresh, and keeps the ask while the dialog stays', () =>
     Effect.gen(function* () {
-      const { asks, reads } = yield* startAsks(bashCall('toolu_01XXC3'), yield* bashScreen())
+      const screen = yield* screenText('12-native-bash-t20')
+      const { asks, reads } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some(screen)])
       const first = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
       const again = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
 
       expect(again).toEqual(first)
-      expect(yield* reads).toHaveLength(1)
+      expect(yield* reads).toBe(2)
+    }),
+  )
+
+  it.effect('follows a dialog that changes while herdr reports the same blocked episode', () =>
+    Effect.gen(function* () {
+      const first = yield* screenText('40-parallel-blocked-1')
+      const second = yield* screenText('42-parallel-blocked-2')
+      const { asks } = yield* startAsks([], [Option.some(first), Option.some(second)])
+      const before = yield* asks.askOf(BLOCKED, Option.none(), 0)
+      const after = yield* asks.askOf(BLOCKED, Option.none(), 0)
+
+      expect(Option.map(before, (ask) => ask.id)).not.toEqual(Option.map(after, (ask) => ask.id))
+    }),
+  )
+
+  it.effect('reads the screen again after a failed read instead of keeping what it lacked', () =>
+    Effect.gen(function* () {
+      const screen = yield* screenText('12-native-bash-t20')
+      const { asks } = yield* startAsks(bashCall('toolu_01XXC3'), [
+        Option.none(),
+        Option.some(screen),
+      ])
+      const optionsOf = (ask: Option.Option<Ask>) =>
+        Option.flatMap(ask, (found) =>
+          Match.value(found).pipe(
+            Match.tag('PermissionAsk', (permission) => Option.some(permission.options.length)),
+            Match.orElse(() => Option.none()),
+          ),
+        )
+      const blind = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+      const sighted = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+
+      expect([optionsOf(blind), optionsOf(sighted)]).toEqual([Option.some(0), Option.some(4)])
     }),
   )
 
   it.effect('forgets a declined permission once the agent is idle, but not while it works', () =>
     Effect.gen(function* () {
-      const { asks } = yield* startAsks(bashCall('toolu_01XXC3'), yield* bashScreen())
+      const screen = yield* screenText('12-native-bash-t20')
+      const { asks } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some(screen)])
       const mark = yield* asks.mark
 
       yield* asks.askOf(agentInfo({ agent_status: 'working' }), SESSION_OPTION, mark)
@@ -156,6 +210,20 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
     }),
   )
 
+  it.effect('drops the hook records of a session no herd agent runs', () =>
+    Effect.gen(function* () {
+      const { asks, ledger } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some('')])
+      const mark = yield* asks.mark
+
+      yield* asks.retain([SESSION], mark)
+      const kept = pendingPermissions(yield* SubscriptionRef.get(ledger), SESSION)
+      yield* asks.retain([], mark)
+      const dropped = pendingPermissions(yield* SubscriptionRef.get(ledger), SESSION)
+
+      expect([kept.length, dropped.length]).toEqual([1, 0])
+    }),
+  )
+
   it.effect('works out the diff of an Edit from the file as it is on disk', () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem
@@ -163,10 +231,10 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
       const filePath = `${directory}/greeting.txt`
 
       yield* fileSystem.writeFileString(filePath, 'hello\n')
-      const { asks } = yield* startAsks(editCall(filePath), '')
+      const { asks } = yield* startAsks(editCall(filePath), [Option.some('')])
       const ask = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
 
-      expect(Option.flatMap(ask, editToPatch)).toEqual(
+      expect(Option.map(Option.flatMap(ask, pendingEdit), (pending) => pending.edit)).toEqual(
         Option.some(
           new EditFile({
             filePath,
@@ -190,10 +258,11 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
 
   it.effect('has no ask for an agent that is not blocked', () =>
     Effect.gen(function* () {
-      const { asks, reads } = yield* startAsks(bashCall('toolu_01XXC3'), yield* bashScreen())
+      const screen = yield* screenText('12-native-bash-t20')
+      const { asks, reads } = yield* startAsks(bashCall('toolu_01XXC3'), [Option.some(screen)])
 
       expect(yield* asks.askOf(agentInfo(), SESSION_OPTION, 0)).toEqual(Option.none())
-      expect(yield* reads).toEqual([])
+      expect(yield* reads).toBe(0)
     }),
   )
 })

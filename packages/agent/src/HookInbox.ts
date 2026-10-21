@@ -3,7 +3,6 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
-import type * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as Socket from 'effect/socket/Socket'
 import * as Stream from 'effect/Stream'
@@ -15,8 +14,9 @@ import {
   type PendingPermission,
   dismissBefore,
   emptyHookLedger,
-  pendingPermission,
+  pendingPermissions,
   recordHook,
+  retainSessions,
 } from '@crook/claude/HookLedger'
 import { HookPayloadFromJson } from '@crook/claude/HookPayload'
 import type { ClaudeSessionId } from '@crook/domain/Ids'
@@ -36,9 +36,11 @@ const fromLedger = (ledger: SubscriptionRef.SubscriptionRef<HookLedger>) =>
   HookInbox.of({
     position: Effect.map(SubscriptionRef.get(ledger), (current) => current.received),
     pendingFor: (session) =>
-      Effect.map(SubscriptionRef.get(ledger), (current) => pendingPermission(current, session)),
+      Effect.map(SubscriptionRef.get(ledger), (current) => pendingPermissions(current, session)),
     dismissBefore: (session, position) =>
       SubscriptionRef.update(ledger, (current) => dismissBefore(current, session, position)),
+    retain: (isKept, position) =>
+      SubscriptionRef.update(ledger, (current) => retainSessions(current, isKept, position)),
     changes: SubscriptionRef.changes(ledger).pipe(
       Stream.map((current) => current.pendingVersion),
       Stream.changes,
@@ -92,10 +94,12 @@ export class HookInbox extends Context.Service<
   HookInbox,
   {
     readonly position: Effect.Effect<number>
-    readonly pendingFor: (
-      session: ClaudeSessionId,
-    ) => Effect.Effect<Option.Option<PendingPermission>>
+    readonly pendingFor: (session: ClaudeSessionId) => Effect.Effect<readonly PendingPermission[]>
     readonly dismissBefore: (session: ClaudeSessionId, position: number) => Effect.Effect<void>
+    readonly retain: (
+      isKept: (session: ClaudeSessionId) => boolean,
+      position: number,
+    ) => Effect.Effect<void>
     readonly changes: Stream.Stream<void>
   }
 >()('@crook/agent/HookInbox') {
