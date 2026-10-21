@@ -1,12 +1,10 @@
 import { ArrowUp } from 'lucide-react'
 import * as React from 'react'
 
+import { isSendKey } from '@crook/web/components/SendKey'
 import { Spinner } from '@crook/web/components/ui/spinner'
 
-const COARSE_POINTER_QUERY = '(pointer: coarse)'
 const SEND_SPINNER_SIZE = 16
-
-const softKeyboard = () => window.matchMedia(COARSE_POINTER_QUERY).matches
 
 const growToContent = (field: HTMLTextAreaElement) => {
   field.style.height = 'auto'
@@ -66,17 +64,10 @@ export function TaskComposer({
             onTaskChange(event.target.value)
           }}
           onKeyDown={(event) => {
-            if (
-              event.key !== 'Enter' ||
-              event.shiftKey ||
-              event.nativeEvent.isComposing ||
-              softKeyboard()
-            ) {
-              return
+            if (isSendKey(event)) {
+              event.preventDefault()
+              event.currentTarget.form?.requestSubmit()
             }
-
-            event.preventDefault()
-            event.currentTarget.form?.requestSubmit()
           }}
         />
         <button

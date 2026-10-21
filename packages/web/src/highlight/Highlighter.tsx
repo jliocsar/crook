@@ -1,12 +1,16 @@
+import { useAtomValue } from '@effect/atom-react/Hooks'
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
+import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
 import * as React from 'react'
 import type { HighlighterCore } from 'shiki/core'
+
+import { CODE_THEMES } from '@crook/web/highlight/Themes'
 
 export type CodeHighlighter = HighlighterCore
 
@@ -17,10 +21,13 @@ type HastNode = HastRoot['children'][number]
 type HastElement = Extract<HastNode, { readonly type: 'element' }>
 
 const LINE_CLASS = 'line'
+const LINE_BREAK = '\n'
 const CLASS_SEPARATOR = ' '
 const CUSTOM_PROPERTY_PREFIX = '--'
 const STYLE_SEPARATOR = ';'
 const STYLE_DECLARATION = /^\s*([^:]+?)\s*:\s*(.+?)\s*$/u
+
+export const HIGHLIGHT_LINE_LIMIT = 300
 
 const LANGUAGE_OF_EXTENSION = new Map([
   ['ts', 'typescript'],
@@ -70,10 +77,8 @@ export const highlighterAtom = Atom.make(
   }),
 ).pipe(Atom.keepAlive)
 
-export const HighlighterContext = React.createContext<Option.Option<CodeHighlighter>>(Option.none())
-
-export const useHighlighter = (): Option.Option<CodeHighlighter> =>
-  React.useContext(HighlighterContext)
+const useHighlighter = (): Option.Option<CodeHighlighter> =>
+  AsyncResult.value(useAtomValue(highlighterAtom))
 
 export const languageOfPath = (path: string): Option.Option<string> =>
   pipe(
@@ -83,6 +88,9 @@ export const languageOfPath = (path: string): Option.Option<string> =>
       Option.fromUndefinedOr(LANGUAGE_OF_EXTENSION.get(extension.toLowerCase())),
     ),
   )
+
+const isShortEnough = (code: string): boolean =>
+  code.split(LINE_BREAK).length <= HIGHLIGHT_LINE_LIMIT
 
 const isLine = (node: HastNode): boolean =>
   node.type === 'element' &&
@@ -146,7 +154,7 @@ export const highlightLines = (
     Option.map((lang) =>
       highlighter.codeToHast(code, {
         lang,
-        themes: { light: 'github-light', dark: 'github-dark' },
+        themes: CODE_THEMES,
         defaultColor: false,
       }),
     ),
@@ -163,8 +171,12 @@ export const useHighlightedLines = (
   return React.useMemo(
     () =>
       Option.flatMap(
-        Option.all({ found: highlighter, lang: Option.liftPredicate(name, Str.isNonEmpty) }),
-        ({ found, lang }) => highlightLines(found, code, lang),
+        Option.all({
+          found: highlighter,
+          lang: Option.liftPredicate(name, Str.isNonEmpty),
+          short: Option.liftPredicate(code, isShortEnough),
+        }),
+        ({ found, lang, short }) => highlightLines(found, short, lang),
       ),
     [highlighter, code, name],
   )

@@ -101,6 +101,12 @@ describe('chatScreenModel', () => {
     expect(chatStatus(away)).toStrictEqual(ChatStatus.Ended({ label: 'laptop offline' }))
   })
 
+  it('keeps what the agent was doing while its machine is away', () => {
+    const away = step(live, laptop([agent('w1:p1', 'working')], 'offline'))
+
+    expect(activityOf(away)).toBe('working')
+  })
+
   it('keeps what it had while there is no snapshot', () => {
     expect(chatScreenModel(Option.none(), LAPTOP, PANE, live)).toBe(live)
   })

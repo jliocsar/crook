@@ -3,11 +3,10 @@ import * as Option from 'effect/Option'
 import { CircleOff, SquareX } from 'lucide-react'
 import * as React from 'react'
 
+import type { EdgeKind } from '@crook/web/chat/ChatModel'
 import { Button } from '@crook/web/components/ui/button'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { shortElapsed } from '@crook/web/time/Elapsed'
-
-export type EdgeKind = 'closed' | 'exited' | 'away'
 
 export interface Restart {
   readonly start: () => void
@@ -34,7 +33,7 @@ const ENDED_TITLE = { closed: 'This pane closed', exited: 'Claude exited' } sati
   string
 >
 
-export const edgeTitle = (kind: EdgeKind, machineLabel: string): string =>
+const edgeTitle = (kind: EdgeKind, machineLabel: string): string =>
   kind === 'away' ? `${machineLabel} is offline` : ENDED_TITLE[kind]
 
 const agoLine = (since: Option.Option<DateTime.Utc>, now: DateTime.Utc): Option.Option<string> =>

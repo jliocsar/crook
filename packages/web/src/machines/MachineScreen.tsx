@@ -6,7 +6,7 @@ import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
-import { openedFromMachine } from '@crook/web/chat/ChatOrigin'
+import { openedFromMachine } from '@crook/web/navigation/ChatOrigin'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { machineScreenAtom } from '@crook/web/atoms/Machines'

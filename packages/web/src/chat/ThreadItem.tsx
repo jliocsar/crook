@@ -35,8 +35,8 @@ import { Response } from '@crook/web/components/ui/response'
 import { SubagentTree } from '@crook/web/components/ui/subagent-tree'
 import type { AgentRun } from '@crook/web/components/ui/subagent-tree'
 import { ToolCall } from '@crook/web/components/ui/tool-call'
-import { languageOfPath } from '@crook/web/highlight/Highlighter'
-import { spanDuration } from '@crook/web/time/Elapsed'
+import { HIGHLIGHT_LINE_LIMIT, languageOfPath } from '@crook/web/highlight/Highlighter'
+import { runningSpan } from '@crook/web/time/Elapsed'
 
 export interface ThreadEnvironment {
   readonly now: DateTime.Utc
@@ -52,6 +52,8 @@ const PATH_FIELD = 'file_path'
 const SHELL_LANGUAGE = 'shellscript'
 const PANE_CLOSED_NOTE = 'Pane closed'
 const BYTES_PER_KILOBYTE = 1024
+const LINE_BREAK = '\n'
+const READ_LINE_NUMBER = /^\s*\d+(?:\t|→)/u
 
 const TOOL_ICON = new Map([
   ['Read', FileText],
@@ -85,7 +87,22 @@ const resultText = (result: ToolResultBlock): string =>
         Match.orElse(() => []),
       ),
     ),
-    Arr.join('\n'),
+    Arr.join(LINE_BREAK),
+  )
+
+export const withoutLineNumbers = (text: string): string =>
+  pipe(
+    Option.liftPredicate(text.split(LINE_BREAK), (lines) =>
+      lines.every((line) => line === '' || READ_LINE_NUMBER.test(line)),
+    ),
+    Option.map((lines) =>
+      pipe(
+        lines,
+        Arr.map((line) => line.replace(READ_LINE_NUMBER, '')),
+        Arr.join(LINE_BREAK),
+      ),
+    ),
+    Option.getOrElse(() => text),
   )
 
 const resultImages = (result: Option.Option<ToolResultBlock>): readonly ImageBlock[] =>
@@ -130,15 +147,8 @@ const patchHunks = (call: ToolCallModel): Option.Option<readonly PatchHunk[]> =>
   )
 
 const toolDuration = (call: ToolCallModel, now: DateTime.Utc): string | undefined =>
-  pipe(
-    Option.all({
-      from: call.startedAt,
-      to: Option.orElse(call.finishedAt, () =>
-        Option.liftPredicate(now, () => call.status === 'running'),
-      ),
-    }),
-    Option.map(({ from, to }) => spanDuration(from, to)),
-    Option.getOrUndefined,
+  Option.getOrUndefined(
+    runningSpan(call.startedAt, call.finishedAt, call.status === 'running', now),
   )
 
 const runMeta = (run: SubagentRun): string =>
@@ -160,15 +170,8 @@ const treeRun = (run: SubagentRun, environment: ThreadEnvironment): AgentRun => 
     label: run.description,
     status,
     meta: status === 'failed' && run.status === 'running' ? PANE_CLOSED_NOTE : runMeta(run),
-    duration: pipe(
-      Option.all({
-        from: run.startedAt,
-        to: Option.orElse(run.finishedAt, () =>
-          Option.liftPredicate(environment.now, () => status === 'running'),
-        ),
-      }),
-      Option.map(({ from, to }) => spanDuration(from, to)),
-      Option.getOrUndefined,
+    duration: Option.getOrUndefined(
+      runningSpan(run.startedAt, run.finishedAt, status === 'running', environment.now),
     ),
     selectable: Option.isSome(run.subagent),
   }
@@ -178,7 +181,7 @@ const renderCode = (code: string, language: Option.Option<string>) => (
   <CodeBlock code={code} language={Option.getOrUndefined(language)} />
 )
 
-export const omittedLabel = (byteLength: number): string =>
+const omittedLabel = (byteLength: number): string =>
   `Earlier messages not loaded (${Math.ceil(byteLength / BYTES_PER_KILOBYTE)} KB)`
 
 function OutputText({ text, failed }: { text: string; failed: boolean }) {
@@ -198,14 +201,16 @@ function OutputText({ text, failed }: { text: string; failed: boolean }) {
 function ResultOutput({
   call,
   language,
+  numbered = false,
 }: {
   call: ToolCallModel
   language: Option.Option<string>
+  numbered?: boolean
 }) {
   return Option.match(call.result, {
     onNone: () => null,
     onSome: (result) => {
-      const text = resultText(result)
+      const text = numbered ? withoutLineNumbers(resultText(result)) : resultText(result)
 
       if (text.trim() === '') {
         return null
@@ -217,6 +222,7 @@ function ResultOutput({
         <CodeBlock
           code={text}
           language={Option.getOrUndefined(language)}
+          maxLines={HIGHLIGHT_LINE_LIMIT}
           className={OUTPUT_CLASS}
         />
       )
@@ -234,7 +240,13 @@ function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
       Option.orElse(patchHunks(call), () => inputHunks(call)),
       {
         onNone: () => <ResultOutput call={call} language={Option.none()} />,
-        onSome: (hunks) => <DiffView hunks={hunks} filename={Option.getOrUndefined(shownPath)} />,
+        onSome: (hunks) => (
+          <DiffView
+            hunks={hunks}
+            filename={Option.getOrUndefined(shownPath)}
+            maxLines={HIGHLIGHT_LINE_LIMIT}
+          />
+        ),
       },
     )
   }
@@ -247,6 +259,7 @@ function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
           code={code}
           filename={Option.getOrUndefined(shownPath)}
           language={Option.getOrUndefined(language)}
+          maxLines={HIGHLIGHT_LINE_LIMIT}
           className={OUTPUT_CLASS}
         />
       ),
@@ -266,7 +279,7 @@ function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
   }
 
   if (call.name === 'Read') {
-    return <ResultOutput call={call} language={language} />
+    return <ResultOutput call={call} language={language} numbered />
   }
 
   return (
@@ -277,13 +290,7 @@ function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
   )
 }
 
-export function ToolCard({
-  call,
-  environment,
-}: {
-  call: ToolCallModel
-  environment: ThreadEnvironment
-}) {
+function ToolCard({ call, environment }: { call: ToolCallModel; environment: ThreadEnvironment }) {
   const Icon = TOOL_ICON.get(call.name) ?? Wrench
 
   return (
@@ -309,9 +316,9 @@ function SubagentRuns({
     <SubagentTree
       runs={runs.map((run) => treeRun(run, environment))}
       onSelectRun={(selected) => {
-        Option.map(
+        Option.match(
           Arr.findFirst(runs, (run) => run.toolUseId === selected.id),
-          environment.onOpenRun,
+          { onNone: () => undefined, onSome: environment.onOpenRun },
         )
       }}
     />

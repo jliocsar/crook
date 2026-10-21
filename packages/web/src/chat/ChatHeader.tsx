@@ -6,9 +6,9 @@ import { RunDot } from '@crook/web/components/ui/subagent-tree'
 import { StatusDot } from '@crook/web/components/StatusDot'
 import { Swap } from '@crook/web/components/Swap'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
-import { scale, useTransformString } from '@crook/web/motion/TransformString'
+import { translate, useTransformString } from '@crook/web/motion/TransformString'
 
-const PILL_FROM = 0.9
+const PILL_RISE = 8
 
 function HollowDot() {
   return (
@@ -69,8 +69,8 @@ export function RunningPill({ count, onShow }: { count: number; onShow: () => vo
           type="button"
           data-slot="running-pill"
           className="border-border bg-muted/60 text-foreground focus-visible:ring-ring inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold tabular-nums focus-visible:ring-2 focus-visible:outline-none"
-          initial={{ opacity: 0, transform: transform.scale(PILL_FROM) }}
-          animate={{ opacity: 1, transform: scale(1) }}
+          initial={{ opacity: 0, transform: transform.translate('Y', PILL_RISE) }}
+          animate={{ opacity: 1, transform: translate('Y', 0) }}
           exit={motionTokens().exit}
           transition={motionTokens().fade}
           onClick={onShow}

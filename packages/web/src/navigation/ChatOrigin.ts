@@ -9,6 +9,12 @@ export const openedFromMachine = (opener: HTMLElement): HistoryState => ({
   openedFromMachine: true,
 })
 
+export const carriedOrigin = ({ openerKey, openedFromMachine: fromMachine }: HistoryState) => {
+  const opener: HistoryState = openerKey === undefined ? {} : { openerKey }
+
+  return fromMachine === true ? { ...opener, openedFromMachine: true } : opener
+}
+
 export const useOpenedFromMachine = (): boolean => {
   const router = useRouter()
   const [fromMachine] = React.useState(() => router.state.location.state.openedFromMachine === true)

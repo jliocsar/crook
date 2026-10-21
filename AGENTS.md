@@ -517,6 +517,15 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Shiki's hast names an element's classes in `properties.class`, a space-separated string, not in
   hast's usual `className` array (measured on 4.5). A walk that looks for `className` finds no
   line and renders every block plain; test the walk against a real highlighter's output.
+- An atom that has to react to another atom without re-running reads it through `get.stream`,
+  which subscribes through the registry instead of adding a dependency (read in `AtomRegistry`).
+  Each run of that stream adds a subscription that lives until the atom does, so run it once for
+  the atom's life and fan it out, rather than re-running it per wait.
+- Claude Code's Read tool result numbers its lines as `1	…` today and `     1→…` in older
+  transcripts (measured in local transcripts). Strip either only when every line carries it.
+- An agent with a long transcript to look at in a probe needs no tokens: `herdr agent start …
+  --kind claude -- --resume <session>` reopens an earlier Claude session in the pane, and the chat
+  tails its file (measured in the JC-101 probe).
 - Vite's dev and preview servers check the `Host` header against `allowedHosts` for HTTP
   requests and the HMR socket, but not for a proxied WebSocket upgrade (measured on 8.3.4: an
   upgrade with `Host: attacker.example` was proxied). A proxy rule that trusts an upgrade does

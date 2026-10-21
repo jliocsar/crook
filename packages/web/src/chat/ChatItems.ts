@@ -85,9 +85,8 @@ const ASYNC_LAUNCH_STATUS = 'async_launched'
 const COMPLETED_STATUS = 'completed'
 const INTERRUPTED_NOTE = 'Interrupted'
 const PATH_FIELDS = new Set(['file_path', 'notebook_path', 'path'])
-
-export const AGENT_TOOL = 'Agent'
-export const PLAN_TOOL = 'TodoWrite'
+const AGENT_TOOL = 'Agent'
+const PLAN_TOOL = 'TodoWrite'
 
 const SUMMARY_FIELD = new Map([
   ['Bash', 'command'],
@@ -154,7 +153,7 @@ const decodeAgentInput = Schema.decodeUnknownOption(AgentInput)
 const decodeFields = Schema.decodeUnknownOption(InputFields)
 const decodeString = Schema.decodeUnknownOption(Schema.NonEmptyString)
 
-export const firstLine = (text: string): string =>
+const firstLine = (text: string): string =>
   pipe(
     text.trim().split('\n'),
     Arr.head,
@@ -279,51 +278,49 @@ const userMessageOf = (line: TranscriptLine): Option.Option<UserMessage> =>
     ),
   )
 
-const resultsIn = (lines: readonly TranscriptLine[]) =>
+const stampedBlocks = <Value>(
+  lines: readonly TranscriptLine[],
+  pick: (block: UserMessage['blocks'][number]) => Option.Option<readonly [string, Value]>,
+): ReadonlyMap<string, Stamped<Value>> =>
   new Map(
     pipe(
       lines,
       Arr.flatMap((line) => Option.toArray(userMessageOf(line))),
       Arr.flatMap((user) =>
         Arr.flatMap(user.blocks, (block) =>
-          Match.value(block).pipe(
-            Match.tag(
-              'ToolResult',
-              (result): readonly (readonly [string, Stamped<ToolResultBlock>])[] => [
-                [result.toolUseId, { value: result, at: user.timestamp }],
-              ],
-            ),
-            Match.orElse(() => []),
+          pipe(
+            pick(block),
+            Option.map(([id, value]): readonly [string, Stamped<Value>] => [
+              id,
+              { value, at: user.timestamp },
+            ]),
+            Option.toArray,
           ),
         ),
       ),
     ),
   )
 
+const resultsIn = (lines: readonly TranscriptLine[]) =>
+  stampedBlocks(lines, (block) =>
+    Match.value(block).pipe(
+      Match.tag('ToolResult', (result) =>
+        Option.some<readonly [string, ToolResultBlock]>([result.toolUseId, result]),
+      ),
+      Match.orElse(() => Option.none()),
+    ),
+  )
+
 const noticesIn = (lines: readonly TranscriptLine[]) =>
-  new Map(
-    pipe(
-      lines,
-      Arr.flatMap((line) => Option.toArray(userMessageOf(line))),
-      Arr.flatMap((user) =>
-        Arr.flatMap(user.blocks, (block) =>
-          Match.value(block).pipe(
-            Match.tag(
-              'TaskNotification',
-              (notice): readonly (readonly [string, Stamped<string>])[] =>
-                pipe(
-                  Option.all({ toolUseId: notice.toolUseId, status: notice.status }),
-                  Option.map(({ toolUseId, status }): readonly [string, Stamped<string>] => [
-                    toolUseId,
-                    { value: status, at: user.timestamp },
-                  ]),
-                  Option.toArray,
-                ),
-            ),
-            Match.orElse(() => []),
-          ),
+  stampedBlocks(lines, (block) =>
+    Match.value(block).pipe(
+      Match.tag('TaskNotification', (notice) =>
+        Option.map(
+          Option.all({ toolUseId: notice.toolUseId, status: notice.status }),
+          ({ toolUseId, status }): readonly [string, string] => [toolUseId, status],
         ),
       ),
+      Match.orElse(() => Option.none()),
     ),
   )
 
@@ -723,8 +720,6 @@ export const chatItems = (
   return groupDrafts(Arr.flatMap(placed, (entry) => draftsOf(entry, evidence)))
 }
 
-export const itemKey = (item: ChatItem): string => item.key
-
 export const runsIn = (items: readonly ChatItem[]): readonly SubagentRun[] =>
   Arr.flatMap(items, (item) => (isSubagents(item) ? item.runs : []))
 
@@ -739,4 +734,10 @@ export const hasToolRunning = (items: readonly ChatItem[]): boolean =>
     (item) =>
       (isTool(item) && item.call.status === 'running') ||
       (isSubagents(item) && item.runs.some((run) => !run.background && isRunning(run))),
+  )
+
+export const firstRunningTreeKey = (items: readonly ChatItem[]): Option.Option<string> =>
+  pipe(
+    Arr.findFirst(items, (item) => isSubagents(item) && item.runs.some(isRunning)),
+    Option.map((item) => item.key),
   )

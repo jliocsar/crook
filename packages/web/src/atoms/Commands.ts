@@ -11,6 +11,7 @@ import * as Atom from 'effect/reactivity/Atom'
 
 import { hasMovedSince, hasStarted } from '@crook/domain/Command'
 import type { Command, CommandReceipt } from '@crook/domain/Command'
+import { findMachine } from '@crook/domain/HerdView'
 import type { HerdView } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
@@ -53,7 +54,7 @@ export const sendCommandAtom = Atom.family((key: IdempotencyKey) =>
 
 const agentsOf = (herd: HerdView, machine: MachineId) =>
   pipe(
-    Arr.findFirst(herd.machines, (entry) => entry.machine.id === machine),
+    findMachine(herd, machine),
     Option.flatMap((entry) => entry.state),
     agentsIn,
   )

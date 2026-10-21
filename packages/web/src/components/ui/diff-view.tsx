@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 import { FileDiff } from 'lucide-react'
 import * as React from 'react'
 
+import { ExpandToggle } from '@crook/web/components/ui/code-block'
 import { languageOfPath, useHighlightedLines } from '@crook/web/highlight/Highlighter'
 
 export type DiffLineKind = 'context' | 'add' | 'remove'
@@ -18,6 +19,7 @@ export type DiffHunk = {
 export type DiffViewProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   hunks: readonly DiffHunk[]
   filename?: string | undefined
+  maxLines?: number
 }
 
 type DiffRow = { readonly kind: DiffLineKind; readonly text: string; readonly hunk: number }
@@ -44,9 +46,12 @@ const rowsOf = (hunks: readonly DiffHunk[]): readonly DiffRow[] =>
 
 const SIGN = { context: ' ', add: '+', remove: '-' } satisfies Record<DiffLineKind, string>
 
-export function DiffView({ hunks, filename, className, ...rootProps }: DiffViewProps) {
+export function DiffView({ hunks, filename, maxLines, className, ...rootProps }: DiffViewProps) {
+  const [expanded, setExpanded] = React.useState(false)
   const rows = React.useMemo(() => rowsOf(hunks), [hunks])
-  const code = React.useMemo(() => rows.map((row) => row.text).join('\n'), [rows])
+  const collapsible = maxLines !== undefined && rows.length > maxLines
+  const shown = collapsible && !expanded ? rows.slice(0, maxLines) : rows
+  const code = shown.map((row) => row.text).join('\n')
   const highlighted = useHighlightedLines(
     code,
     Option.flatMap(Option.fromUndefinedOr(filename), languageOfPath),
@@ -79,7 +84,7 @@ export function DiffView({ hunks, filename, className, ...rootProps }: DiffViewP
         className="m-0 overflow-x-auto py-1.5 font-[family-name:var(--font-mono),monospace] text-xs leading-relaxed"
       >
         <code className="block">
-          {rows.map((row, index) => (
+          {shown.map((row, index) => (
             <span
               key={index}
               data-kind={row.kind}
@@ -110,6 +115,15 @@ export function DiffView({ hunks, filename, className, ...rootProps }: DiffViewP
           ))}
         </code>
       </pre>
+      {collapsible ? (
+        <ExpandToggle
+          expanded={expanded}
+          hidden={rows.length - shown.length}
+          onToggle={() => {
+            setExpanded((open) => !open)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

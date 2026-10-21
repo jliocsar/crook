@@ -1,5 +1,6 @@
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
+import * as Option from 'effect/Option'
 
 const SECONDS_PER_MINUTE = 60
 const MINUTES_PER_HOUR = 60
@@ -27,7 +28,7 @@ export const shortElapsed = (now: DateTime.Utc, since: DateTime.Utc): string => 
   return `${Math.floor(hours / HOURS_PER_DAY)}d`
 }
 
-export const runDuration = (milliseconds: number): string => {
+const runDuration = (milliseconds: number): string => {
   const shown = Math.max(0, milliseconds)
   const seconds = shown / MILLISECONDS_PER_SECOND
 
@@ -48,3 +49,17 @@ export const runDuration = (milliseconds: number): string => {
 
 export const spanDuration = (from: DateTime.Utc, to: DateTime.Utc): string =>
   runDuration(Duration.toMillis(DateTime.distance(from, to)))
+
+export const runningSpan = (
+  startedAt: Option.Option<DateTime.Utc>,
+  finishedAt: Option.Option<DateTime.Utc>,
+  running: boolean,
+  now: DateTime.Utc,
+): Option.Option<string> =>
+  Option.map(
+    Option.all({
+      from: startedAt,
+      to: Option.orElse(finishedAt, () => Option.liftPredicate(now, () => running)),
+    }),
+    ({ from, to }) => spanDuration(from, to),
+  )

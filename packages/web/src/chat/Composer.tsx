@@ -21,36 +21,18 @@ export interface ComposerProps {
   readonly working: boolean
   readonly disabled: boolean
   readonly sending: boolean
+  readonly stopping: boolean
   readonly placeholder: string
   readonly label: string
   readonly failure: Option.Option<string>
 }
 
-const COARSE_POINTER = '(pointer: coarse)'
 const SLASH_ONLY = /^\/\S*$/u
 const SUGGESTION_RISE = 6
-
-export const SLASH_COMMANDS = ['/compact', '/clear', '/model']
+const SLASH_COMMANDS = ['/compact', '/clear', '/model']
 
 export const slashSuggestions = (text: string): readonly string[] =>
   SLASH_ONLY.test(text) ? Arr.filter(SLASH_COMMANDS, (command) => command.startsWith(text)) : []
-
-const subscribeToPointer = (notify: () => void) => {
-  const query = window.matchMedia(COARSE_POINTER)
-
-  query.addEventListener('change', notify)
-
-  return () => {
-    query.removeEventListener('change', notify)
-  }
-}
-
-export const useCoarsePointer = (): boolean =>
-  React.useSyncExternalStore(
-    subscribeToPointer,
-    () => window.matchMedia(COARSE_POINTER).matches,
-    () => false,
-  )
 
 const keepFocus = (event: React.PointerEvent) => {
   event.preventDefault()
@@ -65,12 +47,12 @@ export function Composer({
   working,
   disabled,
   sending,
+  stopping,
   placeholder,
   label,
   failure,
 }: ComposerProps) {
   const field = React.useRef<HTMLTextAreaElement>(null)
-  const coarse = useCoarsePointer()
   const transform = useTransformString()
   const matches = slashSuggestions(value)
 
@@ -110,11 +92,11 @@ export function Composer({
         onSubmit={onSend}
         onStop={onStop}
         status={working && mode === 'prompt' && value.trim() === '' ? 'working' : 'ready'}
-        enterSends={!coarse}
         placeholder={placeholder}
         label={label}
         disabled={disabled}
         sending={sending}
+        stopping={stopping}
         submitLabel={mode === 'decline' ? 'Decline and send' : 'Send'}
         stopLabel="Stop (Esc)"
         className="bg-background"
@@ -125,7 +107,7 @@ export function Composer({
             size="icon-touch"
             className="text-muted-foreground rounded-full"
             aria-label="Slash command"
-            disabled={disabled || mode === 'decline'}
+            disabled={disabled || mode === 'decline' || value.trim() !== ''}
             onPointerDown={keepFocus}
             onClick={() => {
               onValueChange('/')

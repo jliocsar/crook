@@ -16,9 +16,14 @@ import yaml from 'shiki/langs/yaml.mjs'
 import githubDark from 'shiki/themes/github-dark.mjs'
 import githubLight from 'shiki/themes/github-light.mjs'
 
+import { CODE_THEMES } from '@crook/web/highlight/Themes'
+
 export const createCodeHighlighter = () =>
   createHighlighterCore({
-    themes: [githubLight, githubDark],
+    themes: [
+      { ...githubLight, name: CODE_THEMES.light },
+      { ...githubDark, name: CODE_THEMES.dark },
+    ],
     langs: [
       css,
       diff,

@@ -218,6 +218,19 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     return created
   })
 
+  const endTranscript = Effect.fn('endTranscript')(function* (
+    source: TranscriptSource,
+    failure: WatchTranscriptRefused | HubCallDefected,
+  ) {
+    const ending = yield* transcriptFor(source)
+
+    yield* Ref.update(
+      transcripts,
+      (current) => new Map([...current].filter(([key]) => key !== sourceKey(source))),
+    )
+    yield* Queue.fail(ending, failure)
+  })
+
   const layer = Layer.succeed(
     HubLink,
     HubLink.of({
@@ -262,6 +275,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     forgetRefusal,
     forgetAnswers,
     transcriptFor,
+    endTranscript,
     resumes,
     sent,
     commandAnswer,

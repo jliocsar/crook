@@ -1,6 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from 'cn'
-import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
 import { ArrowDown } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
@@ -19,8 +18,8 @@ export interface ThreadHandle {
   readonly scrollToKey: (key: string) => void
 }
 
-const ESTIMATED_ROW_HEIGHT = 64
-const OVERSCAN = 6
+const ESTIMATED_ROW_HEIGHT = 84
+const OVERSCAN = 8
 const ROW_GAP = 12
 const EDGE_PADDING = 16
 const FOLLOW_THRESHOLD = 48
@@ -146,7 +145,9 @@ export function Thread({
 
   React.useLayoutEffect(() => {
     if (!settled) {
-      Arr.map(rows, (row) => rises.current.set(row.key, false))
+      for (const row of rows) {
+        rises.current.set(row.key, false)
+      }
     }
   }, [rows, settled])
 

@@ -21,6 +21,8 @@ import { MachineState } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
 import { PaneTranscript, SubagentsChanged, SubagentTranscript } from '@crook/domain/Transcript'
 import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
+import { PaneNotInHerd } from '@crook/protocol/ClientApi'
+import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
 import { click, eventually, findByRole, present } from '../Dom.ts'
@@ -410,6 +412,162 @@ describe('AgentChatScreen', () => {
         screen.getByText('Subagents take no messages. Reply to Claude in its chat.'),
       ).toBeDefined()
       expect(screen.getByRole('button', { name: 'Back to Agent in w1:p1' })).toBeDefined()
+    }),
+  )
+
+  it.effect('watches again once the herd shows the pane after the hub refused the watch', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const source = new PaneTranscript({ pane: PANE })
+
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.resumes)).toHaveLength(1)
+      })
+      yield* link.endTranscript(source, new PaneNotInHerd({ machine: LAPTOP, pane: PANE }))
+
+      expect(yield* findByRole('button', 'Try again')).toBeDefined()
+
+      yield* SubscriptionRef.set(
+        link.state,
+        liveWith(herd([laptopWith([agent('w1:p1', 'idle')], { connection: 'offline' })])),
+      )
+      yield* Effect.promise(() => screen.findByText('laptop is offline'))
+      yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'idle')]))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.resumes)).toHaveLength(2)
+      })
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Back again.')]),
+      ])
+
+      expect(yield* Effect.promise(() => screen.findByText('Back again.'))).toBeDefined()
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    }),
+  )
+
+  it.effect('watches again when you ask it to try again', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const source = new PaneTranscript({ pane: PANE })
+
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.resumes)).toHaveLength(1)
+      })
+      yield* link.endTranscript(source, new TranscriptReadFailed({ detail: 'disk unplugged' }))
+      yield* click(yield* findByRole('button', 'Try again'))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.resumes)).toHaveLength(2)
+      })
+    }),
+  )
+
+  it.effect('starts over from the tail when the hub cannot resume where the chat left off', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const source = new PaneTranscript({ pane: PANE })
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Before the file shrank.')]),
+      ])
+      yield* Effect.promise(() => screen.findByText('Before the file shrank.'))
+      yield* link.endTranscript(source, new TranscriptResumeRejected({ detail: 'it shrank' }))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.resumes).map((resume) => Option.isSome(resume.from))).toEqual([
+          false,
+          false,
+        ])
+      })
+
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    }),
+  )
+
+  it.effect('sends one Esc for Stop until the herd shows it landed', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new SendKeys({ pane: PANE, keys: ['esc'] }))),
+      )
+
+      const stop = yield* findByRole('button', 'Stop (Esc)')
+
+      yield* click(stop)
+      yield* eventually(() => {
+        expect(stop.getAttribute('aria-busy')).toBe('true')
+      })
+      yield* click(stop)
+
+      expect(stop).toHaveProperty('disabled', true)
+      expect(Ref.getUnsafe(link.sent)).toHaveLength(1)
+    }),
+  )
+
+  it.effect('keeps a typed draft when the slash button is in reach', () =>
+    Effect.gen(function* () {
+      yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+
+      yield* Effect.promise(() => screen.findByRole('textbox'))
+      fireEvent.change(field(), { target: { value: 'first line\nsecond line' } })
+
+      const slash = screen.getByRole('button', { name: 'Slash command' })
+
+      yield* click(slash)
+
+      expect(slash).toHaveProperty('disabled', true)
+      expect(field()).toHaveProperty('value', 'first line\nsecond line')
+    }),
+  )
+
+  it.effect('sends on Ctrl+Enter from a touch keyboard', () =>
+    Effect.gen(function* () {
+      stubMediaQueries(['(prefers-reduced-motion)', '(pointer: coarse)'])
+
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'Run it' }))),
+      )
+      yield* Effect.promise(() => screen.findByRole('textbox'))
+      yield* Effect.promise(() => userEvent.type(field(), 'Run it{Control>}{Enter}{/Control}'))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent).map((call) => call.command)).toMatchObject([
+          { _tag: 'Prompt', pane: PANE, text: 'Run it' },
+        ])
+      })
+    }),
+  )
+
+  it.effect('keeps a resent prompt as sent until the transcript holds it', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'continue' }))),
+      )
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'continue')])])
+      yield* Effect.promise(() => screen.findByText('continue'))
+      yield* Effect.promise(() => userEvent.type(field(), 'continue{Enter}'))
+      yield* eventually(() => {
+        expect(screen.getByText('Sent')).toBeDefined()
+      })
+      yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'working', { seq: 2 })]))
+      yield* Effect.promise(() => screen.findByRole('button', { name: 'Stop (Esc)' }))
+
+      expect(screen.getByText('Sent')).toBeDefined()
+
+      yield* Queue.offer(transcript, chunk(10, 20, [prompt(10, 'continue')]))
+      yield* eventually(() => {
+        expect(screen.queryByText('Sent')).toBeNull()
+      })
+
+      expect(screen.getAllByText('continue')).toHaveLength(2)
     }),
   )
 

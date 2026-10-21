@@ -91,4 +91,16 @@ describe('applyTranscriptEvent', () => {
     expect(offsets(view.lines)).toEqual(['old 0'])
     expect(Option.isSome(view.failure)).toBe(true)
   })
+
+  it('forgets the failure once a watch delivers again', () => {
+    const failed = failedWith(
+      fold([opened(), chunk(0, 10, [prompt(0, 'hi')])]),
+      new MachineNotInHerd({ machine: LAPTOP }),
+    )
+
+    expect(applyTranscriptEvent(failed, opened()).failure).toEqual(Option.none())
+    expect(applyTranscriptEvent(failed, chunk(10, 20, [said(10, 'back')])).failure).toEqual(
+      Option.none(),
+    )
+  })
 })

@@ -1,8 +1,6 @@
-import { useAtomValue } from '@effect/atom-react/Hooks'
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
-import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import type * as React from 'react'
 
 import type { ChatItem } from '@crook/web/chat/ChatItems'
@@ -12,11 +10,12 @@ import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { ThinkingState } from '@crook/web/components/ui/thinking-state'
-import { HighlighterContext, highlighterAtom } from '@crook/web/highlight/Highlighter'
 
 const WORKING_KEY = 'working'
 const FAILURE_KEY = 'transcript failure'
 const WORKING_LABEL = 'Working'
+
+export const NO_MESSAGES = 'No messages yet'
 
 export const itemRows = (
   items: readonly ChatItem[],
@@ -32,15 +31,27 @@ export const workingRow = (elapsed: string): ThreadRow => ({
   content: <ThinkingState label={WORKING_LABEL} elapsed={elapsed} />,
 })
 
-export const failureRows = (view: Option.Option<TranscriptView>): readonly ThreadRow[] =>
+export const failureRows = (
+  view: Option.Option<TranscriptView>,
+  onRetry: () => void,
+): readonly ThreadRow[] =>
   pipe(
     Option.flatMap(view, (found) => found.failure),
     Option.map((failure) => ({
       key: FAILURE_KEY,
       content: (
-        <p role="alert" className="text-destructive px-1 text-center text-sm leading-5">
-          {failure.message}
-        </p>
+        <div className="grid justify-items-center gap-1 py-1">
+          <p role="alert" className="text-destructive px-1 text-center text-sm leading-5">
+            {failure.message}
+          </p>
+          <button
+            type="button"
+            className="text-primary inline-flex min-h-11 items-center px-3 text-sm font-semibold"
+            onClick={onRetry}
+          >
+            Try again
+          </button>
+        </div>
       ),
     })),
     Option.toArray,
@@ -57,10 +68,4 @@ export function LoadingThread() {
 
 export function QuietThread({ children }: { children: React.ReactNode }) {
   return <p className="text-muted-foreground py-10 text-center text-sm">{children}</p>
-}
-
-export function WithHighlighter({ children }: { children: React.ReactNode }) {
-  const highlighter = AsyncResult.value(useAtomValue(highlighterAtom))
-
-  return <HighlighterContext value={highlighter}>{children}</HighlighterContext>
 }

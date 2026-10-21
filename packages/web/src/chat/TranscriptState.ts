@@ -41,7 +41,7 @@ export const EMPTY_TRANSCRIPT = new TranscriptView({
 
 export const isOpened = (view: TranscriptView): boolean => Option.isSome(view.position)
 
-const linesOf = (view: TranscriptView, event: TranscriptEvent): readonly TranscriptLine[] =>
+const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly TranscriptLine[] =>
   Match.value(event).pipe(
     Match.tagsExhaustive({
       TranscriptOpened: (opened) =>
@@ -63,6 +63,16 @@ const subagentsAfter = (view: TranscriptView, event: TranscriptEvent): readonly 
     }),
   )
 
+const recovered = (view: TranscriptView): TranscriptView =>
+  Option.isNone(view.failure)
+    ? view
+    : new TranscriptView({
+        position: view.position,
+        lines: view.lines,
+        subagents: view.subagents,
+        failure: Option.none(),
+      })
+
 export const applyTranscriptEvent = (
   view: TranscriptView,
   event: TranscriptEvent,
@@ -70,13 +80,13 @@ export const applyTranscriptEvent = (
   pipe(
     remainderAfter(view.position, event),
     Option.match({
-      onNone: () => view,
+      onNone: () => recovered(view),
       onSome: (fresh) =>
         new TranscriptView({
           position: positionAfter(view.position, fresh),
-          lines: [...view.lines, ...linesOf(view, fresh)],
+          lines: [...view.lines, ...freshLines(view, fresh)],
           subagents: subagentsAfter(view, fresh),
-          failure: view.failure,
+          failure: Option.none(),
         }),
     }),
   )
@@ -92,3 +102,9 @@ export const failedWith = (view: TranscriptView, failure: TranscriptWatchFailure
 export const resumeOf =
   (tail: Option.Option<TranscriptTailBytes>) =>
   (view: TranscriptView): TranscriptResume => ({ from: view.position, tail })
+
+export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
+  Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
+
+export const subagentsOf = (view: Option.Option<TranscriptView>): readonly Subagent[] =>
+  Option.match(view, { onNone: () => [], onSome: (found) => found.subagents })

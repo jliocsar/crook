@@ -5,7 +5,6 @@ import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
-import { agentTitleOrPane } from '@crook/domain/AgentRow'
 import type { ClaudeSessionId, MachineId, PaneId, SubagentId } from '@crook/domain/Ids'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
 import { connectionAtom } from '@crook/web/atoms/Connection'
@@ -16,26 +15,28 @@ import {
   subagentTranscriptAtom,
   SubagentTranscriptKey,
   subagentTranscriptWholeAtom,
+  transcriptRetryAtom,
 } from '@crook/web/atoms/Transcript'
 import { ChatItem, chatItems, hasToolRunning, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
-import { activityOf } from '@crook/web/chat/ChatModel'
+import { activityOf, cwdOf, titleOf } from '@crook/web/chat/ChatModel'
 import {
   failureRows,
   itemRows,
   LoadingThread,
+  NO_MESSAGES,
   QuietThread,
-  WithHighlighter,
   workingRow,
 } from '@crook/web/chat/ChatRows'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import { runStatusShown } from '@crook/web/chat/ThreadItem'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
+import { linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
 import { Response } from '@crook/web/components/ui/response'
 import { RunDot } from '@crook/web/components/ui/subagent-tree'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
-import { spanDuration } from '@crook/web/time/Elapsed'
+import { runningSpan, spanDuration } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
 
 export interface SubagentScreenProps {
@@ -46,7 +47,6 @@ export interface SubagentScreenProps {
 }
 
 const ASKED_KEY = 'claude asked'
-const NO_MESSAGES = 'No messages yet'
 const SUBAGENT_TITLE = 'Subagent'
 
 const isUserPrompt = ChatItem.$is('UserPrompt')
@@ -65,14 +65,11 @@ const runLine = (run: SubagentRun, paneClosed: boolean, now: ThreadEnvironment['
   pipe(
     [
       Option.some(runWord[runStatusShown(run, paneClosed)]),
-      Option.map(
-        Option.all({
-          from: run.startedAt,
-          to: Option.orElse(run.finishedAt, () =>
-            Option.liftPredicate(now, () => runStatusShown(run, paneClosed) === 'running'),
-          ),
-        }),
-        ({ from, to }) => spanDuration(from, to),
+      runningSpan(
+        run.startedAt,
+        run.finishedAt,
+        runStatusShown(run, paneClosed) === 'running',
+        now,
       ),
       Option.liftPredicate(run.agentType, (type) => type !== ''),
       run.model,
@@ -106,14 +103,12 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const parent = AsyncResult.value(useAtomValue(paneTranscriptAtom(parentKey)))
   const view = AsyncResult.value(useAtomValue(subagentTranscriptAtom(key)))
   const showWhole = useAtomSet(subagentTranscriptWholeAtom(key))
+  const retry = useAtomSet(transcriptRetryAtom(key))
   const now = useNow()
-  const cwd = Option.match(model.row, { onNone: () => '', onSome: (row) => row.cwd })
+  const cwd = cwdOf(model)
   const paneClosed = model.presence === 'closed'
-  const parentLines = Option.match(parent, { onNone: () => [], onSome: (found) => found.lines })
-  const parentRoster = Option.match(parent, {
-    onNone: () => [],
-    onSome: (found) => found.subagents,
-  })
+  const parentLines = linesOf(parent)
+  const parentRoster = subagentsOf(parent)
   const parentActivity = activityOf(model)
   const run = React.useMemo(
     () =>
@@ -124,7 +119,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
     [parentLines, cwd, parentActivity, parentRoster, subagent],
   )
   const running = Option.exists(run, (found) => runStatusShown(found, paneClosed) === 'running')
-  const lines = Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
+  const lines = linesOf(view)
   const items = React.useMemo(
     () => chatItems(lines, { cwd, activity: running ? 'working' : 'still', subagents: [] }),
     [lines, cwd, running],
@@ -137,7 +132,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const shownItems = Arr.filter(items, (item) =>
     Option.match(firstPrompt, { onNone: () => true, onSome: (first) => first.key !== item.key }),
   )
-  const parentTitle = Option.match(model.row, { onNone: () => pane, onSome: agentTitleOrPane })
+  const parentTitle = titleOf(model, pane)
 
   useAtomMount(seenWhileOpenAtom(opened))
 
@@ -162,7 +157,9 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
           ),
         )
       : []),
-    ...failureRows(view),
+    ...failureRows(view, () => {
+      retry((count) => count + 1)
+    }),
   ]
 
   return (
@@ -184,15 +181,11 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
         backLabel={`Back to ${parentTitle}`}
       />
       <div className="min-h-0 flex-1">
-        <WithHighlighter>
-          <Thread
-            rows={rows}
-            dimmed={model.presence === 'away' || connection.stale}
-            empty={
-              Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>
-            }
-          />
-        </WithHighlighter>
+        <Thread
+          rows={rows}
+          dimmed={model.presence === 'away' || connection.stale}
+          empty={Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>}
+        />
       </div>
       <div
         data-slot="chat-dock"

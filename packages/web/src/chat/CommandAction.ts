@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
+import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
@@ -13,15 +14,10 @@ import {
 } from '@crook/web/atoms/Commands'
 import { mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
 
-export interface SentAction {
-  readonly fingerprint: string
-  readonly command: Command
-}
-
 export interface CommandAction {
   readonly state: PendingAction
-  readonly last: Option.Option<SentAction>
-  readonly send: (command: Command, fingerprint: string) => void
+  readonly last: Option.Option<Command>
+  readonly send: (command: Command) => void
 }
 
 interface ActionKeys {
@@ -39,19 +35,19 @@ const isFailed = PendingAction.$is('Failed')
 
 export const useCommandAction = (machine: MachineId): CommandAction => {
   const [keys, setKeys] = React.useState(freshKeys)
-  const [last, setLast] = React.useState<Option.Option<SentAction>>(Option.none())
+  const [last, setLast] = React.useState<Option.Option<Command>>(Option.none())
   const state = useAtomValue(
     pendingActionAtom(new PendingActionKey({ key: keys.current, machine })),
   )
   const sendCurrent = useAtomSet(sendCommandAtom(keys.current))
   const sendSpare = useAtomSet(sendCommandAtom(keys.spare))
 
-  const send = (command: Command, fingerprint: string) => {
+  const send = (command: Command) => {
     const request = new CommandRequest({ machine, command })
     const retry =
-      isFailed(state) && Option.exists(last, (previous) => previous.fingerprint === fingerprint)
+      isFailed(state) && Option.exists(last, (previous) => Equal.equals(previous, command))
 
-    setLast(Option.some({ fingerprint, command }))
+    setLast(Option.some(command))
 
     if (isIdle(state) || retry) {
       sendCurrent(request)

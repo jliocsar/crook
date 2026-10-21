@@ -2,6 +2,8 @@ import { cn } from 'cn'
 import { ArrowUp, Square } from 'lucide-react'
 import * as React from 'react'
 
+import { isSendKey } from '@crook/web/components/SendKey'
+
 export type PromptInputStatus = 'ready' | 'working'
 
 export type PromptInputProps = Omit<
@@ -13,11 +15,11 @@ export type PromptInputProps = Omit<
   onSubmit: (value: string) => void
   onStop: () => void
   status: PromptInputStatus
-  enterSends: boolean
   placeholder: string
   label: string
   disabled?: boolean
   sending?: boolean
+  stopping?: boolean
   maxRows?: number
   actions?: React.ReactNode
   fieldRef?: React.RefObject<HTMLTextAreaElement | null>
@@ -58,11 +60,11 @@ export function PromptInput({
   onSubmit,
   onStop,
   status,
-  enterSends,
   placeholder,
   label,
   disabled = false,
   sending = false,
+  stopping = false,
   maxRows = DEFAULT_MAX_ROWS,
   actions,
   fieldRef,
@@ -113,23 +115,16 @@ export function PromptInput({
         disabled={disabled}
         placeholder={placeholder}
         value={value}
-        enterKeyHint={enterSends ? 'send' : 'enter'}
+        enterKeyHint="enter"
         className="placeholder:text-muted-foreground block w-full resize-none bg-transparent px-3.5 py-3 text-base leading-6 outline-none disabled:opacity-60"
         onChange={(event) => {
           onValueChange(event.target.value)
         }}
         onKeyDown={(event) => {
-          if (
-            !enterSends ||
-            event.key !== 'Enter' ||
-            event.shiftKey ||
-            event.nativeEvent.isComposing
-          ) {
-            return
+          if (isSendKey(event)) {
+            event.preventDefault()
+            submit()
           }
-
-          event.preventDefault()
-          submit()
         }}
       />
       <div data-slot="prompt-input-toolbar" className="flex items-center gap-2 px-2 pb-2">
@@ -140,7 +135,8 @@ export function PromptInput({
             type="button"
             data-slot="prompt-input-stop"
             aria-label={stopLabel}
-            disabled={disabled}
+            aria-busy={stopping || undefined}
+            disabled={disabled || stopping}
             className={cn(ROUND_BUTTON, 'disabled:opacity-50')}
             onPointerDown={keepFocus}
             onClick={onStop}

@@ -196,7 +196,7 @@ function CodeBlockBar({
   )
 }
 
-function ExpandToggle({
+export function ExpandToggle({
   expanded,
   hidden,
   onToggle,
@@ -209,7 +209,7 @@ function ExpandToggle({
     <button
       type="button"
       aria-expanded={expanded}
-      className="border-border text-muted-foreground hover:text-foreground flex w-full items-center justify-center gap-1.5 border-t py-2 text-xs transition-colors duration-150 motion-reduce:transition-none"
+      className="border-border text-muted-foreground hover:text-foreground flex min-h-11 w-full items-center justify-center gap-1.5 border-t text-xs transition-colors duration-150 motion-reduce:transition-none"
       onClick={onToggle}
     >
       <ChevronDown
@@ -249,7 +249,7 @@ export function CodeBlock({
   const clipped = collapsible && !expanded
   const shown = clipped ? lines.slice(0, maxLines) : lines
   const label = filename ?? language
-  const highlighted = useHighlightedLines(code, Option.fromUndefinedOr(language))
+  const highlighted = useHighlightedLines(shown.join('\n'), Option.fromUndefinedOr(language))
 
   return (
     <div
