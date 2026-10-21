@@ -14,7 +14,6 @@ import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
 import { useLaunch } from '@crook/web/newagent/Launch'
 import { LaunchSummary } from '@crook/web/newagent/LaunchSummary'
 import {
-  BranchChoice,
   checkoutLabel,
   currentSelection,
   FolderChoice,
@@ -26,6 +25,10 @@ import {
   placesOn,
   selectionOn,
   typedFolder,
+  withCheckout,
+  withFolder,
+  withWorktree,
+  withWorktreeBranch,
   worktreeBranch,
 } from '@crook/web/newagent/NewAgentLayout'
 import type { Selection } from '@crook/web/newagent/NewAgentLayout'
@@ -118,24 +121,10 @@ function PickerContent({
         selected={Option.map(selection.folder, folderOf)}
         validPath={(typed) => Option.isSome(typedFolder(view, selection.machine, typed))}
         onPick={(place) => {
-          onChange(
-            {
-              ...selection,
-              folder: Option.some(FolderChoice.Recent({ place })),
-              branch: BranchChoice.Checkout(),
-            },
-            true,
-          )
+          onChange(withFolder(selection, Option.some(FolderChoice.Recent({ place }))), true)
         }}
         onType={(typed) => {
-          onChange(
-            {
-              ...selection,
-              folder: typedFolder(view, selection.machine, typed),
-              branch: BranchChoice.Checkout(),
-            },
-            true,
-          )
+          onChange(withFolder(selection, typedFolder(view, selection.machine, typed)), true)
         }}
       />
     )),
@@ -147,25 +136,13 @@ function PickerContent({
             checkout={checkoutLabel(choice)}
             worktree={worktree}
             onCheckout={() => {
-              onChange({ ...selection, branch: BranchChoice.Checkout() }, true)
+              onChange(withCheckout(selection), true)
             }}
             onWorktree={() => {
-              onChange(
-                BranchChoice.$match(selection.branch, {
-                  Checkout: () => ({
-                    ...selection,
-                    branch: BranchChoice.Worktree({ typed: Option.none() }),
-                  }),
-                  Worktree: () => selection,
-                }),
-                false,
-              )
+              onChange(withWorktree(selection), false)
             }}
             onWorktreeChange={(branch) => {
-              onChange(
-                { ...selection, branch: BranchChoice.Worktree({ typed: Option.some(branch) }) },
-                false,
-              )
+              onChange(withWorktreeBranch(selection, branch), false)
             }}
             onDone={onClose}
           />
@@ -183,6 +160,7 @@ function NewAgentFlow() {
   const [task, setTask] = React.useState('')
   const [picker, setPicker] = React.useState<Picker>('machine')
   const [pickerOpen, setPickerOpen] = React.useState(false)
+  const [editedSinceStart, setEditedSinceStart] = React.useState(false)
 
   const view = Option.map(herd, (snapshot) => snapshot.view)
   const launch = useLaunch(view)
@@ -199,7 +177,13 @@ function NewAgentFlow() {
         command,
       })),
     )
-  const ready = connection.controlsEnabled && online && !busy && Option.isSome(commandFor(''))
+  const restartBlocked = launch.blocksRestart && !editedSinceStart
+  const ready =
+    connection.controlsEnabled &&
+    online &&
+    !busy &&
+    !restartBlocked &&
+    Option.isSome(commandFor(''))
 
   React.useEffect(() => {
     if (Option.isNone(chosen) && Option.isSome(selection) && !connection.stale) {
@@ -211,6 +195,7 @@ function NewAgentFlow() {
     const next = commandFor(text)
 
     if (Option.isSome(next)) {
+      setEditedSinceStart(false)
       launch.start(next.value.machine, next.value.command)
     }
   }
@@ -267,7 +252,10 @@ function NewAgentFlow() {
           disabled={busy}
           canSend={ready}
           sending={launch.pending}
-          onTaskChange={setTask}
+          onTaskChange={(next) => {
+            setTask(next)
+            setEditedSinceStart(true)
+          }}
           onSend={() => {
             start(task)
           }}
@@ -304,6 +292,7 @@ function NewAgentFlow() {
               }}
               onChange={(next, close) => {
                 setChosen(Option.some(next))
+                setEditedSinceStart(true)
 
                 if (close) {
                   setPickerOpen(false)

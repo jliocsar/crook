@@ -25,6 +25,7 @@ export interface Launch {
   readonly opening: Option.Option<() => void>
   readonly failure: Option.Option<string>
   readonly openChatAfterFailure: Option.Option<() => void>
+  readonly blocksRestart: boolean
   readonly start: (machine: MachineId, command: LaunchCommand) => void
 }
 
@@ -40,21 +41,23 @@ const paneLeftRunning = (failure: LaunchFailure): Option.Option<PaneId> =>
 const useOpenChat = () => {
   const navigate = useNavigate()
 
-  return ({ machine, pane }: StartedAgent) => {
-    void navigate({
-      to: '/m/$machine/p/$pane',
-      params: { machine, pane },
-      replace: true,
-      state: ({ openerKey }) => (openerKey === undefined ? {} : { openerKey }),
-    })
-  }
+  return React.useCallback(
+    ({ machine, pane }: StartedAgent) => {
+      void navigate({
+        to: '/m/$machine/p/$pane',
+        params: { machine, pane },
+        replace: true,
+        state: ({ openerKey }) => (openerKey === undefined ? {} : { openerKey }),
+      })
+    },
+    [navigate],
+  )
 }
 
 export const useLaunch = (view: Option.Option<HerdView>): Launch => {
   const [result, launch] = useAtom(launchAtom)
   const openChat = useOpenChat()
   const [attempt, setAttempt] = React.useState(Option.none<LaunchAttempt>())
-  const opened = React.useRef(false)
 
   const answered = AsyncResult.isSuccess(result) ? Option.some(result.value) : Option.none()
   const receipt = Option.map(
@@ -66,12 +69,14 @@ export const useLaunch = (view: Option.Option<HerdView>): Launch => {
     Option.flatMap(({ herdView, sent, agent }) => startedAgent(herdView, sent.machine, agent)),
   )
 
+  const startedPane = Option.getOrUndefined(Option.map(started, (agent) => agent.pane))
+  const leftRunning = pipe(failureOf(result), Option.flatMap(paneLeftRunning))
+
   React.useEffect(() => {
-    if (Option.isSome(started) && !opened.current) {
-      opened.current = true
+    if (Option.isSome(started)) {
       openChat(started.value)
     }
-  }, [started, openChat])
+  }, [startedPane, openChat])
 
   return {
     pending: AsyncResult.isWaiting(result),
@@ -79,9 +84,9 @@ export const useLaunch = (view: Option.Option<HerdView>): Launch => {
       openChat(agent)
     }),
     failure: failureMessage(result),
+    blocksRestart: Option.isSome(leftRunning),
     openChatAfterFailure: pipe(
-      failureOf(result),
-      Option.flatMap(paneLeftRunning),
+      leftRunning,
       Option.flatMap((pane) =>
         Option.map(attempt, (sent) => () => {
           openChat({ machine: sent.machine, pane })

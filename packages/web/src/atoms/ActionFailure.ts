@@ -6,7 +6,7 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 const UNEXPECTED_FAILURE_MESSAGE =
   'Something inside crook failed without saying why. Reload crook and try again.'
 
-export const settledFailure = <Success, Failure extends { readonly message: string }>(
+export const settledFailure = <Success, Failure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
 ): Option.Option<Cause.Cause<Failure>> =>
   pipe(

@@ -211,6 +211,31 @@ export const typedFolder = (
     Option.map((folder) => refreshedFolder(view, machine, FolderChoice.Typed({ folder }))),
   )
 
+export const withFolder = (
+  selection: Selection,
+  folder: Option.Option<FolderChoice>,
+): Selection => ({
+  ...selection,
+  folder,
+  branch: BranchChoice.Checkout(),
+})
+
+export const withCheckout = (selection: Selection): Selection => ({
+  ...selection,
+  branch: BranchChoice.Checkout(),
+})
+
+export const withWorktree = (selection: Selection): Selection =>
+  BranchChoice.$match(selection.branch, {
+    Checkout: () => ({ ...selection, branch: BranchChoice.Worktree({ typed: Option.none() }) }),
+    Worktree: () => selection,
+  })
+
+export const withWorktreeBranch = (selection: Selection, branch: string): Selection => ({
+  ...selection,
+  branch: BranchChoice.Worktree({ typed: Option.some(branch) }),
+})
+
 export const isOnlineMachine = (view: HerdView, machine: MachineId): boolean =>
   Option.exists(findMachine(view, machine), isOnline)
 

@@ -22,6 +22,10 @@ import {
   StartsOn,
   typedFolder,
   validBranch,
+  withCheckout,
+  withFolder,
+  withWorktree,
+  withWorktreeBranch,
 } from '@crook/web/newagent/NewAgentLayout'
 import type { Selection } from '@crook/web/newagent/NewAgentLayout'
 import { newAgentBody } from '@crook/web/newagent/NewAgentLayout'
@@ -92,6 +96,29 @@ describe('currentSelection', () => {
     expect(currentSelection(later, Option.some(inCrook))).toEqual(
       Option.some({ ...inCrook, folder: Option.some(FolderChoice.Recent({ place: moved })) }),
     )
+  })
+})
+
+describe('selection changes', () => {
+  it('starts a new folder on its checkout', () => {
+    const named = { ...inCrook, branch: BranchChoice.Worktree({ typed: Option.some('fix-x') }) }
+    const inScratch = Option.some(FolderChoice.Recent({ place: scratch }))
+
+    expect(withFolder(named, inScratch)).toEqual({ ...inCrook, folder: inScratch })
+    expect(withFolder(named, Option.none())).toEqual({ ...inCrook, folder: Option.none() })
+  })
+
+  it('keeps a worktree branch already named, and drops it for the checkout', () => {
+    const unnamed = { ...inCrook, branch: BranchChoice.Worktree({ typed: Option.none() }) }
+    const named = withWorktreeBranch(unnamed, 'fix-x')
+
+    expect(withWorktree(inCrook)).toEqual(unnamed)
+    expect(named).toEqual({
+      ...inCrook,
+      branch: BranchChoice.Worktree({ typed: Option.some('fix-x') }),
+    })
+    expect(withWorktree(named)).toEqual(named)
+    expect(withCheckout(named)).toEqual(inCrook)
   })
 })
 

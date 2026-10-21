@@ -355,7 +355,18 @@ describe('NewAgentScreen', () => {
       yield* Ref.set(link.commandAnswer, Exit.fail(refusal))
       yield* typeTask(TASK)
       yield* click(startButton())
-      yield* click(yield* findByRole('button', 'Open the chat'))
+
+      const openChat = yield* findByRole('button', 'Open the chat')
+
+      expect(startButton()).toHaveProperty('disabled', true)
+      expect(withoutTask()).toHaveProperty('disabled', true)
+
+      yield* typeTask('!')
+
+      expect(startButton()).toHaveProperty('disabled', false)
+      expect(withoutTask()).toHaveProperty('disabled', false)
+
+      yield* click(openChat)
       yield* eventually(() => {
         expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap9')
       })
