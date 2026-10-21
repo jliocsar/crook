@@ -468,6 +468,10 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   its own host check, and the `Host` it compares against must be a fixed name, never another
   request header: a DNS-rebound page sends a matching `Host` and `Origin`.
 
+:::warning
+A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
+:::
+
 :::tip
 Checking the web app against real data, measured:
 
