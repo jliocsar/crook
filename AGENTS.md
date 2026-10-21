@@ -694,6 +694,16 @@ a branch push would publish from main.
 Every action is pinned by its full commit SHA, looked up with `gh api` (`git/ref/tags/<tag>`, and
 the tag object's commit when the tag is annotated), never guessed, with the version in a trailing
 YAML comment. A bump is a new lookup.
+
+The gate refuses a tag whose commit is not on main, and `publish` verifies its own signature with
+the identity and issuer the installer demands before it creates the release. A release its own
+installer refuses can only be replaced by cutting another tag, so the mismatch has to fail the job.
+:::
+
+:::tip
+The web build's directory names live in one `@crook/web` leaf that Vite, the hub and the release
+build all read. Bun embeds an `--asset` directory under its own name, so the directory Vite writes
+and the one the hub serves from the embedded files must be the same name.
 :::
 
 :::tip
@@ -707,6 +717,8 @@ Bun, measured on 1.4.3:
   calls two builds' same-sized files equal. Serve embedded files without one.
 - A compiled binary autoloads `.env` and `bunfig.toml` from its working directory unless built
   with `--no-compile-autoload-dotenv` and `--no-compile-autoload-bunfig`.
+- A cross-target compile downloads that target's runtime once and caches it at
+  `~/.bun/install/cache/bun-<os>-<arch>-v<version>`.
 :::
 
 :::tip
