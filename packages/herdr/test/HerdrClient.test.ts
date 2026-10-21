@@ -2,8 +2,12 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import * as BunSocketServer from '@effect/platform-bun/BunSocketServer'
 import { expect, layer } from '@effect/vitest'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
 import * as FileSystem from 'effect/FileSystem'
+import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
@@ -45,6 +49,8 @@ interface ConnectionScript {
   readonly replies: readonly string[]
   readonly keepOpen: boolean
 }
+
+const HERDR_NOTICED_HANG_UP = Duration.millis(125)
 
 const PONG_LINE =
   '{"id":"ping","result":{"type":"pong","version":"0.9.1","protocol":22,"capabilities":{"live_handoff":true}}}'
@@ -200,7 +206,53 @@ const fakeHerdr = Effect.fn('fakeHerdr')(function* (scripts: readonly Connection
   return { client, received }
 })
 
+const heldReply = Effect.fn('heldReply')(function* (reply: string) {
+  const fileSystem = yield* FileSystem.FileSystem
+  const directory = yield* fileSystem.makeTempDirectoryScoped()
+  const socketPath = `${directory}/herdr.sock`
+  const server = yield* BunSocketServer.make({ path: socketPath })
+  const received = yield* Queue.unbounded<string>()
+  const clientHungUp = yield* Deferred.make<void>()
+  const answer = yield* Latch.make(false)
+
+  yield* server
+    .run((socket) =>
+      Stream.fromEffect(Effect.as(answer.await, `${reply}\n`)).pipe(
+        Stream.concat(Stream.never),
+        Stream.pipeThroughChannel(Socket.toChannelString(socket)),
+        Stream.splitLines,
+        Stream.runForEach((line) => Queue.offer(received, line)),
+        Effect.andThen(Deferred.succeed(clientHungUp, undefined)),
+        Effect.ignore,
+      ),
+    )
+    .pipe(Effect.forkScoped)
+
+  const client = yield* Layer.build(HerdrClient.layerAt(socketPath)).pipe(
+    Effect.map((context) => Context.get(context, HerdrClient)),
+  )
+
+  return { client, received, clientHungUp, answer }
+})
+
 layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (it) => {
+  it.effect('keeps the connection open until herdr answers a slow request', () =>
+    Effect.gen(function* () {
+      const { client, received, clientHungUp, answer } = yield* heldReply(PONG_LINE)
+      const pong = yield* client.request(Ping, {}).pipe(Effect.forkScoped)
+
+      yield* Queue.take(received)
+      const hungUp = yield* Deferred.await(clientHungUp).pipe(
+        Effect.timeoutOption(HERDR_NOTICED_HANG_UP),
+      )
+
+      yield* answer.open
+
+      expect(hungUp).toEqual(Option.none())
+      expect(yield* Fiber.join(pong)).toEqual({ type: 'pong', version: '0.9.1', protocol: 22 })
+    }),
+  )
+
   it.effect('sends one request line and decodes the typed result', () =>
     Effect.gen(function* () {
       const { client, received } = yield* fakeHerdr([replyOnce(PONG_LINE)])

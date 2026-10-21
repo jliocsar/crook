@@ -20,6 +20,7 @@ import { Machine } from '@crook/domain/Machine'
 import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
+import type { Place } from '@crook/domain/Place'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
 
@@ -69,6 +70,7 @@ export const machine = (
     readonly label?: string
     readonly agentVersion?: string
     readonly herdrVersion?: string
+    readonly places?: readonly Place[]
   } = {},
 ) =>
   new HerdMachine({
@@ -95,7 +97,7 @@ export const machine = (
           (row) => new Pane({ id: row.pane, workspace: row.workspace, tab: row.tab }),
         ),
         agents,
-        places: [],
+        places: options.places ?? [],
       }),
     ),
     seen: (options.seen ?? []).map((pane) => PaneId.make(pane)),

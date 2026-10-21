@@ -11,9 +11,11 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
+import type { CommandFailure } from '@crook/protocol/Commands'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
 import type {
@@ -202,6 +204,14 @@ const make = Effect.gen(function* () {
     return yield* whenConnected((calls) => calls.forgetMachine(machine))
   })
 
+  const sendCommand = Effect.fn('HubLink.sendCommand')(function* (
+    machine: MachineId,
+    key: IdempotencyKey,
+    command: Command,
+  ) {
+    return yield* whenConnected((calls) => calls.sendCommand(machine, key, command))
+  })
+
   return HubLink.of({
     changes: Stream.merge(
       SubscriptionRef.changes(state),
@@ -210,6 +220,7 @@ const make = Effect.gen(function* () {
     resync,
     markSeen,
     forgetMachine,
+    sendCommand,
   })
 })
 
@@ -225,6 +236,11 @@ export class HubLink extends Context.Service<
     readonly forgetMachine: (
       machine: MachineId,
     ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed | HubNotConnected>
+    readonly sendCommand: (
+      machine: MachineId,
+      key: IdempotencyKey,
+      command: Command,
+    ) => Effect.Effect<CommandReceipt, CommandFailure | HubCallFailed | HubNotConnected>
   }
 >()('@crook/web/HubLink') {
   static readonly layerWithoutBrowser = Layer.effect(this, make)
