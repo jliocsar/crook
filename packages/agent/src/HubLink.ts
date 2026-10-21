@@ -95,19 +95,25 @@ const make = (connect: HubConnect, hello: Hello) =>
       executor.execute(routed.key, routed.command).pipe(
         Effect.result,
         Effect.forkIn(launches),
-        Effect.flatMap(Fiber.join),
-        Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
+        Effect.flatMap((launch) =>
+          Fiber.join(launch).pipe(
+            Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
+            Effect.tapError((error) => Effect.logWarning(error.message)),
+            Effect.ignore,
+            Effect.forkScoped,
+          ),
+        ),
         Effect.annotateLogs('command', routed.id),
-        Effect.tapError((error) => Effect.logWarning(error.message)),
-        Effect.ignore,
-        Effect.forkScoped,
       )
 
     const holdAttach = (client: AgentLinkClient) =>
       client.Attach({ hello }).pipe(
-        Stream.mapEffect((routed) =>
-          isLaunch(routed.command) ? answerLaunch(client, routed) : answer(client, routed),
+        Stream.tap((routed) =>
+          isLaunch(routed.command) ? answerLaunch(client, routed) : Effect.void,
         ),
+        Stream.filter((routed) => !isLaunch(routed.command)),
+        Stream.buffer({ capacity: 'unbounded' }),
+        Stream.mapEffect((routed) => answer(client, routed)),
         Stream.runDrain,
         Effect.andThen(Effect.fail(new HubAttachEnded())),
       )

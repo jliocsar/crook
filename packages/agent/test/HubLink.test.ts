@@ -80,6 +80,7 @@ interface HubScript {
   readonly reply: (state: MachineState) => Effect.Effect<void, MachineIdMismatch>
   readonly commands: readonly RoutedCommand[]
   readonly responses: readonly ScriptedResponse[]
+  readonly complete: (completion: Completion) => Effect.Effect<void>
 }
 
 interface Publication {
@@ -164,6 +165,7 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
   const reply = script.reply ?? (() => Effect.void)
   const commands = script.commands ?? []
   const responses = script.responses ?? inputResponses
+  const complete = script.complete ?? (() => Effect.void)
   const state = yield* SubscriptionRef.make(stateAt(0))
   const attempts = yield* Ref.make<readonly number[]>([])
   const received = yield* Queue.unbounded<MachineState>()
@@ -188,7 +190,7 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
         PublishState: ({ state: published }) =>
           Queue.offer(received, published).pipe(Effect.andThen(reply(published))),
         CompleteCommand: (completion) =>
-          Queue.offer(completed, completion).pipe(Effect.andThen(Effect.void)),
+          Queue.offer(completed, completion).pipe(Effect.andThen(complete(completion))),
         TranscriptDemands: () => Stream.never,
         PublishTranscript: () => Effect.void,
       }),
@@ -201,7 +203,14 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
     Layer.provide(HubLink.layerWith(connect, hello), yield* agentWith(state, sent, responses)),
   )
 
-  return { state, received, completed, sent: Queue.clear(sent), attempts: Ref.get(attempts) }
+  return {
+    state,
+    received,
+    completed,
+    requests: sent,
+    sent: Queue.clear(sent),
+    attempts: Ref.get(attempts),
+  }
 })
 
 const backoffTimeline = (failedAttempts: number, attachLifetime: Duration.Duration) =>
@@ -340,6 +349,40 @@ it.effect('reconnects at once when the link drops while a launch is still runnin
     yield* TestClock.adjust(PANE_BUSY_RETRY_LIMIT)
 
     expect(reconnected).toEqual(backoffTimeline(1, TICK))
+  }),
+)
+
+it.effect('starts a launch that arrives while a pane command is still being answered', () =>
+  Effect.gen(function* () {
+    const firstAnswerAccepted = yield* Deferred.make<void>()
+    const { requests } = yield* startLink({
+      commands: [
+        routed(0, ACTION, continuePrompt),
+        routed(
+          1,
+          OTHER_ACTION,
+          new StartAgent({ kind: 'claude', folder: import.meta.dirname, task: Option.none() }),
+        ),
+      ],
+      complete: (completion) =>
+        completion.id === CommandId.make(0) ? Deferred.await(firstAnswerAccepted) : Effect.void,
+      responses: [...inputResponses, ...launchStuckAtABusyShell],
+    })
+    const sentWhileHeld = yield* Queue.takeN(requests, 2)
+    const untilFirstStart = yield* Queue.takeN(requests, 4)
+
+    yield* Deferred.succeed(firstAnswerAccepted, undefined)
+    yield* TestClock.adjust(Duration.times(PANE_BUSY_RETRY_LIMIT, 2))
+
+    expect(sentWhileHeld.map((request) => request.method)).toEqual(
+      expect.arrayContaining(['agent.prompt', 'session.snapshot']),
+    )
+    expect(untilFirstStart.map((request) => request.method)).toEqual([
+      'workspace.create',
+      'session.snapshot',
+      'pane.send_input',
+      'agent.start',
+    ])
   }),
 )
 

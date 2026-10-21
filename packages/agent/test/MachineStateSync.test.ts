@@ -574,7 +574,10 @@ it.effect(
   'shows each read to the recent places and publishes their answer in the same version',
   () =>
     Effect.gen(function* () {
-      const observed = yield* Queue.unbounded<readonly AgentRow[]>()
+      const observed = yield* Queue.unbounded<{
+        readonly agents: readonly AgentRow[]
+        readonly firstSightAt: DateTime.Utc
+      }>()
       const place = new Place({
         folder: '/home/jliocsar/Projects/crook',
         checkout: Option.some(new Checkout({ branch: Option.some(BRANCH) })),
@@ -583,14 +586,16 @@ it.effect(
       const recentPlaces = Layer.succeed(
         RecentPlaces,
         RecentPlaces.of({
-          observe: (agents) => Effect.as(Queue.offer(observed, agents), [place]),
+          observe: (agents, firstSightAt) =>
+            Effect.as(Queue.offer(observed, { agents, firstSightAt }), [place]),
         }),
       )
       const { sync } = yield* startSync(working, [], recentPlaces)
       const seen = yield* Queue.take(observed)
       const published = yield* stateAt(sync, 0)
 
-      expect(seen.map((row) => row.pane)).toEqual(['w1:p1'])
+      expect(seen.agents.map((row) => row.pane)).toEqual(['w1:p1'])
+      expect(seen.agents.map((row) => row.statusChangedAt)).toEqual([seen.firstSightAt])
       expect(published.places).toEqual([place])
     }),
 )

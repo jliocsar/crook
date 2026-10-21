@@ -185,6 +185,11 @@ the order the predicates finished, not in input order (read in `effect@4.0.5`'s 
 saw a sorted list come back shuffled). Where order matters, `Effect.forEach` into `Option`s and
 `Arr.getSomes` keeps it.
 
+A fiber forked into a scope that closes before the fiber first runs never runs any of its effect
+(measured: a step forked from inside a `forkScoped` fiber never started when the session scope
+closed right after the fork). Work that must happen once it is accepted is forked into the scope
+that owns it directly, by the fiber that accepted it, and only the follow-up goes in a child.
+
 An `Effect<A>` is assignable to `Effect<void>`: a service method typed `Effect<void>` accepts
 `Queue.offer(…)` or `Effect.forkIn(scope)` as they are, and `begone-slop/no-effect-asvoid` rejects
 the `Effect.asVoid` that would only satisfy the signature (measured: removed in three places, the

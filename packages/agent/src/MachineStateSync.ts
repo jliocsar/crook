@@ -20,8 +20,9 @@ import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import {
+  type HerdReading,
   type ResolvedAgent,
-  agentRowsOf,
+  herdContents,
   herdrLostState,
   initialMachineState,
   nextMachineState,
@@ -30,7 +31,6 @@ import {
 } from '@crook/agent/MachineStateMapping'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
-import type { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import type { LifecycleEventKind, Subscription } from '@crook/herdr/Events'
@@ -124,28 +124,34 @@ const make = Effect.gen(function* () {
       { concurrent: true },
     ).pipe(Effect.annotateLogs('pane', info.pane_id))
 
-  const read = Effect.fn('MachineStateSync.read')(function* (previousAgents: readonly AgentRow[]) {
+  const read = Effect.fn('MachineStateSync.read')(function* () {
     const snapshot = yield* herdr.snapshot
     const agents = yield* Effect.forEach(snapshot.agents, resolveAgent, {
       concurrency: 'unbounded',
     })
-    const herd = {
+
+    return {
       herdrVersion: snapshot.version,
       workspaces: snapshot.workspaces,
       tabs: snapshot.tabs,
       panes: snapshot.panes,
       agents,
       createdPanes: yield* createdPanes.current,
-    }
-    const now = yield* DateTime.now
-    const places = yield* recentPlaces.observe(agentRowsOf(previousAgents, herd, now))
-
-    return { reading: { ...herd, places }, now }
+    } satisfies HerdReading
   })
 
   const firstConnection = yield* mintConnection
-  const initial = yield* read([]).pipe(
-    Effect.map(({ reading, now }) => initialMachineState(machine, firstConnection, reading, now)),
+
+  const readInitial = Effect.fn('MachineStateSync.readInitial')(function* () {
+    const reading = yield* read()
+    const startedAt = yield* DateTime.now
+    const contents = herdContents([], firstConnection, reading, startedAt)
+    const places = yield* recentPlaces.observe(contents.agents, startedAt)
+
+    return { startedAt, initial: initialMachineState(machine, { ...contents, places }) }
+  })
+
+  const { startedAt, initial } = yield* readInitial().pipe(
     Effect.tapError(logHerdrFailure),
     Effect.retry(herdrBackoff),
   )
@@ -159,10 +165,12 @@ const make = Effect.gen(function* () {
 
   const refresh = SubscriptionRef.updateSomeAndGetEffect(state, (previous) =>
     Effect.gen(function* () {
-      const { reading, now } = yield* read(previous.agents)
+      const reading = yield* read()
       const connection = yield* connectionAfter(previous)
+      const contents = herdContents(previous.agents, connection, reading, yield* DateTime.now)
+      const places = yield* recentPlaces.observe(contents.agents, startedAt)
 
-      return nextMachineState(previous, connection, reading, now)
+      return nextMachineState(previous, { ...contents, places })
     }),
   )
 

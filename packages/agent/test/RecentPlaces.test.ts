@@ -17,6 +17,7 @@ import {
   UsedFolder,
   foldersUsedBy,
   mergeUsedFolders,
+  usesWorthRecording,
 } from '@crook/agent/RecentPlaces'
 import { makeEnsureParentDirectory } from '@crook/agent/StateDirectory'
 import { PaneId } from '@crook/domain/Ids'
@@ -28,6 +29,7 @@ const CROOK = '/home/jliocsar/Projects/crook'
 const DOTFILES = '/home/jliocsar/.dotfiles'
 const SCRATCH = '/home/jliocsar/scratch'
 const BRANCH = 'feat/jc-111-new-agent'
+const FIRST_SIGHT = DateTime.makeUnsafe('2026-10-20T14:00:00Z')
 const EARLIER = DateTime.makeUnsafe('2026-10-20T15:00:00Z')
 const LATER = DateTime.makeUnsafe('2026-10-21T13:27:00Z')
 
@@ -88,6 +90,22 @@ describe('mergeUsedFolders', () => {
     ])
   })
 
+  it('records a use stamped at first sight only for a folder the list does not hold yet', () => {
+    expect(
+      usesWorthRecording(
+        [used(CROOK, EARLIER)],
+        [used(CROOK, LATER), used(DOTFILES, LATER)],
+        LATER,
+      ),
+    ).toEqual([used(DOTFILES, LATER)])
+  })
+
+  it('records every use stamped after first sight', () => {
+    expect(usesWorthRecording([used(CROOK, EARLIER)], [used(CROOK, LATER)], EARLIER)).toEqual([
+      used(CROOK, LATER),
+    ])
+  })
+
   it('takes a folder from each agent with a working directory, at its last status change', () => {
     expect(
       foldersUsedBy([agentRow({ cwd: CROOK, statusChangedAt: LATER }), agentRow({ cwd: '' })]),
@@ -113,10 +131,11 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
           const branches = new Map([[repository, BRANCH]])
           const first = yield* recentPlacesAt(file, branches)
 
-          yield* first.observe([agentRow({ cwd: repository, statusChangedAt: LATER })])
-          const published = yield* first.observe([
-            agentRow({ cwd: plain, statusChangedAt: EARLIER }),
-          ])
+          yield* first.observe([agentRow({ cwd: repository, statusChangedAt: LATER })], FIRST_SIGHT)
+          const published = yield* first.observe(
+            [agentRow({ cwd: plain, statusChangedAt: EARLIER })],
+            FIRST_SIGHT,
+          )
           const restarted = yield* recentPlacesAt(file, branches)
 
           expect(published).toEqual([
@@ -127,7 +146,26 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
             }),
             new Place({ folder: plain, checkout: Option.none(), usedAt: EARLIER }),
           ])
-          expect(yield* restarted.observe([])).toEqual(published)
+          expect(yield* restarted.observe([], FIRST_SIGHT)).toEqual(published)
+        }),
+    )
+
+    onDisk.effect(
+      'keeps the stored recency of a folder whose agent was running when crook restarted',
+      () =>
+        Effect.gen(function* () {
+          const file = yield* scratchFile()
+          const folder = yield* scratchFolder
+          const first = yield* recentPlacesAt(file)
+
+          yield* first.observe([agentRow({ cwd: folder, statusChangedAt: EARLIER })], FIRST_SIGHT)
+          const restarted = yield* recentPlacesAt(file)
+          const afterRestart = yield* restarted.observe(
+            [agentRow({ cwd: folder, statusChangedAt: LATER })],
+            LATER,
+          )
+
+          expect(afterRestart.map((place) => place.usedAt)).toEqual([EARLIER])
         }),
     )
 
@@ -140,13 +178,19 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
 
         yield* fileSystem.makeDirectory(removed)
         const places = yield* recentPlacesAt(file)
-        const before = yield* places.observe([
-          agentRow({ cwd: removed, statusChangedAt: LATER }),
-          agentRow({ pane: PaneId.make('w1:p2'), cwd: kept, statusChangedAt: EARLIER }),
-        ])
+        const before = yield* places.observe(
+          [
+            agentRow({ cwd: removed, statusChangedAt: LATER }),
+            agentRow({ pane: PaneId.make('w1:p2'), cwd: kept, statusChangedAt: EARLIER }),
+          ],
+          FIRST_SIGHT,
+        )
 
         yield* fileSystem.remove(removed, { recursive: true })
-        const after = yield* places.observe([agentRow({ cwd: kept, statusChangedAt: EARLIER })])
+        const after = yield* places.observe(
+          [agentRow({ cwd: kept, statusChangedAt: EARLIER })],
+          FIRST_SIGHT,
+        )
 
         expect(before.map((place) => place.folder)).toEqual([removed, kept])
         expect(after.map((place) => place.folder)).toEqual([kept])
@@ -158,7 +202,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
         const file = yield* scratchFile()
         const folders = yield* foldersIn(RECENT_PLACES_CAPACITY + 1)
         const places = yield* recentPlacesAt(file)
-        const kept = yield* places.observe(agentsIn(folders))
+        const kept = yield* places.observe(agentsIn(folders), FIRST_SIGHT)
 
         expect(kept).toHaveLength(RECENT_PLACES_CAPACITY)
         expect(kept.map((place) => place.folder)).not.toContain(folders[0])
@@ -173,20 +217,23 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
         const removed = Arr.getUnsafe(folders, 1)
         const places = yield* recentPlacesAt(file)
 
-        yield* places.observe(agentsIn(Arr.take(folders, RECENT_PLACES_CAPACITY)))
+        yield* places.observe(agentsIn(Arr.take(folders, RECENT_PLACES_CAPACITY)), FIRST_SIGHT)
         yield* fileSystem.remove(removed, { recursive: true })
-        const after = yield* places.observe([
-          agentRow({
-            cwd: Arr.getUnsafe(folders, RECENT_PLACES_CAPACITY),
-            statusChangedAt: LATER,
-          }),
-        ])
+        const after = yield* places.observe(
+          [
+            agentRow({
+              cwd: Arr.getUnsafe(folders, RECENT_PLACES_CAPACITY),
+              statusChangedAt: LATER,
+            }),
+          ],
+          FIRST_SIGHT,
+        )
         const restarted = yield* recentPlacesAt(file)
 
         expect(after).toHaveLength(RECENT_PLACES_CAPACITY)
         expect(after.map((place) => place.folder)).toContain(folders[0])
         expect(after.map((place) => place.folder)).not.toContain(removed)
-        expect(yield* restarted.observe([])).toEqual(after)
+        expect(yield* restarted.observe([], FIRST_SIGHT)).toEqual(after)
       }),
     )
 
@@ -203,13 +250,15 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
           yield* ensureParentDirectory(file)
           yield* fileSystem.writeFileString(file, '[{"folder":')
           const places = yield* recentPlacesAt(file)
-          const before = yield* places.observe([])
+          const before = yield* places.observe([], FIRST_SIGHT)
 
-          yield* places.observe([agentRow({ cwd: folder, statusChangedAt: LATER })])
+          yield* places.observe([agentRow({ cwd: folder, statusChangedAt: LATER })], FIRST_SIGHT)
           const restarted = yield* recentPlacesAt(file)
 
           expect(before).toEqual([])
-          expect((yield* restarted.observe([])).map((place) => place.folder)).toEqual([folder])
+          expect((yield* restarted.observe([], FIRST_SIGHT)).map((place) => place.folder)).toEqual([
+            folder,
+          ])
         }),
     )
   },

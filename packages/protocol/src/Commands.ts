@@ -95,6 +95,8 @@ export class FolderNotCheckout extends Schema.TaggedError<FolderNotCheckout>()(
   }
 }
 
+const shellQuoted = (text: string) => `'${text.replaceAll("'", String.raw`'\''`)}'`
+
 export class AgentNotStarted extends Schema.TaggedError<AgentNotStarted>()('AgentNotStarted', {
   folder: Schema.String,
   worktree: Schema.OptionFromNullOr(Schema.String),
@@ -105,7 +107,7 @@ export class AgentNotStarted extends Schema.TaggedError<AgentNotStarted>()('Agen
     const leftOnDisk = Option.match(this.worktree, {
       onNone: () => '',
       onSome: (path) =>
-        `, but the worktree it made at ${path} stays on disk: remove it with \`git worktree remove ${path}\` if you do not want it`,
+        `, but the worktree it made at ${path} stays on disk: remove it with \`git worktree remove ${shellQuoted(path)}\` if you do not want it`,
     })
 
     return `Claude did not start in ${this.folder}: herdr answered ${this.code}, ${this.detail}. crook closed the panes it opened for it${leftOnDisk}. Look at the machine, then start the agent again as a new action.`

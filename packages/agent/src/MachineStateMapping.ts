@@ -39,16 +39,18 @@ export interface HerdReading {
   readonly panes: readonly PaneInfo[]
   readonly agents: readonly ResolvedAgent[]
   readonly createdPanes: HashSet.HashSet<PaneId>
-  readonly places: readonly Place[]
 }
 
-interface MachineStateContents {
+export interface HerdContents {
   readonly herdrVersion: string
   readonly herdr: HerdrLink
   readonly workspaces: readonly Workspace[]
   readonly tabs: readonly Tab[]
   readonly panes: readonly Pane[]
   readonly agents: readonly AgentRow[]
+}
+
+export interface MachineStateContents extends HerdContents {
   readonly places: readonly Place[]
 }
 
@@ -151,7 +153,7 @@ const labelIn = (panes: readonly PaneInfo[]) => (info: AgentInfo) =>
   Arr.findFirst(panes, (pane) => pane.pane_id === info.pane_id).pipe(Option.flatMap(paneLabel))
 
 const toAgentRow =
-  (previousAgents: readonly AgentRow[], reading: Omit<HerdReading, 'places'>, now: DateTime.Utc) =>
+  (previousAgents: readonly AgentRow[], reading: HerdReading, now: DateTime.Utc) =>
   (resolved: ResolvedAgent) => {
     const { info, claudeSession, branch } = resolved
     const previous = previousRowOf(previousAgents, resolved)
@@ -178,25 +180,18 @@ const toAgentRow =
     })
   }
 
-export const agentRowsOf = (
-  previousAgents: readonly AgentRow[],
-  reading: Omit<HerdReading, 'places'>,
-  now: DateTime.Utc,
-): readonly AgentRow[] => reading.agents.map(toAgentRow(previousAgents, reading, now))
-
-const herdContents = (
+export const herdContents = (
   previousAgents: readonly AgentRow[],
   connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
-): MachineStateContents => ({
+): HerdContents => ({
   herdrVersion: reading.herdrVersion,
   herdr: new HerdrLink({ connection, lostAt: Option.none() }),
   workspaces: reading.workspaces.map(toWorkspace),
   tabs: reading.tabs.map(toTab),
   panes: reading.panes.map(toPane),
-  agents: agentRowsOf(previousAgents, reading, now),
-  places: reading.places,
+  agents: reading.agents.map(toAgentRow(previousAgents, reading, now)),
 })
 
 const withChangedContents = (
@@ -219,23 +214,13 @@ const withChangedContents = (
 
 export const initialMachineState = (
   machine: MachineId,
-  connection: HerdrConnectionId,
-  reading: HerdReading,
-  now: DateTime.Utc,
-): MachineState =>
-  new MachineState({
-    machine,
-    version: MachineStateVersion.make(0),
-    ...herdContents([], connection, reading, now),
-  })
+  contents: MachineStateContents,
+): MachineState => new MachineState({ machine, version: MachineStateVersion.make(0), ...contents })
 
 export const nextMachineState = (
   previous: MachineState,
-  connection: HerdrConnectionId,
-  reading: HerdReading,
-  now: DateTime.Utc,
-): Option.Option<MachineState> =>
-  withChangedContents(previous, herdContents(previous.agents, connection, reading, now))
+  contents: MachineStateContents,
+): Option.Option<MachineState> => withChangedContents(previous, contents)
 
 export const withCreatedPanes = (
   previous: MachineState,

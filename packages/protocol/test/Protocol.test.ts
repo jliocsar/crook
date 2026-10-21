@@ -378,15 +378,15 @@ describe('Command wire shapes', () => {
       detail: 'timed out waiting for agent state',
     })
     const inWorktree = new AgentNotStarted({
-      folder: '/home/jliocsar/Projects/crook-fix-reconnect',
-      worktree: Option.some('/home/jliocsar/Projects/crook-fix-reconnect'),
+      folder: "/home/jliocsar/Julio's Projects/crook-fix-reconnect",
+      worktree: Option.some("/home/jliocsar/Julio's Projects/crook-fix-reconnect"),
       code: 'timeout',
       detail: 'timed out waiting for agent state',
     })
 
     expect(inFolder.message).not.toContain('worktree')
     expect(inWorktree.message).toContain(
-      'git worktree remove /home/jliocsar/Projects/crook-fix-reconnect',
+      String.raw`git worktree remove '/home/jliocsar/Julio'\''s Projects/crook-fix-reconnect'`,
     )
   })
 })

@@ -60,6 +60,19 @@ export const foldersUsedBy = (agents: readonly AgentRow[]): readonly UsedFolder[
     Arr.map((row) => new UsedFolder({ folder: row.cwd, usedAt: row.statusChangedAt })),
   )
 
+const isStoredIn = (stored: readonly UsedFolder[]) => (seen: UsedFolder) =>
+  Arr.some(stored, (entry) => entry.folder === seen.folder)
+
+export const usesWorthRecording = (
+  stored: readonly UsedFolder[],
+  seen: readonly UsedFolder[],
+  firstSightAt: DateTime.Utc,
+): readonly UsedFolder[] =>
+  Arr.filter(
+    seen,
+    (use) => DateTime.isGreaterThan(use.usedAt, firstSightAt) || !isStoredIn(stored)(use),
+  )
+
 const latestUse = (uses: Arr.NonEmptyReadonlyArray<UsedFolder>): UsedFolder =>
   Arr.max(
     uses,
@@ -138,9 +151,13 @@ const make = Effect.gen(function* () {
 
   const used = yield* Ref.make(stored)
 
-  const observe = Effect.fn('RecentPlaces.observe')(function* (agents: readonly AgentRow[]) {
+  const observe = Effect.fn('RecentPlaces.observe')(function* (
+    agents: readonly AgentRow[],
+    firstSightAt: DateTime.Utc,
+  ) {
     const current = yield* Ref.get(used)
-    const next = yield* keepPresent(mergeUsedFolders(current, foldersUsedBy(agents)))
+    const seen = usesWorthRecording(current, foldersUsedBy(agents), firstSightAt)
+    const next = yield* keepPresent(mergeUsedFolders(current, seen))
 
     if (!isSameUse(next, current)) {
       yield* save(next)
@@ -156,7 +173,10 @@ const make = Effect.gen(function* () {
 export class RecentPlaces extends Context.Service<
   RecentPlaces,
   {
-    readonly observe: (agents: readonly AgentRow[]) => Effect.Effect<readonly Place[]>
+    readonly observe: (
+      agents: readonly AgentRow[],
+      firstSightAt: DateTime.Utc,
+    ) => Effect.Effect<readonly Place[]>
   }
 >()('@crook/agent/RecentPlaces') {
   static readonly layer = Layer.effect(this, make)
