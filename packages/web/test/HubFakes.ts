@@ -160,6 +160,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   const settings = yield* SubscriptionRef.make(readySettings)
   const account = yield* SubscriptionRef.make(new HubAccount({ email: OWNER_EMAIL }))
   const prefWrites = yield* Ref.make<readonly PrefWrite[]>([])
+  const prefAttempts = yield* Ref.make<readonly PrefWrite[]>([])
   const prefRefusal = yield* Ref.make(
     Option.none<HubStorageFailed | HubCallFailed | HubNotConnected>(),
   )
@@ -206,18 +207,21 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
       notificationSettings: SubscriptionRef.changes(settings),
       account: SubscriptionRef.changes(account),
       setNotificationPref: (event, enabled) =>
-        answerWith(
-          prefAnswers,
-          prefRefusal,
-          Effect.andThen(
-            Ref.update(prefWrites, (writes) => [...writes, { event, enabled }]),
-            SubscriptionRef.update(
-              settings,
-              (current) =>
-                new NotificationSettings({
-                  prefs: withPref(current.prefs, event, enabled),
-                  delivery: current.delivery,
-                }),
+        Effect.andThen(
+          Ref.update(prefAttempts, (attempts) => [...attempts, { event, enabled }]),
+          answerWith(
+            prefAnswers,
+            prefRefusal,
+            Effect.andThen(
+              Ref.update(prefWrites, (writes) => [...writes, { event, enabled }]),
+              SubscriptionRef.update(
+                settings,
+                (current) =>
+                  new NotificationSettings({
+                    prefs: withPref(current.prefs, event, enabled),
+                    delivery: current.delivery,
+                  }),
+              ),
             ),
           ),
         ),
@@ -251,6 +255,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     settings,
     account,
     prefWrites,
+    prefAttempts,
     prefRefusal,
     prefAnswers,
     testSends,

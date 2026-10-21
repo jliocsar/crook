@@ -7,7 +7,7 @@ import { FailureNote } from '@crook/web/components/FailureNote'
 import { InfoList } from '@crook/web/components/InfoList'
 import { Sheet } from '@crook/web/components/Sheet'
 import { Swap } from '@crook/web/components/Swap'
-import { Button, BUTTON_ICON_SIZE } from '@crook/web/components/ui/button'
+import { Button } from '@crook/web/components/ui/button'
 import { Skeleton } from '@crook/web/components/ui/skeleton'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { useLogOut } from '@crook/web/settings/SettingsActions'
@@ -71,7 +71,7 @@ function LogOutSheet({
           }}
         >
           <Swap id={logOut.pending ? 'pending' : 'idle'}>
-            {logOut.pending ? <Spinner size={BUTTON_ICON_SIZE} /> : null}
+            {logOut.pending ? <Spinner /> : null}
             {logOut.pending ? 'Logging out' : 'Log out'}
           </Swap>
         </Button>

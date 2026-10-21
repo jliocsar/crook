@@ -102,6 +102,7 @@ describe('SettingsScreen', () => {
       })
 
       expect(switchOf('Finished').hasAttribute('aria-readonly')).toBe(false)
+      expect(yield* Ref.get(link.prefAttempts)).toEqual([{ event: 'finished', enabled: false }])
       expect(yield* Ref.get(link.prefWrites)).toEqual([{ event: 'finished', enabled: false }])
     }),
   )

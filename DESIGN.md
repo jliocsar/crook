@@ -346,8 +346,9 @@ rule.
 
 - **Notifications**: Approvals, Questions, Finished and Live Activity, each a row with a label, a
   one-line detail and a switch, `primary` when on. A switch shows what the hub holds: a tap writes
-  to the hub, and the switch moves when the hub's settings come back. It is disabled while its write
-  is in flight, and a refused write shows the hub's sentence under its row. Below the rows:
+  to the hub, and the switch moves when the hub's settings come back. It stays focusable and ignores
+  taps (read-only, `aria-busy`) while its write is in flight, and is disabled only while the hub
+  can't act. A refused write shows the hub's sentence under its row. Below the rows:
   - "Saved on the hub, so every device you log in on shares them."
   - a full-width secondary "Send a test", which swaps to "Sending" and then "Sent to your phone";
     a refusal shows its sentence beneath, and the button reads "Send a test" again;

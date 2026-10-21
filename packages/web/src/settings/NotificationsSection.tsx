@@ -8,7 +8,7 @@ import { HarkNotConfigured } from '@crook/protocol/Hark'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { FailureNote } from '@crook/web/components/FailureNote'
 import { Swap } from '@crook/web/components/Swap'
-import { Button, BUTTON_ICON_SIZE } from '@crook/web/components/ui/button'
+import { Button } from '@crook/web/components/ui/button'
 import { Skeleton } from '@crook/web/components/ui/skeleton'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { useNotificationPref, useTestNotification } from '@crook/web/settings/SettingsActions'
@@ -36,7 +36,7 @@ const TEST_LABEL = {
 
 const TEST_ICON = {
   idle: <Send />,
-  sending: <Spinner size={BUTTON_ICON_SIZE} />,
+  sending: <Spinner />,
   sent: <Check />,
 } satisfies Record<TestNotificationState, React.ReactNode>
 
@@ -141,7 +141,7 @@ function TestNotification({ disabled }: { disabled: boolean }) {
           }}
         >
           <Swap id={test.state}>
-            <span aria-hidden="true" className="inline-flex [&_svg]:size-4">
+            <span aria-hidden="true" className="inline-flex">
               {TEST_ICON[test.state]}
             </span>
             {TEST_LABEL[test.state]}
