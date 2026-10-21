@@ -491,6 +491,14 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   script hung until killed (measured).
 - The router percent-encodes a path param, so a herdr pane id like `w1:p3` sits in the URL as
   `w1%3Ap3`, and the route's params hand it back decoded (measured).
+- A hook that hands back an `Effect` is a zero-argument function returning a lazy Effect, and
+  `effecttsgo/lazy-effect` rejects it (measured). Code that needs the router takes it as an
+  argument, typed `RegisteredRouter`: `AnyRouter` types `history` as `any`, and the type-aware
+  rules reject every call on it (measured).
+- The Hold Button shows its complete label for a while after a hold, whatever its parent says,
+  so a test that reads that label right after a hold reads the button's own state. Assert what
+  the parent controls, such as `disabled` (measured: a test on the label passed with the fix
+  reverted).
 - A grid with no column template gives each item an `auto` column, which grows to the item's
   min-content, so a `truncate` inside it never truncates and a long agent title pushed its card
   past the screen on real data (measured). A grid whose items must shrink takes `grid-cols-1`,
