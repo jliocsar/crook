@@ -16,8 +16,10 @@ import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
+import { PendingAsks } from '@crook/agent/PendingAsks'
 import { StatusBeforeHandoff } from '@crook/domain/AgentRow'
-import { ClaudeSessionId, PaneId } from '@crook/domain/Ids'
+import { type Ask, UnknownAsk } from '@crook/domain/Ask'
+import { AskId, ClaudeSessionId, PaneId } from '@crook/domain/Ids'
 import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
 import {
@@ -124,6 +126,7 @@ const statusPanes = (subscription: FakeSubscription) =>
 const startSync = Effect.fn('startSync')(function* (
   initial: SessionSnapshot,
   subscribeFailures: readonly HerdrSubscriptionError[] = [],
+  asks: ReadonlyMap<string, Ask> = new Map(),
 ) {
   const readStarted = yield* Queue.unbounded<void>()
   const replies = yield* Queue.unbounded<SessionSnapshot>()
@@ -149,6 +152,7 @@ const startSync = Effect.fn('startSync')(function* (
     Layer.provideMerge(MachineStateSync.layer, [
       herdr,
       CreatedPanes.layerTest(),
+      PendingAsks.layerTest(asks),
       ClaudeSessions.layerTest(
         new Map([
           ['w1:p1', SESSION],
@@ -223,6 +227,29 @@ it.effect('re-reads on every event and bumps the version only when the state cha
     const state = yield* stateAt(sync, 1)
 
     expect(state.agents.map((row) => row.status)).toEqual(['blocked'])
+  }),
+)
+
+it.effect('publishes the ask of a blocked agent, and drops it once the agent moves on', () =>
+  Effect.gen(function* () {
+    const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: '' })
+    const { sync, subscriptions, answerRead } = yield* startSync(
+      working,
+      [],
+      new Map([['w1:p1', ask]]),
+    )
+    const subscription = yield* Queue.take(subscriptions)
+
+    yield* answerRead(working)
+    yield* Queue.offer(subscription.events, paneClosed)
+    yield* answerRead(sessionSnapshot([agentInfo({ agent_status: 'blocked' })]))
+    const blocked = yield* stateAt(sync, 1)
+    yield* Queue.offer(subscription.events, paneClosed)
+    yield* answerRead(working)
+    const movedOn = yield* stateAt(sync, 2)
+
+    expect(blocked.agents.map((row) => row.ask)).toEqual([Option.some(ask)])
+    expect(movedOn.agents.map((row) => row.ask)).toEqual([Option.none()])
   }),
 )
 

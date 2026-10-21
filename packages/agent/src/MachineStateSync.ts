@@ -28,6 +28,7 @@ import {
   withCreatedPanes,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
+import { PendingAsks } from '@crook/agent/PendingAsks'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
@@ -87,6 +88,7 @@ const make = Effect.gen(function* () {
   const claudeSessions = yield* ClaudeSessions
   const gitBranches = yield* GitBranches
   const createdPanes = yield* CreatedPanes
+  const asks = yield* PendingAsks
   const machine = yield* CrookMachineId
 
   const sessionOf = (info: AgentInfo) =>
@@ -113,17 +115,23 @@ const make = Effect.gen(function* () {
           ),
     })
 
-  const resolveAgent = (info: AgentInfo) =>
+  const sessionAndAskOf = (info: AgentInfo, mark: number) =>
+    Effect.flatMap(sessionOf(info), (claudeSession) =>
+      Effect.map(asks.askOf(info, claudeSession, mark), (ask) => ({ claudeSession, ask })),
+    )
+
+  const resolveAgent = (mark: number) => (info: AgentInfo) =>
     Effect.zipWith(
-      sessionOf(info),
+      sessionAndAskOf(info, mark),
       branchOf(info),
-      (claudeSession, branch): ResolvedAgent => ({ info, claudeSession, branch }),
+      ({ claudeSession, ask }, branch): ResolvedAgent => ({ info, claudeSession, branch, ask }),
       { concurrent: true },
     ).pipe(Effect.annotateLogs('pane', info.pane_id))
 
   const read = Effect.fn('MachineStateSync.read')(function* () {
+    const mark = yield* asks.mark
     const snapshot = yield* herdr.snapshot
-    const agents = yield* Effect.forEach(snapshot.agents, resolveAgent, {
+    const agents = yield* Effect.forEach(snapshot.agents, resolveAgent(mark), {
       concurrency: 'unbounded',
     })
     const reading: HerdReading = {
@@ -222,6 +230,11 @@ const make = Effect.gen(function* () {
     Effect.tapError(logHerdrFailure),
     Effect.ignore,
     Effect.forkIn(scope),
+  )
+
+  yield* asks.changes.pipe(
+    Stream.runForEach(() => invalidate),
+    Effect.forkScoped,
   )
 
   return MachineStateSync.fromRef(state, invalidate)
