@@ -46,6 +46,8 @@ type SessionFailure = HubCallFailed | HubWatchEnded
 export const SYNC_NOTICE_DELAY = Duration.seconds(1)
 export const RECOVERED_NOTICE_DURATION = Duration.millis(1500)
 
+const isLoggedOut = LinkStatus.$is('LoggedOut')
+
 export class HubWatchEnded extends Schema.TaggedError<HubWatchEnded>()('HubWatchEnded', {}) {
   override get message(): string {
     return 'The hub closed the herd stream while the connection stayed up. crook reconnects on its own; if this keeps happening, read the hub logs.'
@@ -156,12 +158,14 @@ const make = Effect.gen(function* () {
 
   const follow = (visible: boolean, online: boolean, ended: boolean): Effect.Effect<never> => {
     if (ended) {
-      return Effect.andThen(
-        SubscriptionRef.set(
-          state,
-          new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
+      return cache.clear.pipe(
+        Effect.andThen(
+          SubscriptionRef.set(
+            state,
+            new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
+          ),
         ),
-        Effect.never,
+        Effect.andThen(Effect.never),
       )
     }
 
@@ -247,11 +251,19 @@ const make = Effect.gen(function* () {
     Effect.withSpan('HubLink.sendTestNotification'),
   )
 
-  const logOut = Effect.gen(function* () {
-    yield* sessionCheck.logOut
-    yield* cache.clear
-    yield* SubscriptionRef.set(loggedOut, true)
-  }).pipe(Effect.withSpan('HubLink.logOut'))
+  const logOut = Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      yield* sessionCheck.logOut
+      yield* SubscriptionRef.set(loggedOut, true)
+      yield* restore(
+        SubscriptionRef.changes(state).pipe(
+          Stream.filter((current) => isLoggedOut(current.status)),
+          Stream.take(1),
+          Stream.runDrain,
+        ),
+      )
+    }),
+  ).pipe(Effect.withSpan('HubLink.logOut'))
 
   return HubLink.of({
     changes: Stream.merge(

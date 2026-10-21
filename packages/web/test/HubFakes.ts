@@ -68,6 +68,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const sessionCheckTakes = yield* Ref.make(Option.none<Duration.Duration>())
   const logOutRefusal = yield* Ref.make(Option.none<LogOutFailed>())
   const logOuts = yield* Ref.make(0)
+  const whileLoggingOut = yield* Ref.make<Effect.Effect<void>>(Effect.void)
   const prefWrites = yield* Ref.make<readonly PrefWrite[]>([])
 
   const open = Effect.gen(function* () {
@@ -119,12 +120,10 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
           ),
           Ref.get(expired),
         ),
-        logOut: Effect.andThen(
-          Ref.update(logOuts, (count) => count + 1),
-          Effect.flatMap(
-            Ref.get(logOutRefusal),
-            Option.match({ onNone: () => Effect.void, onSome: Effect.fail }),
-          ),
+        logOut: Ref.update(logOuts, (count) => count + 1).pipe(
+          Effect.andThen(Effect.flatten(Ref.get(whileLoggingOut))),
+          Effect.andThen(Ref.get(logOutRefusal)),
+          Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: Effect.fail })),
         ),
       }),
     ),
@@ -144,6 +143,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
     sessionCheckTakes,
     logOutRefusal,
     logOuts,
+    whileLoggingOut,
     prefWrites,
   }
 })

@@ -290,6 +290,20 @@ a terminal — make the `get` uninterruptible, so a started lookup always finish
 :::
 
 :::tip
+`Stream.switchMap` interrupts the previous inner stream and waits for it to end before it starts
+the next (read in `Channel.mergeAll`), so the next stream can undo what the previous one wrote, such
+as a cache it saved into, without racing it (measured: a test that fails with the steps reordered).
+
+An effect made uninterruptible still times out. `Effect.timeoutOrElse` races it in forked children
+that are interruptible whatever the parent is (read in `raceAllFirst`), so a step that must finish
+once started can be uninterruptible and stay bounded by its own timeout.
+
+An `Atom.fn` result outlives the component that showed it. A sheet that must open clean writes
+`Atom.Reset` through `useAtomSet` when it opens, and skips it while the call is in flight, since a
+reset interrupts the running effect.
+:::
+
+:::tip
 A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
 `effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
 

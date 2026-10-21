@@ -4,6 +4,8 @@ import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Fiber from 'effect/Fiber'
+import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
@@ -429,6 +431,50 @@ describe('HubLink', () => {
 
       expect(yield* Ref.get(browser.opened)).toBe(1)
       expect((yield* current).status).toEqual(LinkStatus.LoggedOut())
+    }),
+  )
+
+  it.effect(
+    'closes the socket before it forgets the herd, so a late update cannot cache it again',
+    () =>
+      Effect.gen(function* () {
+        const { browser, link, current, nextSession } = yield* start()
+        const session = yield* nextSession
+
+        yield* Queue.offer(session.views, cachedView)
+        yield* current
+        yield* Ref.set(browser.whileLoggingOut, Queue.offer(session.views, liveView))
+        yield* link.logOut
+
+        expect(yield* Ref.get(browser.closed)).toBe(1)
+        expect(yield* Ref.get(browser.saved)).toEqual(Option.none())
+
+        yield* Queue.offer(session.views, liveView)
+        const state = yield* current
+
+        expect(state.herd).toEqual(Option.none())
+        expect(yield* Ref.get(browser.saved)).toEqual(Option.none())
+      }),
+  )
+
+  it.effect('finishes a logout it started even when whoever asked for it goes away', () =>
+    Effect.gen(function* () {
+      const { browser, link, current, nextSession } = yield* start()
+      const session = yield* nextSession
+      const exeDevAnswers = yield* Latch.make(false)
+
+      yield* Queue.offer(session.views, liveView)
+      yield* current
+      yield* Ref.set(browser.whileLoggingOut, exeDevAnswers.await)
+      const attempt = yield* Effect.forkChild(link.logOut, { startImmediately: true })
+
+      yield* Effect.forkChild(Fiber.interrupt(attempt), { startImmediately: true })
+      yield* exeDevAnswers.open
+      const state = yield* current
+
+      expect(state.status).toEqual(LinkStatus.LoggedOut())
+      expect(yield* Ref.get(browser.saved)).toEqual(Option.none())
+      expect(yield* Ref.get(browser.closed)).toBe(1)
     }),
   )
 

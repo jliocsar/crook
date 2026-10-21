@@ -102,10 +102,7 @@ const hubStream = <Success, Failure>(stream: Stream.Stream<Success, Failure | Rp
   )
 
 export const callsFrom = (client: ClientApiClient): HubCalls => ({
-  watchHerd: client.WatchHerd().pipe(
-    Stream.mapError(connectionLost),
-    Stream.catchDefect((cause) => Stream.fail(callDefected(cause))),
-  ),
+  watchHerd: hubStream(client.WatchHerd()),
   markSeen: (machine, pane) => hubCall(client.MarkSeen({ machine, pane })),
   forgetMachine: (machine) => hubCall(client.ForgetMachine({ machine })),
   watchNotificationSettings: hubStream(client.WatchNotificationSettings()),
