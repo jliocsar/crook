@@ -698,6 +698,9 @@ YAML comment. A bump is a new lookup.
 The gate refuses a tag whose commit is not on main, and `publish` verifies its own signature with
 the identity and issuer the installer demands before it creates the release. A release its own
 installer refuses can only be replaced by cutting another tag, so the mismatch has to fail the job.
+For the same reason `publish` runs the compiled linux-x64 pair before it signs anything: the gate
+never compiles, so a Bun or Vite change that moves the embedded web build would otherwise ship a
+hub that refuses to start.
 :::
 
 :::tip

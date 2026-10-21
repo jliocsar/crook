@@ -2,6 +2,7 @@ import * as BunServices from '@effect/platform-bun/BunServices'
 import { expect, layer } from '@effect/vitest'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import * as Option from 'effect/Option'
 import * as Stream from 'effect/Stream'
 import * as ChildProcess from 'effect/process/ChildProcess'
 
@@ -17,6 +18,7 @@ interface Sandbox {
 
 interface Release {
   readonly agentReports: string
+  readonly agentFailure: Option.Option<string>
   readonly checksumOf: (agent: string) => string
   readonly cosignExit: number
 }
@@ -49,12 +51,20 @@ printf '%s\\n' "$*" >> "$COSIGN_CALLS"
 exit ${exitCode}
 `
 
-const fakeAgent = (reports: string) => `#!/bin/sh
-printf '%s\\n' '${reports}'
-`
+const fakeAgent = (release: Release) =>
+  Option.match(release.agentFailure, {
+    onNone: () => `#!/bin/sh
+printf '%s\\n' '${release.agentReports}'
+`,
+    onSome: (failure) => `#!/bin/sh
+printf '%s\\n' '${failure}' >&2
+exit 1
+`,
+  })
 
 const honestRelease: Release = {
   agentReports: `crook-agent v${VERSION}`,
+  agentFailure: Option.none(),
   checksumOf: (agent) => agent,
   cosignExit: 0,
 }
@@ -66,7 +76,7 @@ const sandboxWith = Effect.fn('sandboxWith')(function* (release: Release) {
   const root = yield* fileSystem.makeTempDirectoryScoped()
   const target = yield* hostTarget(process.platform, process.arch)
   const agentArtifact = artifactName({ app: 'agent', target })
-  const agent = fakeAgent(release.agentReports)
+  const agent = fakeAgent(release)
   const sandbox: Sandbox = {
     root,
     release: `${root}/release`,
@@ -132,7 +142,7 @@ layer(BunServices.layer)('install.sh', (it) => {
       expect(cosignCalls).toContain(`--certificate-identity ${SIGNED_BY}`)
       expect(cosignCalls).toContain(`--certificate-oidc-issuer ${GITHUB_ISSUER}`)
       expect(ghCalls).toContain(`release download v${VERSION} --repo jliocsar/crook`)
-      expect(installed).toBe(fakeAgent(honestRelease.agentReports))
+      expect(installed).toBe(fakeAgent(honestRelease))
       expect(leftInCache).toEqual([])
     }),
   )
@@ -168,6 +178,21 @@ layer(BunServices.layer)('install.sh', (it) => {
 
       expect(result.exitCode).toBe(1)
       expect(result.output).toContain('reports "crook-agent v0.1.0" rather than crook-agent v0.2.0')
+      expect(yield* installedAgent(sandbox)).toBe(false)
+    }),
+  )
+
+  it.effect('installs nothing and shows why when the binary fails to run', () =>
+    Effect.gen(function* () {
+      const sandbox = yield* sandboxWith({
+        ...honestRelease,
+        agentFailure: Option.some('cannot execute: required file not found'),
+      })
+      const result = yield* install(sandbox, ['--version', VERSION])
+
+      expect(result.exitCode).toBe(1)
+      expect(result.output).toContain('failed to run from')
+      expect(result.output).toContain('it printed: cannot execute: required file not found')
       expect(yield* installedAgent(sandbox)).toBe(false)
     }),
   )

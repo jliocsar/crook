@@ -197,8 +197,8 @@ for app in $apps; do
   [ "$(sha256_of "$work/$artifact")" = "$expected" ] ||
     fail "$artifact does not match its signed checksum, so nothing was installed."
   chmod 755 "$work/$artifact"
-  reported="$("$work/$artifact" --version)" ||
-    fail "$artifact did not run from $work, so nothing was installed. That directory must allow running programs, as a noexec mount does not."
+  reported="$("$work/$artifact" --version 2>"$work/$artifact.stderr")" ||
+    fail "$artifact failed to run from $work, so nothing was installed. A noexec mount on that directory is one cause, a binary built for another libc or CPU is another; it printed: $(cat "$work/$artifact.stderr")"
   [ "$reported" = "crook-$app v$version" ] ||
     fail "$artifact reports \"$reported\" rather than crook-$app v$version, so nothing was installed."
 done
