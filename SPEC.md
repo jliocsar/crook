@@ -195,7 +195,7 @@ Screens
    - Top: "Needs you" section (blocked first, then done-unseen), across all machines.
    - Then grouped: Machine (online/offline/reconnecting badge) → Workspace → agents (tab as a chip on the row).
    - Row: status dot (idle/working/blocked/done/unknown), title (`terminal_title_stripped`), workspace/branch, time since last state change, machine chip when collapsed.
-   - Pull to resync. Long-press: rename, close, pin.
+   - Pull to resync. Long-press (or the chat's `…`): rename, pin, hold to close. Swipe left: Pin and Close; Close opens the same sheet. Closing a pane crook didn't open asks first.
    - Live: rows move/re-color as events arrive.
 2. **Agent chat**
    - Transcript rendered as chat: user bubbles, assistant markdown, tool calls collapsed by default (name + one-line summary, expand for input/output), diffs with syntax highlight, images.

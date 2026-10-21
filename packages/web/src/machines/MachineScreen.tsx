@@ -6,10 +6,13 @@ import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
+import { useOpenCardActions } from '@crook/web/actions/AgentActions'
+import type { OpenCardActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { machineScreenAtom } from '@crook/web/atoms/Machines'
 import { Dimmed } from '@crook/web/components/Dimmed'
+import { useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { SectionBody } from '@crook/web/herd/HerdLayout'
 import { AgentCards } from '@crook/web/herd/HerdList'
@@ -32,14 +35,19 @@ function MachineAgents({
   model,
   now,
   stale,
+  controlsEnabled,
   onOpenAgent,
+  onOpenActions,
 }: {
   model: MachineScreenModel
   now: DateTime.Utc
   stale: boolean
+  controlsEnabled: boolean
   onOpenAgent: OpenAgent
+  onOpenActions: OpenCardActions
 }) {
   const { card, body } = model.detail
+  const row = useOpenRow()
 
   return (
     <section aria-labelledby="machine-agents">
@@ -51,7 +59,10 @@ function MachineAgents({
               machine={card.machine.id}
               agents={agents}
               now={now}
+              row={row}
+              controlsEnabled={controlsEnabled}
               onOpenAgent={onOpenAgent}
+              onOpenActions={onOpenActions}
             />
           ),
           NoAgents: () => (
@@ -92,10 +103,12 @@ function MachineDetail({
   model,
   connection,
   onOpenAgent,
+  onOpenActions,
 }: {
   model: MachineScreenModel
   connection: ConnectionView
   onOpenAgent: OpenAgent
+  onOpenActions: OpenCardActions
 }) {
   const now = useNow()
   const { back } = usePushedScreen()
@@ -128,7 +141,9 @@ function MachineDetail({
             model={model}
             now={now}
             stale={connection.stale}
+            controlsEnabled={connection.controlsEnabled}
             onOpenAgent={onOpenAgent}
+            onOpenActions={onOpenActions}
           />
           <MachineAbout detail={model.detail} now={now} />
           {model.inHerd && isOffline(card.machine) ? (
@@ -150,6 +165,7 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
   const herd = useAtomValue(herdAtom)
   const model = useAtomValue(machineScreenAtom(machine))
   const navigate = useNavigate()
+  const openCardActions = useOpenCardActions()
 
   const openAgent: OpenAgent = (agentMachine, card, opener) => {
     void navigate({
@@ -164,7 +180,12 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
       {Option.match(model, {
         onNone: () => <UnknownMachine title={machine} loading={Option.isNone(herd)} />,
         onSome: (found) => (
-          <MachineDetail model={found} connection={connection} onOpenAgent={openAgent} />
+          <MachineDetail
+            model={found}
+            connection={connection}
+            onOpenAgent={openAgent}
+            onOpenActions={openCardActions}
+          />
         ),
       })}
     </PushedScreen>

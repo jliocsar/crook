@@ -1,9 +1,10 @@
-import { RegistryProvider } from '@effect/atom-react/RegistryContext'
+import { RegistryContext, scheduleTask } from '@effect/atom-react/RegistryContext'
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router'
 import { render } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Atom from 'effect/reactivity/Atom'
+import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 
 import type { HerdView } from '@crook/domain/HerdView'
 import { hubRuntime } from '@crook/web/atoms/Hub'
@@ -33,13 +34,28 @@ export const renderApp = Effect.fn('renderApp')(function* (path: string, initial
     defaultRemountDeps: remountWhenParamsChange,
     ...ROUTE_FALLBACKS,
   })
+  const { registry } = yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      const made = AtomRegistry.make({
+        initialValues: [Atom.initialValue(hubRuntime.layer, link.layer)],
+        scheduleTask,
+      })
+      const rendered = render(
+        <RegistryContext value={made}>
+          <RouterProvider router={router} />
+        </RegistryContext>,
+      )
 
-  render(
-    <RegistryProvider initialValues={[Atom.initialValue(hubRuntime.layer, link.layer)]}>
-      <RouterProvider router={router} />
-    </RegistryProvider>,
+      return { registry: made, rendered }
+    }),
+    ({ registry: made, rendered }) =>
+      Effect.sync(() => {
+        rendered.unmount()
+        made.dispose()
+      }),
   )
+
   yield* Effect.promise(() => router.load())
 
-  return { router, link }
+  return { router, link, registry }
 })

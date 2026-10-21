@@ -17,8 +17,13 @@ import {
   RenameAgent,
   SendKeys,
   StartAgent,
+  hasClosed,
   hasMovedSince,
+  hasRenamed,
   hasStarted,
+  isReceiptShown,
+  PaneClosed,
+  PaneRenamed,
   interrupt,
   targetPane,
 } from '@crook/domain/Command'
@@ -221,6 +226,43 @@ describe('starting an agent', () => {
 
     expect(hasStarted(started, [rowAt(pane, 1), rowAt(PaneId.make('w1:p2'), 1)])).toBe(true)
     expect(hasStarted(started, [rowAt(pane, 1)])).toBe(false)
+  })
+})
+
+describe('isReceiptShown', () => {
+  const renamed = new PaneRenamed({ pane, label: Option.some('Payments') })
+  const cleared = new PaneRenamed({ pane, label: Option.none() })
+
+  it('holds a rename once the row carries the label herdr stored, a cleared one included', () => {
+    expect(hasRenamed(renamed, rowAt(pane, 1, terminal, Option.some('Payments')))).toBe(true)
+    expect(hasRenamed(renamed, rowAt(pane, 1))).toBe(false)
+    expect(hasRenamed(cleared, rowAt(pane, 1))).toBe(true)
+    expect(hasRenamed(cleared, rowAt(pane, 1, terminal, Option.some('Payments')))).toBe(false)
+    expect(
+      hasRenamed(renamed, rowAt(PaneId.make('w1:p2'), 1, terminal, Option.some('Payments'))),
+    ).toBe(false)
+  })
+
+  it('holds a close once the pane is gone from the agents', () => {
+    const closed = new PaneClosed({ pane })
+
+    expect(hasClosed(closed, [rowAt(PaneId.make('w1:p2'), 1)])).toBe(true)
+    expect(hasClosed(closed, [rowAt(pane, 1)])).toBe(false)
+  })
+
+  it('judges every receipt by what the agents it names show', () => {
+    const agents = [rowAt(pane, 4, terminal, Option.some('Payments'))]
+
+    expect(isReceiptShown(renamed, agents)).toBe(true)
+    expect(isReceiptShown(new PaneClosed({ pane }), agents)).toBe(false)
+    expect(isReceiptShown(new PaneClosed({ pane }), [])).toBe(true)
+    expect(isReceiptShown(new AgentStarted({ pane }), agents)).toBe(true)
+    expect(isReceiptShown(new InputDelivered({ pane, terminal, stateChangeSeq: 3 }), agents)).toBe(
+      true,
+    )
+    expect(isReceiptShown(new InputDelivered({ pane, terminal, stateChangeSeq: 4 }), agents)).toBe(
+      false,
+    )
   })
 })
 

@@ -17,7 +17,11 @@ import type { CommandFailure } from '@crook/protocol/Commands'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
-import type { ForgetMachineRefused, HubCallFailed } from '@crook/web/rpc/HubConnection'
+import type {
+  ForgetMachineRefused,
+  HubCallFailed,
+  SetPinnedRefused,
+} from '@crook/web/rpc/HubConnection'
 import { HubLink } from '@crook/web/rpc/HubLink'
 import type { HubNotConnected } from '@crook/web/rpc/HubLink'
 import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
@@ -31,6 +35,12 @@ export interface FakeSession {
 export interface SeenCall {
   readonly machine: MachineId
   readonly pane: PaneId
+}
+
+export interface PinCall {
+  readonly machine: MachineId
+  readonly pane: PaneId
+  readonly pinned: boolean
 }
 
 export interface SentCommand {
@@ -73,6 +83,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
         Ref.update(seen, (calls) => [...calls, { machine, pane }]),
       forgetMachine: (machine: MachineId) =>
         Ref.update(forgotten, (machines) => [...machines, machine]),
+      setPinned: () => Effect.void,
       sendCommand: (machine: MachineId, key: IdempotencyKey, command: Command) =>
         Effect.andThen(
           Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
@@ -137,6 +148,10 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     Option.none<ForgetMachineRefused | HubCallFailed | HubNotConnected>(),
   )
   const forgetAnswers = yield* Latch.make(true)
+  const pins = yield* Ref.make<readonly PinCall[]>([])
+  const pinRefusal = yield* Ref.make(
+    Option.none<SetPinnedRefused | HubCallFailed | HubNotConnected>(),
+  )
   const sent = yield* Ref.make<readonly SentCommand[]>([])
   const commandAnswer =
     yield* Ref.make<Exit.Exit<CommandReceipt, CommandFailure | HubCallFailed | HubNotConnected>>(
@@ -161,6 +176,14 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
             }),
           ),
         ),
+      setPinned: (machine, pane, pinned) =>
+        Effect.andThen(
+          Ref.update(pins, (calls) => [...calls, { machine, pane, pinned }]),
+          Effect.flatMap(
+            Ref.get(pinRefusal),
+            Option.match({ onNone: () => Effect.void, onSome: Effect.fail }),
+          ),
+        ),
       sendCommand: (machine, key, command) =>
         Effect.andThen(
           Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
@@ -177,6 +200,8 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     forgotten,
     forgetRefusal,
     forgetAnswers,
+    pins,
+    pinRefusal,
     sent,
     commandAnswer,
     commandAnswers,

@@ -179,8 +179,8 @@ describe('HerdScreen', () => {
       )
       expect(document.querySelector('[data-dimmed="true"]')).not.toBeNull()
       expect(screen.getByRole('button', { name: 'New agent' }).hasAttribute('disabled')).toBe(true)
-      expect(screen.getByRole('status', { name: '' }).textContent).toContain(
-        "Can't reach the hub. crook keeps retrying.",
+      expect(screen.getAllByRole('status').map((region) => region.textContent)).toContainEqual(
+        expect.stringContaining("Can't reach the hub. crook keeps retrying."),
       )
     }),
   )

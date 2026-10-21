@@ -491,6 +491,18 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   script hung until killed (measured).
 - The router percent-encodes a path param, so a herdr pane id like `w1:p3` sits in the URL as
   `w1%3Ap3`, and the route's params hand it back decoded (measured).
+- A hook that hands back an `Effect` is a zero-argument function returning a lazy Effect, and
+  `effecttsgo/lazy-effect` rejects it (measured). Code that needs the router takes it as an
+  argument, typed `RegisteredRouter`: `AnyRouter` types `history` as `any`, and the type-aware
+  rules reject every call on it (measured).
+- The Hold Button shows its complete label for a while after a hold, whatever its parent says,
+  so a test that reads that label right after a hold reads the button's own state. Assert what
+  the parent controls, such as `disabled` (measured: a test on the label passed with the fix
+  reverted).
+- A grid with no column template gives each item an `auto` column, which grows to the item's
+  min-content, so a `truncate` inside it never truncates and a long agent title pushed its card
+  past the screen on real data (measured). A grid whose items must shrink takes `grid-cols-1`,
+  whose `minmax(0, 1fr)` lets them.
 - A production build minifies the CSS, so a custom property read back at runtime is not what
   `index.css` spells: `180ms` comes back as `.18s` and `cubic-bezier(0.22, …)` as
   `cubic-bezier(.22, …)` (measured). The dev server and the tests serve the source, so only
@@ -524,6 +536,16 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
 :::
 
+- Base UI's Dialog returns focus on close to the element focused before it opened only while that
+  element is still connected; once it is gone, focus lands on the body (measured on 1.9.0, after a
+  close removed the card that opened the sheet). The shared sheet hands Base UI its own return
+  target, falling back to the current tab when the opener is gone or inert, and is told outright
+  when its own action removed the opener, rather than trusting `isConnected` on an element that may
+  still be animating out.
+- A focus test compares `document.activeElement` with the element itself. Focus that fell to the
+  body still passes a check on its `textContent`, which holds every label on the page (measured: a
+  test asserting the tab's text passed with focus on the body).
+
 :::tip
 Checking the web app against real data, measured:
 
@@ -540,7 +562,9 @@ Checking the web app against real data, measured:
   `HERDR_SOCKET_PATH` at the named session's socket, or every command lands in the user's own
   session. Never use the default one.
 - `herdr pane report-agent` puts an agent with a chosen status in any shell pane, and
-  `release-agent` takes it out, so a herd in every state needs no running Claude. Such a fake
+  `release-agent` takes it out, so a herd in every state needs no running Claude.
+  `release-agent` takes the pane id before its options, `release-agent <pane> --agent claude
+  --source <name>`; options first is refused. Such a fake
   takes no keys: `agent.send_keys` answers it `agent_not_ready`, so key delivery is tested
   against scripted herdr responses instead.
 - The agent takes an agent's title from the pane's terminal title before herdr's own `title`. An

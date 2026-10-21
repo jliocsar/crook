@@ -3,7 +3,7 @@ import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
-import { needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
+import { isPinned, needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
 import { type AgentRow, pendingAskSummary } from '@crook/domain/AgentRow'
 import { findMachine } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
@@ -15,6 +15,7 @@ import { agentsIn } from '@crook/domain/MachineState'
 export interface AgentCardModel {
   readonly row: AgentRow
   readonly needsYou: boolean
+  readonly pinned: boolean
   readonly workspace: string
   readonly tab: string
   readonly askSummary: Option.Option<string>
@@ -51,22 +52,27 @@ const labelOf = <Id extends string>(
     Option.getOrElse(() => id),
   )
 
-const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
+export const cardFor = (herdMachine: HerdMachine) => {
   const loud = needsYou(herdMachine)
+  const pinned = isPinned(herdMachine)
   const workspaces = Option.match(herdMachine.state, {
     onNone: () => [],
     onSome: (state) => state.workspaces,
   })
   const tabs = Option.match(herdMachine.state, { onNone: () => [], onSome: (state) => state.tabs })
 
-  return Arr.map(orderAgents(herdMachine), (row) => ({
+  return (row: AgentRow): AgentCardModel => ({
     row,
     needsYou: loud(row),
+    pinned: pinned(row),
     workspace: labelOf(workspaces, row.workspace),
     tab: labelOf(tabs, row.tab),
     askSummary: pendingAskSummary(row),
-  }))
+  })
 }
+
+const agentCards = (herdMachine: HerdMachine): AgentCardModel[] =>
+  Arr.map(orderAgents(herdMachine), cardFor(herdMachine))
 
 const hasNoAgents = (herdMachine: HerdMachine) => agentsIn(herdMachine.state).length === 0
 

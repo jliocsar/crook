@@ -40,6 +40,7 @@ export const agent = (
     readonly seq?: number
     readonly branch?: string
     readonly ask?: Ask
+    readonly createdByCrook?: boolean
   } = {},
 ) =>
   new AgentRow({
@@ -50,7 +51,7 @@ export const agent = (
     status,
     title: options.title ?? `Agent in ${pane}`,
     label: Option.fromUndefinedOr(options.label),
-    createdByCrook: false,
+    createdByCrook: options.createdByCrook ?? false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.fromUndefinedOr(options.branch),
     claudeSession: Option.none(),
@@ -71,6 +72,7 @@ export const machine = (
     readonly agentVersion?: string
     readonly herdrVersion?: string
     readonly places?: readonly Place[]
+    readonly shellPanes?: readonly string[]
   } = {},
 ) =>
   new HerdMachine({
@@ -93,9 +95,15 @@ export const machine = (
         herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
         workspaces: [new Workspace({ id: CROOK_WORKSPACE, label: 'crook' })],
         tabs: [new Tab({ id: CROOK_TAB, workspace: CROOK_WORKSPACE, label: 'web' })],
-        panes: agents.map(
-          (row) => new Pane({ id: row.pane, workspace: row.workspace, tab: row.tab }),
-        ),
+        panes: [
+          ...agents.map(
+            (row) => new Pane({ id: row.pane, workspace: row.workspace, tab: row.tab }),
+          ),
+          ...(options.shellPanes ?? []).map(
+            (pane) =>
+              new Pane({ id: PaneId.make(pane), workspace: CROOK_WORKSPACE, tab: CROOK_TAB }),
+          ),
+        ],
         agents,
         places: options.places ?? [],
       }),

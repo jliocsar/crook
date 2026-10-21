@@ -5,12 +5,16 @@ export const focusScreenTitle = (screen: HTMLElement | null): void => {
   screen?.querySelector<HTMLElement>(`[${SCREEN_TITLE_ATTRIBUTE}]`)?.focus({ preventScroll: true })
 }
 
+export const focusTarget = (opener: Element | null): HTMLElement | null =>
+  opener instanceof HTMLElement &&
+  opener.isConnected &&
+  opener !== document.body &&
+  opener.closest('[inert]') === null
+    ? opener
+    : document.querySelector<HTMLElement>(
+        `nav[aria-label="${SECTIONS_LABEL}"] [aria-current="page"]`,
+      )
+
 export const restoreFocus = (opener: Element | null): void => {
-  const target =
-    opener instanceof HTMLElement && opener.isConnected && opener !== document.body
-      ? opener
-      : document.querySelector<HTMLElement>(
-          `nav[aria-label="${SECTIONS_LABEL}"] [aria-current="page"]`,
-        )
-  target?.focus({ preventScroll: true })
+  focusTarget(opener)?.focus({ preventScroll: true })
 }

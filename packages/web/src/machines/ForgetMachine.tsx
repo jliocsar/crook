@@ -1,5 +1,6 @@
-import * as Option from 'effect/Option'
+import type * as Option from 'effect/Option'
 
+import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { HoldButton } from '@crook/web/components/ui/hold-button'
 
 export function ForgetMachine({
@@ -26,18 +27,7 @@ export function ForgetMachine({
       <p className="text-muted-foreground text-center text-xs leading-4">
         It comes back on its own if its agent connects again.
       </p>
-      {Option.match(failure, {
-        onNone: () => null,
-        onSome: (message) => <ForgetFailure message={message} />,
-      })}
+      <ActionFailure message={failure} />
     </div>
-  )
-}
-
-export function ForgetFailure({ message }: { message: string }) {
-  return (
-    <p role="alert" className="text-destructive text-sm leading-5">
-      {message}
-    </p>
   )
 }

@@ -26,7 +26,7 @@ The landing screen is the herd: every agent on every machine.
 
 ### Layout
 
-**Moved to `DESIGN.md` (The herd)** by JC-93, except pins. The header became the root list's
+**Moved to `DESIGN.md` (The herd)** by JC-93, and pins by JC-112. The header became the root list's
 sticky header, per `DESIGN.md`'s Navigation, so the hub status and the one-line summary are not
 built.
 
@@ -58,8 +58,8 @@ built.
 
 ### Interactions
 
-Tap and pull **moved to `DESIGN.md` (The herd)** by JC-93. Swipe, long-press and the order
-freeze wait for JC-112.
+Tap and pull **moved to `DESIGN.md` (The herd)** by JC-93; swipe, long-press and the order
+freeze by JC-112.
 
 - **Tap** opens the agent's chat (below). It slides in from the right, and a swipe from the left
   edge goes back.
@@ -544,7 +544,7 @@ One flat page on the Settings tab, three sections, each a Section Label over a r
 ## Empty and edge states: decided, variant "Card"
 
 The herd's empty states and the needs-you badge **moved to `DESIGN.md` (Empty states)** by JC-93.
-The chat's closed, exited and offline cards wait for the chat, and the toast for JC-112.
+The chat's closed, exited and offline cards wait for the chat. The toast moved with JC-112.
 
 ### Prototype
 

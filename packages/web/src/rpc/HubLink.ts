@@ -23,6 +23,7 @@ import type {
   HubCallFailed,
   HubCalls,
   MarkSeenRefused,
+  SetPinnedRefused,
 } from '@crook/web/rpc/HubConnection'
 import {
   announce,
@@ -204,6 +205,14 @@ const make = Effect.gen(function* () {
     return yield* whenConnected((calls) => calls.forgetMachine(machine))
   })
 
+  const setPinned = Effect.fn('HubLink.setPinned')(function* (
+    machine: MachineId,
+    pane: PaneId,
+    pinned: boolean,
+  ) {
+    return yield* whenConnected((calls) => calls.setPinned(machine, pane, pinned))
+  })
+
   const sendCommand = Effect.fn('HubLink.sendCommand')(function* (
     machine: MachineId,
     key: IdempotencyKey,
@@ -220,6 +229,7 @@ const make = Effect.gen(function* () {
     resync,
     markSeen,
     forgetMachine,
+    setPinned,
     sendCommand,
   })
 })
@@ -236,6 +246,11 @@ export class HubLink extends Context.Service<
     readonly forgetMachine: (
       machine: MachineId,
     ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed | HubNotConnected>
+    readonly setPinned: (
+      machine: MachineId,
+      pane: PaneId,
+      pinned: boolean,
+    ) => Effect.Effect<void, SetPinnedRefused | HubCallFailed | HubNotConnected>
     readonly sendCommand: (
       machine: MachineId,
       key: IdempotencyKey,

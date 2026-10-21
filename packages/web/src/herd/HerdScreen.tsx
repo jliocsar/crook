@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react'
 import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
+import { useOpenCardActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdLayoutAtom, resyncAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
@@ -67,6 +68,7 @@ export function HerdScreen() {
   const now = useNow()
   const sections = useCollapsedMachines()
   const [addingMachine, setAddingMachine] = React.useState(false)
+  const openCardActions = useOpenCardActions()
 
   const openNewAgent = (opener: HTMLElement) => {
     void navigate({ to: '/new', state: openedFrom(opener) })
@@ -97,6 +99,7 @@ export function HerdScreen() {
                 isOpen={sections.isOpen}
                 onToggle={sections.toggle}
                 onOpenAgent={openAgent}
+                onOpenActions={openCardActions}
                 onNewAgent={openNewAgent}
                 onAddMachine={() => {
                   setAddingMachine(true)

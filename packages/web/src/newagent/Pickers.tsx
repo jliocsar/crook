@@ -10,21 +10,19 @@ import type { MachineId } from '@crook/domain/Ids'
 import type { Place } from '@crook/domain/Place'
 import { MachineBadge } from '@crook/web/components/MachineBadge'
 import { Button } from '@crook/web/components/ui/button'
+import { Input } from '@crook/web/components/ui/input'
 import { folderName, validBranch } from '@crook/web/newagent/NewAgentLayout'
-
-const FIELD =
-  'border-input bg-background focus-visible:border-ring focus-visible:ring-ring/35 placeholder:text-muted-foreground h-11 w-full min-w-0 rounded-lg border px-3 font-mono text-base outline-none focus-visible:ring-3'
 
 const ROW =
   'enabled:hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 w-full touch-manipulation items-center gap-3 rounded-lg px-3 py-1.5 text-left transition-colors duration-[var(--motion-fast)] ease-[var(--ease-out)] outline-none select-none focus-visible:relative focus-visible:z-10 focus-visible:ring-3 disabled:opacity-50 motion-reduce:transition-none'
 
 function MonoField(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <input
+    <Input
       autoCapitalize="none"
       autoCorrect="off"
       spellCheck={false}
-      className={FIELD}
+      className="font-mono"
       {...props}
     />
   )

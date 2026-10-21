@@ -1,6 +1,7 @@
 import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
+import { Pin } from 'lucide-react'
 
 import { agentTitleOrPane } from '@crook/domain/AgentRow'
 import { StatusWord } from '@crook/web/components/StatusWord'
@@ -23,6 +24,14 @@ export function AgentCard({ card, now }: { card: AgentCardModel; now: DateTime.U
         >
           {agentTitleOrPane(row)}
         </span>
+        {card.pinned ? (
+          <Pin
+            role="img"
+            aria-label="Pinned"
+            data-slot="pin-marker"
+            className="text-muted-foreground size-3.5 shrink-0 self-center"
+          />
+        ) : null}
         <span className={cn('shrink-0 font-mono text-xs tabular-nums', emphasis)}>
           {shortElapsed(now, row.statusChangedAt)}
         </span>

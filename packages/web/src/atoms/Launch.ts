@@ -5,17 +5,11 @@ import * as Schema from 'effect/Schema'
 import { AgentStarted } from '@crook/domain/Command'
 import type { LaunchCommand } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
-import type { CommandFailure } from '@crook/protocol/Commands'
+import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
 import { hubRuntime } from '@crook/web/atoms/Hub'
-import type { HubCallFailed } from '@crook/web/rpc/HubConnection'
 import { HubLink } from '@crook/web/rpc/HubLink'
-import type { HubNotConnected } from '@crook/web/rpc/HubLink'
 
-export type LaunchFailure =
-  | CommandFailure
-  | HubCallFailed
-  | HubNotConnected
-  | LaunchAnsweredWithoutPane
+export type LaunchFailure = SendCommandFailure | LaunchAnsweredWithoutPane
 
 export class LaunchAttempt extends Data.Class<{
   readonly key: IdempotencyKey
