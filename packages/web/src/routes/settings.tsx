@@ -1,9 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { TabScreen } from '@crook/web/navigation/TabScreen'
+import { SettingsScreen } from '@crook/web/settings/SettingsScreen'
 
-export const Route = createFileRoute('/settings')({ component: Settings })
-
-function Settings() {
-  return <TabScreen title="Settings" />
-}
+export const Route = createFileRoute('/settings')({ component: SettingsScreen })
