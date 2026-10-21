@@ -175,6 +175,16 @@ the `Effect.asVoid` that would only satisfy the signature (measured: removed in 
 typecheck still passed).
 :::
 
+:::warning
+A field that travels on the wire gets no `Schema.withConstructorDefault`, not even to spare other
+fixtures an edit. The default lets a real producer forget the field and still typecheck, so the
+missing data ships as the default. Add the field everywhere it is built instead.
+
+Copying a `Schema.Class` instance with one field changed is `new X(Struct.evolve(x, { field: … }))`:
+a spread of the instance is `typescript(no-misused-spread)`, and `Struct.evolve` copies the own
+enumerable fields, which are the schema's (measured).
+:::
+
 :::tip
 An app reads its own version with `import packageJson from '../package.json' with { type: 'json' }`.
 The house tsconfig accepts it without `resolveJsonModule`, and Bun runs it (both measured). A

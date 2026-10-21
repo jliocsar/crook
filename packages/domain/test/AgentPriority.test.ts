@@ -26,6 +26,8 @@ const agent = (pane: string, status: AgentStatus, minutesIn: number) =>
     tab: TabId.make('w1:t1'),
     status,
     title: pane,
+    label: Option.none(),
+    createdByCrook: false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.none(),
     claudeSession: Option.none(),

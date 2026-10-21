@@ -9,6 +9,7 @@ import * as Schema from 'effect/Schema'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
+import type { PaneId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
 
 interface RankedAgent {
@@ -56,17 +57,15 @@ const byPriority: Order.Order<RankedAgent> = Order.combineAll([
   (self, that) => withinTier[self.tier](self, that),
 ])
 
-export const isSeen = (machine: HerdMachine) => {
-  const seenPanes = HashSet.fromIterable(machine.seen)
+const paneIn = (panes: readonly PaneId[]) => {
+  const listed = HashSet.fromIterable(panes)
 
-  return (row: AgentRow): boolean => HashSet.has(seenPanes, row.pane)
+  return (row: AgentRow): boolean => HashSet.has(listed, row.pane)
 }
 
-export const isPinned = (machine: HerdMachine) => {
-  const pinnedPanes = HashSet.fromIterable(machine.pinned)
+export const isSeen = (machine: HerdMachine) => paneIn(machine.seen)
 
-  return (row: AgentRow): boolean => HashSet.has(pinnedPanes, row.pane)
-}
+export const isPinned = (machine: HerdMachine) => paneIn(machine.pinned)
 
 export const priorityTier = (machine: HerdMachine) => {
   const seen = isSeen(machine)

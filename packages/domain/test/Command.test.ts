@@ -9,13 +9,10 @@ import {
   ClosePane,
   Command,
   InputDelivered,
-  PaneClosed,
-  PaneRenamed,
   RenameAgent,
   SendKeys,
   hasMovedSince,
   interrupt,
-  isObservedIn,
   targetPane,
 } from '@crook/domain/Command'
 import { PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
@@ -30,6 +27,7 @@ const rowAt = (
   new AgentRow({
     pane: rowPane,
     label,
+    createdByCrook: false,
     workspace: WorkspaceId.make('w1'),
     tab: TabId.make('w1:t1'),
     status: 'working',
@@ -91,40 +89,20 @@ describe('rename and close', () => {
     )
   })
 
-  it('rejects an empty name: clearing one is an absent label', () => {
+  it('rejects a blank, padded or control-character name: clearing one is an absent label', () => {
     const decode = Schema.decodeUnknownResult(Command)
+    const renamedTo = (label: string) => decode({ _tag: 'RenameAgent', pane: 'w1:p1', label })
 
-    expect(Result.isFailure(decode({ _tag: 'RenameAgent', pane: 'w1:p1', label: '' }))).toBe(true)
+    expect(Result.isFailure(renamedTo(''))).toBe(true)
+    expect(Result.isFailure(renamedTo('   '))).toBe(true)
+    expect(Result.isFailure(renamedTo(' Payments'))).toBe(true)
+    expect(Result.isFailure(renamedTo('Pay\u001b[2Jments'))).toBe(true)
+    expect(Result.isSuccess(renamedTo('Payments · 🐑'))).toBe(true)
   })
 
   it('targets the pane every command names', () => {
     expect(targetPane(new RenameAgent({ pane, label: Option.some('Herd') }))).toBe(pane)
     expect(targetPane(new ClosePane({ pane, confirmed: true }))).toBe(pane)
-  })
-})
-
-describe('isObservedIn', () => {
-  it('sees input once the pane moves on', () => {
-    const receipt = new InputDelivered({ pane, stateChangeSeq: 4 })
-
-    expect(isObservedIn(receipt, [rowAt(pane, 4)])).toBe(false)
-    expect(isObservedIn(receipt, [rowAt(pane, 5)])).toBe(true)
-  })
-
-  it('sees a rename once the pane carries the new name, and a cleared one once it has none', () => {
-    const renamed = new PaneRenamed({ pane, label: Option.some('Herd screen') })
-    const cleared = new PaneRenamed({ pane, label: Option.none() })
-
-    expect(isObservedIn(renamed, [rowAt(pane, 4)])).toBe(false)
-    expect(isObservedIn(renamed, [rowAt(pane, 4, Option.some('Herd screen'))])).toBe(true)
-    expect(isObservedIn(cleared, [rowAt(pane, 4)])).toBe(true)
-  })
-
-  it('sees a close once the pane is gone from the agents', () => {
-    const closed = new PaneClosed({ pane })
-
-    expect(isObservedIn(closed, [rowAt(pane, 4)])).toBe(false)
-    expect(isObservedIn(closed, [rowAt(PaneId.make('w1:p2'), 4)])).toBe(true)
   })
 })
 

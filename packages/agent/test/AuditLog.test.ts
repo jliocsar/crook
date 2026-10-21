@@ -10,15 +10,14 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
-import {
-  AuditLine,
-  AuditLog,
-  CrookAuditLogPath,
-  CrookAuditPolicy,
-  DEFAULT_AUDIT_ARGUMENT_LIMIT,
-} from '@crook/agent/AuditLog'
+import { AuditLine, AuditLog, CrookAuditLogPath, CrookAuditPolicy } from '@crook/agent/AuditLog'
 import { OWNER_ONLY_FILE_MODE } from '@crook/agent/StateDirectory'
-import { AuditPolicy, REDACTED } from '@crook/domain/Audit'
+import {
+  AuditPolicy,
+  DEFAULT_AUDIT_ARGUMENT_LIMIT,
+  REDACTED,
+  REDACT_NOTHING,
+} from '@crook/domain/Audit'
 import { ClosePane, Prompt } from '@crook/domain/Command'
 import { IdempotencyKey, PaneId } from '@crook/domain/Ids'
 import { PaneNotCreatedByCrook } from '@crook/protocol/Commands'
@@ -113,6 +112,33 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
             }),
           ),
         ).toEqual(new AuditPolicy({ argumentLimit: 80, redactedArguments: ['text', 'label'] }))
+      }),
+    )
+
+    it.effect('fails at startup on a redaction it cannot honour rather than logging the data', () =>
+      Effect.gen(function* () {
+        const policyFrom = (redact: string) =>
+          CrookAuditPolicy.parse(ConfigProvider.fromUnknown({ CROOK_AUDIT_REDACT: redact }))
+        const nothing = yield* policyFrom(REDACT_NOTHING)
+        const misspelt = yield* Effect.exit(policyFrom('txt'))
+        const padded = yield* Effect.exit(policyFrom('text, keys'))
+
+        expect(nothing.redactedArguments).toEqual([])
+        expect(Exit.isFailure(misspelt)).toBe(true)
+        expect(Exit.isFailure(padded)).toBe(true)
+      }),
+    )
+
+    it.effect('ignores a state home that is not an absolute path, as the XDG spec says', () =>
+      Effect.gen(function* () {
+        const pathWith = (stateHome: string) =>
+          CrookAuditLogPath.parse(
+            ConfigProvider.fromUnknown({ HOME: '/home/jc', XDG_STATE_HOME: stateHome }),
+          )
+
+        expect(yield* pathWith('/var/state')).toBe('/var/state/crook/audit.jsonl')
+        expect(yield* pathWith('')).toBe('/home/jc/.local/state/crook/audit.jsonl')
+        expect(yield* pathWith('state')).toBe('/home/jc/.local/state/crook/audit.jsonl')
       }),
     )
   },

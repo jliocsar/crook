@@ -4,12 +4,12 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import type * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { AuditLog, DEFAULT_AUDIT_ARGUMENT_LIMIT } from '@crook/agent/AuditLog'
+import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AgentRow } from '@crook/domain/AgentRow'
-import { AuditPolicy } from '@crook/domain/Audit'
+import { AuditPolicy, DEFAULT_AUDIT_ARGUMENT_LIMIT } from '@crook/domain/Audit'
 import { MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import type { HerdrClient } from '@crook/herdr/HerdrClient'
@@ -107,6 +107,8 @@ export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[
     tab: TabId.make('w1:t1'),
     status: 'idle',
     title: 'EX-253 Example feature',
+    label: Option.none(),
+    createdByCrook: false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.none(),
     claudeSession: Option.none(),

@@ -16,12 +16,14 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
+import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import {
   type HerdReading,
   type ResolvedAgent,
   initialMachineState,
   nextMachineState,
+  withCreatedPanes,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
 import { MachineId } from '@crook/domain/Ids'
@@ -75,6 +77,7 @@ const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
   const claudeSessions = yield* ClaudeSessions
   const gitBranches = yield* GitBranches
+  const createdPanes = yield* CreatedPanes
   const machine = yield* CrookMachineId
 
   const sessionOf = (info: AgentInfo) =>
@@ -120,6 +123,7 @@ const make = Effect.gen(function* () {
       tabs: snapshot.tabs,
       panes: snapshot.panes,
       agents,
+      createdPanes: yield* createdPanes.current,
     }
 
     return { reading, now: yield* DateTime.now }
@@ -159,6 +163,13 @@ const make = Effect.gen(function* () {
     Effect.forkScoped,
   )
 
+  yield* createdPanes.changes.pipe(
+    Stream.runForEach((created) =>
+      SubscriptionRef.updateSome(state, (previous) => withCreatedPanes(previous, created)),
+    ),
+    Effect.forkScoped,
+  )
+
   const scope = yield* Effect.scope
   const invalidate = refresh.pipe(
     Effect.tapError(logHerdrFailure),
@@ -181,7 +192,7 @@ export class MachineStateSync extends Context.Service<
 
   static readonly fromRef = (
     state: SubscriptionRef.SubscriptionRef<MachineState>,
-    invalidate: Effect.Effect<void> = Effect.void,
+    invalidate: Effect.Effect<void>,
   ) =>
     MachineStateSync.of({
       current: SubscriptionRef.get(state),

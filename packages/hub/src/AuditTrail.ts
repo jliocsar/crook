@@ -1,4 +1,3 @@
-import * as Config from 'effect/Config'
 import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
@@ -14,9 +13,9 @@ import {
   AuditArguments,
   type AuditedOperation,
   AuditOutcome,
-  AuditPolicy,
   applyAuditPolicy,
   auditExit,
+  auditPolicyConfig,
 } from '@crook/domain/Audit'
 import { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import { dieOnUnencodableRecord } from '@crook/hub/Database'
@@ -27,18 +26,11 @@ export interface AuditRequest extends AuditedOperation {
   readonly idempotencyKey: Option.Option<IdempotencyKey>
 }
 
-export const DEFAULT_HUB_AUDIT_ARGUMENT_LIMIT = 200
-export const DEFAULT_HUB_AUDIT_REDACTED: readonly string[] = ['text']
-
-export const CrookHubAuditPolicy = Config.all({
-  argumentLimit: Config.schema(
-    AuditPolicy.fields.argumentLimit,
-    'CROOK_HUB_AUDIT_ARGUMENT_LIMIT',
-  ).pipe(Config.withDefault(DEFAULT_HUB_AUDIT_ARGUMENT_LIMIT)),
-  redactedArguments: Config.Array(Schema.NonEmptyString, 'CROOK_HUB_AUDIT_REDACT').pipe(
-    Config.withDefault(DEFAULT_HUB_AUDIT_REDACTED),
-  ),
-}).pipe(Config.map((fields) => new AuditPolicy(fields)))
+export const CrookHubAuditPolicy = auditPolicyConfig({
+  limitVariable: 'CROOK_HUB_AUDIT_ARGUMENT_LIMIT',
+  redactVariable: 'CROOK_HUB_AUDIT_REDACT',
+  redactedByDefault: ['text'],
+})
 
 export class HubAuditRecord extends Schema.Class<HubAuditRecord>('HubAuditRecord')({
   at: Schema.DateTimeUtcFromString,

@@ -56,17 +56,10 @@ const readableVersion = Schema.decodeUnknownOption(CrookVersion)
 
 const byMachineId = Order.mapInput(Order.String, (entry: MachineEntry) => entry.id)
 
-const seenPanes = (entry: MachineEntry) =>
+const panesInState = (entry: MachineEntry, isKept: (pane: PaneId) => boolean) =>
   pipe(
     agentsIn(entry.state),
-    Arr.filter((row) => HashMap.has(entry.seen, row.pane)),
-    Arr.map((row) => row.pane),
-  )
-
-const pinnedPanes = (entry: MachineEntry) =>
-  pipe(
-    agentsIn(entry.state),
-    Arr.filter((row) => HashSet.has(entry.pinned, row.pane)),
+    Arr.filter((row) => isKept(row.pane)),
     Arr.map((row) => row.pane),
   )
 
@@ -82,8 +75,8 @@ const toHerdMachine = (entry: MachineEntry) =>
       herdrVersion: entry.herdrVersion,
     }),
     state: entry.state,
-    seen: seenPanes(entry),
-    pinned: pinnedPanes(entry),
+    seen: panesInState(entry, (pane) => HashMap.has(entry.seen, pane)),
+    pinned: panesInState(entry, (pane) => HashSet.has(entry.pinned, pane)),
   })
 
 const toView = (entries: HashMap.HashMap<MachineId, MachineEntry>) =>

@@ -3,12 +3,12 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
-import * as Path from 'effect/Path'
-import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as Semaphore from 'effect/Semaphore'
+import type * as Stream from 'effect/Stream'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { OWNER_ONLY_DIRECTORY_MODE, stateFile } from '@crook/agent/StateDirectory'
+import { makeEnsureParentDirectory, stateFile } from '@crook/agent/StateDirectory'
 import { PaneId } from '@crook/domain/Ids'
 
 const TEMPORARY_SUFFIX = '.tmp'
@@ -37,7 +37,7 @@ export class CreatedPanesUnreadable extends Schema.TaggedError<CreatedPanesUnrea
 
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
-  const path = yield* Path.Path
+  const ensureParentDirectory = yield* makeEnsureParentDirectory
   const file = yield* CrookCreatedPanesPath
   const writing = yield* Semaphore.make(1)
 
@@ -45,34 +45,34 @@ const make = Effect.gen(function* () {
     Effect.flatMap(Schema.decodeEffect(CreatedPanesFile)),
     Effect.map(HashSet.fromIterable),
     Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(HashSet.empty<PaneId>())),
-    Effect.mapError((cause) => new CreatedPanesUnreadable({ path: file, cause })),
-    Effect.catchTag('CreatedPanesUnreadable', (error) =>
-      Effect.as(Effect.logWarning(error.message), HashSet.empty<PaneId>()),
+    Effect.catch((cause) =>
+      Effect.as(
+        Effect.logWarning(new CreatedPanesUnreadable({ path: file, cause }).message),
+        HashSet.empty<PaneId>(),
+      ),
     ),
   )
-  const panes = yield* Ref.make(stored)
+  const panes = yield* SubscriptionRef.make(stored)
 
   const save = (next: HashSet.HashSet<PaneId>) => {
     const temporary = `${file}${TEMPORARY_SUFFIX}`
 
-    return fileSystem
-      .makeDirectory(path.dirname(file), { recursive: true, mode: OWNER_ONLY_DIRECTORY_MODE })
-      .pipe(
-        Effect.andThen(
-          fileSystem.writeFileString(
-            temporary,
-            Schema.encodeSync(CreatedPanesFile)(Array.from(next)),
-          ),
+    return ensureParentDirectory(file).pipe(
+      Effect.andThen(
+        fileSystem.writeFileString(
+          temporary,
+          Schema.encodeSync(CreatedPanesFile)(Array.from(next)),
         ),
-        Effect.andThen(fileSystem.rename(temporary, file)),
-        Effect.mapError((cause) => new CreatedPanesUnwritable({ path: file, cause })),
-      )
+      ),
+      Effect.andThen(fileSystem.rename(temporary, file)),
+      Effect.mapError((cause) => new CreatedPanesUnwritable({ path: file, cause })),
+    )
   }
 
   const change = (update: (current: HashSet.HashSet<PaneId>) => HashSet.HashSet<PaneId>) =>
     writing.withPermits(1)(
       Effect.gen(function* () {
-        const current = yield* Ref.get(panes)
+        const current = yield* SubscriptionRef.get(panes)
         const next = update(current)
 
         if (HashSet.size(next) === HashSet.size(current)) {
@@ -80,12 +80,12 @@ const make = Effect.gen(function* () {
         }
 
         yield* save(next)
-        yield* Ref.set(panes, next)
+        yield* SubscriptionRef.set(panes, next)
       }),
     )
 
   return CreatedPanes.of({
-    has: (pane) => Effect.map(Ref.get(panes), HashSet.has(pane)),
+    ...CreatedPanes.readingFrom(panes),
     remember: (pane) => change(HashSet.add(pane)).pipe(Effect.withSpan('CreatedPanes.remember')),
     forget: (pane) => change(HashSet.remove(pane)).pipe(Effect.withSpan('CreatedPanes.forget')),
   })
@@ -94,6 +94,8 @@ const make = Effect.gen(function* () {
 export class CreatedPanes extends Context.Service<
   CreatedPanes,
   {
+    readonly current: Effect.Effect<HashSet.HashSet<PaneId>>
+    readonly changes: Stream.Stream<HashSet.HashSet<PaneId>>
     readonly has: (pane: PaneId) => Effect.Effect<boolean>
     readonly remember: (pane: PaneId) => Effect.Effect<void, CreatedPanesUnwritable>
     readonly forget: (pane: PaneId) => Effect.Effect<void, CreatedPanesUnwritable>
@@ -101,14 +103,22 @@ export class CreatedPanes extends Context.Service<
 >()('@crook/agent/CreatedPanes') {
   static readonly layer = Layer.effect(this, make)
 
+  static readonly readingFrom = (
+    panes: SubscriptionRef.SubscriptionRef<HashSet.HashSet<PaneId>>,
+  ) => ({
+    current: SubscriptionRef.get(panes),
+    changes: SubscriptionRef.changes(panes),
+    has: (pane: PaneId) => Effect.map(SubscriptionRef.get(panes), HashSet.has(pane)),
+  })
+
   static readonly layerTest = (created: Iterable<PaneId> = []) =>
     Layer.effect(
       this,
-      Effect.map(Ref.make(HashSet.fromIterable(created)), (panes) =>
+      Effect.map(SubscriptionRef.make(HashSet.fromIterable(created)), (panes) =>
         CreatedPanes.of({
-          has: (pane) => Effect.map(Ref.get(panes), HashSet.has(pane)),
-          remember: (pane) => Ref.update(panes, HashSet.add(pane)),
-          forget: (pane) => Ref.update(panes, HashSet.remove(pane)),
+          ...CreatedPanes.readingFrom(panes),
+          remember: (pane) => SubscriptionRef.update(panes, HashSet.add(pane)),
+          forget: (pane) => SubscriptionRef.update(panes, HashSet.remove(pane)),
         }),
       ),
     )

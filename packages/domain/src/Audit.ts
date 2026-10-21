@@ -1,8 +1,10 @@
+import * as Arr from 'effect/Array'
 import * as Cause from 'effect/Cause'
+import * as Config from 'effect/Config'
 import * as Exit from 'effect/Exit'
+import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Predicate from 'effect/Predicate'
 import * as Record from 'effect/Record'
 import * as Schema from 'effect/Schema'
 
@@ -18,6 +20,22 @@ export interface AuditedExit {
   readonly failure: Option.Option<string>
 }
 
+export interface AuditPolicyVariables {
+  readonly limitVariable: string
+  readonly redactVariable: string
+  readonly redactedByDefault: readonly AuditArgumentName[]
+}
+
+export const AuditArgumentName = Schema.Literals([
+  'pane',
+  'text',
+  'keys',
+  'label',
+  'confirmed',
+  'pinned',
+])
+export type AuditArgumentName = typeof AuditArgumentName.Type
+
 export const AuditValue = Schema.Union([
   Schema.String,
   Schema.Boolean,
@@ -26,7 +44,7 @@ export const AuditValue = Schema.Union([
 ])
 export type AuditValue = typeof AuditValue.Type
 
-export const AuditArguments = Schema.Record(Schema.String, AuditValue)
+export const AuditArguments = Schema.Record(AuditArgumentName, Schema.optionalKey(AuditValue))
 export type AuditArguments = typeof AuditArguments.Type
 
 export const AuditOutcome = Schema.Literals(['succeeded', 'failed', 'interrupted'])
@@ -34,34 +52,73 @@ export type AuditOutcome = typeof AuditOutcome.Type
 
 export class AuditPolicy extends Schema.Class<AuditPolicy>('AuditPolicy')({
   argumentLimit: Schema.Int.check(Schema.isGreaterThan(0)),
-  redactedArguments: Schema.Array(Schema.String),
+  redactedArguments: Schema.Array(AuditArgumentName),
 }) {}
 
+export const DEFAULT_AUDIT_ARGUMENT_LIMIT = 200
+export const REDACT_NOTHING = 'none'
 export const REDACTED = '[redacted]'
 export const TRUNCATION_MARK = '…'
 export const DEFECT = 'Defect'
 
-const truncate = (limit: number) => (text: string) => {
-  const characters = Array.from(text)
+const characterCount = (text: string) => Array.from(text).length
 
-  return characters.length > limit
-    ? `${characters.slice(0, limit).join('')}${TRUNCATION_MARK}`
-    : text
+const firstCharacters = (count: number) => (text: string) =>
+  Array.from(text).slice(0, count).join('')
+
+const truncate = (limit: number) => (text: string) =>
+  characterCount(text) > limit ? `${firstCharacters(limit)(text)}${TRUNCATION_MARK}` : text
+
+const markLastAsCut = (kept: readonly string[]): readonly string[] =>
+  Arr.match(kept, {
+    onEmpty: () => [TRUNCATION_MARK],
+    onNonEmpty: (nonEmpty) =>
+      Arr.modifyLastNonEmpty(nonEmpty, (last) => `${last}${TRUNCATION_MARK}`),
+  })
+
+const truncateTexts = (limit: number) => (texts: readonly string[]) => {
+  const remainingBefore = Arr.scan(
+    texts,
+    limit,
+    (remaining, text) => remaining - characterCount(text),
+  )
+  const kept = pipe(
+    Arr.zip(remainingBefore, texts),
+    Arr.takeWhile(([remaining]) => remaining > 0),
+    Arr.map(([remaining, text]) => firstCharacters(remaining)(text)),
+  )
+
+  return Arr.lastNonEmpty(remainingBefore) < 0 ? markLastAsCut(kept) : kept
 }
 
 const truncateValue = (limit: number) => (value: AuditValue) =>
-  Match.value(value).pipe(
+  Match.type<AuditValue>().pipe(
     Match.when(Match.string, truncate(limit)),
-    Match.when(Match.boolean, (flag): AuditValue => flag),
-    Match.when(Predicate.isNull, (): AuditValue => null),
-    Match.orElse((texts): AuditValue => texts.map(truncate(limit))),
-  )
+    Match.when(Arr.isArray, truncateTexts(limit)),
+    Match.orElse((untouched) => untouched),
+  )(value)
 
 const failureName = (cause: Cause.Cause<unknown>) =>
   Cause.findErrorOption(cause).pipe(
     Option.map((error) => (error instanceof Error ? error.name : String(error))),
     Option.getOrElse(() => DEFECT),
   )
+
+export const auditPolicyConfig = ({
+  limitVariable,
+  redactVariable,
+  redactedByDefault,
+}: AuditPolicyVariables) =>
+  Config.all({
+    argumentLimit: Config.schema(AuditPolicy.fields.argumentLimit, limitVariable).pipe(
+      Config.withDefault(DEFAULT_AUDIT_ARGUMENT_LIMIT),
+    ),
+    redactedArguments: Config.Literal(REDACT_NOTHING, redactVariable).pipe(
+      Config.map((): readonly AuditArgumentName[] => []),
+      Config.orElse(() => Config.Array(AuditArgumentName, redactVariable)),
+      Config.withDefault(redactedByDefault),
+    ),
+  }).pipe(Config.map((fields) => new AuditPolicy(fields)))
 
 export const commandAudit = (command: Command): AuditedOperation =>
   Match.value(command).pipe(
@@ -88,8 +145,8 @@ export const commandAudit = (command: Command): AuditedOperation =>
 export const applyAuditPolicy =
   (policy: AuditPolicy) =>
   (auditArguments: AuditArguments): AuditArguments =>
-    Record.map(auditArguments, (value, name) =>
-      policy.redactedArguments.includes(name)
+    Record.map<string, AuditValue, AuditValue>(auditArguments, (value, name) =>
+      Arr.some(policy.redactedArguments, (redacted) => redacted === name)
         ? REDACTED
         : truncateValue(policy.argumentLimit)(value),
     )

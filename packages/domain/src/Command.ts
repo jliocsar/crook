@@ -1,13 +1,17 @@
-import * as Arr from 'effect/Array'
-import * as Equivalence from 'effect/Equivalence'
 import * as Match from 'effect/Match'
-import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { PaneId } from '@crook/domain/Ids'
 
+const WITHOUT_CONTROL_CHARACTERS = /^\P{Cc}*$/u
+
 export const INTERRUPT_KEY = 'esc'
+
+export const PaneLabel = Schema.Trimmed.check(
+  Schema.isNonEmpty(),
+  Schema.isPattern(WITHOUT_CONTROL_CHARACTERS),
+)
 
 export class Prompt extends Schema.TaggedClass<Prompt>()('Prompt', {
   pane: PaneId,
@@ -21,7 +25,7 @@ export class SendKeys extends Schema.TaggedClass<SendKeys>()('SendKeys', {
 
 export class RenameAgent extends Schema.TaggedClass<RenameAgent>()('RenameAgent', {
   pane: PaneId,
-  label: Schema.OptionFromNullOr(Schema.NonEmptyString),
+  label: Schema.OptionFromNullOr(PaneLabel),
 }) {}
 
 export class ClosePane extends Schema.TaggedClass<ClosePane>()('ClosePane', {
@@ -39,7 +43,7 @@ export class InputDelivered extends Schema.TaggedClass<InputDelivered>()('InputD
 
 export class PaneRenamed extends Schema.TaggedClass<PaneRenamed>()('PaneRenamed', {
   pane: PaneId,
-  label: RenameAgent.fields.label,
+  label: AgentRow.fields.label,
 }) {}
 
 export class PaneClosed extends Schema.TaggedClass<PaneClosed>()('PaneClosed', {
@@ -48,8 +52,6 @@ export class PaneClosed extends Schema.TaggedClass<PaneClosed>()('PaneClosed', {
 
 export const CommandReceipt = Schema.Union([InputDelivered, PaneRenamed, PaneClosed])
 export type CommandReceipt = typeof CommandReceipt.Type
-
-const isSameLabel = Option.makeEquivalence(Equivalence.String)
 
 export const interrupt = (pane: PaneId) => new SendKeys({ pane, keys: [INTERRUPT_KEY] })
 
@@ -65,16 +67,3 @@ export const targetPane = (command: Command): PaneId =>
 
 export const hasMovedSince = (receipt: InputDelivered, row: AgentRow) =>
   row.pane === receipt.pane && row.stateChangeSeq > receipt.stateChangeSeq
-
-export const isObservedIn = (receipt: CommandReceipt, agents: readonly AgentRow[]): boolean => {
-  const row = Arr.findFirst(agents, (agent) => agent.pane === receipt.pane)
-
-  return Match.value(receipt).pipe(
-    Match.tagsExhaustive({
-      InputDelivered: (delivered) => Option.exists(row, (found) => hasMovedSince(delivered, found)),
-      PaneRenamed: (renamed) =>
-        Option.exists(row, (found) => isSameLabel(found.label, renamed.label)),
-      PaneClosed: () => Option.isNone(row),
-    }),
-  )
-}

@@ -59,6 +59,7 @@ import {
   agentRow,
   executorWith,
   machineStateWith,
+  paneInfo,
 } from './Fixtures'
 
 const AGENT_PANE = PaneId.make('w1:p1')
@@ -331,7 +332,9 @@ it('gives up on herdr early enough for its answer to reach the hub before the hu
   ).toBe(true)
 })
 
-const renamed = scriptedResult(PaneRenameMethod, { type: 'pane_info' })
+const renamedTo = (label: Option.Option<string>) =>
+  scriptedResult(PaneRenameMethod, { type: 'pane_info', pane: paneInfo({ label }) })
+const renamed = renamedTo(Option.some('Payments'))
 const closed = scriptedResult(PaneCloseMethod, { type: 'ok' })
 const rename = new RenameAgent({ pane: AGENT_PANE, label: Option.some('Payments') })
 const unconfirmedClose = new ClosePane({ pane: AGENT_PANE, confirmed: false })
@@ -340,7 +343,7 @@ const confirmedClose = new ClosePane({ pane: AGENT_PANE, confirmed: true })
 it.effect('renames the pane in herdr and asks for a re-read, since herdr sends no event', () =>
   Effect.gen(function* () {
     const rereads = yield* Ref.make(0)
-    const { executor, sent } = yield* startExecutor([renamed, renamed], {
+    const { executor, sent } = yield* startExecutor([renamed], {
       invalidate: Ref.update(rereads, (count) => count + 1),
     })
     const receipt = yield* executor.execute(FIRST_ACTION, rename)
@@ -357,6 +360,18 @@ it.effect('renames the pane in herdr and asks for a re-read, since herdr sends n
       { pane_id: 'w1:p1', label: null },
     ])
     expect(yield* Ref.get(rereads)).toBe(2)
+  }),
+)
+
+it.effect('answers a rename with the name herdr says it stored', () =>
+  Effect.gen(function* () {
+    const { executor } = yield* startExecutor([renamedTo(Option.none())])
+    const cleared = yield* executor.execute(
+      FIRST_ACTION,
+      new RenameAgent({ pane: AGENT_PANE, label: Option.none() }),
+    )
+
+    expect(cleared).toEqual(new PaneRenamed({ pane: AGENT_PANE, label: Option.none() }))
   }),
 )
 

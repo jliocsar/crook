@@ -11,6 +11,7 @@ import * as Result from 'effect/Result'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandPolicy } from '@crook/agent/CommandPolicy'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
+import { paneLabel } from '@crook/agent/MachineStateMapping'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import {
@@ -73,7 +74,11 @@ const make = Effect.gen(function* () {
               pane_id: rename.pane,
               label: Option.getOrNull(rename.label),
             })
-            .pipe(Effect.as(new PaneRenamed({ pane: rename.pane, label: rename.label }))),
+            .pipe(
+              Effect.map(
+                (reply) => new PaneRenamed({ pane: rename.pane, label: paneLabel(reply.pane) }),
+              ),
+            ),
         ClosePane: (close) =>
           herdr
             .request(PaneCloseMethod, { pane_id: close.pane })

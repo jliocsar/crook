@@ -1,8 +1,10 @@
 import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
+import * as HashSet from 'effect/HashSet'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
+import * as Struct from 'effect/Struct'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { type ClaudeSessionId, type MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
@@ -23,6 +25,14 @@ export interface HerdReading {
   readonly tabs: readonly TabInfo[]
   readonly panes: readonly PaneInfo[]
   readonly agents: readonly ResolvedAgent[]
+  readonly createdPanes: HashSet.HashSet<PaneId>
+}
+
+interface MachineStateContents {
+  readonly herdrVersion: string
+  readonly workspaces: readonly Workspace[]
+  readonly tabs: readonly Tab[]
+  readonly agents: readonly AgentRow[]
 }
 
 const isSameMachineState = Schema.toEquivalence(MachineState)
@@ -52,14 +62,18 @@ const statusChangedAt =
 export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
   Option.orElse(info.foreground_cwd, () => info.cwd)
 
+export const paneLabel = (pane: PaneInfo): Option.Option<string> =>
+  pane.label.pipe(Option.map(Str.trim), Option.filter(Str.isNonEmpty))
+
 const labelIn = (panes: readonly PaneInfo[]) => (info: AgentInfo) =>
-  Arr.findFirst(panes, (pane) => pane.pane_id === info.pane_id).pipe(
-    Option.flatMap((pane) => pane.label),
-    Option.filter(Str.isNonEmpty),
-  )
+  Arr.findFirst(panes, (pane) => pane.pane_id === info.pane_id).pipe(Option.flatMap(paneLabel))
 
 const toAgentRow =
-  (since: (info: AgentInfo) => DateTime.Utc, labelOf: (info: AgentInfo) => Option.Option<string>) =>
+  (
+    since: (info: AgentInfo) => DateTime.Utc,
+    labelOf: (info: AgentInfo) => Option.Option<string>,
+    createdPanes: HashSet.HashSet<PaneId>,
+  ) =>
   ({ info, claudeSession, branch }: ResolvedAgent) =>
     new AgentRow({
       pane: PaneId.make(info.pane_id),
@@ -70,6 +84,7 @@ const toAgentRow =
         Option.getOrElse(() => ''),
       ),
       label: labelOf(info),
+      createdByCrook: HashSet.has(createdPanes, PaneId.make(info.pane_id)),
       cwd: Option.getOrElse(workingDirectoryOf(info), () => ''),
       branch,
       claudeSession,
@@ -81,14 +96,32 @@ const herdContents = (
   previousAgents: readonly AgentRow[],
   reading: HerdReading,
   now: DateTime.Utc,
-) => ({
+): MachineStateContents => ({
   herdrVersion: reading.herdrVersion,
   workspaces: reading.workspaces.map(toWorkspace),
   tabs: reading.tabs.map(toTab),
   agents: reading.agents.map(
-    toAgentRow(statusChangedAt(previousAgents, now), labelIn(reading.panes)),
+    toAgentRow(statusChangedAt(previousAgents, now), labelIn(reading.panes), reading.createdPanes),
   ),
 })
+
+const withChangedContents = (
+  previous: MachineState,
+  contents: MachineStateContents,
+): Option.Option<MachineState> =>
+  Option.liftPredicate(
+    new MachineState({ machine: previous.machine, version: previous.version, ...contents }),
+    (candidate) => !isSameMachineState(candidate, previous),
+  ).pipe(
+    Option.map(
+      () =>
+        new MachineState({
+          machine: previous.machine,
+          version: MachineStateVersion.make(previous.version + 1),
+          ...contents,
+        }),
+    ),
+  )
 
 export const initialMachineState = (
   machine: MachineId,
@@ -105,20 +138,21 @@ export const nextMachineState = (
   previous: MachineState,
   reading: HerdReading,
   now: DateTime.Utc,
-): Option.Option<MachineState> => {
-  const contents = herdContents(previous.agents, reading, now)
+): Option.Option<MachineState> =>
+  withChangedContents(previous, herdContents(previous.agents, reading, now))
 
-  return Option.liftPredicate(
-    new MachineState({ machine: previous.machine, version: previous.version, ...contents }),
-    (candidate) => !isSameMachineState(candidate, previous),
-  ).pipe(
-    Option.map(
-      () =>
-        new MachineState({
-          machine: previous.machine,
-          version: MachineStateVersion.make(previous.version + 1),
-          ...contents,
-        }),
+export const withCreatedPanes = (
+  previous: MachineState,
+  createdPanes: HashSet.HashSet<PaneId>,
+): Option.Option<MachineState> =>
+  withChangedContents(previous, {
+    herdrVersion: previous.herdrVersion,
+    workspaces: previous.workspaces,
+    tabs: previous.tabs,
+    agents: previous.agents.map(
+      (row) =>
+        new AgentRow(
+          Struct.evolve(row, { createdByCrook: () => HashSet.has(createdPanes, row.pane) }),
+        ),
     ),
-  )
-}
+  })

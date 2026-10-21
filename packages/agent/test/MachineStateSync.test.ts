@@ -9,9 +9,10 @@ import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
+import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { ClaudeSessionId } from '@crook/domain/Ids'
+import { ClaudeSessionId, PaneId } from '@crook/domain/Ids'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -67,8 +68,9 @@ const startSync = Effect.fn('startSync')(function* (
       ),
   })
   const context = yield* Layer.build(
-    Layer.provide(MachineStateSync.layer, [
+    Layer.provideMerge(MachineStateSync.layer, [
       herdr,
+      CreatedPanes.layerTest(),
       ClaudeSessions.layerTest(new Map([['w1:p1', SESSION]])),
       GitBranches.layerTest(new Map([['/home/jliocsar/Projects/crook', BRANCH]])),
       ConfigProvider.layer(ConfigProvider.fromUnknown({ CROOK_MACHINE_ID: 'laptop' })),
@@ -82,6 +84,7 @@ const startSync = Effect.fn('startSync')(function* (
 
   return {
     sync: Context.get(context, MachineStateSync),
+    createdPanes: Context.get(context, CreatedPanes),
     subscriptions,
     readStarted,
     replies,
@@ -152,6 +155,27 @@ it.effect('re-reads when asked to, for a change herdr announces no event for', (
 
     expect(state.agents.map((row) => row.label)).toEqual([Option.some('Payments')])
   }),
+)
+
+it.effect(
+  'republishes the agents when crook remembers or forgets a pane, without asking herdr',
+  () =>
+    Effect.gen(function* () {
+      const { sync, createdPanes, subscriptions, readStarted, answerRead } =
+        yield* startSync(working)
+
+      yield* Queue.take(subscriptions)
+      yield* answerRead(working)
+      yield* createdPanes.remember(PaneId.make('w1:p1'))
+      const remembered = yield* stateAt(sync, 1)
+
+      yield* createdPanes.forget(PaneId.make('w1:p1'))
+      const forgotten = yield* stateAt(sync, 2)
+
+      expect(remembered.agents.map((row) => row.createdByCrook)).toEqual([true])
+      expect(forgotten.agents.map((row) => row.createdByCrook)).toEqual([false])
+      expect(yield* Queue.size(readStarted)).toBe(0)
+    }),
 )
 
 it.effect('coalesces a burst of events that lands during a read into one more read', () =>

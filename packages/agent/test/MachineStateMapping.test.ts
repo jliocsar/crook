@@ -1,11 +1,13 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as DateTime from 'effect/DateTime'
+import * as HashSet from 'effect/HashSet'
 import * as Option from 'effect/Option'
 
 import {
   type HerdReading,
   initialMachineState,
   nextMachineState,
+  withCreatedPanes,
 } from '@crook/agent/MachineStateMapping'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { ClaudeSessionId, MachineId, PaneId, TabId, WorkspaceId } from '@crook/domain/Ids'
@@ -24,6 +26,7 @@ const reading = (agents: HerdReading['agents'], herdrVersion = HERDR_VERSION): H
   tabs: [tabInfo],
   panes: [],
   agents,
+  createdPanes: HashSet.empty(),
 })
 
 describe('MachineStateMapping', () => {
@@ -51,6 +54,8 @@ describe('MachineStateMapping', () => {
         tab: TabId.make('w1:t1'),
         status: 'working',
         title: 'EX-253 Example feature',
+        label: Option.none(),
+        createdByCrook: false,
         cwd: '/home/jliocsar/Projects/crook',
         branch: Option.some('main'),
         claudeSession: Option.some(SESSION),
@@ -82,7 +87,7 @@ describe('MachineStateMapping', () => {
     expect(row?.cwd).toBe('/home/jliocsar/Projects/crook/packages/agent')
   })
 
-  it('carries the name the pane was given in herdr, and none for an empty or absent one', () => {
+  it('carries the name the pane was given in herdr, and none for a blank or absent one', () => {
     const agents = [
       { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
       {
@@ -95,14 +100,20 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
       },
+      {
+        info: agentInfo({ pane_id: 'w1:p4' }),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+      },
     ]
     const state = initialMachineState(
       MACHINE,
       {
         ...reading(agents),
         panes: [
-          paneInfo({ label: Option.some('Payments') }),
+          paneInfo({ label: Option.some(' Payments ') }),
           paneInfo({ pane_id: 'w1:p2', label: Option.some('') }),
+          paneInfo({ pane_id: 'w1:p4', label: Option.some('   ') }),
         ],
       },
       STARTED,
@@ -112,7 +123,31 @@ describe('MachineStateMapping', () => {
       ['EX-253 Example feature', Option.some('Payments')],
       ['EX-253 Example feature', Option.none()],
       ['EX-253 Example feature', Option.none()],
+      ['EX-253 Example feature', Option.none()],
     ])
+  })
+
+  it('marks the panes crook created, and bumps the version only when that record changes', () => {
+    const agents = [
+      { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+      {
+        info: agentInfo({ pane_id: 'w1:p2' }),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+      },
+    ]
+    const created = HashSet.make(PaneId.make('w1:p2'))
+    const state = initialMachineState(
+      MACHINE,
+      { ...reading(agents), createdPanes: created },
+      STARTED,
+    )
+    const forgotten = Option.getOrThrow(withCreatedPanes(state, HashSet.empty()))
+
+    expect(state.agents.map((row) => row.createdByCrook)).toEqual([false, true])
+    expect(withCreatedPanes(state, created)).toEqual(Option.none())
+    expect(forgotten.version).toBe(1)
+    expect(forgotten.agents.map((row) => row.createdByCrook)).toEqual([false, false])
   })
 
   it('keeps the version when a re-read changes nothing', () => {

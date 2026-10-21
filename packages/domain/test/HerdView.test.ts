@@ -33,6 +33,8 @@ const agentRow = (pane: string, claudeSession: Option.Option<ClaudeSessionId>) =
     tab,
     status: 'blocked',
     title: 'EX-253 Example feature',
+    label: Option.none(),
+    createdByCrook: false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.some('feat/jc-97-98-registry-seen'),
     claudeSession,
@@ -81,6 +83,7 @@ const herd = new HerdView({
       }),
       state: Option.none(),
       seen: [],
+      pinned: [],
     }),
   ],
 })

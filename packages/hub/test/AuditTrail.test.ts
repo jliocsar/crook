@@ -1,21 +1,18 @@
 import { expect, layer } from '@effect/vitest'
 import * as ConfigProvider from 'effect/ConfigProvider'
+import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
+import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as SqlClient from 'effect/sql/SqlClient'
 import { SqlError } from 'effect/sql/SqlError'
 
-import { AuditPolicy } from '@crook/domain/Audit'
+import { AuditPolicy, DEFAULT_AUDIT_ARGUMENT_LIMIT, REDACT_NOTHING } from '@crook/domain/Audit'
 import { MachineId } from '@crook/domain/Ids'
-import {
-  AuditTrail,
-  CrookHubAuditPolicy,
-  DEFAULT_HUB_AUDIT_ARGUMENT_LIMIT,
-  DEFAULT_HUB_AUDIT_REDACTED,
-  HubAuditRecord,
-} from '@crook/hub/AuditTrail'
+import { AuditTrail, CrookHubAuditPolicy, HubAuditRecord } from '@crook/hub/AuditTrail'
 import * as Database from '@crook/hub/Database'
 import { MachineNotInHerd } from '@crook/protocol/ClientApi'
 
@@ -55,6 +52,29 @@ layer(trail)('AuditTrail', (it) => {
     }),
   )
 
+  it.effect('records an action the phone abandoned midway as interrupted', () =>
+    Effect.gen(function* () {
+      const audit = yield* AuditTrail
+      const sql = yield* SqlClient.SqlClient
+      const started = yield* Deferred.make<void>()
+      const abandoned = { ...forgetLaptop, operation: 'SendCommand' }
+      const action = yield* Deferred.succeed(started, undefined).pipe(
+        Effect.andThen(Effect.never),
+        audit.audited(abandoned),
+        Effect.forkChild,
+      )
+
+      yield* Deferred.await(started)
+      yield* Fiber.interrupt(action)
+      const rows = yield* sql`SELECT * FROM audit WHERE operation = ${abandoned.operation}`
+      const records = yield* Schema.decodeUnknownEffect(Schema.Array(HubAuditRecord))(rows)
+
+      expect(records.map((record) => [record.actor, record.outcome, record.failure])).toEqual([
+        [OWNER, 'interrupted', Option.none()],
+      ])
+    }),
+  )
+
   it.effect('refuses to change or delete what it recorded', () =>
     Effect.gen(function* () {
       const audit = yield* AuditTrail
@@ -81,11 +101,25 @@ layer(trail)('AuditTrail', (it) => {
 
       expect(defaults).toEqual(
         new AuditPolicy({
-          argumentLimit: DEFAULT_HUB_AUDIT_ARGUMENT_LIMIT,
-          redactedArguments: DEFAULT_HUB_AUDIT_REDACTED,
+          argumentLimit: DEFAULT_AUDIT_ARGUMENT_LIMIT,
+          redactedArguments: ['text'],
         }),
       )
       expect(configured.redactedArguments).toEqual(['label'])
+    }),
+  )
+
+  it.effect('redacts nothing only when told so, and refuses a name it does not know', () =>
+    Effect.gen(function* () {
+      const policyFrom = (redact: string) =>
+        CrookHubAuditPolicy.parse(ConfigProvider.fromUnknown({ CROOK_HUB_AUDIT_REDACT: redact }))
+      const nothing = yield* policyFrom(REDACT_NOTHING)
+      const misspelt = yield* Effect.exit(policyFrom('txt'))
+      const padded = yield* Effect.exit(policyFrom('text, keys'))
+
+      expect(nothing.redactedArguments).toEqual([])
+      expect(Exit.isFailure(misspelt)).toBe(true)
+      expect(Exit.isFailure(padded)).toBe(true)
     }),
   )
 })

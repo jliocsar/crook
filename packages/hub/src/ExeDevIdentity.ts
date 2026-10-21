@@ -134,16 +134,13 @@ const make = Effect.gen(function* () {
   }
 
   const admitPhonePage = (headers: Headers.Headers) =>
-    Effect.andThen(requireOwner(headers), requireBrowserLogin(headers))
+    requireOwner(headers).pipe(Effect.tap(() => requireBrowserLogin(headers)))
 
   return ExeDevIdentity.of({
     admitAgent: (headers) => Effect.andThen(requireOwner(headers), machineOf(headers)),
     admitPhonePage,
     admitPhoneSocket: (headers) =>
-      requireOwner(headers).pipe(
-        Effect.tap(() => requireBrowserLogin(headers)),
-        Effect.tap(() => requireSameOrigin(headers)),
-      ),
+      admitPhonePage(headers).pipe(Effect.tap(() => requireSameOrigin(headers))),
   })
 })
 
@@ -155,7 +152,7 @@ export class ExeDevIdentity extends Context.Service<
     ) => Effect.Effect<MachineId, OwnerEmailRejected | MachineUnidentified>
     readonly admitPhonePage: (
       headers: Headers.Headers,
-    ) => Effect.Effect<void, OwnerEmailRejected | BrowserLoginRequired>
+    ) => Effect.Effect<string, OwnerEmailRejected | BrowserLoginRequired>
     readonly admitPhoneSocket: (
       headers: Headers.Headers,
     ) => Effect.Effect<string, OwnerEmailRejected | BrowserLoginRequired | UpgradeOriginRejected>

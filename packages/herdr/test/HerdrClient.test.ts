@@ -218,7 +218,9 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
         Queue.take(received).pipe(Effect.flatMap(Schema.decodeEffect(SentRequest))),
       )
 
-      expect(renamed).toEqual({ type: 'pane_info' })
+      expect(renamed.type).toBe('pane_info')
+      expect(renamed.pane.pane_id).toBe('w1:p1')
+      expect(renamed.pane.label).toEqual(Option.some('Renamed by crook'))
       expect(closed).toEqual({ type: 'ok' })
       expect(requests.map((request) => request.params)).toEqual([
         { pane_id: 'w1:p1', label: 'Renamed by crook' },

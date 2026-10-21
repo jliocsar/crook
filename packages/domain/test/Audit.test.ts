@@ -56,7 +56,7 @@ describe('commandAudit', () => {
 })
 
 describe('applyAuditPolicy', () => {
-  it('cuts every text past the limit, counting characters rather than UTF-16 units', () => {
+  it('cuts every argument past the limit, counting characters rather than UTF-16 units', () => {
     const policy = new AuditPolicy({ argumentLimit: 3, redactedArguments: [] })
 
     expect(
@@ -68,10 +68,19 @@ describe('applyAuditPolicy', () => {
       }),
     ).toEqual({
       text: `🐑🐑🐑${TRUNCATION_MARK}`,
-      keys: ['esc', `ent${TRUNCATION_MARK}`],
+      keys: [`esc${TRUNCATION_MARK}`],
       confirmed: false,
       label: null,
     })
+  })
+
+  it('spends one limit across the texts of an array, marking the last text it kept', () => {
+    const policy = new AuditPolicy({ argumentLimit: 5, redactedArguments: [] })
+
+    expect(applyAuditPolicy(policy)({ keys: ['abc', 'defgh', 'ij'] })).toEqual({
+      keys: ['abc', `de${TRUNCATION_MARK}`],
+    })
+    expect(applyAuditPolicy(policy)({ keys: ['ab', 'cde'] })).toEqual({ keys: ['ab', 'cde'] })
   })
 
   it('replaces a redacted argument whole, whatever its value', () => {

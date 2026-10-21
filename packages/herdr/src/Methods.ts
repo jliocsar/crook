@@ -1,6 +1,6 @@
 import * as Schema from 'effect/Schema'
 
-import { PaneProcessInfo, SessionSnapshot } from '@crook/herdr/Records'
+import { PaneInfo, PaneProcessInfo, SessionSnapshot } from '@crook/herdr/Records'
 
 export interface HerdrMethod<Params, Result> {
   readonly name: string
@@ -36,7 +36,7 @@ export const AgentSendKeysMethod = makeMethod('agent.send_keys', {
 
 export const PaneRenameMethod = makeMethod('pane.rename', {
   params: Schema.Struct({ pane_id: Schema.String, label: Schema.NullOr(Schema.String) }),
-  result: Schema.Struct({ type: Schema.Literal('pane_info') }),
+  result: Schema.Struct({ type: Schema.Literal('pane_info'), pane: PaneInfo }),
 })
 
 export const PaneCloseMethod = makeMethod('pane.close', {

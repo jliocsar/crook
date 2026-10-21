@@ -42,6 +42,8 @@ const agentAt = (pane: PaneId, stateChangeSeq: number) =>
     tab: TabId.make('w1:t1'),
     status: 'done',
     title: 'EX-253 Example feature',
+    label: Option.none(),
+    createdByCrook: false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.none(),
     claudeSession: Option.none(),
