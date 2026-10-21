@@ -73,6 +73,7 @@
       "dependencies": {
         "@crook/domain": "workspace:*",
         "@crook/protocol": "workspace:*",
+        "@crook/web": "workspace:*",
         "@effect/platform-bun": "4.0.5",
         "@effect/sql-sqlite-bun": "4.0.5",
         "effect": "4.0.5",
@@ -89,6 +90,19 @@
       "version": "0.0.1",
       "dependencies": {
         "@crook/domain": "workspace:*",
+        "effect": "4.0.5",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
+    "packages/release": {
+      "name": "@crook/release",
+      "version": "0.0.1",
+      "dependencies": {
+        "@crook/domain": "workspace:*",
+        "@crook/web": "workspace:*",
+        "@effect/platform-bun": "4.0.5",
         "effect": "4.0.5",
       },
       "devDependencies": {
@@ -364,6 +378,8 @@
     "@crook/hub": ["@crook/hub@workspace:packages/hub"],
 
     "@crook/protocol": ["@crook/protocol@workspace:packages/protocol"],
+
+    "@crook/release": ["@crook/release@workspace:packages/release"],
 
     "@crook/tsconfig": ["@crook/tsconfig@workspace:packages/tsconfig"],
 

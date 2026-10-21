@@ -1,0 +1,22 @@
+{
+  "name": "@crook/release",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "bun --bun vitest run --fsModuleCachePath node_modules/.vitest-cache"
+  },
+  "dependencies": {
+    "@crook/domain": "workspace:*",
+    "@crook/web": "workspace:*",
+    "@effect/platform-bun": "4.0.5",
+    "effect": "4.0.5"
+  },
+  "devDependencies": {
+    "@crook/tsconfig": "workspace:*"
+  }
+}

@@ -10,6 +10,8 @@
     "test": "bun run --filter '*' --if-present test",
     "typecheck": "bun run --filter '*' --if-present typecheck",
     "build": "bun run --filter '*' --if-present build",
+    "release:build": "bun packages/release/src/main.ts build",
+    "release:build:host": "bun packages/release/src/main.ts build --host",
     "lint": "oxlint --deny-warnings --no-error-on-unmatched-pattern",
     "lint:fix": "oxlint --fix --deny-warnings --no-error-on-unmatched-pattern",
     "fmt": "oxfmt",

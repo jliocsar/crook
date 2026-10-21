@@ -1,4 +1,3 @@
-import * as Config from 'effect/Config'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -7,7 +6,6 @@ import * as Match from 'effect/Match'
 import * as Stream from 'effect/Stream'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
-import * as HttpStaticServer from 'effect/http/HttpStaticServer'
 import * as RpcSerialization from 'effect/rpc/RpcSerialization'
 import * as RpcServer from 'effect/rpc/RpcServer'
 import type { SqlError } from 'effect/sql/SqlError'
@@ -24,6 +22,7 @@ import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import * as HerdActivity from '@crook/hub/HerdActivity'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { SeenTracker } from '@crook/hub/SeenTracker'
+import * as StaticWeb from '@crook/hub/StaticWeb'
 import { Herd } from '@crook/hub/Herd'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
@@ -32,8 +31,6 @@ import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 export const SOCKET_SILENCE_TIMEOUT = Duration.times(AGENT_PING_INTERVAL, 2)
-
-export const CrookWebRoot = Config.String('CROOK_WEB_ROOT')
 
 export const socketOptions = {
   sendPings: false,
@@ -51,7 +48,7 @@ const routes = Effect.gen(function* () {
   const audit = yield* AuditTrail
   const notifier = yield* HarkNotifier
   const serialization = yield* RpcSerialization.RpcSerialization
-  const serveWeb = yield* HttpStaticServer.make({ root: yield* CrookWebRoot, spa: true })
+  const serveWeb = yield* StaticWeb.make(StaticWeb.thisBundle)
 
   const admitTranscript = (machine: MachineId, source: TranscriptSource) =>
     Match.value(source).pipe(

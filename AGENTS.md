@@ -693,6 +693,54 @@ Never run `install-service`, `uninstall-service`, `systemctl --user` start/enabl
 A `bun build --compile` binary reports its own path as `process.execPath`, and `Bun.main` sits under `/$bunfs/`; from a checkout `process.execPath` is bun and `Bun.main` is the script (measured). That is how the agent tells which command runs it.
 :::
 
+## Release
+
+:::warning
+The release workflow runs on a pushed `vX.Y.Z` tag and nothing else. A trigger that also fires on
+a branch push would publish from main.
+
+Every action is pinned by its full commit SHA, looked up with `gh api` (`git/ref/tags/<tag>`, and
+the tag object's commit when the tag is annotated), never guessed, with the version in a trailing
+YAML comment. A bump is a new lookup.
+
+The gate refuses a tag whose commit is not on main, and `publish` verifies its own signature with
+the identity and issuer the installer demands before it creates the release. A release its own
+installer refuses can only be replaced by cutting another tag, so the mismatch has to fail the job.
+For the same reason `publish` runs the compiled linux-x64 pair before it signs anything: the gate
+never compiles, so a Bun or Vite change that moves the embedded web build would otherwise ship a
+hub that refuses to start.
+:::
+
+:::tip
+The web build's directory names live in one `@crook/web` leaf that Vite, the hub and the release
+build all read. Bun embeds an `--asset` directory under its own name, so the directory Vite writes
+and the one the hub serves from the embedded files must be the same name.
+:::
+
+:::tip
+Bun, measured on 1.4.3:
+
+- `bun build --compile --asset=<dir>` embeds the directory under its own name at
+  `/$bunfs/root/<name>`, and every bundled module's `import.meta.dirname` is `/$bunfs/root`. The
+  embedded files stat, read and list like real ones.
+- `Bun.embeddedFiles` holds plain `Blob`s, not `File`s, so it gives no names without a cast.
+- An embedded file's modification time is the epoch, so any validator built from size and mtime
+  calls two builds' same-sized files equal. Serve embedded files without one.
+- A compiled binary autoloads `.env` and `bunfig.toml` from its working directory unless built
+  with `--no-compile-autoload-dotenv` and `--no-compile-autoload-bunfig`.
+- A cross-target compile downloads that target's runtime once and caches it at
+  `~/.bun/install/cache/bun-<os>-<arch>-v<version>`.
+:::
+
+:::tip
+`effect/cli`'s `Flag.Boolean` is a required flag until it gets `Flag.withDefault(false)` (measured:
+"Missing required flag").
+
+`oxlint-disable-next-line` excuses the next line only, and `oxfmt` can move the reported call to a
+line of its own, as it did with an `Effect.provide` at an entry point (measured). Bind the program
+to a constant first, so the directive sits right above the call it excuses.
+:::
+
 ## Establishing a fact
 
 Do not guess about Effect, oxc or Bun. Do not trust a plausible claim in a review.
