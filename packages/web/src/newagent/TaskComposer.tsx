@@ -53,7 +53,7 @@ export function TaskComposer({
       <label className="sr-only" htmlFor={fieldId}>
         First message to Claude
       </label>
-      <div className="flex items-end gap-2 pr-2 pb-2">
+      <div className="flex items-end gap-2 p-1.5">
         <textarea
           ref={field}
           id={fieldId}
@@ -61,7 +61,7 @@ export function TaskComposer({
           value={task}
           disabled={disabled}
           placeholder="What should Claude work on?"
-          className="placeholder:text-muted-foreground block max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-3.5 pt-3 pb-1 text-base leading-6 outline-none disabled:opacity-60"
+          className="placeholder:text-muted-foreground block max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-base leading-6 outline-none disabled:opacity-60"
           onChange={(event) => {
             onTaskChange(event.target.value)
           }}
