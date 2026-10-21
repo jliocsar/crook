@@ -212,6 +212,21 @@ still reports only the failure, so a test that needs the items as well collects 
 `runForEach`.
 :::
 
+:::tip
+A parked `Queue.offer` is resumed synchronously inside the call that takes its message: the queue
+resumes it through `Effect.callback`, which runs the offerer's fiber in place. What the offerer
+does next has already run by the time the taker resumes, unless its op budget runs out right
+there, so a test cannot slip an interrupt between the offer and its next step (measured on
+`effect@4.0.5`). Guard such a gap by making the consumer idempotent, and test that part on its own.
+:::
+
+:::caution
+`promise/prefer-await-to-then` reads `Stream.catch(…)` and `Effect.catch(…)` as promise chaining and
+rejects them, except inside a `yield*` expression, where it stays silent (measured). Writing the
+pipeline as the body of an `Effect.fn` generator, `return yield* stream.pipe(Stream.catch(…), …)`,
+is honest code that passes; do not spell the catch as a `catchTags` list to dodge it.
+:::
+
 :::warning
 An effect `Cache` lookup that every caller abandons is interrupted and dropped from the cache, so
 the next `get` runs it again (measured). Where running twice is the bug — anything that types into

@@ -174,7 +174,7 @@ Responsibilities
 - Optionally write `pane.report_metadata` tokens back into Herdr (e.g. show in the TUI sidebar that the phone is attached).
 - Seen: when a phone opens an agent's chat, the hub marks that pane seen at its current `state_change_seq`; a later transition makes it unseen again. Herdr's own Done badge is left alone, because its only way to mark seen is a focus command, which jumps every attached TUI to that pane (D12, S8).
 - One Herdr session per machine: always the default socket (or `HERDR_SOCKET_PATH`). Named sessions are out of scope for v1.
-- Config: `HERDR_SOCKET_PATH` (or default), Claude roots (`CROOK_CLAUDE_ROOTS`, comma list, default `~/.claude`, plus `CLAUDE_CONFIG_DIR` when set), hub URL, exe.dev VM token for the hub VM (its signed `ctx` carries the machine id), label.
+- Config: `HERDR_SOCKET_PATH` (or default), Claude roots (`CROOK_CLAUDE_ROOTS`, comma list of absolute paths, default `~/.claude`, plus `CLAUDE_CONFIG_DIR` when set; a relative root stops the agent at startup), hub URL, exe.dev VM token for the hub VM (its signed `ctx` carries the machine id), label.
 
 The Herdr plugin (`herdr-plugin.toml`)
 
@@ -221,7 +221,7 @@ Invariants that hold whatever the shapes end up being:
 
 - Machine state travels as **whole values**, never as replayable events (Herdr's own contract: events invalidate, reads are authoritative).
 - Transcripts travel as **offset-addressed appends**, so a reconnect resumes from an offset instead of refetching. A new Claude session on the same pane (`/clear`) is announced in the stream, never inferred by the phone.
-- Images travel **inline** in the transcript stream, base64, once per image. The largest measured image line is far under the WebSocket payload limit (ARCHITECTURE.md §2.6).
+- Images travel **inline** in the transcript stream, base64, once per image. The largest measured image line is far under the WebSocket payload limit (ARCHITECTURE.md §2.6). Only `image/png` and `image/jpeg` arrive as images; the phone renders them from `blob:` object URLs, so the CSP gains `img-src 'self' blob:` and nothing else.
 - Every command carries an **idempotency key** minted on the phone; a retry never prompts an agent twice.
 - A command's success is confirmed by **observed state** (status leaves `blocked`), not just by an ack.
 - Global pane id = `<machine_id>/<herdr pane id>`; machine id comes from the exe.dev token `ctx`.
