@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@effect/vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
@@ -15,7 +15,15 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
-import { AgentStarted, AnswerAsk, Decline, Prompt, SendKeys } from '@crook/domain/Command'
+import {
+  AgentStarted,
+  AnswerAsk,
+  ClosePane,
+  Decline,
+  PaneClosed,
+  Prompt,
+  SendKeys,
+} from '@crook/domain/Command'
 import { HerdMachine } from '@crook/domain/HerdView'
 import { AskId, PaneId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
@@ -294,6 +302,60 @@ describe('AgentChatScreen', () => {
           },
         ])
       })
+    }),
+  )
+
+  it.effect('opens the action sheet from the header, and a close goes back to the herd', () =>
+    Effect.gen(function* () {
+      const { router, link } = yield* renderApp(
+        '/m/laptop/p/w1%3Ap1',
+        live([agent('w1:p1', 'idle', { title: 'Port the herd', createdByCrook: true })]),
+      )
+      const endedCards: string[] = []
+      const watcher = new MutationObserver(() => {
+        if (document.body.textContent.includes('This pane closed')) {
+          endedCards.push('This pane closed')
+        }
+      })
+
+      yield* Ref.set(link.commandAnswer, Exit.succeed(new PaneClosed({ pane: PANE })))
+      yield* click(yield* findByRole('button', 'Actions for Port the herd'))
+      const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
+
+      expect(within(sheet).getByText('Port the herd')).toBeDefined()
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent).map((call) => call.command)).toEqual([
+          new ClosePane({ pane: PANE, confirmed: false }),
+        ])
+      })
+      watcher.observe(document.body, { childList: true, subtree: true, characterData: true })
+      yield* SubscriptionRef.set(link.state, live([]))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/')
+      })
+
+      expect(yield* Effect.promise(() => screen.findByText('Pane closed'))).toBeDefined()
+
+      watcher.disconnect()
+
+      expect(endedCards).toEqual([])
+    }),
+  )
+
+  it.effect('offers no actions once the pane has closed', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(
+        CHAT,
+        live([agent('w1:p1', 'idle', { title: 'Port the herd' })]),
+      )
+
+      yield* findByRole('button', 'Actions for Port the herd')
+      yield* SubscriptionRef.set(link.state, live([]))
+      yield* Effect.promise(() => screen.findByText('This pane closed'))
+
+      expect(screen.queryByRole('button', { name: 'Actions for Port the herd' })).toBeNull()
     }),
   )
 

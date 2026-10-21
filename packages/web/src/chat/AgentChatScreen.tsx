@@ -3,11 +3,13 @@ import { useNavigate } from '@tanstack/react-router'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
+import { Ellipsis } from 'lucide-react'
 import * as React from 'react'
 
 import { pendingAskSummary } from '@crook/domain/AgentRow'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
+import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
@@ -56,6 +58,7 @@ import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import { linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
+import { Button } from '@crook/web/components/ui/button'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { Message } from '@crook/web/components/ui/message'
 import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
@@ -65,6 +68,7 @@ import { useNow } from '@crook/web/time/Now'
 
 interface DockProps {
   readonly model: ChatScreenModel
+  readonly closedHere: boolean
   readonly composer: ComposerCommands
   readonly blocked: boolean
   readonly restart: Option.Option<Restart>
@@ -103,6 +107,9 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
   return Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>
 }
 
+const hasActions = (model: ChatScreenModel): boolean =>
+  Option.isSome(model.row) && (model.presence === 'live' || model.presence === 'away')
+
 function AskSlot({ row }: { row: AgentRow }) {
   return Option.match(pendingAskSummary(row), {
     onNone: () => null,
@@ -121,6 +128,7 @@ function AskSlot({ row }: { row: AgentRow }) {
 
 function ChatDock({
   model,
+  closedHere,
   composer,
   blocked,
   restart,
@@ -133,7 +141,7 @@ function ChatDock({
   const inset = useKeyboardInset()
   const [composerFocused, setComposerFocused] = React.useState(false)
 
-  if (model.presence === 'notClaude') {
+  if (model.presence === 'notClaude' || closedHere) {
     return null
   }
 
@@ -209,6 +217,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   )
   const commands = useChatCommands({ machine, pane, model, connection, items, draft, setDraft })
   const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS
+  const openActions = useOpenAgentActions()
+  const closedHere = useClosedFromChat(machine, pane)
+  const title = titleOf(model, pane)
 
   useAtomMount(seenWhileOpenAtom(opened))
 
@@ -254,20 +265,36 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   return (
     <>
       <PushedHeader
-        title={titleOf(model, pane)}
+        title={title}
         subtitle={<ChatStatusLine status={chatStatus(model)} place={placeOf(model)} />}
         backLabel={backLabel}
         trailing={
-          <RunningPill
-            count={runningCount(items)}
-            onShow={() => {
-              const key = firstRunningTreeKey(items)
+          <>
+            <RunningPill
+              count={runningCount(items)}
+              onShow={() => {
+                const key = firstRunningTreeKey(items)
 
-              if (Option.isSome(key)) {
-                thread.current?.scrollToKey(key.value)
-              }
-            }}
-          />
+                if (Option.isSome(key)) {
+                  thread.current?.scrollToKey(key.value)
+                }
+              }}
+            />
+            {hasActions(model) && !closedHere ? (
+              <Button
+                variant="ghost"
+                size="icon-touch"
+                data-slot="chat-actions"
+                aria-label={`Actions for ${title}`}
+                className="text-muted-foreground shrink-0"
+                onClick={() => {
+                  openActions(machine, pane, 'chat')
+                }}
+              >
+                <Ellipsis className="size-5" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </>
         }
       />
       <div className="min-h-0 flex-1">
@@ -280,6 +307,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       </div>
       <ChatDock
         model={model}
+        closedHere={closedHere}
         composer={commands.composer}
         blocked={commands.blocked}
         restart={commands.restart}

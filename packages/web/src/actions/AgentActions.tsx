@@ -70,6 +70,24 @@ export const useOpenAgentActions = (): OpenAgentActions => {
   }
 }
 
+export const useClosedFromChat = (machine: MachineId, pane: PaneId): boolean => {
+  const views = useAtomValue(agentActionsViewsAtom)
+  const agent = new PaneAddress({ machine, pane })
+  const closingNow = views.some(
+    (view) =>
+      view.session.origin === 'chat' &&
+      Equal.equals(view.session.agent, agent) &&
+      SheetOutcome.$is('Closed')(view.outcome),
+  )
+  const [closed, setClosed] = React.useState(closingNow)
+
+  if (closingNow && !closed) {
+    setClosed(true)
+  }
+
+  return closed || closingNow
+}
+
 export const useOpenCardActions = (): OpenCardActions => {
   const open = useOpenAgentActions()
 
