@@ -2,19 +2,22 @@ import { cn } from 'cn'
 import * as Equal from 'effect/Equal'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Schema from 'effect/Schema'
 import type * as React from 'react'
 
 import type { Ask, AskQuestion, PermissionAsk, QuestionAsk, UnknownAsk } from '@crook/domain/Ask'
-import { ApproveAlways, Choose, Decline } from '@crook/domain/Command'
+import { Choose, Decline } from '@crook/domain/Command'
 import type { AskAnswer } from '@crook/domain/Command'
 import {
+  alwaysCaption,
   AskAnswerState,
   AskDetail,
   answerableQuestion,
+  answerInFlight,
   askDetail,
   askTitle,
   askTool,
+  isAnswerUnderway,
+  NEEDS_YOU,
   permissionButtons,
 } from '@crook/web/chat/AskModel'
 import type { AskButton } from '@crook/web/chat/AskModel'
@@ -51,34 +54,16 @@ const UNREADABLE_HINT = 'Decline it here, or tell Claude what to do instead.'
 const QUESTIONNAIRE_HINT =
   'crook can only pick the answer to one question with one choice. Answer this one in the terminal, or tell Claude what to do instead.'
 
-const GRID_COLUMNS = ['grid-cols-1', 'grid-cols-2', 'grid-cols-3']
-
-const declined = new Decline({ message: Option.none() })
-
-const isApproveAlways = Schema.is(ApproveAlways)
-
-const answeringWith = (state: AskAnswerState): Option.Option<AskAnswer> =>
-  AskAnswerState.$match(state, {
-    Open: () => Option.none(),
-    Answering: ({ answer }) => Option.some(answer),
-    Answered: () => Option.none(),
-    AlreadyAnswered: () => Option.none(),
-    Refused: () => Option.none(),
-  })
+const DECLINE_BUTTONS: readonly AskButton[] = [
+  { label: DECLINE_LABEL, answer: new Decline({ message: Option.none() }) },
+]
 
 const locked = (controls: AnswerControls): boolean =>
-  controls.disabled ||
-  AskAnswerState.$match(controls.state, {
-    Open: () => false,
-    Answering: () => true,
-    Answered: () => true,
-    AlreadyAnswered: () => false,
-    Refused: () => false,
-  })
+  controls.disabled || isAnswerUnderway(controls.state)
 
 function NeedsYou() {
   return (
-    <span className="text-primary text-xs font-bold tracking-[0.08em] uppercase">Needs you</span>
+    <span className="text-primary text-xs font-bold tracking-[0.08em] uppercase">{NEEDS_YOU}</span>
   )
 }
 
@@ -116,8 +101,7 @@ function DetailView({ detail }: { detail: AskDetail }) {
         className={DETAIL_CAP}
       />
     ),
-    Input: ({ text }) => <ScreenText text={text} />,
-    Screen: ({ text }) => <ScreenText text={text} />,
+    Text: ({ text }) => <ScreenText text={text} />,
     Summary: ({ text }) => <p className="truncate font-mono text-sm">{text}</p>,
   })
 }
@@ -143,10 +127,10 @@ function AnswerButtons({
   buttons: readonly AskButton[]
   controls: AnswerControls
 }) {
-  const answering = answeringWith(controls.state)
+  const answering = answerInFlight(controls.state)
 
   return (
-    <div data-slot="ask-answers" className={cn('grid gap-2', GRID_COLUMNS[buttons.length - 1])}>
+    <div data-slot="ask-answers" className="grid auto-cols-fr grid-flow-col gap-2">
       {buttons.map((button, index) => (
         <Button
           key={button.label}
@@ -177,9 +161,6 @@ function PermissionDock({
   cwd: string
   controls: AnswerControls
 }) {
-  const buttons = permissionButtons(ask)
-  const always = buttons.find((button) => isApproveAlways(button.answer))
-
   return (
     <>
       <div className="grid gap-0.5">
@@ -187,12 +168,15 @@ function PermissionDock({
         <p className="text-muted-foreground truncate font-mono text-xs">{askTool(ask)}</p>
       </div>
       <DetailView detail={askDetail(ask, cwd)} />
-      <AnswerButtons buttons={buttons} controls={controls} />
-      {always === undefined ? null : (
-        <p data-slot="ask-always" className="text-muted-foreground text-xs leading-4">
-          {`Always: ${always.description}`}
-        </p>
-      )}
+      <AnswerButtons buttons={permissionButtons(ask)} controls={controls} />
+      {Option.match(alwaysCaption(ask), {
+        onNone: () => null,
+        onSome: (caption) => (
+          <p data-slot="ask-always" className="text-muted-foreground text-xs leading-4">
+            {caption}
+          </p>
+        ),
+      })}
     </>
   )
 }
@@ -229,7 +213,7 @@ function QuestionDock({ ask, controls }: { ask: QuestionAsk; controls: AnswerCon
           }))}
           submitLabel={ANSWER_LABEL}
           disabled={locked(controls)}
-          pending={Option.isSome(answeringWith(controls.state))}
+          pending={isAnswerUnderway(controls.state)}
           onChoose={(label) => {
             controls.onAnswer(new Choose({ answer: label }))
           }}
@@ -243,10 +227,7 @@ function QuestionDock({ ask, controls }: { ask: QuestionAsk; controls: AnswerCon
       <>
         <QuestionList questions={ask.questions} />
         <p className="text-muted-foreground text-sm leading-5">{QUESTIONNAIRE_HINT}</p>
-        <AnswerButtons
-          buttons={[{ label: DECLINE_LABEL, description: DECLINE_LABEL, answer: declined }]}
-          controls={controls}
-        />
+        <AnswerButtons buttons={DECLINE_BUTTONS} controls={controls} />
       </>
     ),
   })
@@ -258,10 +239,7 @@ function UnknownDock({ ask, controls }: { ask: UnknownAsk; controls: AnswerContr
       <p className="text-base leading-6 font-semibold">{askTitle(ask)}</p>
       <ScreenText text={ask.screen} />
       <p className="text-muted-foreground text-sm leading-5">{UNREADABLE_HINT}</p>
-      <AnswerButtons
-        buttons={[{ label: DECLINE_LABEL, description: DECLINE_LABEL, answer: declined }]}
-        controls={controls}
-      />
+      <AnswerButtons buttons={DECLINE_BUTTONS} controls={controls} />
     </>
   )
 }
@@ -270,7 +248,11 @@ export function AskDock({ ask, cwd, state, disabled, onAnswer }: AskDockProps) {
   const controls: AnswerControls = { state, disabled, onAnswer }
 
   return (
-    <section data-slot="ask-dock" aria-label="Needs you" className="grid gap-2 pb-1">
+    <section
+      data-slot="ask-dock"
+      aria-label={NEEDS_YOU}
+      className="flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-1 *:shrink-0"
+    >
       <NeedsYou />
       {Match.value(ask).pipe(
         Match.tagsExhaustive({

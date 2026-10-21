@@ -14,7 +14,7 @@ import { panePresence } from '@crook/domain/MachineState'
 import type { PanePresence } from '@crook/domain/MachineState'
 import { remembersOutcome, settledError } from '@crook/web/atoms/ActionFailure'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
-import { ActionProgress, progressOf } from '@crook/web/atoms/ActionProgress'
+import { ActionProgress, isDone, isIdle, progressOf } from '@crook/web/atoms/ActionProgress'
 import type { HubCallFailed, SetPinnedRefused } from '@crook/web/rpc/HubConnection'
 import type { HubNotConnected } from '@crook/web/rpc/HubLink'
 
@@ -53,10 +53,6 @@ export const isInFlightOrDone = ActionProgress.$match({
   Done: () => true,
   Failed: () => false,
 })
-
-const isDone = ActionProgress.$is('Done')
-
-const isIdle = ActionProgress.$is('Idle')
 
 const isSettled = (progress: ActionProgress<unknown>): boolean =>
   isIdle(progress) || isDone(progress)

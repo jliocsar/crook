@@ -3,49 +3,38 @@ import * as Option from 'effect/Option'
 import { Check, TriangleAlert } from 'lucide-react'
 import * as React from 'react'
 
+import { Button } from '@crook/web/components/ui/button'
+import { Input } from '@crook/web/components/ui/input'
 import { Spinner } from '@crook/web/components/ui/spinner'
 
-export type QuestionChoice = {
-  id: string
-  label: React.ReactNode
-  description?: React.ReactNode
+export interface QuestionChoice {
+  readonly id: string
+  readonly label: React.ReactNode
+  readonly description?: React.ReactNode
 }
 
-export type QuestionnaireProps = Omit<
-  React.FormHTMLAttributes<HTMLFormElement>,
-  'onSubmit' | 'children'
-> & {
-  prompt: React.ReactNode
-  description?: React.ReactNode
-  choices: readonly QuestionChoice[]
-  freeform?: boolean
-  freeformLabel?: string
-  freeformPlaceholder?: string
-  submitLabel?: string
-  requiredMessage?: string
-  disabled?: boolean
-  pending?: boolean
-  onChoose: (id: string) => void
-  onFreeform: (text: string) => void
+export interface QuestionnaireProps {
+  readonly prompt: React.ReactNode
+  readonly choices: readonly QuestionChoice[]
+  readonly submitLabel: string
+  readonly disabled: boolean
+  readonly pending: boolean
+  readonly onChoose: (id: string) => void
+  readonly onFreeform: (text: string) => void
 }
 
-const ICON_SIZE = 13
+const FREEFORM_LABEL = 'Another answer'
+const FREEFORM_PLACEHOLDER = 'Something else…'
+const REQUIRED_MESSAGE = 'Choose an answer to continue.'
 
 export function Questionnaire({
   prompt,
-  description,
   choices,
-  freeform = true,
-  freeformLabel = 'Another answer',
-  freeformPlaceholder = 'Something else…',
-  submitLabel = 'Submit',
-  requiredMessage = 'Choose an answer to continue.',
-  disabled = false,
-  pending = false,
+  submitLabel,
+  disabled,
+  pending,
   onChoose,
   onFreeform,
-  className,
-  ...formProps
 }: QuestionnaireProps) {
   const reactId = React.useId()
   const [chosen, setChosen] = React.useState(Option.none<string>())
@@ -76,15 +65,11 @@ export function Questionnaire({
   return (
     <form
       data-slot="questionnaire"
-      className={cn(
-        'border-border bg-card text-card-foreground rounded-[var(--radius)] border',
-        className,
-      )}
+      className="border-border bg-card text-card-foreground rounded-[var(--radius)] border"
       onSubmit={(event) => {
         event.preventDefault()
         submit()
       }}
-      {...formProps}
     >
       <fieldset className="border-0 p-0" disabled={disabled}>
         <legend
@@ -94,9 +79,6 @@ export function Questionnaire({
           {prompt}
         </legend>
         <div className="px-4 pt-2 pb-4">
-          {description === undefined ? null : (
-            <p className="text-muted-foreground mb-3 text-sm leading-relaxed">{description}</p>
-          )}
           <div className="grid gap-1.5">
             {choices.map((choice) => {
               const id = `${reactId}-${choice.id}`
@@ -138,35 +120,32 @@ export function Questionnaire({
               )
             })}
           </div>
-          {freeform ? (
-            <div className="mt-1.5">
-              <label className="sr-only" htmlFor={freeformId}>
-                {freeformLabel}
-              </label>
-              <input
-                id={freeformId}
-                className="border-border placeholder:text-muted-foreground focus-visible:ring-ring min-h-11 w-full rounded-[calc(var(--radius)-0.25rem)] border bg-transparent px-3 text-base focus-visible:ring-2 focus-visible:outline-none"
-                placeholder={freeformPlaceholder}
-                value={typed}
-                onChange={(event) => {
-                  setTyped(event.target.value)
-                  setShowError(false)
+          <div className="mt-1.5">
+            <label className="sr-only" htmlFor={freeformId}>
+              {FREEFORM_LABEL}
+            </label>
+            <Input
+              id={freeformId}
+              placeholder={FREEFORM_PLACEHOLDER}
+              value={typed}
+              onChange={(event) => {
+                setTyped(event.target.value)
+                setShowError(false)
 
-                  if (event.target.value.trim() !== '') {
-                    setChosen(Option.none())
-                  }
-                }}
-              />
-            </div>
-          ) : null}
+                if (event.target.value.trim() !== '') {
+                  setChosen(Option.none())
+                }
+              }}
+            />
+          </div>
           {showError ? (
             <p
               id={errorId}
               role="alert"
               className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
             >
-              <TriangleAlert aria-hidden="true" size={ICON_SIZE} />
-              {requiredMessage}
+              <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+              {REQUIRED_MESSAGE}
             </p>
           ) : null}
         </div>
@@ -175,15 +154,16 @@ export function Questionnaire({
         data-slot="questionnaire-actions"
         className="border-border flex items-center gap-2 border-t px-3 py-2.5"
       >
-        <button
+        <Button
           type="submit"
+          size="touch"
           data-slot="questionnaire-submit"
           disabled={disabled}
-          className="bg-foreground text-background focus-visible:ring-ring ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition-opacity duration-150 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50 motion-reduce:transition-none"
+          className="ml-auto"
         >
           {submitLabel}
-          {pending ? <Spinner size={ICON_SIZE} /> : <Check aria-hidden="true" size={ICON_SIZE} />}
-        </button>
+          {pending ? <Spinner /> : <Check aria-hidden="true" />}
+        </Button>
       </div>
     </form>
   )

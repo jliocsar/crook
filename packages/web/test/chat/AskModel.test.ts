@@ -27,7 +27,10 @@ import {
   answerableQuestion,
   answerState,
   askDetail,
+  alwaysCaption,
+  answerInFlight,
   askTitle,
+  isAnswerUnderway,
   permissionButtons,
   withAlwaysNotes,
   withoutAskedCall,
@@ -127,6 +130,34 @@ describe('permissionButtons', () => {
   })
 })
 
+describe('alwaysCaption', () => {
+  it("says what Always grants without the dialog's own answer wording or key hint", () => {
+    const always = (label: string) =>
+      alwaysCaption(
+        permission(new RunCommand({ command: 'ls' }), [
+          new AskOption({ number: 2, label, choice: 'always' }),
+        ]),
+      )
+
+    expect(
+      always(
+        'Yes, and switch to accept edits (auto-approve file edits and common file commands) for this session (shift+tab)',
+      ),
+    ).toEqual(
+      Option.some(
+        'Always: switch to accept edits (auto-approve file edits and common file commands) for this session',
+      ),
+    )
+    expect(always('Yes, and always allow access to /work from this project')).toEqual(
+      Option.some('Always: allow access to /work from this project'),
+    )
+    expect(always('Yes, and don’t ask again for: npm *')).toEqual(
+      Option.some('Always: don’t ask again for: npm *'),
+    )
+    expect(alwaysCaption(permission(new RunCommand({ command: 'ls' })))).toEqual(Option.none())
+  })
+})
+
 describe('answerableQuestion', () => {
   const asked = (multiSelect: Option.Option<boolean>) =>
     new AskQuestion({ header: 'Auth', question: 'Which?', multiSelect, choices: [] })
@@ -183,6 +214,16 @@ describe('answerState', () => {
     ).toEqual(AskAnswerState.Refused({ message: 'Nope.' }))
   })
 
+  it('counts an answer as underway only while it is being sent', () => {
+    const answer = new Approve()
+
+    expect(isAnswerUnderway(AskAnswerState.Answering({ answer }))).toBe(true)
+    expect(answerInFlight(AskAnswerState.Answering({ answer }))).toEqual(Option.some(answer))
+    expect(isAnswerUnderway(AskAnswerState.Answered({ answer }))).toBe(false)
+    expect(answerInFlight(AskAnswerState.Answered({ answer }))).toEqual(Option.none())
+    expect(isAnswerUnderway(AskAnswerState.Open())).toBe(false)
+  })
+
   it('ignores an answer to another ask and any other command', () => {
     const sending = ActionProgress.Sending()
 
@@ -210,9 +251,30 @@ describe('always notes', () => {
     expect(alwaysNoteFor(ask, new Approve(), items)).toEqual(Option.none())
     expect(alwaysNoteFor(ask, new ApproveAlways(), items)).toEqual(
       Option.some(
-        new AlwaysNote({ ask: ASK, text: 'Yes, and always allow', after: Option.some('last') }),
+        new AlwaysNote({
+          ask: ASK,
+          text: 'Commands like this one allowed without asking again',
+          after: Option.some('last'),
+        }),
       ),
     )
+  })
+
+  it('words the note from the ask, scoped to the session only when the grant is', () => {
+    const sessionOptions = [
+      new AskOption({
+        number: 2,
+        label: 'Yes, and switch to accept edits (auto-approve file edits) for this session',
+        choice: 'always',
+      }),
+    ]
+
+    expect(
+      Option.map(
+        alwaysNoteFor(permission(edit(Option.none()), sessionOptions), new ApproveAlways(), []),
+        (found) => found.text,
+      ),
+    ).toEqual(Option.some('File edits like this one allowed for the rest of the session'))
   })
 
   it('places a note after its item, and at the end when that item is gone', () => {

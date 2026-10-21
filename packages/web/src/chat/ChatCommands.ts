@@ -8,7 +8,6 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 
-import type { AgentRow } from '@crook/domain/AgentRow'
 import type { Ask } from '@crook/domain/Ask'
 import {
   AnswerAsk,
@@ -20,16 +19,24 @@ import {
 } from '@crook/domain/Command'
 import type { AskAnswer, Command, CommandReceipt } from '@crook/domain/Command'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
-import { ActionProgress } from '@crook/web/atoms/ActionProgress'
+import {
+  ActionProgress,
+  failureMessageOf,
+  isDone,
+  isFailed,
+  isSending,
+  isSent,
+} from '@crook/web/atoms/ActionProgress'
 import { alwaysNotesAtom } from '@crook/web/atoms/Chat'
 import { OpenedAgent } from '@crook/web/atoms/Herd'
 import {
   alwaysNoteFor,
-  AskAnswerState,
   answerState,
+  isAnswered,
+  isAnswerSettled,
   isAnswerUnderway,
 } from '@crook/web/chat/AskModel'
-import type { AlwaysNote } from '@crook/web/chat/AskModel'
+import type { AlwaysNote, AskAnswerState } from '@crook/web/chat/AskModel'
 import { isUserPrompt } from '@crook/web/chat/ChatItems'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { activityOf } from '@crook/web/chat/ChatModel'
@@ -83,21 +90,7 @@ const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, awaited: 0 }
 
 export const STOP_SETTLE = Duration.millis(512)
 
-const isSending = ActionProgress.$is('Sending')
-const isSent = ActionProgress.$is('Sent')
-const isDone = ActionProgress.$is('Done')
-const isFailed = ActionProgress.$is('Failed')
-
 const decodeFolder = Schema.decodeUnknownOption(FolderPath)
-
-export const failureOf = (action: CommandAction): Option.Option<string> =>
-  ActionProgress.$match(action.state, {
-    Failed: (failed) => Option.some(failed.message),
-    Idle: () => Option.none(),
-    Sending: () => Option.none(),
-    Sent: () => Option.none(),
-    Done: () => Option.none(),
-  })
 
 export const isInFlight = (action: CommandAction): boolean =>
   isSending(action.state) || isSent(action.state)
@@ -166,8 +159,8 @@ const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
     Match.orElse(() => Option.none<PaneId>()),
   )
 
-export const composerMode = (row: Option.Option<AgentRow>, blocked: boolean): ComposerMode =>
-  blocked && Option.exists(row, (found) => Option.isSome(found.ask)) ? 'decline' : 'prompt'
+export const composerMode = (openAsk: Option.Option<Ask>): ComposerMode =>
+  Option.isSome(openAsk) ? 'decline' : 'prompt'
 
 export const placeholderOf = (
   connection: ConnectionView,
@@ -243,33 +236,21 @@ const useStopLock = (stop: CommandAction): boolean => {
 const useAlwaysNotes = (opened: OpenedAgent, answer: CommandAction) => {
   const [notes, setNotes] = useAtom(alwaysNotesAtom(opened))
   const [awaited, setAwaited] = React.useState(Option.none<AlwaysNote>())
-  const settled = Option.map(awaited, (note) => answerState(answer, note.ask))
-  const settledTag = Option.match(settled, {
-    onNone: () => '',
-    onSome: AskAnswerState.$match({
-      Open: () => 'open',
-      Answering: () => 'answering',
-      Answered: () => 'answered',
-      AlreadyAnswered: () => 'refused',
-      Refused: () => 'refused',
-    }),
-  })
+  const answered = Option.filter(awaited, (note) => isAnswered(answerState(answer, note.ask)))
+  const abandoned = Option.exists(awaited, (note) => isAnswerSettled(answerState(answer, note.ask)))
 
   React.useEffect(() => {
-    if (Option.isNone(awaited) || settledTag === 'open' || settledTag === 'answering') {
-      return
-    }
+    if (Option.isSome(answered)) {
+      const note = answered.value
 
-    const note = awaited.value
-
-    if (settledTag === 'answered') {
       setNotes((current) =>
         Arr.some(current, (kept) => kept.ask === note.ask) ? current : [...current, note],
       )
+      setAwaited(Option.none())
+    } else if (abandoned) {
+      setAwaited(Option.none())
     }
-
-    setAwaited(Option.none())
-  }, [settledTag])
+  }, [Option.isSome(answered), abandoned])
 
   return { notes, expect: setAwaited }
 }
@@ -313,13 +294,13 @@ export const useChatCommands = ({
   const prompted = usePromptWait(items)
   const activity = activityOf(model)
   const blocked = activity === 'blocked'
-  const mode = composerMode(model.row, blocked)
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(new OpenedAgent({ machine, pane }), answer)
   const openAsk = Option.flatMap(
     Option.filter(model.row, () => blocked),
     (row) => row.ask,
   )
+  const mode = composerMode(openAsk)
   const answering = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(answer, ask.id)))
   const declining = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(prompt, ask.id)))
 
@@ -335,26 +316,20 @@ export const useChatCommands = ({
   }
 
   const send = (text: string) => {
-    Option.match(
-      Option.flatMap(
-        Option.filter(model.row, () => mode === 'decline'),
-        (row) => row.ask,
-      ),
-      {
-        onNone: () => {
-          sendPrompt(new Prompt({ pane, text }))
-        },
-        onSome: (ask) => {
-          sendPrompt(
-            new AnswerAsk({
-              pane,
-              ask: ask.id,
-              answer: new Decline({ message: Option.some(text) }),
-            }),
-          )
-        },
+    Option.match(openAsk, {
+      onNone: () => {
+        sendPrompt(new Prompt({ pane, text }))
       },
-    )
+      onSome: (ask) => {
+        sendPrompt(
+          new AnswerAsk({
+            pane,
+            ask: ask.id,
+            answer: new Decline({ message: Option.some(text) }),
+          }),
+        )
+      },
+    })
   }
 
   const answerAsk = (ask: Ask) => (given: AskAnswer) => {
@@ -388,7 +363,7 @@ export const useChatCommands = ({
       stopping,
       placeholder: placeholderOf(connection, mode, blocked),
       label: mode === 'decline' ? 'Tell Claude what to do instead' : 'Message to Claude',
-      failure: Option.orElse(failureOf(prompt), () => failureOf(stop)),
+      failure: Option.orElse(failureMessageOf(prompt.state), () => failureMessageOf(stop.state)),
     },
     restart: Option.map(
       Option.flatMap(model.row, (row) => decodeFolder(row.cwd)),
@@ -398,7 +373,7 @@ export const useChatCommands = ({
         },
         starting: isInFlight(restart),
         disabled: !connection.canAct,
-        failure: failureOf(restart),
+        failure: failureMessageOf(restart.state),
       }),
     ),
     pendingPrompt: pendingPromptText(prompt, prompted.wait, items),

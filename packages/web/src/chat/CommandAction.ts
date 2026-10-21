@@ -5,9 +5,9 @@ import * as React from 'react'
 
 import type { Command } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
-import { settledError } from '@crook/web/atoms/ActionFailure'
+import { remembersOutcome, settledError } from '@crook/web/atoms/ActionFailure'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
-import { ActionProgress } from '@crook/web/atoms/ActionProgress'
+import { isFailed, isIdle } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import {
   CommandRequest,
@@ -34,8 +34,15 @@ const freshKeys = (): ActionKeys => ({
   spare: mintIdempotencyKey(),
 })
 
-const isIdle = ActionProgress.$is('Idle')
-const isFailed = ActionProgress.$is('Failed')
+const sentAgainUnderSameKey = (
+  state: CommandProgress,
+  refusal: Option.Option<SendCommandFailure>,
+  last: Option.Option<Command>,
+  command: Command,
+): boolean =>
+  isFailed(state) &&
+  Option.exists(last, (previous) => Equal.equals(previous, command)) &&
+  !Option.exists(refusal, remembersOutcome)
 
 export const useCommandAction = (machine: MachineId): CommandAction => {
   const [keys, setKeys] = React.useState(freshKeys)
@@ -49,8 +56,7 @@ export const useCommandAction = (machine: MachineId): CommandAction => {
 
   const send = (command: Command) => {
     const request = new CommandRequest({ machine, command })
-    const retry =
-      isFailed(state) && Option.exists(last, (previous) => Equal.equals(previous, command))
+    const retry = sentAgainUnderSameKey(state, refusal, last, command)
 
     setLast(Option.some(command))
 

@@ -28,7 +28,11 @@ import type { AskAnswer } from '@crook/domain/Command'
 import { AskId, PaneId } from '@crook/domain/Ids'
 import { PaneTranscript } from '@crook/domain/Transcript'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
-import { AskDialogUnreadable, AskNotPending } from '@crook/protocol/Commands'
+import {
+  AskDialogUnreadable,
+  AskNotPending,
+  DeclineMessageUndelivered,
+} from '@crook/protocol/Commands'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
 import { click, eventually, findByRole } from '../Dom.ts'
@@ -47,6 +51,11 @@ const VIEWPORT_HEIGHT = 812
 
 const ALWAYS_LABEL =
   "Yes, and don't ask again for bun run lint commands in /home/jliocsar/Projects/crook"
+
+const EDIT_ALWAYS_LABEL =
+  'Yes, and switch to accept edits (auto-approve file edits and common file commands) for this session (shift+tab)'
+
+const EDIT_NOTE = 'File edits like this one allowed for the rest of the session'
 
 const dialogOptions = (labels: readonly (readonly [string, AskChoice])[]) =>
   labels.map(([label, choice], index) => new AskOption({ number: index + 1, label, choice }))
@@ -88,7 +97,11 @@ const editAsk = new PermissionAsk({
       }),
     ]),
   }),
-  options: THREE_OPTIONS,
+  options: dialogOptions([
+    ['Yes', 'yes'],
+    [EDIT_ALWAYS_LABEL, 'always'],
+    ['No', 'no'],
+  ]),
   dialog: Option.some('fingerprint'),
 })
 
@@ -169,7 +182,11 @@ describe('the ask dock', () => {
       expect(within(dock()).getByText('Bash')).toBeDefined()
       expect(within(dock()).getByText('bun run lint')).toBeDefined()
       expect(answerLabels()).toEqual(expect.arrayContaining(['Yes', 'Always', 'No']))
-      expect(within(dock()).getByText(`Always: ${ALWAYS_LABEL}`)).toBeDefined()
+      expect(
+        within(dock()).getByText(
+          "Always: don't ask again for bun run lint commands in /home/jliocsar/Projects/crook",
+        ),
+      ).toBeDefined()
 
       yield* link.commandAnswers.close
       yield* Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(answered(new Approve()))))
@@ -182,6 +199,9 @@ describe('the ask dock', () => {
 
       yield* link.commandAnswers.open
       yield* Effect.promise(() => screen.findByText('Answered. Waiting for Claude to move on.'))
+
+      expect(screen.getByRole('button', { name: 'No' })).toHaveProperty('disabled', false)
+
       yield* SubscriptionRef.set(
         link.state,
         live([agent('w1:p1', 'working', { seq: 2, title: 'Lint the web package' })]),
@@ -263,6 +283,72 @@ describe('the ask dock', () => {
     }),
   )
 
+  it.effect('takes a second tap on an ask still open after the answer, under a new key', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedOn(bashAsk()))
+
+      yield* Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(answered(new Approve()))))
+      yield* click(yield* findByRole('button', 'Yes'))
+      yield* Effect.promise(() => screen.findByText('Answered. Waiting for Claude to move on.'))
+
+      expect(screen.getByRole('textbox')).toHaveProperty('disabled', false)
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(new AskNotPending({ pane: PANE, ask: BASH_ID })))
+      yield* click(screen.getByRole('button', { name: 'Yes' }))
+      yield* Effect.promise(() => screen.findByText('Already answered'))
+
+      const [first, second] = Ref.getUnsafe(link.sent)
+
+      expect(second?.command).toEqual(answered(new Approve()))
+      expect(second?.key).not.toBe(first?.key)
+    }),
+  )
+
+  it.effect('sends a decline whose message went undelivered again under a new key', () =>
+    Effect.gen(function* () {
+      const ask = question(Option.some(false))
+      const { link } = yield* renderApp(CHAT, blockedOn(ask))
+      const typed = answered(new Decline({ message: Option.some('Use both') }), ask.id)
+      const refusal = new DeclineMessageUndelivered({ pane: PANE, reason: 'herdr hung up' })
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(refusal))
+      const other = yield* Effect.promise(() => screen.findByPlaceholderText('Something else…'))
+
+      yield* Effect.promise(() => userEvent.type(other, 'Use both'))
+      yield* click(screen.getByRole('button', { name: 'Answer' }))
+      yield* Effect.promise(() => screen.findByText(refusal.message))
+      yield* click(screen.getByRole('button', { name: 'Answer' }))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent)).toHaveLength(2)
+      })
+
+      const [first, retry] = Ref.getUnsafe(link.sent)
+
+      expect(retry?.command).toEqual(typed)
+      expect(retry?.key).not.toBe(first?.key)
+    }),
+  )
+
+  it.effect('announces the ask, and hands keyboard focus to the composer when it clears', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedOn(bashAsk()))
+      const no = yield* findByRole('button', 'No')
+
+      expect(
+        Array.from(document.querySelectorAll('[role="status"]'), (region) => region.textContent),
+      ).toContain('Needs you: Run this command? (Bash)')
+
+      no.focus()
+      yield* SubscriptionRef.set(
+        link.state,
+        live([agent('w1:p1', 'working', { seq: 2, title: 'Lint the web package' })]),
+      )
+      yield* eventually(() => {
+        expect(document.activeElement).toBe(screen.getByRole('textbox'))
+      })
+    }),
+  )
+
   it.effect('shows an edit as its diff and hides the call it asks about until it is answered', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, blockedOn(editAsk))
@@ -310,11 +396,17 @@ describe('the ask dock', () => {
             old_string: 'const herd = 1',
             new_string: 'const herd = 2',
           }),
+          toolUse(5, 'toolu_read', 'Read', { file_path: `${CWD}/packages/hub/src/Herd.ts` }),
         ]),
       ])
       yield* Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(always)))
       yield* click(yield* findByRole('button', 'Always'))
-      yield* Effect.promise(() => screen.findByText(ALWAYS_LABEL))
+
+      const waiting = yield* Effect.promise(() => screen.findByText(EDIT_NOTE))
+      const read = screen.getByRole('button', { name: /^Read\(/u })
+
+      expect(waiting.compareDocumentPosition(read) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
       yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'working', { seq: 2 })]))
       yield* Queue.offer(
         transcript,
@@ -325,9 +417,9 @@ describe('the ask dock', () => {
       )
       yield* Effect.promise(() => screen.findByText('Now run the tests'))
 
-      const note = screen.getByText(ALWAYS_LABEL)
+      const note = screen.getByText(EDIT_NOTE)
       const call = screen.getByRole('button', { name: /^Edit\(/u })
-      const later = screen.getByText('Now run the tests')
+      const later = screen.getByRole('button', { name: /^Read\(/u })
 
       expect(call.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(note.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

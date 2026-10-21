@@ -28,7 +28,20 @@ interface ActionProgressDefinition extends Data.TaggedEnum.WithGenerics<1> {
 
 export const ActionProgress = Data.taggedEnum<ActionProgressDefinition>()
 
+export const isIdle = ActionProgress.$is('Idle')
+
+export const isSending = ActionProgress.$is('Sending')
+
+export const isSent = ActionProgress.$is('Sent')
+
+export const isDone = ActionProgress.$is('Done')
+
+export const isFailed = ActionProgress.$is('Failed')
+
 const asksConfirmation = Schema.is(PaneNotCreatedByCrook)
+
+export const failureMessageOf = (progress: ActionProgress<unknown>): Option.Option<string> =>
+  Option.map(Option.liftPredicate(progress, isFailed), (failed) => failed.message)
 
 export const progressOf = <Receipt, Failure extends { readonly message: string }>(
   result: AsyncResult.AsyncResult<Receipt, Failure>,

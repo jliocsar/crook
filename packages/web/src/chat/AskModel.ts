@@ -6,7 +6,7 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { askOption, askSummary, relativeToFolder } from '@crook/domain/Ask'
-import type { Ask, AskQuestion, PermissionAsk, QuestionAsk } from '@crook/domain/Ask'
+import type { Ask, AskOption, AskQuestion, PermissionAsk, QuestionAsk } from '@crook/domain/Ask'
 import { Approve, ApproveAlways, Decline } from '@crook/domain/Command'
 import type { AskAnswer, Command } from '@crook/domain/Command'
 import type { AskId } from '@crook/domain/Ids'
@@ -21,8 +21,7 @@ export type AskDetail = Data.TaggedEnum<{
   Command: { readonly command: string }
   Diff: { readonly hunks: readonly DiffHunk[]; readonly filename: string }
   File: { readonly content: string; readonly filename: string }
-  Input: { readonly text: string }
-  Screen: { readonly text: string }
+  Text: { readonly text: string }
   Summary: { readonly text: string }
 }>
 
@@ -38,7 +37,6 @@ export type AnswerProgress = Pick<CommandAction, 'state' | 'refusal' | 'last'>
 
 export interface AskButton {
   readonly label: string
-  readonly description: string
   readonly answer: AskAnswer
 }
 
@@ -47,7 +45,14 @@ const ALWAYS_LABEL = 'Always'
 const NO_LABEL = 'No'
 const JSON_INDENT = 2
 const NOTE_KEY_PREFIX = 'always'
+const SESSION_SCOPE = 'session'
+const ALWAYS_CAPTION_PREFIX = 'Always: '
+const SESSION_NOTE_SCOPE = 'for the rest of the session'
+const LASTING_NOTE_SCOPE = 'without asking again'
+const ANSWER_PREFIXES = ['Yes, and always ', 'Yes, and ', 'Yes, ']
+const KEY_HINT = /\s+\([a-z+]+\)$/u
 
+export const NEEDS_YOU = 'Needs you'
 export const RUN_COMMAND_TITLE = 'Run this command?'
 export const UNKNOWN_ASK_TITLE = "Claude is waiting on something crook can't read"
 
@@ -66,6 +71,18 @@ const isTool = ChatItem.$is('Tool')
 const isAlreadyAnswered = Schema.is(AskNotPending)
 
 const isApproveAlways = Schema.is(ApproveAlways)
+
+const isAnswering = AskAnswerState.$is('Answering')
+
+export const isAnswered = AskAnswerState.$is('Answered')
+
+export const isAnswerUnderway = (state: AskAnswerState): boolean => isAnswering(state)
+
+export const answerInFlight = (state: AskAnswerState): Option.Option<AskAnswer> =>
+  Option.map(Option.liftPredicate(state, isAnswering), (answering) => answering.answer)
+
+export const isAnswerSettled = (state: AskAnswerState): boolean =>
+  AskAnswerState.$is('AlreadyAnswered')(state) || AskAnswerState.$is('Refused')(state)
 
 const permissionTitle = (ask: PermissionAsk): string =>
   Match.value(ask.action).pipe(
@@ -97,6 +114,15 @@ export const askTool = (ask: PermissionAsk): string =>
     onSome: (plugin) => `${ask.tool} · from the ${plugin} plugin`,
   })
 
+export const askAnnouncement = (ask: Ask): string =>
+  Match.value(ask).pipe(
+    Match.tag(
+      'PermissionAsk',
+      (permission) => `${NEEDS_YOU}: ${askTitle(permission)} (${askTool(permission)})`,
+    ),
+    Match.orElse((other) => `${NEEDS_YOU}: ${askTitle(other)}`),
+  )
+
 export const askDetail = (ask: PermissionAsk, cwd: string): AskDetail =>
   Match.value(ask.action).pipe(
     Match.tagsExhaustive({
@@ -122,32 +148,53 @@ export const askDetail = (ask: PermissionAsk, cwd: string): AskDetail =>
         ),
       WriteFile: (write) =>
         AskDetail.File({ content: write.content, filename: relativeToFolder(cwd, write.filePath) }),
-      UseTool: (use) => AskDetail.Input({ text: JSON.stringify(use.input, null, JSON_INDENT) }),
-      ScreenDetail: (detail) => AskDetail.Screen({ text: detail.text }),
+      UseTool: (use) => AskDetail.Text({ text: JSON.stringify(use.input, null, JSON_INDENT) }),
+      ScreenDetail: (detail) => AskDetail.Text({ text: detail.text }),
     }),
   )
 
 export const permissionButtons = (ask: PermissionAsk): readonly AskButton[] =>
   Arr.getSomes([
-    Option.map(askOption(ask, 'yes'), (option): AskButton => ({
+    Option.map(askOption(ask, 'yes'), (): AskButton => ({
       label: YES_LABEL,
-      description: option.label,
       answer: new Approve(),
     })),
-    Option.map(askOption(ask, 'always'), (option): AskButton => ({
+    Option.map(askOption(ask, 'always'), (): AskButton => ({
       label: ALWAYS_LABEL,
-      description: option.label,
       answer: new ApproveAlways(),
     })),
-    Option.some<AskButton>({
-      label: NO_LABEL,
-      description: Option.match(askOption(ask, 'no'), {
-        onNone: () => NO_LABEL,
-        onSome: (option) => option.label,
-      }),
-      answer: new Decline({ message: Option.none() }),
-    }),
+    Option.some<AskButton>({ label: NO_LABEL, answer: new Decline({ message: Option.none() }) }),
   ])
+
+const withoutAnswerPrefix = (label: string): string =>
+  pipe(
+    Arr.findFirst(ANSWER_PREFIXES, (prefix) => label.startsWith(prefix)),
+    Option.match({
+      onNone: () => label,
+      onSome: (prefix) => label.slice(prefix.length),
+    }),
+  )
+
+export const alwaysCaption = (ask: PermissionAsk): Option.Option<string> =>
+  Option.map(
+    askOption(ask, 'always'),
+    (option) =>
+      `${ALWAYS_CAPTION_PREFIX}${withoutAnswerPrefix(option.label.replace(KEY_HINT, ''))}`,
+  )
+
+const allowedSubject = (ask: PermissionAsk): string =>
+  Match.value(ask.action).pipe(
+    Match.tagsExhaustive({
+      RunCommand: () => 'Commands like this one',
+      EditFile: () => 'File edits like this one',
+      WriteFile: () => 'File edits like this one',
+      UseTool: () => `Calls to ${ask.tool} like this one`,
+      ScreenDetail: () => `Calls to ${ask.tool} like this one`,
+    }),
+  )
+
+const allowedScope = (option: AskOption): string =>
+  option.label.includes(SESSION_SCOPE) ? SESSION_NOTE_SCOPE : LASTING_NOTE_SCOPE
 
 export const answerableQuestion = (ask: QuestionAsk): Option.Option<AskQuestion> =>
   Option.filter(
@@ -185,21 +232,13 @@ export const answerState = (progress: AnswerProgress, ask: AskId): AskAnswerStat
     },
   )
 
-export const isAnswerUnderway = AskAnswerState.$match({
-  Open: () => false,
-  Answering: () => true,
-  Answered: () => true,
-  AlreadyAnswered: () => false,
-  Refused: () => false,
-})
-
 const alwaysNoteOf = (ask: PermissionAsk, items: readonly ChatItem[]): Option.Option<AlwaysNote> =>
   Option.map(
     askOption(ask, 'always'),
     (option) =>
       new AlwaysNote({
         ask: ask.id,
-        text: option.label,
+        text: `${allowedSubject(ask)} allowed ${allowedScope(option)}`,
         after: pipe(
           Arr.findFirst(items, (item) => isTool(item) && item.call.id === ask.id),
           Option.orElse(() => Arr.last(items)),

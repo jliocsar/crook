@@ -18,7 +18,7 @@ import {
   transcriptWholeAtom,
 } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
-import { withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
+import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
 import type { AskDockCommands, ComposerCommands } from '@crook/web/chat/ChatCommands'
 import { ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
@@ -83,6 +83,9 @@ interface DockProps {
 const BACK_TO_AGENTS = 'Back to Agents'
 const NOT_CLAUDE = 'Not a Claude pane'
 const PENDING_PROMPT_KEY = 'pending prompt'
+const ASK_DOCK_SELECTOR = '[data-slot="ask-dock"]'
+const COMPOSER_FIELD_SELECTOR = '[data-slot="composer"] textarea'
+const VISIBLE_FOCUS = ':focus-visible'
 
 const pendingPromptRows = (text: Option.Option<string>): readonly ThreadRow[] =>
   Option.toArray(
@@ -111,6 +114,42 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
 const hasActions = (model: ChatScreenModel): boolean =>
   Option.isSome(model.row) && (model.presence === 'live' || model.presence === 'away')
 
+const holdsVisibleAskFocus = (target: EventTarget): boolean =>
+  target instanceof Element &&
+  target.closest(ASK_DOCK_SELECTOR) !== null &&
+  target.matches(VISIBLE_FOCUS)
+
+const useFocusAfterAsk = (container: React.RefObject<HTMLDivElement | null>, askKey: string) => {
+  const askFocused = React.useRef(false)
+
+  React.useEffect(() => {
+    if (!askFocused.current) {
+      return
+    }
+
+    askFocused.current = false
+
+    const active = document.activeElement
+    const lost =
+      active === null || active === document.body || active.closest(ASK_DOCK_SELECTOR) !== null
+
+    if (lost) {
+      container.current?.querySelector<HTMLElement>(COMPOSER_FIELD_SELECTOR)?.focus()
+    }
+  }, [askKey])
+
+  return {
+    onFocus: (event: React.FocusEvent) => {
+      askFocused.current = holdsVisibleAskFocus(event.target)
+    },
+    onBlur: (event: React.FocusEvent) => {
+      if (event.relatedTarget !== null) {
+        askFocused.current = holdsVisibleAskFocus(event.relatedTarget)
+      }
+    },
+  }
+}
+
 function ChatDock({
   model,
   closedHere,
@@ -125,6 +164,11 @@ function ChatDock({
 }: DockProps) {
   const inset = useKeyboardInset()
   const [composerFocused, setComposerFocused] = React.useState(false)
+  const container = React.useRef<HTMLDivElement>(null)
+  const askFocus = useFocusAfterAsk(
+    container,
+    Option.match(ask, { onNone: () => '', onSome: (dock) => dock.ask.id }),
+  )
 
   if (model.presence === 'notClaude' || closedHere) {
     return null
@@ -132,10 +176,14 @@ function ChatDock({
 
   return (
     <div
+      ref={container}
       data-slot="chat-dock"
-      className="border-border bg-card border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)]"
+      className="border-border bg-card flex min-h-0 flex-col border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)]"
       style={inset > 0 ? { paddingBottom: inset } : undefined}
     >
+      <p role="status" className="sr-only">
+        {Option.match(ask, { onNone: () => '', onSome: (dock) => askAnnouncement(dock.ask) })}
+      </p>
       {Option.match(edgeKindOf(model), {
         onSome: (kind) => (
           <EdgeCard
@@ -155,15 +203,17 @@ function ChatDock({
         ),
         onNone: () => (
           <div
-            className="grid gap-2"
-            onFocus={() => {
+            className="flex min-h-0 flex-col gap-2"
+            onFocus={(event) => {
               setComposerFocused(true)
+              askFocus.onFocus(event)
             }}
-            onBlur={() => {
+            onBlur={(event) => {
               setComposerFocused(false)
+              askFocus.onBlur(event)
             }}
           >
-            <Collapse open={Option.isSome(ask)}>
+            <Collapse open={Option.isSome(ask)} className="flex min-h-0 flex-col">
               {Option.match(ask, {
                 onNone: () => null,
                 onSome: (dock) => (
@@ -247,12 +297,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       ? []
       : [
           ...itemRows(
-            withAlwaysNotes(
-              withoutAskedCall(
-                items,
-                Option.map(commands.ask, (dock) => dock.ask.id),
-              ),
-              commands.alwaysNotes,
+            withoutAskedCall(
+              withAlwaysNotes(items, commands.alwaysNotes),
+              Option.map(commands.ask, (dock) => dock.ask.id),
             ),
             environment,
           ),
