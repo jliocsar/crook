@@ -300,6 +300,9 @@ The Agents tab: every agent on every machine, one section per machine.
     button reads "Hold to close anyway".
   - Save reads "Saving…" and the Hold Button "Closing…" until the herd shows the change; then the
     sheet closes by itself. A refusal shows its sentence in the sheet, under the action.
+  - Swiping the sheet away while a close is out only hides it: the close still finishes, a close
+    from the chat still goes back to the herd, and a close that fails brings the sheet back with
+    its sentence. Once a pane has asked for "Hold to close anyway", every retry asks the same.
   - Rename and Close are disabled while the hub can't act or the machine isn't online. Pin needs
     only the hub, which stores it.
 - **The order freezes** while a card is swiped open or being dragged. A card that arrives
@@ -309,7 +312,8 @@ The Agents tab: every agent on every machine, one section per machine.
   the pane is still there. A close from the chat goes back to the herd with "Pane closed"; a
   close from a card needs no toast, since the card leaves.
 - **The toast** is a pill in `bg-foreground text-background` above the tab bar. It rises 8px on
-  the fade and stays 3s, an unmeasured knob to settle on the phone.
+  the fade and stays 3s, both picked in the prototype rather than measured; settle them on the
+  phone.
 - **Pull down** resyncs: it arms at 48px, rests at 40px while syncing and stops at 96px. It is
   off while the hub can't act, since crook is already retrying.
 - **Live updates** re-sort each list; a card moves to its new place on the reorder spring.
