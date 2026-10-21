@@ -48,6 +48,7 @@ import { ClientApi, MachineStillConnected, PaneNotInHerd } from '@crook/protocol
 import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import {
   type CommandResult,
+  FolderNotFound,
   MachineOffline,
   PaneNotAgent,
   PaneNotCreatedByCrook,
@@ -285,6 +286,8 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
             RenameAgent: (rename) =>
               Result.succeed(new PaneRenamed({ pane: rename.pane, label: rename.label })),
             ClosePane: (close) => Result.fail(new PaneNotCreatedByCrook({ pane: close.pane })),
+            StartAgent: (start) => Result.fail(new FolderNotFound({ folder: start.folder })),
+            CreateWorktree: (create) => Result.fail(new FolderNotFound({ folder: create.folder })),
           }),
         ),
       )
@@ -365,6 +368,9 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
               RenameAgent: (rename) =>
                 Result.succeed(new PaneRenamed({ pane: rename.pane, label: rename.label })),
               ClosePane: (close) => Result.fail(new PaneNotCreatedByCrook({ pane: close.pane })),
+              StartAgent: (start) => Result.fail(new FolderNotFound({ folder: start.folder })),
+              CreateWorktree: (create) =>
+                Result.fail(new FolderNotFound({ folder: create.folder })),
             }),
           ),
         )

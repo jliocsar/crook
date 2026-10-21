@@ -26,8 +26,10 @@ import {
   initialMachineState,
   nextMachineState,
   withCreatedPanes,
+  withPlaces,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
+import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
@@ -87,6 +89,7 @@ const make = Effect.gen(function* () {
   const claudeSessions = yield* ClaudeSessions
   const gitBranches = yield* GitBranches
   const createdPanes = yield* CreatedPanes
+  const recentPlaces = yield* RecentPlaces
   const machine = yield* CrookMachineId
 
   const sessionOf = (info: AgentInfo) =>
@@ -139,8 +142,11 @@ const make = Effect.gen(function* () {
   })
 
   const firstConnection = yield* mintConnection
+  const knownPlaces = yield* recentPlaces.current
   const initial = yield* read().pipe(
-    Effect.map(({ reading, now }) => initialMachineState(machine, firstConnection, reading, now)),
+    Effect.map(({ reading, now }) =>
+      initialMachineState(machine, firstConnection, reading, now, knownPlaces),
+    ),
     Effect.tapError(logHerdrFailure),
     Effect.retry(herdrBackoff),
   )
@@ -213,6 +219,18 @@ const make = Effect.gen(function* () {
   yield* createdPanes.changes.pipe(
     Stream.runForEach((created) =>
       SubscriptionRef.updateSome(state, (previous) => withCreatedPanes(previous, created)),
+    ),
+    Effect.forkScoped,
+  )
+
+  yield* SubscriptionRef.changes(state).pipe(
+    Stream.runForEach((current) => recentPlaces.observe(current.agents)),
+    Effect.forkScoped,
+  )
+
+  yield* recentPlaces.changes.pipe(
+    Stream.runForEach((places) =>
+      SubscriptionRef.updateSome(state, (previous) => withPlaces(previous, places)),
     ),
     Effect.forkScoped,
   )

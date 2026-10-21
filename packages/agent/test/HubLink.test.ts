@@ -95,6 +95,7 @@ const stateAt = (version: number) =>
     tabs: [],
     panes: [],
     agents: [agentRow()],
+    places: [],
   })
 
 const routed = (id: number, key: IdempotencyKey, command: RoutedCommand['command']) =>

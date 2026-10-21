@@ -10,15 +10,18 @@ import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
+import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
-import { StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import { type AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import { ClaudeSessionId, PaneId } from '@crook/domain/Ids'
 import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
+import { Place } from '@crook/domain/Place'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -124,6 +127,7 @@ const statusPanes = (subscription: FakeSubscription) =>
 const startSync = Effect.fn('startSync')(function* (
   initial: SessionSnapshot,
   subscribeFailures: readonly HerdrSubscriptionError[] = [],
+  recentPlaces: Layer.Layer<RecentPlaces> = RecentPlaces.layerTest(),
 ) {
   const readStarted = yield* Queue.unbounded<void>()
   const replies = yield* Queue.unbounded<SessionSnapshot>()
@@ -149,6 +153,7 @@ const startSync = Effect.fn('startSync')(function* (
     Layer.provideMerge(MachineStateSync.layer, [
       herdr,
       CreatedPanes.layerTest(),
+      recentPlaces,
       ClaudeSessions.layerTest(
         new Map([
           ['w1:p1', SESSION],
@@ -563,5 +568,32 @@ it.effect('drops a tab that vanished with only the pane_exited of its last pane'
 
     expect(state.tabs.map((tab) => tab.id)).toEqual(['w1:t1'])
     expect(panePresence(state, PaneId.make('w1:p7'))).toBe('gone')
+  }),
+)
+
+it.effect('shows each agent to the recent places and publishes the places they answer with', () =>
+  Effect.gen(function* () {
+    const places = yield* SubscriptionRef.make<readonly Place[]>([])
+    const observed = yield* Queue.unbounded<readonly AgentRow[]>()
+    const recentPlaces = Layer.succeed(
+      RecentPlaces,
+      RecentPlaces.of({
+        ...RecentPlaces.readingFrom(places),
+        observe: (agents) => Queue.offer(observed, agents),
+      }),
+    )
+    const { sync } = yield* startSync(working, [], recentPlaces)
+    const seen = yield* Queue.take(observed)
+    const place = new Place({
+      folder: '/home/jliocsar/Projects/crook',
+      branch: Option.some(BRANCH),
+      usedAt: DateTime.makeUnsafe('2026-10-21T13:27:00Z'),
+    })
+
+    yield* SubscriptionRef.set(places, [place])
+    const published = yield* stateAt(sync, 1)
+
+    expect(seen.map((row) => row.pane)).toEqual(['w1:p1'])
+    expect(published.places).toEqual([place])
   }),
 )

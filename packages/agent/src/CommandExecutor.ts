@@ -8,6 +8,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 
+import { AgentLauncher } from '@crook/agent/AgentLauncher'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandPolicy } from '@crook/agent/CommandPolicy'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
@@ -18,7 +19,9 @@ import {
   type Command,
   type CommandReceipt,
   InputDelivered,
+  type LaunchCommand,
   PaneClosed,
+  type PaneCommand,
   PaneRenamed,
 } from '@crook/domain/Command'
 import type { IdempotencyKey } from '@crook/domain/Ids'
@@ -29,6 +32,7 @@ import {
   PaneCloseMethod,
   PaneRenameMethod,
 } from '@crook/herdr/Methods'
+import { AGENT_READY_TIMEOUT, PROMPT_START_WINDOW } from '@crook/protocol/AgentLink'
 import {
   type AgentCommandFailure,
   CommandDeliveryUnknown,
@@ -47,6 +51,11 @@ const SLOWEST_MEASURED_PROMPT = Duration.millis(403)
 export const COMMAND_REPLAY_CAPACITY = 1024
 export const HERDR_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_PROMPT, 10)
 
+export const LAUNCH_DELIVERY_TIMEOUT = Duration.sum(
+  Duration.sum(AGENT_READY_TIMEOUT, PROMPT_START_WINDOW),
+  HERDR_DELIVERY_TIMEOUT,
+)
+
 const inputDelivered = (row: AgentRow): CommandReceipt =>
   new InputDelivered({
     pane: row.pane,
@@ -60,8 +69,9 @@ const make = Effect.gen(function* () {
   const sync = yield* MachineStateSync
   const createdPanes = yield* CreatedPanes
   const audit = yield* AuditLog
+  const launcher = yield* AgentLauncher
 
-  const deliver = (command: Command, row: AgentRow) =>
+  const deliver = (command: PaneCommand, row: AgentRow) =>
     Match.value(command).pipe(
       Match.tagsExhaustive({
         Prompt: (prompt) =>
@@ -95,6 +105,7 @@ const make = Effect.gen(function* () {
       Match.tagsExhaustive({
         InputDelivered: () => Effect.void,
         PaneRenamed: () => sync.invalidate,
+        AgentStarted: () => Effect.void,
         PaneClosed: (closed) =>
           createdPanes
             .forget(closed.pane)
@@ -106,7 +117,21 @@ const make = Effect.gen(function* () {
       }),
     )
 
-  const run = Effect.fn('CommandExecutor.run')(function* ({ command }: Execution) {
+  const runLaunch = (command: LaunchCommand) =>
+    launcher.launch(command).pipe(
+      Effect.map(Result.succeed),
+      Effect.timeoutOrElse({
+        duration: LAUNCH_DELIVERY_TIMEOUT,
+        orElse: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
+      }),
+      Effect.catchTags({
+        AgentNotStarted: (notStarted) => Effect.succeed(Result.fail(notStarted)),
+        TaskNotDelivered: (notDelivered) => Effect.succeed(Result.fail(notDelivered)),
+        CommandDeliveryUnknown: (unknown) => Effect.succeed(Result.fail(unknown)),
+      }),
+    )
+
+  const runOnPane = Effect.fn('CommandExecutor.runOnPane')(function* (command: PaneCommand) {
     const row = yield* policy.admit(command)
 
     return yield* deliver(command, row).pipe(
@@ -121,6 +146,8 @@ const make = Effect.gen(function* () {
         HerdrUnreachable: () => Effect.fail(new HerdrUnavailable()),
         HerdrPaneNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
         HerdrAgentNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
+        HerdrPaneBusy: (busy) =>
+          Effect.fail(new HerdrRefusedCommand({ code: 'agent_pane_busy', detail: busy.detail })),
         HerdrRequestRejected: (rejected) =>
           Effect.fail(new HerdrRefusedCommand({ code: rejected.code, detail: rejected.detail })),
         HerdrRequestInvalid: (invalid) => Effect.die(invalid),
@@ -130,6 +157,17 @@ const make = Effect.gen(function* () {
       ),
     )
   })
+
+  const run = ({
+    command,
+  }: Execution): Effect.Effect<
+    Result.Result<CommandReceipt, AgentCommandFailure>,
+    AgentCommandFailure
+  > =>
+    Match.value(command).pipe(
+      Match.tags({ StartAgent: runLaunch, CreateWorktree: runLaunch }),
+      Match.orElse(runOnPane),
+    )
 
   const outcomes = yield* Cache.makeWith(run, {
     capacity: COMMAND_REPLAY_CAPACITY,
@@ -162,5 +200,7 @@ export class CommandExecutor extends Context.Service<
     ) => Effect.Effect<CommandReceipt, AgentCommandFailure>
   }
 >()('@crook/agent/CommandExecutor') {
-  static readonly layer = Layer.effect(this, make).pipe(Layer.provide(CommandPolicy.layer))
+  static readonly layer = Layer.effect(this, make).pipe(
+    Layer.provide([CommandPolicy.layer, AgentLauncher.layer]),
+  )
 }

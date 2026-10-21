@@ -41,6 +41,7 @@ export const workspaceInfo = new WorkspaceInfo({
   tab_count: 1,
   active_tab_id: 'w1:t1',
   agent_status: 'working',
+  worktree: Option.none(),
 })
 
 export const tabInfo = new TabInfo({
@@ -160,6 +161,7 @@ export const machineStateWith = (agents: readonly AgentRow[]) =>
     tabs: [],
     panes: [],
     agents,
+    places: [],
   })
 
 export const AUDIT_EVERYTHING = new AuditPolicy({
@@ -179,6 +181,7 @@ export const executorWith = (
     CreatedPanes.layerTest(options.created),
     options.audit ?? discardingAudit,
     herdr,
+    BunFileSystem.layer,
   ])
 
 export const linkedAgentWith = (

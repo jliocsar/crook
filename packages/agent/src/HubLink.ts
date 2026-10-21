@@ -14,6 +14,7 @@ import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
+import { LaunchCommand } from '@crook/domain/Command'
 import {
   AGENT_PING_INTERVAL,
   AGENT_SOCKET_OPEN_TIMEOUT,
@@ -21,6 +22,7 @@ import {
   Hello,
   hubReconnectSchedule,
 } from '@crook/protocol/AgentLink'
+import type { RoutedCommand } from '@crook/protocol/Commands'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 import packageJson from '../package.json' with { type: 'json' }
@@ -30,6 +32,8 @@ export type AgentLinkClient = RpcClient.FromGroup<typeof AgentLink, RpcClientErr
 export type HubConnect = Effect.Effect<AgentLinkClient, never, Scope.Scope>
 
 const HUB_AUTHORIZATION_HEADER = 'X-Exedev-Authorization'
+
+const isLaunch = Schema.is(LaunchCommand)
 
 export const CrookHubUrl = Config.URL('CROOK_HUB_URL')
 export const CrookHubToken = Config.Redacted('CROOK_HUB_TOKEN')
@@ -78,14 +82,23 @@ const make = (connect: HubConnect, hello: Hello) =>
     const executor = yield* CommandExecutor
     const transcripts = yield* TranscriptStreams
 
+    const complete = (client: AgentLinkClient, routed: RoutedCommand) =>
+      executor.execute(routed.key, routed.command).pipe(
+        Effect.result,
+        Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
+        Effect.annotateLogs('command', routed.id),
+      )
+
     const holdAttach = (client: AgentLinkClient) =>
       client.Attach({ hello }).pipe(
         Stream.mapEffect((routed) =>
-          executor.execute(routed.key, routed.command).pipe(
-            Effect.result,
-            Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
-            Effect.annotateLogs('command', routed.id),
-          ),
+          isLaunch(routed.command)
+            ? complete(client, routed).pipe(
+                Effect.tapError((error) => Effect.logWarning(error.message)),
+                Effect.ignore,
+                Effect.forkScoped,
+              )
+            : complete(client, routed),
         ),
         Stream.runDrain,
         Effect.andThen(Effect.fail(new HubAttachEnded())),

@@ -21,6 +21,7 @@ import {
 } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion, isHerdrLost } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
+import type { Place } from '@crook/domain/Place'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
 import type { AgentInfo, PaneInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
@@ -47,6 +48,7 @@ interface MachineStateContents {
   readonly tabs: readonly Tab[]
   readonly panes: readonly Pane[]
   readonly agents: readonly AgentRow[]
+  readonly places: readonly Place[]
 }
 
 const isSameMachineState = Schema.toEquivalence(MachineState)
@@ -177,6 +179,7 @@ const toAgentRow =
 
 const herdContents = (
   previousAgents: readonly AgentRow[],
+  places: readonly Place[],
   connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
@@ -187,6 +190,7 @@ const herdContents = (
   tabs: reading.tabs.map(toTab),
   panes: reading.panes.map(toPane),
   agents: reading.agents.map(toAgentRow(previousAgents, reading, now)),
+  places,
 })
 
 const withChangedContents = (
@@ -212,11 +216,12 @@ export const initialMachineState = (
   connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
+  places: readonly Place[] = [],
 ): MachineState =>
   new MachineState({
     machine,
     version: MachineStateVersion.make(0),
-    ...herdContents([], connection, reading, now),
+    ...herdContents([], places, connection, reading, now),
   })
 
 export const nextMachineState = (
@@ -225,7 +230,10 @@ export const nextMachineState = (
   reading: HerdReading,
   now: DateTime.Utc,
 ): Option.Option<MachineState> =>
-  withChangedContents(previous, herdContents(previous.agents, connection, reading, now))
+  withChangedContents(
+    previous,
+    herdContents(previous.agents, previous.places, connection, reading, now),
+  )
 
 export const withCreatedPanes = (
   previous: MachineState,
@@ -243,6 +251,21 @@ export const withCreatedPanes = (
           Struct.evolve(row, { createdByCrook: () => HashSet.has(createdPanes, row.pane) }),
         ),
     ),
+    places: previous.places,
+  })
+
+export const withPlaces = (
+  previous: MachineState,
+  places: readonly Place[],
+): Option.Option<MachineState> =>
+  withChangedContents(previous, {
+    herdrVersion: previous.herdrVersion,
+    herdr: previous.herdr,
+    workspaces: previous.workspaces,
+    tabs: previous.tabs,
+    panes: previous.panes,
+    agents: previous.agents,
+    places,
   })
 
 export const herdrLostState = (
@@ -261,6 +284,7 @@ export const herdrLostState = (
           tabs: state.tabs,
           panes: state.panes,
           agents: state.agents,
+          places: state.places,
         }),
     ),
   )
