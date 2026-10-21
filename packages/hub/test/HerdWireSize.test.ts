@@ -6,11 +6,10 @@ import * as Schema from 'effect/Schema'
 import * as RpcSerialization from 'effect/rpc/RpcSerialization'
 
 import { RECENT_PLACES_CAPACITY } from '@crook/agent/RecentPlaces'
-import { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { CrookVersion } from '@crook/domain/CrookVersion'
-import { HerdUpdate, MachineReplaced } from '@crook/domain/HerdUpdate'
-import { HerdMachine } from '@crook/domain/HerdView'
+import { HerdReplaced, HerdUpdate, MachineReplaced } from '@crook/domain/HerdUpdate'
+import { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
   ClaudeSessionId,
@@ -27,24 +26,29 @@ import { Pane } from '@crook/domain/Pane'
 import { Checkout, Place } from '@crook/domain/Place'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
+import { agentInfo } from '@crook/herdr/RecordFixtures'
+
+import { agentRow } from './Fixtures'
 
 const INITIAL_WINDOW_BYTES = 14_600
 const AGENTS_ON_ONE_MACHINE = 10
 const STATUSES: readonly AgentStatus[] = ['working', 'idle', 'done', 'blocked']
-const MACHINE = MachineId.make('laptop')
 const WORKSPACE = WorkspaceId.make('w1')
 const VERSION = CrookVersion.make('0.0.1')
 
 const observedAt = DateTime.makeUnsafe('2026-10-21T12:00:00Z')
 
+const fixtureCounter = agentInfo().state_change_seq
+
+const widestRandomConnection = HerdrConnectionId.make(Number.MIN_SAFE_INTEGER)
+
 const encodeUpdate = Schema.encodeSync(Schema.toCodecJson(HerdUpdate))
 
 const tabOf = (agent: number) => TabId.make(`w1:t${agent + 1}`)
 
-const agentRow = (agent: number) =>
-  new AgentRow({
+const laneRow = (agent: number) =>
+  agentRow({
     pane: PaneId.make(`w1:p${agent * 2 + 1}`),
-    workspace: WORKSPACE,
     tab: tabOf(agent),
     terminal: TerminalId.make(`term_65e4981ac9ff${agent}`),
     status: Arr.getUnsafe(STATUSES, agent % STATUSES.length),
@@ -54,10 +58,7 @@ const agentRow = (agent: number) =>
     cwd: `/home/jliocsar/Projects/crook-worktrees/lane-${agent}`,
     branch: Option.some(`feat/jc-${100 + agent}-herd-live-activity`),
     claudeSession: Option.some(ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')),
-    stateChangeSeq: 14_162,
-    statusChangedAt: observedAt,
-    beforeHandoff: Option.none(),
-    ask: Option.none(),
+    stateChangeSeq: fixtureCounter,
   })
 
 const panesBeside = (agent: number) =>
@@ -65,53 +66,59 @@ const panesBeside = (agent: number) =>
     (pane) => new Pane({ id: PaneId.make(`w1:p${pane}`), workspace: WORKSPACE, tab: tabOf(agent) }),
   )
 
-const machineWith = (agentCount: number) => {
+const stateWith = (machine: MachineId, agentCount: number) => {
   const agents = Arr.makeBy(agentCount, (agent) => agent)
 
-  return new HerdMachine({
+  return new MachineState({
+    machine,
+    version: MachineStateVersion.make(fixtureCounter),
+    herdrVersion: '0.9.1',
+    herdr: new HerdrLink({ connection: widestRandomConnection, lostAt: Option.none() }),
+    workspaces: [new Workspace({ id: WORKSPACE, label: 'crook' })],
+    tabs: agents.map(
+      (agent) => new Tab({ id: tabOf(agent), workspace: WORKSPACE, label: 'claude' }),
+    ),
+    panes: agents.flatMap(panesBeside),
+    agents: agents.map(laneRow),
+    places: Arr.makeBy(
+      RECENT_PLACES_CAPACITY,
+      (place) =>
+        new Place({
+          folder: `/home/jliocsar/Projects/crook-worktrees/lane-${place}`,
+          checkout: Option.some(
+            new Checkout({ branch: Option.some(`feat/jc-${100 + place}-herd-live-activity`) }),
+          ),
+          usedAt: observedAt,
+        }),
+    ),
+  })
+}
+
+const machineWith = (machine: MachineId, agentCount: number) =>
+  new HerdMachine({
     machine: new Machine({
-      id: MACHINE,
-      label: 'laptop',
+      id: machine,
+      label: machine,
       connection: 'online',
       connectionChangedAt: observedAt,
       lastSeenAt: observedAt,
       agentVersion: Option.some(VERSION),
       herdrVersion: Option.some('0.9.1'),
     }),
-    state: Option.some(
-      new MachineState({
-        machine: MACHINE,
-        version: MachineStateVersion.make(4211),
-        herdrVersion: '0.9.1',
-        herdr: new HerdrLink({
-          connection: HerdrConnectionId.make(1_834_567_890),
-          lostAt: Option.none(),
-        }),
-        workspaces: [new Workspace({ id: WORKSPACE, label: 'crook' })],
-        tabs: agents.map(
-          (agent) => new Tab({ id: tabOf(agent), workspace: WORKSPACE, label: 'claude' }),
-        ),
-        panes: agents.flatMap(panesBeside),
-        agents: agents.map(agentRow),
-        places: Arr.makeBy(
-          RECENT_PLACES_CAPACITY,
-          (place) =>
-            new Place({
-              folder: `/home/jliocsar/Projects/crook-worktrees/lane-${place}`,
-              checkout: Option.some(
-                new Checkout({ branch: Option.some(`feat/jc-${100 + place}-herd-live-activity`) }),
-              ),
-              usedAt: observedAt,
-            }),
-        ),
-      }),
-    ),
+    state: Option.some(stateWith(machine, agentCount)),
     seen: [],
     pinned: [],
   })
-}
 
-const wireBytes = (update: MachineReplaced) =>
+const herdOf = (machineCount: number) =>
+  new HerdView({
+    hubVersion: VERSION,
+    machines: Arr.makeBy(machineCount, (machine) =>
+      machineWith(MachineId.make(`vm-${machine + 1}`), AGENTS_ON_ONE_MACHINE),
+    ),
+  })
+
+const wireBytes = (update: HerdUpdate) =>
   new TextEncoder().encode(
     String(
       RpcSerialization.ndjson.makeUnsafe().encode({
@@ -125,7 +132,15 @@ const wireBytes = (update: MachineReplaced) =>
 describe('herd updates on the wire', () => {
   it('carries a change on one machine of ten agents in one initial TCP window', () => {
     expect(
-      wireBytes(new MachineReplaced({ entry: machineWith(AGENTS_ON_ONE_MACHINE) })),
+      wireBytes(
+        new MachineReplaced({
+          entry: machineWith(MachineId.make('laptop'), AGENTS_ON_ONE_MACHINE),
+        }),
+      ),
     ).toBeLessThan(INITIAL_WINDOW_BYTES)
+  })
+
+  it('would need more than one initial TCP window for a whole herd of two such machines', () => {
+    expect(wireBytes(new HerdReplaced({ herd: herdOf(2) }))).toBeGreaterThan(INITIAL_WINDOW_BYTES)
   })
 })
