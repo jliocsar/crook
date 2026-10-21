@@ -91,7 +91,7 @@ function AgentCardRow({
       layout="position"
       transition={SPRING}
       exit={motionTokens().exit}
-      className="grid gap-2"
+      className="grid grid-cols-1 gap-2"
     >
       <SwipeRow
         id={toGlobalPaneId(machine, pane)}
