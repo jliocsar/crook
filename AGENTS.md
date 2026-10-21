@@ -514,6 +514,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   any machine (measured: five calls where one was due). It reads a derived atom that holds only
   its decision instead; atoms compare values with `Object.is`, so a boolean that did not flip
   wakes nothing.
+- Shiki's hast names an element's classes in `properties.class`, a space-separated string, not in
+  hast's usual `className` array (measured on 4.5). A walk that looks for `className` finds no
+  line and renders every block plain; test the walk against a real highlighter's output.
 - Vite's dev and preview servers check the `Host` header against `allowedHosts` for HTTP
   requests and the HMR socket, but not for a proxied WebSocket upgrade (measured on 8.3.4: an
   upgrade with `Host: attacker.example` was proxied). A proxy rule that trusts an upgrade does
@@ -547,6 +550,10 @@ Checking the web app against real data, measured:
   OSC 0 escape sets it, and a shell prompt resets it, so hold the pane in a long `sleep` after it.
 - A browser tab shows the install screen. An init script that makes `navigator.standalone` true
   gets past it.
+- The agent has no long-running entry of its own yet, so a probe composes its layers itself. It
+  exits on a config error before dialing unless `CROOK_MACHINE_ID` is set.
+- agent-browser scrolls an element into view before it clicks it, which moves the scroll container
+  around it. A scroll position read after such a click is the tool's, not the app's.
 :::
 
 :::warning
