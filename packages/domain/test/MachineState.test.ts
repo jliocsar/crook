@@ -53,6 +53,8 @@ const stateOn = (herdr: HerdrLink, status: AgentStatus = 'unknown') =>
         terminal: TerminalId.make('term_65e4981ac9ff02'),
         status,
         title: 'Claude Code',
+        label: Option.none(),
+        createdByCrook: false,
         cwd: '/home/jliocsar/Projects/crook',
         branch: Option.none(),
         claudeSession: Option.none(),

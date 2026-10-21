@@ -9,6 +9,7 @@ export class HerdMachine extends Schema.Class<HerdMachine>('HerdMachine')({
   machine: Machine,
   state: Schema.OptionFromNullOr(MachineState),
   seen: Schema.Array(PaneId),
+  pinned: Schema.Array(PaneId),
 }) {}
 
 export class HerdView extends Schema.Class<HerdView>('HerdView')({

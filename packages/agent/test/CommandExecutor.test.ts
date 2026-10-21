@@ -6,6 +6,8 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
+import * as Ref from 'effect/Ref'
 import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -13,7 +15,18 @@ import * as TestClock from 'effect/testing/TestClock'
 
 import { CommandExecutor, HERDR_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
 import { HUB_RECONNECT_BASE } from '@crook/agent/HubLink'
-import { InputDelivered, Prompt, SendKeys, interrupt } from '@crook/domain/Command'
+import { type AgentAuditEntry, AuditLog } from '@crook/agent/AuditLog'
+import { AuditPolicy, REDACTED } from '@crook/domain/Audit'
+import {
+  ClosePane,
+  InputDelivered,
+  PaneClosed,
+  PaneRenamed,
+  Prompt,
+  RenameAgent,
+  SendKeys,
+  interrupt,
+} from '@crook/domain/Command'
 import { IdempotencyKey, PaneId } from '@crook/domain/Ids'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
@@ -24,16 +37,31 @@ import {
   scriptedRejection,
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
-import { AgentPromptMethod, AgentSendKeysMethod } from '@crook/herdr/Methods'
+import {
+  AgentPromptMethod,
+  AgentSendKeysMethod,
+  PaneCloseMethod,
+  PaneRenameMethod,
+} from '@crook/herdr/Methods'
 import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
 import {
   CommandDeliveryUnknown,
   HerdrRefusedCommand,
   HerdrUnavailable,
   PaneNotAgent,
+  PaneNotCreatedByCrook,
 } from '@crook/protocol/Commands'
 
-import { TERMINAL, agentRow, executorWith, machineStateWith } from './Fixtures'
+import {
+  AUDIT_EVERYTHING,
+  type ExecutorOptions,
+  LAPTOP,
+  TERMINAL,
+  agentRow,
+  executorWith,
+  machineStateWith,
+  paneInfo,
+} from './Fixtures'
 
 const AGENT_PANE = PaneId.make('w1:p1')
 const SHELL_PANE = PaneId.make('w1:p2')
@@ -54,12 +82,13 @@ const sentRequests = (requests: readonly SentRequest[]) =>
 
 const startExecutor = Effect.fn('startExecutor')(function* (
   responses: readonly ScriptedResponse[],
+  options: ExecutorOptions = {},
 ) {
   const state = yield* SubscriptionRef.make(machineStateWith([agentRow()]))
   const sent = yield* Queue.unbounded<SentRequest>()
   const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
   const context = yield* Layer.build(
-    executorWith(HerdrClient.layerTest({ responses, events, sent }), state),
+    executorWith(HerdrClient.layerTest({ responses, events, sent }), state, options),
   )
 
   return { executor: Context.get(context, CommandExecutor), sent: Queue.clear(sent), state }
@@ -307,3 +336,137 @@ it('gives up on herdr early enough for its answer to reach the hub before the hu
     Duration.isLessThan(Duration.sum(HERDR_DELIVERY_TIMEOUT, HUB_RECONNECT_BASE), COMMAND_TIMEOUT),
   ).toBe(true)
 })
+
+const renamedTo = (label: Option.Option<string>) =>
+  scriptedResult(PaneRenameMethod, { type: 'pane_info', pane: paneInfo({ label }) })
+const renamed = renamedTo(Option.some('Payments'))
+const closed = scriptedResult(PaneCloseMethod, { type: 'ok' })
+const rename = new RenameAgent({ pane: AGENT_PANE, label: Option.some('Payments') })
+const unconfirmedClose = new ClosePane({ pane: AGENT_PANE, confirmed: false })
+const confirmedClose = new ClosePane({ pane: AGENT_PANE, confirmed: true })
+
+it.effect('renames the pane in herdr and asks for a re-read, since herdr sends no event', () =>
+  Effect.gen(function* () {
+    const rereads = yield* Ref.make(0)
+    const { executor, sent } = yield* startExecutor([renamed], {
+      invalidate: Ref.update(rereads, (count) => count + 1),
+    })
+    const receipt = yield* executor.execute(FIRST_ACTION, rename)
+
+    yield* executor.execute(FIRST_ACTION, rename)
+    yield* executor.execute(
+      SECOND_ACTION,
+      new RenameAgent({ pane: AGENT_PANE, label: Option.none() }),
+    )
+
+    expect(receipt).toEqual(new PaneRenamed({ pane: AGENT_PANE, label: Option.some('Payments') }))
+    expect(sentRequests(yield* sent).map((request) => request.params)).toEqual([
+      { pane_id: 'w1:p1', label: 'Payments' },
+      { pane_id: 'w1:p1', label: null },
+    ])
+    expect(yield* Ref.get(rereads)).toBe(2)
+  }),
+)
+
+it.effect('answers a rename with the name herdr says it stored', () =>
+  Effect.gen(function* () {
+    const { executor } = yield* startExecutor([renamedTo(Option.none())])
+    const cleared = yield* executor.execute(
+      FIRST_ACTION,
+      new RenameAgent({ pane: AGENT_PANE, label: Option.none() }),
+    )
+
+    expect(cleared).toEqual(new PaneRenamed({ pane: AGENT_PANE, label: Option.none() }))
+  }),
+)
+
+it.effect('closes a pane crook created without asking, and forgets it once closed', () =>
+  Effect.gen(function* () {
+    const { executor, sent } = yield* startExecutor([closed], { created: [AGENT_PANE] })
+    const receipt = yield* executor.execute(FIRST_ACTION, unconfirmedClose)
+    const refused = yield* executor.execute(SECOND_ACTION, unconfirmedClose).pipe(Effect.flip)
+
+    expect(receipt).toEqual(new PaneClosed({ pane: AGENT_PANE }))
+    expect(refused).toEqual(new PaneNotCreatedByCrook({ pane: AGENT_PANE }))
+    expect(sentRequests(yield* sent)).toEqual([
+      { id: 'pane.close', method: 'pane.close', params: { pane_id: 'w1:p1' } },
+    ])
+  }),
+)
+
+it.effect('closes a pane crook did not create only once the close is confirmed', () =>
+  Effect.gen(function* () {
+    const { executor, sent } = yield* startExecutor([closed])
+    const refused = yield* executor.execute(FIRST_ACTION, unconfirmedClose).pipe(Effect.flip)
+
+    expect(refused).toEqual(new PaneNotCreatedByCrook({ pane: AGENT_PANE }))
+    expect(yield* sent).toEqual([])
+
+    const receipt = yield* executor.execute(SECOND_ACTION, confirmedClose)
+
+    expect(receipt).toEqual(new PaneClosed({ pane: AGENT_PANE }))
+    expect(yield* sent).toHaveLength(1)
+  }),
+)
+
+it.effect('refuses to rename or close a pane that hosts no agent, and sends nothing', () =>
+  Effect.gen(function* () {
+    const { executor, sent } = yield* startExecutor([renamed, closed])
+    const renameRefused = yield* executor
+      .execute(FIRST_ACTION, new RenameAgent({ pane: SHELL_PANE, label: Option.some('Shell') }))
+      .pipe(Effect.flip)
+    const closeRefused = yield* executor
+      .execute(SECOND_ACTION, new ClosePane({ pane: SHELL_PANE, confirmed: true }))
+      .pipe(Effect.flip)
+
+    expect(renameRefused).toEqual(new PaneNotAgent({ pane: SHELL_PANE }))
+    expect(closeRefused).toEqual(new PaneNotAgent({ pane: SHELL_PANE }))
+    expect(yield* sent).toEqual([])
+  }),
+)
+
+it.effect('audits every execution, replays and refusals included, under the policy', () =>
+  Effect.gen(function* () {
+    const entries = yield* Queue.unbounded<AgentAuditEntry>()
+    const policy = new AuditPolicy({ argumentLimit: 6, redactedArguments: ['label'] })
+    const { executor } = yield* startExecutor([prompted], {
+      audit: AuditLog.layerTest(entries, LAPTOP, policy),
+    })
+
+    yield* executor.execute(FIRST_ACTION, continuePrompt)
+    yield* executor.execute(FIRST_ACTION, continuePrompt)
+    yield* executor.execute(SECOND_ACTION, rename).pipe(Effect.flip)
+    yield* executor.execute(SECOND_ACTION, unconfirmedClose).pipe(Effect.flip)
+    const audited = yield* Queue.clear(entries)
+
+    expect(
+      audited.map((entry) => [entry.machine, entry.key, entry.operation, entry.arguments]),
+    ).toEqual([
+      [LAPTOP, FIRST_ACTION, 'Prompt', { pane: 'w1:p1', text: 'contin…' }],
+      [LAPTOP, FIRST_ACTION, 'Prompt', { pane: 'w1:p1', text: 'contin…' }],
+      [LAPTOP, SECOND_ACTION, 'RenameAgent', { pane: 'w1:p1', label: REDACTED }],
+      [LAPTOP, SECOND_ACTION, 'ClosePane', { pane: 'w1:p1', confirmed: false }],
+    ])
+    expect(audited.map((entry) => [entry.outcome, entry.failure])).toEqual([
+      ['succeeded', Option.none()],
+      ['succeeded', Option.none()],
+      ['failed', Option.some('CommandDeliveryUnknown')],
+      ['failed', Option.some('PaneNotCreatedByCrook')],
+    ])
+  }),
+)
+
+it.effect('audits under the default policy without changing short arguments', () =>
+  Effect.gen(function* () {
+    const entries = yield* Queue.unbounded<AgentAuditEntry>()
+    const { executor } = yield* startExecutor([keysSent], {
+      audit: AuditLog.layerTest(entries, LAPTOP, AUDIT_EVERYTHING),
+    })
+
+    yield* executor.execute(FIRST_ACTION, interrupt(AGENT_PANE))
+
+    expect((yield* Queue.clear(entries)).map((entry) => entry.arguments)).toEqual([
+      { pane: 'w1:p1', keys: ['esc'] },
+    ])
+  }),
+)

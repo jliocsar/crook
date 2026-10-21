@@ -6,7 +6,15 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as RpcTest from 'effect/rpc/RpcTest'
 
-import { InputDelivered, Prompt, SendKeys } from '@crook/domain/Command'
+import {
+  ClosePane,
+  InputDelivered,
+  PaneClosed,
+  PaneRenamed,
+  Prompt,
+  RenameAgent,
+  SendKeys,
+} from '@crook/domain/Command'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
@@ -20,6 +28,7 @@ import {
   CommandResult,
   MachineOffline,
   PaneNotAgent,
+  PaneNotCreatedByCrook,
   RoutedCommand,
 } from '@crook/protocol/Commands'
 
@@ -66,6 +75,8 @@ const clientApiHandlers = ClientApi.toLayer({
   ForgetMachine: ({ machine }) => Effect.fail(new MachineNotInHerd({ machine })),
   MarkSeen: ({ machine, pane: markedPane }) =>
     Effect.fail(new PaneNotInHerd({ machine, pane: markedPane })),
+  SetPinned: ({ machine, pane: pinnedPane, pinned }) =>
+    pinned ? Effect.void : Effect.fail(new PaneNotInHerd({ machine, pane: pinnedPane })),
   SendCommand: ({ machine, command }) =>
     machine === laptop
       ? Effect.succeed(
@@ -119,6 +130,19 @@ layer(clientApiHandlers)('ClientApi', (rpc) => {
     }),
   )
 
+  rpc.effect('carries a pin and the reason one was refused', () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(ClientApi)
+
+      yield* client.SetPinned({ machine: laptop, pane, pinned: true })
+      const refused = yield* client
+        .SetPinned({ machine: laptop, pane, pinned: false })
+        .pipe(Effect.flip)
+
+      expect(refused).toEqual(new PaneNotInHerd({ machine: laptop, pane }))
+    }),
+  )
+
   rpc.effect('answers SendCommand with a receipt or a tagged failure', () =>
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(ClientApi)
@@ -158,5 +182,27 @@ describe('Command wire shapes', () => {
     expect(roundTrip(CommandResult, delivered)).toEqual(delivered)
     expect(roundTrip(CommandResult, refused)).toEqual(refused)
     expect(roundTrip(CommandResult, unknown)).toEqual(unknown)
+  })
+
+  it('carries a rename, a close and their receipts through JSON', () => {
+    const rename = new RoutedCommand({
+      id: CommandId.make(8),
+      key: IdempotencyKey.make('action-2'),
+      command: new RenameAgent({ pane, label: Option.some('Payments') }),
+    })
+    const close = new RoutedCommand({
+      id: CommandId.make(9),
+      key: IdempotencyKey.make('action-3'),
+      command: new ClosePane({ pane, confirmed: false }),
+    })
+    const renamed = Result.succeed(new PaneRenamed({ pane, label: Option.none() }))
+    const closed = Result.succeed(new PaneClosed({ pane }))
+    const notOurs = Result.fail(new PaneNotCreatedByCrook({ pane }))
+
+    expect(roundTrip(RoutedCommand, rename)).toEqual(rename)
+    expect(roundTrip(RoutedCommand, close)).toEqual(close)
+    expect(roundTrip(CommandResult, renamed)).toEqual(renamed)
+    expect(roundTrip(CommandResult, closed)).toEqual(closed)
+    expect(roundTrip(CommandResult, notOurs)).toEqual(notOurs)
   })
 })

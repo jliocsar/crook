@@ -179,6 +179,21 @@ feeding one go in a single `Layer.provide(target, [a, b, c])`, which is what
 A data-last combinator stored in a variable before it meets its input — `const retry = Effect.retry({ … })`
 — infers `unknown` for the error, and `effecttsgo/any-unknown-in-error-context` reports every effect it
 touches. Apply it inline (measured).
+
+An `Effect<A>` is assignable to `Effect<void>`: a service method typed `Effect<void>` accepts
+`Queue.offer(…)` or `Effect.forkIn(scope)` as they are, and `begone-slop/no-effect-asvoid` rejects
+the `Effect.asVoid` that would only satisfy the signature (measured: removed in three places, the
+typecheck still passed).
+:::
+
+:::warning
+A field that travels on the wire gets no `Schema.withConstructorDefault`, not even to spare other
+fixtures an edit. The default lets a real producer forget the field and still typecheck, so the
+missing data ships as the default. Add the field everywhere it is built instead.
+
+Copying a `Schema.Class` instance with one field changed is `new X(Struct.evolve(x, { field: … }))`:
+a spread of the instance is `typescript(no-misused-spread)`, and `Struct.evolve` copies the own
+enumerable fields, which are the schema's (measured).
 :::
 
 :::tip

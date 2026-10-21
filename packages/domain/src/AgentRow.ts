@@ -22,6 +22,8 @@ export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   terminal: TerminalId,
   status: AgentStatus,
   title: Schema.String,
+  label: Schema.OptionFromNullOr(Schema.String),
+  createdByCrook: Schema.Boolean,
   cwd: Schema.String,
   branch: Schema.OptionFromNullOr(Schema.String),
   claudeSession: Schema.OptionFromNullOr(ClaudeSessionId),
@@ -35,3 +37,5 @@ export const seenMarkOf = (row: AgentRow): SeenMark =>
     onNone: () => ({ terminal: row.terminal, stateChangeSeq: row.stateChangeSeq }),
     onSome: (before) => ({ terminal: before.terminal, stateChangeSeq: before.stateChangeSeq }),
   })
+
+export const agentTitle = (row: AgentRow): string => Option.getOrElse(row.label, () => row.title)

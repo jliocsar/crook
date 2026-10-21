@@ -1,9 +1,17 @@
+import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { PaneId } from '@crook/domain/Ids'
 
+const WITHOUT_CONTROL_CHARACTERS = /^\P{Cc}*$/u
+
 export const INTERRUPT_KEY = 'esc'
+
+export const PaneLabel = Schema.Trimmed.check(
+  Schema.isNonEmpty(),
+  Schema.isPattern(WITHOUT_CONTROL_CHARACTERS),
+)
 
 export class Prompt extends Schema.TaggedClass<Prompt>()('Prompt', {
   pane: PaneId,
@@ -15,7 +23,17 @@ export class SendKeys extends Schema.TaggedClass<SendKeys>()('SendKeys', {
   keys: Schema.NonEmptyArray(Schema.NonEmptyString),
 }) {}
 
-export const Command = Schema.Union([Prompt, SendKeys])
+export class RenameAgent extends Schema.TaggedClass<RenameAgent>()('RenameAgent', {
+  pane: PaneId,
+  label: Schema.OptionFromNullOr(PaneLabel),
+}) {}
+
+export class ClosePane extends Schema.TaggedClass<ClosePane>()('ClosePane', {
+  pane: PaneId,
+  confirmed: Schema.Boolean,
+}) {}
+
+export const Command = Schema.Union([Prompt, SendKeys, RenameAgent, ClosePane])
 export type Command = typeof Command.Type
 
 export class InputDelivered extends Schema.TaggedClass<InputDelivered>()('InputDelivered', {
@@ -24,10 +42,29 @@ export class InputDelivered extends Schema.TaggedClass<InputDelivered>()('InputD
   stateChangeSeq: AgentRow.fields.stateChangeSeq,
 }) {}
 
-export const CommandReceipt = Schema.Union([InputDelivered])
+export class PaneRenamed extends Schema.TaggedClass<PaneRenamed>()('PaneRenamed', {
+  pane: PaneId,
+  label: AgentRow.fields.label,
+}) {}
+
+export class PaneClosed extends Schema.TaggedClass<PaneClosed>()('PaneClosed', {
+  pane: PaneId,
+}) {}
+
+export const CommandReceipt = Schema.Union([InputDelivered, PaneRenamed, PaneClosed])
 export type CommandReceipt = typeof CommandReceipt.Type
 
 export const interrupt = (pane: PaneId) => new SendKeys({ pane, keys: [INTERRUPT_KEY] })
+
+export const targetPane = (command: Command): PaneId =>
+  Match.value(command).pipe(
+    Match.tagsExhaustive({
+      Prompt: (prompt) => prompt.pane,
+      SendKeys: (sendKeys) => sendKeys.pane,
+      RenameAgent: (rename) => rename.pane,
+      ClosePane: (close) => close.pane,
+    }),
+  )
 
 export const hasMovedSince = (receipt: InputDelivered, row: AgentRow) =>
   row.pane === receipt.pane &&

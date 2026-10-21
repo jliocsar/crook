@@ -38,6 +38,8 @@ const agentRow = (pane: string, claudeSession: Option.Option<ClaudeSessionId>) =
     terminal: TerminalId.make(`term_${pane}`),
     status: 'blocked',
     title: 'EX-253 Example feature',
+    label: Option.none(),
+    createdByCrook: false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.some('feat/jc-97-98-registry-seen'),
     claudeSession,
@@ -60,6 +62,7 @@ const herd = new HerdView({
         herdrVersion: Option.some('0.9.1'),
       }),
       seen: [PaneId.make('w1:p2')],
+      pinned: [PaneId.make('w1:p1')],
       state: Option.some(
         new MachineState({
           machine: laptop,
@@ -94,6 +97,7 @@ const herd = new HerdView({
       }),
       state: Option.none(),
       seen: [],
+      pinned: [],
     }),
   ],
 })

@@ -26,6 +26,7 @@ import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import * as Database from '@crook/hub/Database'
 import { Herd, RECONNECT_GRACE, hubVersion } from '@crook/hub/Herd'
 import { MachineRegistry } from '@crook/hub/MachineRegistry'
+import { PinnedAgents } from '@crook/hub/PinnedAgents'
 import { SeenTracker } from '@crook/hub/SeenTracker'
 import { Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
@@ -53,6 +54,8 @@ const agentAt = (pane: PaneId, stateChangeSeq: number, terminal: TerminalId = BE
     terminal,
     status: 'done',
     title: 'EX-253 Example feature',
+    label: Option.none(),
+    createdByCrook: false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.none(),
     claudeSession: Option.none(),
@@ -69,6 +72,8 @@ const handedOffAt = (stateChangeSeq: number, status: AgentStatus) =>
     terminal: AFTER_HANDOFF,
     status,
     title: 'EX-253 Example feature',
+    label: Option.none(),
+    createdByCrook: false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.none(),
     claudeSession: Option.none(),
@@ -109,6 +114,9 @@ const connectionOf = (view: HerdView, id: MachineId) =>
 
 const seenOf = (view: HerdView, id: MachineId) =>
   Option.map(machineIn(view, id), (entry: HerdMachine) => entry.seen)
+
+const pinnedOf = (view: HerdView, id: MachineId) =>
+  Option.map(machineIn(view, id), (entry: HerdMachine) => entry.pinned)
 
 const viewWhere = Effect.fn('viewWhere')(function* (predicate: (view: HerdView) => boolean) {
   const herd = yield* Herd
@@ -157,6 +165,14 @@ const refusingStorage = Layer.mergeAll(
       dropPanes: () => Effect.fail(storageRefused),
     }),
   ),
+  Layer.succeed(
+    PinnedAgents,
+    PinnedAgents.of({
+      all: Effect.succeed([]),
+      pin: () => Effect.fail(storageRefused),
+      unpin: () => Effect.fail(storageRefused),
+    }),
+  ),
 )
 
 const withRefusingRegistry = <Success, Failure, Requirements>(
@@ -168,7 +184,7 @@ const withRefusingRegistry = <Success, Failure, Requirements>(
         Layer.provideMerge(
           Herd.layerWithoutDependencies,
           Layer.provide(
-            Layer.mergeAll(refusingRegistry, SeenTracker.layer),
+            Layer.mergeAll(refusingRegistry, SeenTracker.layer, PinnedAgents.layer),
             Database.layerAt(IN_MEMORY),
           ),
         ),
@@ -638,5 +654,87 @@ it.effect('refuses forget and mark seen with nothing changed when the database r
     expect(seen).toEqual(Option.some([]))
     expect(notForgotten).toBe(storageRefused)
     expect(connection).toEqual(Option.some('offline'))
+  }).pipe(withRefusingStorage),
+)
+
+it.effect('pins and unpins an agent of a known machine, and refuses a pane it has never seen', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* attach(LAPTOP)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7), agentAt(OTHER_PANE, 3)]))
+    yield* herd.setPinned(LAPTOP, OTHER_PANE, true)
+    yield* herd.setPinned(LAPTOP, OTHER_PANE, true)
+    const pinned = pinnedOf(yield* currentView, LAPTOP)
+
+    yield* herd.setPinned(LAPTOP, OTHER_PANE, false)
+    const unpinned = pinnedOf(yield* currentView, LAPTOP)
+    const unknownPane = yield* herd.setPinned(LAPTOP, PaneId.make('w1:p9'), true).pipe(Effect.flip)
+    const unknownMachine = yield* herd.setPinned(WORK, PANE, true).pipe(Effect.flip)
+
+    expect(pinned).toEqual(Option.some([OTHER_PANE]))
+    expect(unpinned).toEqual(Option.some([]))
+    expect(unknownPane).toEqual(new PaneNotInHerd({ machine: LAPTOP, pane: PaneId.make('w1:p9') }))
+    expect(unknownMachine).toEqual(new MachineNotInHerd({ machine: WORK }))
+  }).pipe(withFreshHerd),
+)
+
+it.effect('keeps a pin while its pane is away, and shows it again when the pane returns', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* attach(LAPTOP)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+    yield* herd.setPinned(LAPTOP, PANE, true)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, []))
+    const away = pinnedOf(yield* currentView, LAPTOP)
+
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 3, [agentAt(PANE, 1)]))
+    const back = pinnedOf(yield* currentView, LAPTOP)
+
+    expect(away).toEqual(Option.some([]))
+    expect(back).toEqual(Option.some([PANE]))
+  }).pipe(withFreshHerd),
+)
+
+it.effect('keeps pins across a hub restart', () =>
+  Effect.gen(function* () {
+    const hub = yield* restartingHerd()
+    const state = stateOf(LAPTOP, 1, [agentAt(PANE, 7)])
+
+    yield* hub.run(
+      Effect.gen(function* () {
+        const herd = yield* Herd
+
+        yield* attach(LAPTOP)
+        yield* herd.publish(LAPTOP, state)
+        yield* herd.setPinned(LAPTOP, PANE, true)
+      }),
+    )
+    const afterRestart = yield* hub.run(
+      Effect.gen(function* () {
+        const herd = yield* Herd
+
+        yield* attach(LAPTOP)
+        yield* herd.publish(LAPTOP, state)
+
+        return yield* currentView
+      }),
+    )
+
+    expect(pinnedOf(afterRestart, LAPTOP)).toEqual(Option.some([PANE]))
+  }),
+)
+
+it.effect('refuses a pin with nothing changed when the database refuses', () =>
+  Effect.gen(function* () {
+    const herd = yield* Herd
+
+    yield* attach(LAPTOP)
+    yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+    const refused = yield* herd.setPinned(LAPTOP, PANE, true).pipe(Effect.flip)
+
+    expect(refused).toBe(storageRefused)
+    expect(pinnedOf(yield* currentView, LAPTOP)).toEqual(Option.some([]))
   }).pipe(withRefusingStorage),
 )

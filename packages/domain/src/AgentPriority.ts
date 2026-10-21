@@ -9,10 +9,12 @@ import * as Schema from 'effect/Schema'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
+import type { PaneId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
 
 interface RankedAgent {
   readonly row: AgentRow
+  readonly pinned: boolean
   readonly tier: PriorityTier
 }
 
@@ -44,15 +46,26 @@ const byTier = Order.mapInput(Order.Number, (ranked: RankedAgent) =>
   PriorityTier.literals.indexOf(ranked.tier),
 )
 
-const byPriority: Order.Order<RankedAgent> = Order.combine(byTier, (self, that) =>
-  withinTier[self.tier](self, that),
+const byPinnedFirst = Order.mapInput(
+  Order.flip(Order.Boolean),
+  (ranked: RankedAgent) => ranked.pinned,
 )
 
-export const isSeen = (machine: HerdMachine) => {
-  const seenPanes = HashSet.fromIterable(machine.seen)
+const byPriority: Order.Order<RankedAgent> = Order.combineAll([
+  byPinnedFirst,
+  byTier,
+  (self, that) => withinTier[self.tier](self, that),
+])
 
-  return (row: AgentRow): boolean => HashSet.has(seenPanes, row.pane)
+const paneIn = (panes: readonly PaneId[]) => {
+  const listed = HashSet.fromIterable(panes)
+
+  return (row: AgentRow): boolean => HashSet.has(listed, row.pane)
 }
+
+export const isSeen = (machine: HerdMachine) => paneIn(machine.seen)
+
+export const isPinned = (machine: HerdMachine) => paneIn(machine.pinned)
 
 export const priorityTier = (machine: HerdMachine) => {
   const seen = isSeen(machine)
@@ -76,10 +89,11 @@ export const needsYou = (machine: HerdMachine) => {
 
 export const orderAgents = (machine: HerdMachine): AgentRow[] => {
   const tierOf = priorityTier(machine)
+  const pinned = isPinned(machine)
 
   return pipe(
     agentsIn(machine.state),
-    Arr.map((row): RankedAgent => ({ row, tier: tierOf(row) })),
+    Arr.map((row): RankedAgent => ({ row, pinned: pinned(row), tier: tierOf(row) })),
     Arr.sort(byPriority),
     Arr.map((ranked) => ranked.row),
   )

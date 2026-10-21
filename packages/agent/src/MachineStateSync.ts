@@ -17,6 +17,7 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
+import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import {
   type HerdReading,
@@ -24,6 +25,7 @@ import {
   herdrLostState,
   initialMachineState,
   nextMachineState,
+  withCreatedPanes,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
 import { reconnectBackoff, trackConnectionHealth } from '@crook/agent/Reconnect'
@@ -83,6 +85,7 @@ const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
   const claudeSessions = yield* ClaudeSessions
   const gitBranches = yield* GitBranches
+  const createdPanes = yield* CreatedPanes
   const machine = yield* CrookMachineId
 
   const sessionOf = (info: AgentInfo) =>
@@ -128,6 +131,7 @@ const make = Effect.gen(function* () {
       tabs: snapshot.tabs,
       panes: snapshot.panes,
       agents,
+      createdPanes: yield* createdPanes.current,
     }
 
     return { reading, now: yield* DateTime.now }
@@ -205,7 +209,21 @@ const make = Effect.gen(function* () {
 
   yield* herdrSession().pipe(Effect.retry(herdrBackoff), Effect.forever, Effect.forkScoped)
 
-  return MachineStateSync.fromRef(state)
+  yield* createdPanes.changes.pipe(
+    Stream.runForEach((created) =>
+      SubscriptionRef.updateSome(state, (previous) => withCreatedPanes(previous, created)),
+    ),
+    Effect.forkScoped,
+  )
+
+  const scope = yield* Effect.scope
+  const invalidate = refresh.pipe(
+    Effect.tapError(logHerdrFailure),
+    Effect.ignore,
+    Effect.forkIn(scope),
+  )
+
+  return MachineStateSync.fromRef(state, invalidate)
 })
 
 export class MachineStateSync extends Context.Service<
@@ -213,16 +231,23 @@ export class MachineStateSync extends Context.Service<
   {
     readonly current: Effect.Effect<MachineState>
     readonly changes: Stream.Stream<MachineState>
+    readonly invalidate: Effect.Effect<void>
   }
 >()('@crook/agent/MachineStateSync') {
   static readonly layer = Layer.effect(this, make)
 
-  static readonly fromRef = (state: SubscriptionRef.SubscriptionRef<MachineState>) =>
+  static readonly fromRef = (
+    state: SubscriptionRef.SubscriptionRef<MachineState>,
+    invalidate: Effect.Effect<void>,
+  ) =>
     MachineStateSync.of({
       current: SubscriptionRef.get(state),
       changes: SubscriptionRef.changes(state),
+      invalidate,
     })
 
-  static readonly layerTest = (state: SubscriptionRef.SubscriptionRef<MachineState>) =>
-    Layer.succeed(this, this.fromRef(state))
+  static readonly layerTest = (
+    state: SubscriptionRef.SubscriptionRef<MachineState>,
+    invalidate: Effect.Effect<void> = Effect.void,
+  ) => Layer.succeed(this, this.fromRef(state, invalidate))
 }

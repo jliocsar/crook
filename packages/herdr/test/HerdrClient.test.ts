@@ -28,7 +28,9 @@ import {
 } from '@crook/herdr/HerdrClient'
 import {
   AgentPromptMethod,
+  PaneCloseMethod,
   PaneProcessInfoMethod,
+  PaneRenameMethod,
   Ping,
   SessionSnapshotMethod,
 } from '@crook/herdr/Methods'
@@ -41,6 +43,11 @@ interface ConnectionScript {
 
 const PONG_LINE =
   '{"id":"ping","result":{"type":"pong","version":"0.9.1","protocol":22,"capabilities":{"live_handoff":true}}}'
+
+const PANE_RENAME_REPLY_LINE =
+  '{"id":"pane.rename","result":{"type":"pane_info","pane":{"pane_id":"w1:p1","terminal_id":"term_65e4b2b37ae2a1","workspace_id":"w1","tab_id":"w1:t1","focused":true,"label":"Renamed by crook","agent":"claude","agent_status":"idle","revision":3}}}'
+
+const PANE_CLOSE_REPLY_LINE = '{"id":"pane.close","result":{"type":"ok"}}'
 
 const SNAPSHOT_LINE = JSON.stringify({
   id: 'session.snapshot',
@@ -190,6 +197,36 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
         method: 'ping',
         params: {},
       })
+    }),
+  )
+
+  it.effect('renames a pane with a label, clears one with null, and closes a pane', () =>
+    Effect.gen(function* () {
+      const { client, received } = yield* fakeHerdr([
+        replyOnce(PANE_RENAME_REPLY_LINE),
+        replyOnce(PANE_RENAME_REPLY_LINE),
+        replyOnce(PANE_CLOSE_REPLY_LINE),
+      ])
+      const renamed = yield* client.request(PaneRenameMethod, {
+        pane_id: 'w1:p1',
+        label: 'Renamed by crook',
+      })
+
+      yield* client.request(PaneRenameMethod, { pane_id: 'w1:p1', label: null })
+      const closed = yield* client.request(PaneCloseMethod, { pane_id: 'w1:p1' })
+      const requests = yield* Effect.forEach([1, 2, 3], () =>
+        Queue.take(received).pipe(Effect.flatMap(Schema.decodeEffect(SentRequest))),
+      )
+
+      expect(renamed.type).toBe('pane_info')
+      expect(renamed.pane.pane_id).toBe('w1:p1')
+      expect(renamed.pane.label).toEqual(Option.some('Renamed by crook'))
+      expect(closed).toEqual({ type: 'ok' })
+      expect(requests.map((request) => request.params)).toEqual([
+        { pane_id: 'w1:p1', label: 'Renamed by crook' },
+        { pane_id: 'w1:p1', label: null },
+        { pane_id: 'w1:p1' },
+      ])
     }),
   )
 

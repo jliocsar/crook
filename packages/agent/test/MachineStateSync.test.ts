@@ -13,6 +13,7 @@ import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
+import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
 import { RECONNECT_CAP } from '@crook/agent/Reconnect'
@@ -145,8 +146,9 @@ const startSync = Effect.fn('startSync')(function* (
       ),
   })
   const context = yield* Layer.build(
-    Layer.provide(MachineStateSync.layer, [
+    Layer.provideMerge(MachineStateSync.layer, [
       herdr,
+      CreatedPanes.layerTest(),
       ClaudeSessions.layerTest(
         new Map([
           ['w1:p1', SESSION],
@@ -165,6 +167,7 @@ const startSync = Effect.fn('startSync')(function* (
 
   return {
     sync: Context.get(context, MachineStateSync),
+    createdPanes: Context.get(context, CreatedPanes),
     subscriptions,
     readStarted,
     replies,
@@ -221,6 +224,44 @@ it.effect('re-reads on every event and bumps the version only when the state cha
 
     expect(state.agents.map((row) => row.status)).toEqual(['blocked'])
   }),
+)
+
+it.effect('re-reads when asked to, for a change herdr announces no event for', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, answerRead } = yield* startSync(working)
+
+    yield* Queue.take(subscriptions)
+    yield* answerRead(working)
+    yield* sync.invalidate
+    yield* answerRead(
+      sessionSnapshot([agentInfo()], [paneInfo({ label: Option.some('Payments') })]),
+    )
+
+    const state = yield* stateAt(sync, 1)
+
+    expect(state.agents.map((row) => row.label)).toEqual([Option.some('Payments')])
+  }),
+)
+
+it.effect(
+  'republishes the agents when crook remembers or forgets a pane, without asking herdr',
+  () =>
+    Effect.gen(function* () {
+      const { sync, createdPanes, subscriptions, readStarted, answerRead } =
+        yield* startSync(working)
+
+      yield* Queue.take(subscriptions)
+      yield* answerRead(working)
+      yield* createdPanes.remember(PaneId.make('w1:p1'))
+      const remembered = yield* stateAt(sync, 1)
+
+      yield* createdPanes.forget(PaneId.make('w1:p1'))
+      const forgotten = yield* stateAt(sync, 2)
+
+      expect(remembered.agents.map((row) => row.createdByCrook)).toEqual([true])
+      expect(forgotten.agents.map((row) => row.createdByCrook)).toEqual([false])
+      expect(yield* Queue.size(readStarted)).toBe(0)
+    }),
 )
 
 it.effect('coalesces a burst of events that lands during a read into one more read', () =>
