@@ -6,8 +6,6 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import { Ellipsis } from 'lucide-react'
 import * as React from 'react'
 
-import { pendingAskSummary } from '@crook/domain/AgentRow'
-import type { AgentRow } from '@crook/domain/AgentRow'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
@@ -19,8 +17,10 @@ import {
   transcriptRetryAtom,
   transcriptWholeAtom,
 } from '@crook/web/atoms/Transcript'
+import { AskDock } from '@crook/web/chat/AskDock'
+import { withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
-import type { ComposerCommands } from '@crook/web/chat/ChatCommands'
+import type { AskDockCommands, ComposerCommands } from '@crook/web/chat/ChatCommands'
 import { ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
 import {
   chatItems,
@@ -59,6 +59,7 @@ import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import { linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { Button } from '@crook/web/components/ui/button'
+import { Collapse } from '@crook/web/components/Collapse'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { Message } from '@crook/web/components/ui/message'
 import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
@@ -70,7 +71,7 @@ interface DockProps {
   readonly model: ChatScreenModel
   readonly closedHere: boolean
   readonly composer: ComposerCommands
-  readonly blocked: boolean
+  readonly ask: Option.Option<AskDockCommands>
   readonly restart: Option.Option<Restart>
   readonly draft: string
   readonly onDraftChange: (draft: string) => void
@@ -110,27 +111,11 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
 const hasActions = (model: ChatScreenModel): boolean =>
   Option.isSome(model.row) && (model.presence === 'live' || model.presence === 'away')
 
-function AskSlot({ row }: { row: AgentRow }) {
-  return Option.match(pendingAskSummary(row), {
-    onNone: () => null,
-    onSome: (summary) => (
-      <section
-        data-slot="ask-dock"
-        aria-label="Needs you"
-        className="border-border bg-muted/40 grid gap-0.5 rounded-[var(--radius)] border px-3.5 py-2.5"
-      >
-        <p className="text-muted-foreground text-xs font-semibold">Needs you</p>
-        <p className="truncate font-mono text-sm">{summary}</p>
-      </section>
-    ),
-  })
-}
-
 function ChatDock({
   model,
   closedHere,
   composer,
-  blocked,
+  ask,
   restart,
   draft,
   onDraftChange,
@@ -178,10 +163,21 @@ function ChatDock({
               setComposerFocused(false)
             }}
           >
-            {Option.match(
-              Option.filter(model.row, () => blocked),
-              { onNone: () => null, onSome: (row) => <AskSlot row={row} /> },
-            )}
+            <Collapse open={Option.isSome(ask)}>
+              {Option.match(ask, {
+                onNone: () => null,
+                onSome: (dock) => (
+                  <AskDock
+                    key={dock.ask.id}
+                    ask={dock.ask}
+                    cwd={cwdOf(model)}
+                    state={dock.state}
+                    disabled={dock.disabled}
+                    onAnswer={dock.onAnswer}
+                  />
+                ),
+              })}
+            </Collapse>
             <Composer value={draft} onValueChange={onDraftChange} {...composer} />
           </div>
         ),
@@ -250,7 +246,16 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     model.presence === 'notClaude'
       ? []
       : [
-          ...itemRows(items, environment),
+          ...itemRows(
+            withAlwaysNotes(
+              withoutAskedCall(
+                items,
+                Option.map(commands.ask, (dock) => dock.ask.id),
+              ),
+              commands.alwaysNotes,
+            ),
+            environment,
+          ),
           ...pendingPromptRows(commands.pendingPrompt),
           ...Option.toArray(
             Option.map(working, (row) => workingRow(shortElapsed(now, row.statusChangedAt))),
@@ -309,7 +314,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         model={model}
         closedHere={closedHere}
         composer={commands.composer}
-        blocked={commands.blocked}
+        ask={commands.ask}
         restart={commands.restart}
         draft={draft}
         onDraftChange={setDraft}

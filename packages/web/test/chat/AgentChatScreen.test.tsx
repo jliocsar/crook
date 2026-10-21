@@ -288,7 +288,7 @@ describe('AgentChatScreen', () => {
       )
 
       expect(document.querySelector('[data-slot="ask-dock"]')?.textContent).toContain(
-        'Bash bun run lint',
+        'bun run lint',
       )
 
       yield* Effect.promise(() => userEvent.type(composer, 'Lint only the web package{Enter}'))

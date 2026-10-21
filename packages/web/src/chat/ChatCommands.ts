@@ -1,3 +1,4 @@
+import { useAtom } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
@@ -8,6 +9,7 @@ import * as Schema from 'effect/Schema'
 import * as React from 'react'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
+import type { Ask } from '@crook/domain/Ask'
 import {
   AnswerAsk,
   Decline,
@@ -16,9 +18,18 @@ import {
   Prompt,
   StartAgent,
 } from '@crook/domain/Command'
-import type { Command, CommandReceipt } from '@crook/domain/Command'
+import type { AskAnswer, Command, CommandReceipt } from '@crook/domain/Command'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { ActionProgress } from '@crook/web/atoms/ActionProgress'
+import { alwaysNotesAtom } from '@crook/web/atoms/Chat'
+import { OpenedAgent } from '@crook/web/atoms/Herd'
+import {
+  alwaysNoteFor,
+  AskAnswerState,
+  answerState,
+  isAnswerUnderway,
+} from '@crook/web/chat/AskModel'
+import type { AlwaysNote } from '@crook/web/chat/AskModel'
 import { isUserPrompt } from '@crook/web/chat/ChatItems'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { activityOf } from '@crook/web/chat/ChatModel'
@@ -32,9 +43,17 @@ import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
 export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange'>
 
+export interface AskDockCommands {
+  readonly ask: Ask
+  readonly state: AskAnswerState
+  readonly disabled: boolean
+  readonly onAnswer: (answer: AskAnswer) => void
+}
+
 export interface ChatCommands {
   readonly composer: ComposerCommands
-  readonly blocked: boolean
+  readonly ask: Option.Option<AskDockCommands>
+  readonly alwaysNotes: readonly AlwaysNote[]
   readonly restart: Option.Option<Restart>
   readonly pendingPrompt: Option.Option<string>
 }
@@ -221,6 +240,40 @@ const useStopLock = (stop: CommandAction): boolean => {
   return isSending(stop.state) || (acknowledged && !settled)
 }
 
+const useAlwaysNotes = (opened: OpenedAgent, answer: CommandAction) => {
+  const [notes, setNotes] = useAtom(alwaysNotesAtom(opened))
+  const [awaited, setAwaited] = React.useState(Option.none<AlwaysNote>())
+  const settled = Option.map(awaited, (note) => answerState(answer, note.ask))
+  const settledTag = Option.match(settled, {
+    onNone: () => '',
+    onSome: AskAnswerState.$match({
+      Open: () => 'open',
+      Answering: () => 'answering',
+      Answered: () => 'answered',
+      AlreadyAnswered: () => 'refused',
+      Refused: () => 'refused',
+    }),
+  })
+
+  React.useEffect(() => {
+    if (Option.isNone(awaited) || settledTag === 'open' || settledTag === 'answering') {
+      return
+    }
+
+    const note = awaited.value
+
+    if (settledTag === 'answered') {
+      setNotes((current) =>
+        Arr.some(current, (kept) => kept.ask === note.ask) ? current : [...current, note],
+      )
+    }
+
+    setAwaited(Option.none())
+  }, [settledTag])
+
+  return { notes, expect: setAwaited }
+}
+
 const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
   const navigate = useNavigate()
   const started = ActionProgress.$match(action.state, {
@@ -256,11 +309,19 @@ export const useChatCommands = ({
   const prompt = useCommandAction(machine)
   const stop = useCommandAction(machine)
   const restart = useCommandAction(machine)
+  const answer = useCommandAction(machine)
   const prompted = usePromptWait(items)
   const activity = activityOf(model)
   const blocked = activity === 'blocked'
   const mode = composerMode(model.row, blocked)
   const stopping = useStopLock(stop)
+  const always = useAlwaysNotes(new OpenedAgent({ machine, pane }), answer)
+  const openAsk = Option.flatMap(
+    Option.filter(model.row, () => blocked),
+    (row) => row.ask,
+  )
+  const answering = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(answer, ask.id)))
+  const declining = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(prompt, ask.id)))
 
   useClearSentDraft(prompt, draft, setDraft)
   useRestartInPlace(machine, restart)
@@ -296,8 +357,19 @@ export const useChatCommands = ({
     )
   }
 
+  const answerAsk = (ask: Ask) => (given: AskAnswer) => {
+    always.expect(alwaysNoteFor(ask, given, items))
+    answer.send(new AnswerAsk({ pane, ask: ask.id, answer: given }))
+  }
+
   return {
-    blocked,
+    ask: Option.map(openAsk, (ask) => ({
+      ask,
+      state: answerState(answer, ask.id),
+      disabled: !connection.canAct || declining,
+      onAnswer: answerAsk(ask),
+    })),
+    alwaysNotes: always.notes,
     composer: {
       onSend: send,
       onStop: () => {
@@ -308,7 +380,10 @@ export const useChatCommands = ({
       mode,
       working: activity === 'working',
       disabled:
-        !connection.canAct || (blocked && mode === 'prompt') || model.presence === 'loading',
+        !connection.canAct ||
+        (blocked && mode === 'prompt') ||
+        (mode === 'decline' && answering) ||
+        model.presence === 'loading',
       sending: isSending(prompt.state),
       stopping,
       placeholder: placeholderOf(connection, mode, blocked),

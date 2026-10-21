@@ -1,0 +1,291 @@
+import { cn } from 'cn'
+import * as Equal from 'effect/Equal'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
+import type * as React from 'react'
+
+import type { Ask, AskQuestion, PermissionAsk, QuestionAsk, UnknownAsk } from '@crook/domain/Ask'
+import { ApproveAlways, Choose, Decline } from '@crook/domain/Command'
+import type { AskAnswer } from '@crook/domain/Command'
+import {
+  AskAnswerState,
+  AskDetail,
+  answerableQuestion,
+  askDetail,
+  askTitle,
+  askTool,
+  permissionButtons,
+} from '@crook/web/chat/AskModel'
+import type { AskButton } from '@crook/web/chat/AskModel'
+import { ActionFailure } from '@crook/web/components/ActionFailure'
+import { Button } from '@crook/web/components/ui/button'
+import { CodeBlock } from '@crook/web/components/ui/code-block'
+import { DiffView } from '@crook/web/components/ui/diff-view'
+import { Questionnaire } from '@crook/web/components/ui/questionnaire'
+import { Spinner } from '@crook/web/components/ui/spinner'
+import { languageOfPath } from '@crook/web/highlight/Highlighter'
+
+export interface AskDockProps {
+  readonly ask: Ask
+  readonly cwd: string
+  readonly state: AskAnswerState
+  readonly disabled: boolean
+  readonly onAnswer: (answer: AskAnswer) => void
+}
+
+interface AnswerControls {
+  readonly state: AskAnswerState
+  readonly disabled: boolean
+  readonly onAnswer: (answer: AskAnswer) => void
+}
+
+const DETAIL_CAP = 'max-h-40 overflow-y-auto'
+const SHELL_LANGUAGE = 'shellscript'
+const DECLINE_LABEL = 'Decline'
+const ANSWER_LABEL = 'Answer'
+const ANSWERED_NOTE = 'Answered. Waiting for Claude to move on.'
+const ALREADY_ANSWERED_NOTE = 'Already answered'
+const UNREADABLE_HINT = 'Decline it here, or tell Claude what to do instead.'
+
+const QUESTIONNAIRE_HINT =
+  'crook can only pick the answer to one question with one choice. Answer this one in the terminal, or tell Claude what to do instead.'
+
+const GRID_COLUMNS = ['grid-cols-1', 'grid-cols-2', 'grid-cols-3']
+
+const declined = new Decline({ message: Option.none() })
+
+const isApproveAlways = Schema.is(ApproveAlways)
+
+const answeringWith = (state: AskAnswerState): Option.Option<AskAnswer> =>
+  AskAnswerState.$match(state, {
+    Open: () => Option.none(),
+    Answering: ({ answer }) => Option.some(answer),
+    Answered: () => Option.none(),
+    AlreadyAnswered: () => Option.none(),
+    Refused: () => Option.none(),
+  })
+
+const locked = (controls: AnswerControls): boolean =>
+  controls.disabled ||
+  AskAnswerState.$match(controls.state, {
+    Open: () => false,
+    Answering: () => true,
+    Answered: () => true,
+    AlreadyAnswered: () => false,
+    Refused: () => false,
+  })
+
+function NeedsYou() {
+  return (
+    <span className="text-primary text-xs font-bold tracking-[0.08em] uppercase">Needs you</span>
+  )
+}
+
+function AnswerStatus({ state }: { state: AskAnswerState }) {
+  return AskAnswerState.$match(state, {
+    Open: () => null,
+    Answering: () => null,
+    Answered: () => (
+      <p role="status" className="text-muted-foreground text-sm leading-5">
+        {ANSWERED_NOTE}
+      </p>
+    ),
+    AlreadyAnswered: () => (
+      <p role="status" className="text-muted-foreground text-sm leading-5">
+        {ALREADY_ANSWERED_NOTE}
+      </p>
+    ),
+    Refused: ({ message }) => <ActionFailure message={Option.some(message)} />,
+  })
+}
+
+function DetailView({ detail }: { detail: AskDetail }) {
+  return AskDetail.$match(detail, {
+    Command: ({ command }) => (
+      <CodeBlock code={command} language={SHELL_LANGUAGE} wrap className={DETAIL_CAP} />
+    ),
+    Diff: ({ hunks, filename }) => (
+      <DiffView hunks={hunks} filename={filename} className={DETAIL_CAP} />
+    ),
+    File: ({ content, filename }) => (
+      <CodeBlock
+        code={content}
+        filename={filename}
+        language={Option.getOrUndefined(languageOfPath(filename))}
+        className={DETAIL_CAP}
+      />
+    ),
+    Input: ({ text }) => <ScreenText text={text} />,
+    Screen: ({ text }) => <ScreenText text={text} />,
+    Summary: ({ text }) => <p className="truncate font-mono text-sm">{text}</p>,
+  })
+}
+
+function ScreenText({ text }: { text: string }) {
+  return (
+    <pre
+      data-slot="ask-screen"
+      className={cn(
+        'bg-muted/60 rounded-[calc(var(--radius)-0.25rem)] p-2.5 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap',
+        DETAIL_CAP,
+      )}
+    >
+      {text}
+    </pre>
+  )
+}
+
+function AnswerButtons({
+  buttons,
+  controls,
+}: {
+  buttons: readonly AskButton[]
+  controls: AnswerControls
+}) {
+  const answering = answeringWith(controls.state)
+
+  return (
+    <div data-slot="ask-answers" className={cn('grid gap-2', GRID_COLUMNS[buttons.length - 1])}>
+      {buttons.map((button, index) => (
+        <Button
+          key={button.label}
+          size="touch"
+          variant={index === 0 ? 'default' : 'outline'}
+          className="text-base"
+          disabled={locked(controls)}
+          onClick={() => {
+            controls.onAnswer(button.answer)
+          }}
+        >
+          {button.label}
+          {Option.exists(answering, (answer) => Equal.equals(answer, button.answer)) ? (
+            <Spinner />
+          ) : null}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
+function PermissionDock({
+  ask,
+  cwd,
+  controls,
+}: {
+  ask: PermissionAsk
+  cwd: string
+  controls: AnswerControls
+}) {
+  const buttons = permissionButtons(ask)
+  const always = buttons.find((button) => isApproveAlways(button.answer))
+
+  return (
+    <>
+      <div className="grid gap-0.5">
+        <p className="text-base leading-6 font-semibold">{askTitle(ask)}</p>
+        <p className="text-muted-foreground truncate font-mono text-xs">{askTool(ask)}</p>
+      </div>
+      <DetailView detail={askDetail(ask, cwd)} />
+      <AnswerButtons buttons={buttons} controls={controls} />
+      {always === undefined ? null : (
+        <p data-slot="ask-always" className="text-muted-foreground text-xs leading-4">
+          {`Always: ${always.description}`}
+        </p>
+      )}
+    </>
+  )
+}
+
+function QuestionList({ questions }: { questions: readonly AskQuestion[] }) {
+  return (
+    <div className={cn('grid gap-3', DETAIL_CAP)}>
+      {questions.map((question, index) => (
+        <div key={index} className="grid gap-1">
+          <p className="text-muted-foreground font-mono text-xs">{question.header}</p>
+          <p className="text-sm font-semibold">{question.question}</p>
+          <ul className="text-muted-foreground list-disc ps-5 text-sm leading-5">
+            {question.choices.map((choice) => (
+              <li key={choice.label}>{choice.label}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function QuestionDock({ ask, controls }: { ask: QuestionAsk; controls: AnswerControls }) {
+  return Option.match(answerableQuestion(ask), {
+    onSome: (question) => (
+      <>
+        <p className="text-muted-foreground font-mono text-xs">{question.header}</p>
+        <Questionnaire
+          prompt={question.question}
+          choices={question.choices.map((choice) => ({
+            id: choice.label,
+            label: choice.label,
+            description: Option.getOrUndefined(choice.description),
+          }))}
+          submitLabel={ANSWER_LABEL}
+          disabled={locked(controls)}
+          pending={Option.isSome(answeringWith(controls.state))}
+          onChoose={(label) => {
+            controls.onAnswer(new Choose({ answer: label }))
+          }}
+          onFreeform={(text) => {
+            controls.onAnswer(new Decline({ message: Option.some(text) }))
+          }}
+        />
+      </>
+    ),
+    onNone: () => (
+      <>
+        <QuestionList questions={ask.questions} />
+        <p className="text-muted-foreground text-sm leading-5">{QUESTIONNAIRE_HINT}</p>
+        <AnswerButtons
+          buttons={[{ label: DECLINE_LABEL, description: DECLINE_LABEL, answer: declined }]}
+          controls={controls}
+        />
+      </>
+    ),
+  })
+}
+
+function UnknownDock({ ask, controls }: { ask: UnknownAsk; controls: AnswerControls }) {
+  return (
+    <>
+      <p className="text-base leading-6 font-semibold">{askTitle(ask)}</p>
+      <ScreenText text={ask.screen} />
+      <p className="text-muted-foreground text-sm leading-5">{UNREADABLE_HINT}</p>
+      <AnswerButtons
+        buttons={[{ label: DECLINE_LABEL, description: DECLINE_LABEL, answer: declined }]}
+        controls={controls}
+      />
+    </>
+  )
+}
+
+export function AskDock({ ask, cwd, state, disabled, onAnswer }: AskDockProps) {
+  const controls: AnswerControls = { state, disabled, onAnswer }
+
+  return (
+    <section data-slot="ask-dock" aria-label="Needs you" className="grid gap-2 pb-1">
+      <NeedsYou />
+      {Match.value(ask).pipe(
+        Match.tagsExhaustive({
+          PermissionAsk: (permission): React.ReactNode => (
+            <PermissionDock ask={permission} cwd={cwd} controls={controls} />
+          ),
+          QuestionAsk: (question): React.ReactNode => (
+            <QuestionDock ask={question} controls={controls} />
+          ),
+          UnknownAsk: (unknown): React.ReactNode => (
+            <UnknownDock ask={unknown} controls={controls} />
+          ),
+        }),
+      )}
+      <AnswerStatus state={state} />
+    </section>
+  )
+}

@@ -47,7 +47,7 @@ export const withoutLineNumbers = (text: string): string =>
     Option.getOrElse(() => text),
   )
 
-const fileName = (path: string): string => path.split('/').at(-1) ?? path
+export const fileName = (path: string): string => path.split('/').at(-1) ?? path
 
 export const pathOf = (call: ToolCallModel): Option.Option<string> =>
   stringField(call.input, PATH_FIELD)
@@ -61,17 +61,19 @@ export const picturesOf = (call: ToolCallModel): readonly Picture[] => {
   })
 }
 
+export const editHunks = (oldString: string, newString: string): readonly DiffHunk[] => [
+  {
+    oldStart: 1,
+    newStart: 1,
+    lines: [
+      ...oldString.split(LINE_BREAK).map((line) => `-${line}`),
+      ...newString.split(LINE_BREAK).map((line) => `+${line}`),
+    ],
+  },
+]
+
 export const inputHunks = (call: ToolCallModel): Option.Option<readonly DiffHunk[]> =>
-  Option.map(decodeEditInput(call.input), (edit) => [
-    {
-      oldStart: 1,
-      newStart: 1,
-      lines: [
-        ...edit.old_string.split(LINE_BREAK).map((line) => `-${line}`),
-        ...edit.new_string.split(LINE_BREAK).map((line) => `+${line}`),
-      ],
-    },
-  ])
+  Option.map(decodeEditInput(call.input), (edit) => editHunks(edit.old_string, edit.new_string))
 
 export const patchHunks = (call: ToolCallModel): Option.Option<readonly PatchHunk[]> =>
   pipe(
