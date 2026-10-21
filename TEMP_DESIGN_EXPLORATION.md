@@ -776,8 +776,9 @@ true`, at least a minute after the last start (Hark warns iOS drops faster ones)
 - **The manifest**: `name` and `short_name` are `crook`, `display` is `standalone`, the
   background and theme colours are the light background, and the orientation isn't locked.
 
-The install screen and the manifest moved to `DESIGN.md` (Outside the app). Approvals,
-questions, withdrawal and the Live Activity's lifecycle stay here for JC-107.
+The install screen and the manifest moved to `DESIGN.md` (Outside the app). Approvals and the
+Live Activity's lifecycle moved there too, with JC-108 and JC-109. Questions and withdrawal stay
+here for JC-107.
 
 ### Decided against
 
@@ -796,7 +797,7 @@ These were picked in the prototype, not measured:
 - the wordmark is 26% of the icon's width with `-0.03em` tracking;
 - the splash mark is 30% of the screen's width;
 - the install screen staggers its pieces by 50ms;
-- how long the "All done" card lingers isn't picked yet.
+- how long the "All done" card lingers: 45s, picked by JC-108 from Hark's own example.
 
 ### Data this needs
 

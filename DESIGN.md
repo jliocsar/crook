@@ -474,6 +474,14 @@ Unmeasured knobs, picked in the prototype; settle them on the phone: the 1.5s "B
   ("Prototype the herd screen wants Bash · laptop"), or the latest working one. The symbol is
   `warning`, `terminal` or `success`, with no progress bar. The accent is the dark theme's
   foreground (`#EEEBE4`).
+- **Approvals** are Hark approval prompts on a normal notification, never on the Live Activity,
+  so the herd card keeps the device's one slot. The prompt names the tool only, never the command,
+  uses Hark's longest expiry (a day), and is cancelled as soon as the agent stops waiting on that
+  ask. Seeing the agent in crook does not cancel it: it is an action, not an alert.
+- **The Live Activity starts** when the herd goes from idle to busy, because a start makes a
+  sound, and never within a minute of the last start (Hark warns iOS drops faster ones). It
+  updates on each change of its text, ends on "All done" and lingers 45s (Hark's own example of
+  a short linger), and is restarted with its fixed key before Hark's 8h cap.
 
 Unmeasured knobs: the wordmark is 26% of the icon's width with `-0.03em` tracking, the splash mark
 is 30% of the screen's width, and the install screen staggers its pieces by 50ms.
