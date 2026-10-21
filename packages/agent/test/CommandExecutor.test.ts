@@ -12,7 +12,6 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { CommandExecutor, HERDR_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
-import { HUB_RECONNECT_BASE } from '@crook/agent/HubLink'
 import { InputDelivered, Prompt, SendKeys, interrupt } from '@crook/domain/Command'
 import { IdempotencyKey, PaneId } from '@crook/domain/Ids'
 import type { HerdrEvent } from '@crook/herdr/Events'
@@ -25,7 +24,7 @@ import {
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { AgentPromptMethod, AgentSendKeysMethod } from '@crook/herdr/Methods'
-import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
+import { COMMAND_TIMEOUT, HUB_RECONNECT_BASE } from '@crook/protocol/AgentLink'
 import {
   CommandDeliveryUnknown,
   HerdrRefusedCommand,

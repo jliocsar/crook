@@ -1,7 +1,6 @@
 import * as BunSocket from '@effect/platform-bun/BunSocket'
 import * as Clock from 'effect/Clock'
 import * as Config from 'effect/Config'
-import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
@@ -21,6 +20,8 @@ import {
   AGENT_SOCKET_OPEN_TIMEOUT,
   AgentLink,
   Hello,
+  hubReconnectSchedule,
+  stayedHealthy,
 } from '@crook/protocol/AgentLink'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
@@ -31,8 +32,6 @@ export type AgentLinkClient = RpcClient.FromGroup<typeof AgentLink, RpcClientErr
 export type HubConnect = Effect.Effect<AgentLinkClient, never, Scope.Scope>
 
 const HUB_AUTHORIZATION_HEADER = 'X-Exedev-Authorization'
-
-export const HUB_RECONNECT_BASE = Duration.millis(77)
 
 export const CrookHubUrl = Config.URL('CROOK_HUB_URL')
 export const CrookHubToken = Config.Redacted('CROOK_HUB_TOKEN')
@@ -105,12 +104,7 @@ const make = (connect: HubConnect, hello: Hello) =>
           Option.orElseSome(() => now),
         ),
       )
-      const stayedHealthy = Effect.zipWith(
-        Ref.get(acceptedAt),
-        Clock.currentTimeMillis,
-        (accepted, now) =>
-          Option.exists(accepted, (first) => now - first >= Duration.toMillis(AGENT_PING_INTERVAL)),
-      )
+      const healthy = Effect.zipWith(Ref.get(acceptedAt), Clock.currentTimeMillis, stayedHealthy)
 
       yield* Effect.all([holdAttach(client), publishChanges(client, markAccepted)], {
         concurrency: 'unbounded',
@@ -119,21 +113,12 @@ const make = (connect: HubConnect, hello: Hello) =>
         Effect.catchDefect((cause) => Effect.fail(new HubCallDefected({ cause }))),
         Effect.tapError((error) => Effect.logWarning(error.message)),
         Effect.catch((error) =>
-          Effect.flatMap(stayedHealthy, (healthy) => (healthy ? Effect.void : Effect.fail(error))),
+          Effect.flatMap(healthy, (stayed) => (stayed ? Effect.void : Effect.fail(error))),
         ),
       )
     }, Effect.scoped)
 
-    yield* session().pipe(
-      Effect.retry(
-        Schedule.min([
-          Schedule.exponential(HUB_RECONNECT_BASE),
-          Schedule.spaced(AGENT_PING_INTERVAL),
-        ]),
-      ),
-      Effect.forever,
-      Effect.forkScoped,
-    )
+    yield* session().pipe(Effect.retry(hubReconnectSchedule), Effect.forever, Effect.forkScoped)
   })
 
 export const layerWith = (connect: HubConnect, hello: Hello) =>

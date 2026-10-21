@@ -52,6 +52,7 @@ import { AgentPromptMethod } from '@crook/herdr/Methods'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
 import { AGENT_PING_INTERVAL, AgentLink, Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { ClientApi, MachineStillConnected } from '@crook/protocol/ClientApi'
+import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import {
   type CommandResult,
   MachineOffline,
@@ -149,7 +150,7 @@ const attachAs = Effect.fn('attachAs')(function* (
   machine: MachineId,
   pingInterval: Duration.Duration = AGENT_PING_INTERVAL,
 ) {
-  const agent = yield* connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(machine), pingInterval)
+  const agent = yield* connect(AgentLink, AGENT_PATH, agentToken(machine), pingInterval)
 
   yield* agent.Attach({ hello }).pipe(Stream.runDrain, Effect.ignore, Effect.forkScoped)
   yield* agent.PublishState({ state: stateOf(machine, 1) })
@@ -173,7 +174,7 @@ const machineIn = (view: HerdView, id: MachineId) =>
   Arr.findFirst(view.machines, (entry) => entry.machine.id === id)
 
 const herdWhere = Effect.fn('herdWhere')(function* (predicate: (view: HerdView) => boolean) {
-  const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+  const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
 
   return yield* phone
     .WatchHerd()
@@ -184,7 +185,7 @@ const answeringAgent = Effect.fn('answeringAgent')(function* (
   machine: MachineId,
   answer: (routed: RoutedCommand) => CommandResult,
 ) {
-  const agent = yield* connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(machine))
+  const agent = yield* connect(AgentLink, AGENT_PATH, agentToken(machine))
 
   yield* agent.Attach({ hello }).pipe(
     Stream.runForEach((routed) => agent.CompleteCommand({ id: routed.id, result: answer(routed) })),
@@ -202,7 +203,7 @@ const machineShows = (id: MachineId, connection: MachineConnection) =>
 layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
   live.effect('answers the health check without any exe.dev headers', () =>
     Effect.gen(function* () {
-      expect(yield* get(HttpRoutes.HEALTH_PATH)).toEqual({ status: 200, body: 'ok' })
+      expect(yield* get(HEALTH_PATH)).toEqual({ status: 200, body: 'ok' })
     }),
   )
 
@@ -227,31 +228,31 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
 
   live.effect('refuses phone sockets from another origin, another login or an agent token', () =>
     Effect.gen(function* () {
-      expect(yield* get(HttpRoutes.CLIENT_PATH, { ...ownerLogin, Origin: EVIL_ORIGIN })).toEqual(
+      expect(yield* get(CLIENT_PATH, { ...ownerLogin, Origin: EVIL_ORIGIN })).toEqual(
         rejectedWith(new UpgradeOriginRejected({ origin: Option.some(EVIL_ORIGIN) })),
       )
-      expect(yield* get(HttpRoutes.CLIENT_PATH, { 'X-ExeDev-Email': OWNER })).toEqual(
+      expect(yield* get(CLIENT_PATH, { 'X-ExeDev-Email': OWNER })).toEqual(
         rejectedWith(new UpgradeOriginRejected({ origin: Option.none() })),
       )
-      expect(yield* get(HttpRoutes.CLIENT_PATH, { Origin: HUB_ORIGIN })).toEqual(
+      expect(yield* get(CLIENT_PATH, { Origin: HUB_ORIGIN })).toEqual(
         rejectedWith(new OwnerEmailRejected({ email: Option.none() })),
       )
-      expect(
-        yield* get(HttpRoutes.CLIENT_PATH, { ...agentToken('laptop'), Origin: HUB_ORIGIN }),
-      ).toEqual(rejectedWith(new BrowserLoginRequired()))
+      expect(yield* get(CLIENT_PATH, { ...agentToken('laptop'), Origin: HUB_ORIGIN })).toEqual(
+        rejectedWith(new BrowserLoginRequired()),
+      )
     }),
   )
 
   live.effect('refuses agent sockets without a machine id or minted by someone else', () =>
     Effect.gen(function* () {
-      expect(yield* get(HttpRoutes.AGENT_PATH, { 'X-ExeDev-Email': OWNER })).toEqual(
+      expect(yield* get(AGENT_PATH, { 'X-ExeDev-Email': OWNER })).toEqual(
         rejectedWith(new MachineUnidentified()),
       )
       expect(
-        yield* get(HttpRoutes.AGENT_PATH, { 'X-ExeDev-Email': OWNER, 'X-ExeDev-Token-Ctx': '{}' }),
+        yield* get(AGENT_PATH, { 'X-ExeDev-Email': OWNER, 'X-ExeDev-Token-Ctx': '{}' }),
       ).toEqual(rejectedWith(new MachineUnidentified()))
       expect(
-        yield* get(HttpRoutes.AGENT_PATH, { ...agentToken('laptop'), 'X-ExeDev-Email': STRANGER }),
+        yield* get(AGENT_PATH, { ...agentToken('laptop'), 'X-ExeDev-Email': STRANGER }),
       ).toEqual(rejectedWith(new OwnerEmailRejected({ email: Option.some(STRANGER) })))
     }),
   )
@@ -280,7 +281,7 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
       const laptop = MachineId.make('seen-laptop')
 
       yield* attachAs(laptop)
-      const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+      const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
       const refused = yield* phone.ForgetMachine({ machine: laptop }).pipe(Effect.flip)
 
       yield* phone.MarkSeen({ machine: laptop, pane: PANE })
@@ -299,7 +300,7 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
     Effect.gen(function* () {
       const laptop = MachineId.make('spoof-laptop')
       const impostor = MachineId.make('spoof-impostor')
-      const agent = yield* connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(laptop))
+      const agent = yield* connect(AgentLink, AGENT_PATH, agentToken(laptop))
       const mismatch = yield* agent
         .PublishState({ state: stateOf(impostor, 0) })
         .pipe(RpcClient.withHeaders(tokenContextOf(impostor)), Effect.flip)
@@ -354,7 +355,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
           }),
         ),
       )
-      const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+      const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
       const receipt = yield* phone.SendCommand({
         machine,
         key,
@@ -404,7 +405,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
           events: yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>(),
           sent,
         })
-        const dialHub = connect(AgentLink, HttpRoutes.AGENT_PATH, agentToken(machine)).pipe(
+        const dialHub = connect(AgentLink, AGENT_PATH, agentToken(machine)).pipe(
           Effect.provideService(HttpServer.HttpServer, server),
         )
 
@@ -415,7 +416,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
           ),
         )
         yield* machineShows(machine, 'online')
-        const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+        const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
         const command = new Prompt({ pane, text: 'continue' })
         const receipt = yield* phone.SendCommand({ machine, key, command })
         const replayed = yield* phone.SendCommand({ machine, key, command })
@@ -431,7 +432,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
   live.effect('answers MachineOffline for a machine whose agent is not attached', () =>
     Effect.gen(function* () {
       const machine = MachineId.make('command-nowhere')
-      const phone = yield* connect(ClientApi, HttpRoutes.CLIENT_PATH, ownerLogin)
+      const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
       const offline = yield* phone
         .SendCommand({ machine, key, command: new Prompt({ pane, text: 'continue' }) })
         .pipe(Effect.flip)

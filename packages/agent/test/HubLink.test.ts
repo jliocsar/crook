@@ -35,13 +35,20 @@ import {
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { AgentPromptMethod, AgentSendKeysMethod } from '@crook/herdr/Methods'
-import { AGENT_PING_INTERVAL, AgentLink, Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import {
+  AGENT_PING_INTERVAL,
+  AgentLink,
+  Hello,
+  HUB_RECONNECT_BASE,
+  MachineIdMismatch,
+} from '@crook/protocol/AgentLink'
 import {
   CommandId,
   type CommandResult,
   PaneNotAgent,
   RoutedCommand,
 } from '@crook/protocol/Commands'
+import { AGENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
 import packageJson from '../package.json' with { type: 'json' }
@@ -70,7 +77,6 @@ interface RealHub {
   readonly hellos: Queue.Queue<Hello>
 }
 
-const HUB_PATH = '/rpc/agent'
 const TICK = Duration.millis(1)
 const AGENT_PANE = PaneId.make('w1:p1')
 const SHELL_PANE = PaneId.make('w1:p2')
@@ -158,7 +164,7 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
 const backoffTimeline = (failedAttempts: number, attachLifetime: Duration.Duration) =>
   pipe(
     Arr.makeBy(failedAttempts, (attempt) =>
-      Duration.min(Duration.times(HubLink.HUB_RECONNECT_BASE, 2 ** attempt), AGENT_PING_INTERVAL),
+      Duration.min(Duration.times(HUB_RECONNECT_BASE, 2 ** attempt), AGENT_PING_INTERVAL),
     ),
     Arr.scan(0, (at, delay) => at + Duration.toMillis(Duration.sum(attachLifetime, delay))),
   )
@@ -182,7 +188,7 @@ it.effect('republishes the current state when it reconnects after the hub ends A
     yield* Queue.take(received)
     yield* SubscriptionRef.set(state, stateAt(1))
     yield* Queue.take(received)
-    yield* TestClock.adjust(Duration.sum(TICK, HubLink.HUB_RECONNECT_BASE))
+    yield* TestClock.adjust(Duration.sum(TICK, HUB_RECONNECT_BASE))
 
     expect(yield* Queue.take(received)).toEqual(stateAt(1))
     expect(yield* attempts).toEqual(backoffTimeline(1, TICK))
@@ -232,7 +238,7 @@ it.effect('reconnects with backoff when the hub rejects a publish', () =>
     })
 
     yield* Queue.take(received)
-    yield* TestClock.adjust(Duration.sum(TICK, HubLink.HUB_RECONNECT_BASE))
+    yield* TestClock.adjust(Duration.sum(TICK, HUB_RECONNECT_BASE))
 
     expect(yield* attempts).toEqual(backoffTimeline(1, TICK))
   }),
@@ -245,7 +251,7 @@ it.effect('reconnects with backoff when a hub call dies', () =>
     })
 
     yield* Queue.take(received)
-    yield* TestClock.adjust(Duration.sum(TICK, HubLink.HUB_RECONNECT_BASE))
+    yield* TestClock.adjust(Duration.sum(TICK, HUB_RECONNECT_BASE))
 
     expect(yield* attempts).toEqual(backoffTimeline(1, TICK))
   }),
@@ -287,7 +293,7 @@ it.effect('skips the versions that went stale while a publish was in flight', ()
   }),
 )
 
-const hubProtocol = RpcServer.layerProtocolWebsocket({ path: HUB_PATH }).pipe(
+const hubProtocol = RpcServer.layerProtocolWebsocket({ path: AGENT_PATH }).pipe(
   Layer.provide(protocolSerialization),
 )
 
@@ -346,7 +352,7 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
           yield* agentWith(state, sent),
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
-              CROOK_HUB_URL: `ws://${hub.url.host}${HUB_PATH}`,
+              CROOK_HUB_URL: `ws://${hub.url.host}${AGENT_PATH}`,
               CROOK_HUB_TOKEN: 'exe0.vm-token',
               CROOK_MACHINE_LABEL: 'Laptop',
             }),
@@ -388,7 +394,7 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
           yield* agentWith(state, sent),
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
-              CROOK_HUB_URL: `ws://${hub.url.host}${HUB_PATH}`,
+              CROOK_HUB_URL: `ws://${hub.url.host}${AGENT_PATH}`,
               CROOK_HUB_TOKEN: 'exe0.vm-token',
             }),
           ),
