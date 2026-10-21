@@ -97,7 +97,6 @@ const install = Effect.fn('install')(function* (sandbox: Sandbox, args: readonly
     env: {
       PATH: `${sandbox.root}/fakes:${SYSTEM_PATH}`,
       HOME: sandbox.root,
-      TMPDIR: sandbox.root,
       CROOK_INSTALL_DIR: sandbox.installed,
       CROOK_COSIGN: `${sandbox.root}/fakes/cosign`,
       FAKE_RELEASE: sandbox.release,
@@ -126,6 +125,7 @@ layer(BunServices.layer)('install.sh', (it) => {
       const cosignCalls = yield* fileSystem.readFileString(sandbox.cosignCalls)
       const ghCalls = yield* fileSystem.readFileString(sandbox.ghCalls)
       const installed = yield* fileSystem.readFileString(`${sandbox.installed}/crook-agent`)
+      const leftInCache = yield* fileSystem.readDirectory(`${sandbox.root}/.cache/crook`)
 
       expect(result.exitCode).toBe(0)
       expect(result.output).toContain(`installed ${sandbox.installed}/crook-agent ${VERSION}`)
@@ -133,6 +133,7 @@ layer(BunServices.layer)('install.sh', (it) => {
       expect(cosignCalls).toContain(`--certificate-oidc-issuer ${GITHUB_ISSUER}`)
       expect(ghCalls).toContain(`release download v${VERSION} --repo jliocsar/crook`)
       expect(installed).toBe(fakeAgent(honestRelease.agentReports))
+      expect(leftInCache).toEqual([])
     }),
   )
 

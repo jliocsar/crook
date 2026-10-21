@@ -34,26 +34,23 @@ export class VersionMismatch extends Schema.TaggedError<VersionMismatch>()('Vers
 }
 
 export const versionOfTag = (tag: string) =>
-  pipe(
-    Option.liftPredicate(tag, Str.startsWith(TAG_PREFIX)),
-    Option.map(Str.slice(TAG_PREFIX.length)),
-    Option.flatMap(Schema.decodeUnknownOption(CrookVersion)),
-    Option.match({
-      onNone: () => Effect.fail(new TagNotAVersion({ tag })),
-      onSome: Effect.succeed,
-    }),
+  Effect.fromOption(
+    pipe(
+      Option.liftPredicate(tag, Str.startsWith(TAG_PREFIX)),
+      Option.map(Str.slice(TAG_PREFIX.length)),
+      Option.flatMap(Schema.decodeUnknownOption(CrookVersion)),
+    ),
+    () => new TagNotAVersion({ tag }),
   )
 
 export const releasedVersion = Effect.fn('ReleaseVersion.releasedVersion')(function* (
   tag: string,
   versions: WorkspaceVersions,
 ) {
-  const tagged = yield* versionOfTag(tag)
-
-  return yield* Effect.succeed(tagged).pipe(
+  return yield* versionOfTag(tag).pipe(
     Effect.filterOrFail(
-      () => versions.agent === tagged && versions.hub === tagged,
-      () => new VersionMismatch({ tagged, ...versions }),
+      (tagged) => versions.agent === tagged && versions.hub === tagged,
+      (tagged) => new VersionMismatch({ tagged, ...versions }),
     ),
   )
 })

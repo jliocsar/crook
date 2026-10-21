@@ -35,8 +35,10 @@ workflow of $REPOSITORY signed them, and installs them into $install_directory
 named, and the latest release without --version. Nothing updates on its own:
 run this again to update.
 
-The signature is checked with cosign $COSIGN_VERSION, downloaded once into
-$cache_directory and checked against its pinned SHA-256. Set CROOK_COSIGN to
+Downloads go to a directory under $cache_directory, removed
+when the installer ends, and each binary is run from there once, with --version,
+before it is installed. The signature is checked with cosign $COSIGN_VERSION,
+downloaded once into $cache_directory and checked against its pinned SHA-256. Set CROOK_COSIGN to
 the path of a cosign you trust to use that one instead.
 EOF
 }
@@ -148,7 +150,6 @@ trusted_cosign() {
   [ "$(sha256_of "$work/cosign")" = "$cosign_sha256" ] ||
     fail "the downloaded cosign $COSIGN_VERSION does not match its pinned SHA-256, so nothing was installed."
   chmod 755 "$work/cosign"
-  mkdir -p "$cache_directory"
   mv -f "$work/cosign" "$cached"
   printf '%s\n' "$cached"
 }
@@ -161,7 +162,8 @@ fi
 printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' ||
   fail "$version is not a crook version: crook versions are a plain major.minor.patch, such as 0.1.0."
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/crook-install.XXXXXX")"
+mkdir -p "$cache_directory"
+work="$(mktemp -d "$cache_directory/install.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 trap 'exit 1' HUP INT TERM
 
@@ -195,7 +197,8 @@ for app in $apps; do
   [ "$(sha256_of "$work/$artifact")" = "$expected" ] ||
     fail "$artifact does not match its signed checksum, so nothing was installed."
   chmod 755 "$work/$artifact"
-  reported="$("$work/$artifact" --version)" || fail "$artifact did not run on this machine, so nothing was installed."
+  reported="$("$work/$artifact" --version)" ||
+    fail "$artifact did not run from $work, so nothing was installed. That directory must allow running programs, as a noexec mount does not."
   [ "$reported" = "crook-$app v$version" ] ||
     fail "$artifact reports \"$reported\" rather than crook-$app v$version, so nothing was installed."
 done

@@ -6,7 +6,6 @@ import * as Schema from 'effect/Schema'
 import * as ChildProcess from 'effect/process/ChildProcess'
 import { ChildProcessSpawner } from 'effect/process/ChildProcessSpawner'
 
-import { EMBEDDED_WEB_DIRECTORY } from '@crook/hub/StaticWeb'
 import {
   type Artifact,
   type ReleaseTarget,
@@ -15,6 +14,7 @@ import {
   bunCompileTarget,
 } from '@crook/release/Targets'
 import { PackageVersion, releasedVersion } from '@crook/release/ReleaseVersion'
+import { WEB_BUILD_DIRECTORY } from '@crook/web/build/WebBuild'
 
 export interface Workspace {
   readonly root: string
@@ -41,8 +41,7 @@ export class CompileFailed extends Schema.TaggedError<CompileFailed>()('CompileF
   }
 }
 
-const webBuildOf = (workspace: Workspace) =>
-  `${workspace.root}/packages/web/${EMBEDDED_WEB_DIRECTORY}`
+const webBuildOf = (workspace: Workspace) => `${workspace.root}/packages/web/${WEB_BUILD_DIRECTORY}`
 
 const embeddedAssets = (artifact: Artifact, workspace: Workspace): readonly string[] =>
   Match.value(artifact.app).pipe(
@@ -89,8 +88,12 @@ const buildWeb = (workspace: Workspace) =>
     ),
   )
 
-const compile = (artifact: Artifact, workspace: Workspace) =>
-  exitCodeOf(
+const compile = Effect.fn('Build.compile')(function* (artifact: Artifact, workspace: Workspace) {
+  const fileSystem = yield* FileSystem.FileSystem
+  const outfile = `${workspace.output}/${artifactName(artifact)}`
+
+  yield* fileSystem.remove(outfile, { force: true })
+  yield* exitCodeOf(
     ChildProcess.make('bun', compileArguments(artifact, workspace), {
       cwd: workspace.root,
       stdout: 'inherit',
@@ -101,22 +104,22 @@ const compile = (artifact: Artifact, workspace: Workspace) =>
       (exitCode) => exitCode === SUCCESS,
       (exitCode) => new CompileFailed({ artifact: artifactName(artifact), exitCode }),
     ),
-    Effect.andThen(Effect.logInfo(`Built ${workspace.output}/${artifactName(artifact)}`)),
   )
+  yield* Effect.logInfo(`Built ${outfile}`)
+})
 
 export const build = Effect.fn('Build.build')(function* (targets: readonly ReleaseTarget[]) {
   const fileSystem = yield* FileSystem.FileSystem
   const workspace = yield* thisWorkspace
 
   yield* buildWeb(workspace)
-  yield* fileSystem.remove(workspace.output, { recursive: true, force: true })
   yield* fileSystem.makeDirectory(workspace.output, { recursive: true })
   yield* Effect.forEach(artifactsFor(targets), (artifact) => compile(artifact, workspace), {
     discard: true,
   })
 })
 
-const versionOfMember = Effect.fn('Build.versionOfMember')(function* (
+export const versionOfMember = Effect.fn('Build.versionOfMember')(function* (
   workspace: Workspace,
   member: string,
 ) {

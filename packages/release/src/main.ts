@@ -37,7 +37,7 @@ const build = Command.make(
   ({ targets, host }) => Effect.flatMap(chosenTargets(targets, host), Build.build),
 ).pipe(
   Command.withDescription(
-    'Build the web app, then compile the agent and the hub, with the web build embedded, into dist/ at the repository root.',
+    'Build the web app, then compile the agent and the hub, with the web build embedded, into dist/ at the repository root. Only the artifacts it builds are replaced; the other targets already in dist/ stay.',
   ),
 )
 
