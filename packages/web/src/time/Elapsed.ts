@@ -5,7 +5,7 @@ import * as Option from 'effect/Option'
 const SECONDS_PER_MINUTE = 60
 const MINUTES_PER_HOUR = 60
 const HOURS_PER_DAY = 24
-const MILLISECONDS_PER_SECOND = 1000
+const TENTHS_PER_SECOND = 10
 const ONE_DECIMAL_BELOW_SECONDS = 10
 
 export const shortElapsed = (now: DateTime.Utc, since: DateTime.Utc): string => {
@@ -28,27 +28,29 @@ export const shortElapsed = (now: DateTime.Utc, since: DateTime.Utc): string => 
   return `${Math.floor(hours / HOURS_PER_DAY)}d`
 }
 
-const runDuration = (milliseconds: number): string => {
-  const shown = Math.max(0, milliseconds)
-  const seconds = shown / MILLISECONDS_PER_SECOND
+const runDuration = (span: Duration.Duration): string => {
+  const milliseconds = Math.round(Math.max(0, Duration.toMillis(span)))
+  const exactSeconds = Duration.toSeconds(Duration.millis(milliseconds))
+  const tenths = Math.round(exactSeconds * TENTHS_PER_SECOND) / TENTHS_PER_SECOND
+  const seconds = Math.round(exactSeconds)
 
-  if (shown < MILLISECONDS_PER_SECOND) {
-    return `${Math.round(shown)}ms`
+  if (exactSeconds < 1) {
+    return `${milliseconds}ms`
+  }
+
+  if (tenths < ONE_DECIMAL_BELOW_SECONDS) {
+    return `${tenths.toFixed(1)}s`
   }
 
   if (seconds < SECONDS_PER_MINUTE) {
-    return seconds < ONE_DECIMAL_BELOW_SECONDS
-      ? `${seconds.toFixed(1)}s`
-      : `${Math.round(seconds)}s`
+    return `${seconds}s`
   }
 
-  const minutes = Math.floor(seconds / SECONDS_PER_MINUTE)
-
-  return `${minutes}m ${Math.round(seconds - minutes * SECONDS_PER_MINUTE)}s`
+  return `${Math.floor(seconds / SECONDS_PER_MINUTE)}m ${seconds % SECONDS_PER_MINUTE}s`
 }
 
 export const spanDuration = (from: DateTime.Utc, to: DateTime.Utc): string =>
-  runDuration(Duration.toMillis(DateTime.distance(from, to)))
+  runDuration(DateTime.distance(from, to))
 
 export const runningSpan = (
   startedAt: Option.Option<DateTime.Utc>,

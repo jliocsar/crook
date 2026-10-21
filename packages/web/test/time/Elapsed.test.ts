@@ -32,6 +32,22 @@ describe('runningSpan', () => {
     )
   })
 
+  it('rounds before it picks the unit, so a span just under a boundary reads as the next one', () => {
+    const spanOf = (milliseconds: number) =>
+      runningSpan(
+        Option.some(START),
+        Option.some(DateTime.addDuration(START, Duration.millis(milliseconds))),
+        false,
+        START,
+      )
+
+    expect(spanOf(999.6)).toEqual(Option.some('1.0s'))
+    expect(spanOf(9_960)).toEqual(Option.some('10s'))
+    expect(spanOf(59_600)).toEqual(Option.some('1m 0s'))
+    expect(spanOf(119_600)).toEqual(Option.some('2m 0s'))
+    expect(spanOf(61_000)).toEqual(Option.some('1m 1s'))
+  })
+
   it('times a running span up to now, and gives nothing for an unfinished one that stopped', () => {
     expect(runningSpan(Option.some(START), Option.none(), true, later(12))).toEqual(
       Option.some('12s'),

@@ -51,17 +51,23 @@ export interface ChatCommandsInput {
 
 export interface PromptWait {
   readonly promptsAtSend: number
-  readonly arrived: boolean
+  readonly awaited: number
+}
+
+export interface PromptSend {
+  readonly replacesFailed: boolean
+  readonly awaitsPrompt: boolean
 }
 
 const SLASH = '/'
-const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, arrived: true }
+const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, awaited: 0 }
 
 export const STOP_SETTLE = Duration.millis(512)
 
 const isSending = PendingAction.$is('Sending')
 const isSent = PendingAction.$is('Sent')
 const isDone = PendingAction.$is('Done')
+const isFailed = PendingAction.$is('Failed')
 
 const decodeFolder = Schema.decodeUnknownOption(FolderPath)
 
@@ -104,7 +110,25 @@ export const promptCount = (items: readonly ChatItem[]): number =>
   Arr.filter(items, isUserPrompt).length
 
 const hasArrived = (wait: PromptWait, items: readonly ChatItem[]): boolean =>
-  wait.arrived || promptCount(items) > wait.promptsAtSend
+  wait.awaited === 0 || promptCount(items) >= wait.promptsAtSend + wait.awaited
+
+const awaitsPrompt = (command: Command): boolean =>
+  Option.exists(textOf(command), (text) => !text.startsWith(SLASH))
+
+export const waitAfterSend = (
+  wait: PromptWait,
+  items: readonly ChatItem[],
+  send: PromptSend,
+): PromptWait => {
+  const carried = hasArrived(wait, items) ? 0 : wait.awaited - (send.replacesFailed ? 1 : 0)
+  const awaited = carried + (send.awaitsPrompt ? 1 : 0)
+
+  if (awaited === 0) {
+    return NOTHING_AWAITED
+  }
+
+  return { promptsAtSend: carried === 0 ? promptCount(items) : wait.promptsAtSend, awaited }
+}
 
 export const pendingPromptText = (
   action: CommandAction,
@@ -161,15 +185,15 @@ const usePromptWait = (items: readonly ChatItem[]) => {
   const arrived = hasArrived(wait, items)
 
   React.useEffect(() => {
-    if (arrived && !wait.arrived) {
-      setWait({ promptsAtSend: wait.promptsAtSend, arrived: true })
+    if (arrived && wait.awaited > 0) {
+      setWait(NOTHING_AWAITED)
     }
   }, [arrived, wait])
 
   return {
     wait,
-    awaitPrompt: () => {
-      setWait({ promptsAtSend: promptCount(items), arrived: false })
+    afterSend: (send: PromptSend) => {
+      setWait(waitAfterSend(wait, items, send))
     },
   }
 }
@@ -242,7 +266,10 @@ export const useChatCommands = ({
   useRestartInPlace(machine, restart)
 
   const sendPrompt = (command: Command) => {
-    prompted.awaitPrompt()
+    prompted.afterSend({
+      replacesFailed: isFailed(prompt.state) && Option.exists(prompt.last, awaitsPrompt),
+      awaitsPrompt: awaitsPrompt(command),
+    })
     prompt.send(command)
   }
 

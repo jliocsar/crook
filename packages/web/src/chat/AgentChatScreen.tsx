@@ -12,10 +12,10 @@ import { chatScreenAtom } from '@crook/web/atoms/Chat'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import {
-  paneTranscriptAtom,
   PaneTranscriptKey,
-  paneTranscriptWholeAtom,
+  transcriptAtom,
   transcriptRetryAtom,
+  transcriptWholeAtom,
 } from '@crook/web/atoms/Transcript'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
 import type { ComposerCommands } from '@crook/web/chat/ChatCommands'
@@ -192,8 +192,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   )
   const model = useAtomValue(chatScreenAtom(opened))
   const connection = useAtomValue(connectionAtom)
-  const view = AsyncResult.value(useAtomValue(paneTranscriptAtom(transcriptKey)))
-  const showWhole = useAtomSet(paneTranscriptWholeAtom(transcriptKey))
+  const view = AsyncResult.value(useAtomValue(transcriptAtom(transcriptKey)))
+  const showWhole = useAtomSet(transcriptWholeAtom(transcriptKey))
   const retry = useAtomSet(transcriptRetryAtom(transcriptKey))
   const fromMachine = useOpenedFromMachine()
   const now = useNow()
@@ -212,6 +212,15 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
 
   useAtomMount(seenWhileOpenAtom(opened))
 
+  const openRun = (run: SubagentRun) => {
+    if (Option.isSome(run.subagent)) {
+      void navigate({
+        to: '/m/$machine/p/$pane/sub/$session/$subagent',
+        params: { machine, pane, session: run.session, subagent: run.subagent.value },
+      })
+    }
+  }
+
   const environment: ThreadEnvironment = {
     now,
     cwd,
@@ -219,14 +228,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     onShowEarlier: () => {
       showWhole(true)
     },
-    onOpenRun: (run: SubagentRun) => {
-      if (Option.isSome(run.subagent)) {
-        void navigate({
-          to: '/m/$machine/p/$pane/sub/$session/$subagent',
-          params: { machine, pane, session: run.session, subagent: run.subagent.value },
-        })
-      }
-    },
+    onOpenRun: Option.some(openRun),
   }
 
   const working = Option.filter(

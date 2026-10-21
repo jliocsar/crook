@@ -1,5 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from 'cn'
+import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
 import { ArrowDown } from 'lucide-react'
 import { motion, useReducedMotion } from 'motion/react'
@@ -25,7 +26,6 @@ const ROW_GAP = 12
 const EDGE_PADDING = 16
 const FOLLOW_THRESHOLD = 48
 const RISE = 8
-const MILLISECONDS_PER_SECOND = 1000
 const JUMP_ICON_SIZE = 13
 
 const isAtBottom = (viewport: HTMLElement): boolean =>
@@ -43,8 +43,11 @@ const useSettled = (rowCount: number): boolean => {
       () => {
         setSettled(true)
       },
-      Option.getOrElse(Option.fromUndefinedOr(motionTokens().fade.duration), () => 0) *
-        MILLISECONDS_PER_SECOND,
+      Duration.toMillis(
+        Duration.seconds(
+          Option.getOrElse(Option.fromUndefinedOr(motionTokens().fade.duration), () => 0),
+        ),
+      ),
     )
 
     return () => {
@@ -96,8 +99,8 @@ export function Thread({
   handle?: React.Ref<ThreadHandle>
 }) {
   const viewport = React.useRef<HTMLDivElement>(null)
-  const rises = React.useRef(new Map<string, boolean>())
-  const memory = React.useRef(new Map<string, boolean>())
+  const [rises] = React.useState(() => new Map<string, boolean>())
+  const [memory] = React.useState(() => new Map<string, boolean>())
   const [following, setFollowing] = React.useState(true)
   const followingRef = React.useRef(true)
   const reduce = useReducedMotion() ?? false
@@ -152,10 +155,10 @@ export function Thread({
   React.useLayoutEffect(() => {
     if (!settled) {
       for (const row of rows) {
-        rises.current.set(row.key, false)
+        rises.set(row.key, false)
       }
     }
-  }, [rows, settled])
+  }, [rows, settled, rises])
 
   React.useEffect(() => {
     const element = viewport.current
@@ -177,21 +180,14 @@ export function Thread({
     }
   }, [toBottom])
 
-  const risesFirstTime = (key: string): boolean => {
-    const decided = rises.current.get(key)
+  const risesFirstTime = (key: string): boolean => rises.get(key) ?? settled
 
-    if (decided !== undefined) {
-      return decided
-    }
-
-    rises.current.set(key, settled)
-
-    return settled
-  }
-
-  const shown = React.useCallback((key: string) => {
-    rises.current.set(key, false)
-  }, [])
+  const shown = React.useCallback(
+    (key: string) => {
+      rises.set(key, false)
+    },
+    [rises],
+  )
 
   return (
     <Dimmed dimmed={dimmed} className="relative h-full min-h-0">
@@ -224,7 +220,7 @@ export function Thread({
                   className="absolute inset-x-0 top-0 px-4"
                   style={{ transform: translate('Y', virtual.start) }}
                 >
-                  <RowMemoryScope store={memory.current} rowKey={row.key}>
+                  <RowMemoryScope store={memory} rowKey={row.key}>
                     <Appear rowKey={row.key} rise={risesFirstTime(row.key)} onShown={shown}>
                       {row.content}
                     </Appear>

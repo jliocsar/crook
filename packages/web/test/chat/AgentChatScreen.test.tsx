@@ -25,8 +25,9 @@ import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
 import { PaneNotInHerd } from '@crook/protocol/ClientApi'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { STOP_SETTLE } from '@crook/web/chat/ChatCommands'
+import { COLD_START } from '@crook/web/rpc/HubLinkState'
 
-import { liveWith, renderApp } from '../AppRender.tsx'
+import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
 import { click, eventually, findByRole, present, wait } from '../Dom.ts'
 import { agent, CROOK_TAB, CROOK_WORKSPACE, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered, STARTED_PANE } from '../HubFakes.ts'
@@ -373,6 +374,25 @@ describe('AgentChatScreen', () => {
     }),
   )
 
+  it.effect('waits for the hub instead of calling closed a pane the cached herd lacks', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(
+        CHAT,
+        stateWith(COLD_START, Option.some(herd([laptopWith([])]))),
+      )
+
+      expect(
+        yield* Effect.promise(() => screen.findByText('Loading the conversation')),
+      ).toBeDefined()
+      expect(screen.queryByText('This pane closed')).toBeNull()
+
+      yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'idle')]))
+
+      expect(yield* Effect.promise(() => screen.findByRole('textbox'))).toBeDefined()
+      expect(screen.queryByText('This pane closed')).toBeNull()
+    }),
+  )
+
   it.effect('starts Claude again in the same folder and replaces the chat in place', () =>
     Effect.gen(function* () {
       const { link, router } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
@@ -598,6 +618,42 @@ describe('AgentChatScreen', () => {
       })
 
       expect(screen.getAllByText('continue')).toHaveLength(2)
+    }),
+  )
+
+  it.effect('keeps a second prompt as sent while only the first has arrived', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'first')])])
+      yield* Effect.promise(() => screen.findByText('first'))
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'second' }))),
+      )
+      yield* Effect.promise(() => userEvent.type(field(), 'second{Enter}'))
+      yield* eventually(() => {
+        expect(screen.getByText('Sent')).toBeDefined()
+      })
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'third' }))),
+      )
+      yield* Effect.promise(() => userEvent.type(field(), 'third{Enter}'))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent)).toHaveLength(2)
+        expect(screen.getByText('third')).toBeDefined()
+      })
+      yield* Queue.offer(transcript, chunk(10, 20, [prompt(10, 'second')]))
+      yield* Effect.promise(() => screen.findByText('second'))
+
+      expect(screen.getByText('Sent')).toBeDefined()
+
+      yield* Queue.offer(transcript, chunk(20, 30, [prompt(20, 'third')]))
+      yield* eventually(() => {
+        expect(screen.queryByText('Sent')).toBeNull()
+      })
     }),
   )
 

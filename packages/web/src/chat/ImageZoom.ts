@@ -1,3 +1,4 @@
+import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
 import { animate, mix, useReducedMotion } from 'motion/react'
 import type { AnimationPlaybackControls } from 'motion/react'
@@ -51,7 +52,6 @@ const DOUBLE_TAP_MS = 300
 const FADE_DISTANCE = 320
 const VELOCITY_WINDOW_MS = 80
 const MIN_FLICK_DISTANCE = 24
-const MILLISECONDS_PER_SECOND = 1000
 
 export const REST: View = { scale: 1, shiftX: 0, shiftY: 0, drop: 0 }
 
@@ -92,7 +92,7 @@ const releaseVelocity = (samples: readonly Sample[], now: number): number => {
     return 0
   }
 
-  return ((last.top - first.top) / (last.at - first.at)) * MILLISECONDS_PER_SECOND
+  return (last.top - first.top) / Duration.toSeconds(Duration.millis(last.at - first.at))
 }
 
 export const isDismissal = (drop: number, samples: readonly Sample[], now: number): boolean => {
@@ -199,7 +199,7 @@ export function useZoom(onDismiss: () => void) {
   const picture = React.useRef<HTMLImageElement>(null)
   const backdrop = React.useRef<HTMLDivElement>(null)
   const view = React.useRef<View>(REST)
-  const pointers = React.useRef(new Map<number, Point>())
+  const [pointers] = React.useState(() => new Map<number, Point>())
   const gesture = React.useRef<Option.Option<Gesture>>(Option.none())
   const lastTap = React.useRef(0)
   const settling = React.useRef<Option.Option<AnimationPlaybackControls>>(Option.none())
@@ -310,8 +310,8 @@ export function useZoom(onDismiss: () => void) {
   const onPointerDown = (event: React.PointerEvent) => {
     stopSettling()
     event.currentTarget.setPointerCapture(event.pointerId)
-    pointers.current.set(event.pointerId, pointOf(event))
-    Option.match(pairOf(pointers.current), {
+    pointers.set(event.pointerId, pointOf(event))
+    Option.match(pairOf(pointers), {
       onSome: ([first, second]) => {
         gesture.current = Option.some({
           kind: 'pinch',
@@ -327,18 +327,18 @@ export function useZoom(onDismiss: () => void) {
   }
 
   const onPointerMove = (event: React.PointerEvent) => {
-    if (!pointers.current.has(event.pointerId)) {
+    if (!pointers.has(event.pointerId)) {
       return
     }
 
-    pointers.current.set(event.pointerId, pointOf(event))
+    pointers.set(event.pointerId, pointOf(event))
 
     if (Option.isNone(gesture.current)) {
       return
     }
 
     const current = gesture.current.value
-    const pair = pairOf(pointers.current)
+    const pair = pairOf(pointers)
 
     if (current.kind === 'pan') {
       movePan(current, pointOf(event))
@@ -348,11 +348,11 @@ export function useZoom(onDismiss: () => void) {
   }
 
   const onPointerUp = (event: React.PointerEvent) => {
-    const released = pointers.current.get(event.pointerId)
+    const released = pointers.get(event.pointerId)
     const current = gesture.current
-    const [remaining] = [...pointers.current.values()].filter((point) => point !== released)
+    const [remaining] = [...pointers.values()].filter((point) => point !== released)
 
-    pointers.current.delete(event.pointerId)
+    pointers.delete(event.pointerId)
 
     if (remaining !== undefined) {
       beginPan(
@@ -377,9 +377,9 @@ export function useZoom(onDismiss: () => void) {
   }
 
   const onPointerCancel = (event: React.PointerEvent) => {
-    pointers.current.delete(event.pointerId)
+    pointers.delete(event.pointerId)
 
-    if (pointers.current.size === 0) {
+    if (pointers.size === 0) {
       gesture.current = Option.none()
       settleInBounds()
     }

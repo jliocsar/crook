@@ -11,6 +11,7 @@ import * as React from 'react'
 import type { HighlighterCore } from 'shiki/core'
 
 import { CODE_THEMES } from '@crook/web/highlight/Themes'
+import { LINE_BREAK } from '@crook/web/text/Lines'
 
 export type CodeHighlighter = HighlighterCore
 
@@ -21,7 +22,6 @@ type HastNode = HastRoot['children'][number]
 type HastElement = Extract<HastNode, { readonly type: 'element' }>
 
 const LINE_CLASS = 'line'
-const LINE_BREAK = '\n'
 const CLASS_SEPARATOR = ' '
 const CUSTOM_PROPERTY_PREFIX = '--'
 const STYLE_SEPARATOR = ';'

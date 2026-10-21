@@ -20,7 +20,9 @@ import type {
   TranscriptMessage,
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
+import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
 import { TranscriptLine } from '@crook/web/chat/TranscriptState'
+import { LINE_BREAK, PARAGRAPH_BREAK } from '@crook/web/text/Lines'
 
 export type ToolStatus = 'running' | 'waiting' | 'success' | 'error' | 'stopped'
 
@@ -155,7 +157,7 @@ const decodeString = Schema.decodeUnknownOption(Schema.NonEmptyString)
 
 const firstLine = (text: string): string =>
   pipe(
-    text.trim().split('\n'),
+    text.trim().split(LINE_BREAK),
     Arr.head,
     Option.getOrElse(() => ''),
   )
@@ -525,29 +527,9 @@ const assistantDrafts = (
     ),
   )
 
-const textOf = (message: UserMessage): string =>
-  pipe(
-    message.blocks,
-    Arr.flatMap((block) =>
-      Match.value(block).pipe(
-        Match.tag('Text', (text) => [text.text]),
-        Match.orElse(() => []),
-      ),
-    ),
-    Arr.join('\n\n'),
-  ).trim()
-
-const imagesOf = (message: UserMessage): readonly ImageBlock[] =>
-  Arr.flatMap(message.blocks, (block) =>
-    Match.value(block).pipe(
-      Match.tag('Image', (image) => [image]),
-      Match.orElse(() => []),
-    ),
-  )
-
 const promptDraft = (message: UserMessage, key: string): readonly Draft[] => {
-  const text = textOf(message)
-  const images = imagesOf(message)
+  const text = Arr.join(textsIn(message.blocks), PARAGRAPH_BREAK).trim()
+  const images = imagesIn(message.blocks)
 
   return Str.isEmpty(text) && images.length === 0
     ? []

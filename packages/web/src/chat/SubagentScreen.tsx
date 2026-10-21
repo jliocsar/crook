@@ -10,12 +10,11 @@ import { chatScreenAtom } from '@crook/web/atoms/Chat'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import {
-  paneTranscriptAtom,
   PaneTranscriptKey,
-  subagentTranscriptAtom,
   SubagentTranscriptKey,
-  subagentTranscriptWholeAtom,
+  transcriptAtom,
   transcriptRetryAtom,
+  transcriptWholeAtom,
 } from '@crook/web/atoms/Transcript'
 import { chatItems, hasToolRunning, isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
@@ -31,8 +30,8 @@ import {
 import { ImageViewer } from '@crook/web/chat/Images'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
-import { runStatusShown } from '@crook/web/chat/ThreadItem'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
+import { runStatusShown } from '@crook/web/chat/ToolView'
 import { linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
 import { Response } from '@crook/web/components/ui/response'
 import { RunDot } from '@crook/web/components/ui/subagent-tree'
@@ -54,8 +53,6 @@ const runWord = { running: 'running', done: 'done', failed: 'failed' } satisfies
   SubagentRun['status'],
   string
 >
-
-const ignoreRun = (): void => undefined
 
 const findRun = (runs: readonly SubagentRun[], subagent: SubagentId): Option.Option<SubagentRun> =>
   Arr.findFirst(runs, (run) => Option.contains(run.subagent, subagent))
@@ -99,9 +96,9 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   )
   const model = useAtomValue(chatScreenAtom(opened))
   const connection = useAtomValue(connectionAtom)
-  const parent = AsyncResult.value(useAtomValue(paneTranscriptAtom(parentKey)))
-  const view = AsyncResult.value(useAtomValue(subagentTranscriptAtom(key)))
-  const showWhole = useAtomSet(subagentTranscriptWholeAtom(key))
+  const parent = AsyncResult.value(useAtomValue(transcriptAtom(parentKey)))
+  const view = AsyncResult.value(useAtomValue(transcriptAtom(key)))
+  const showWhole = useAtomSet(transcriptWholeAtom(key))
   const retry = useAtomSet(transcriptRetryAtom(key))
   const now = useNow()
   const cwd = cwdOf(model)
@@ -142,7 +139,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
     onShowEarlier: () => {
       showWhole(true)
     },
-    onOpenRun: ignoreRun,
+    onOpenRun: Option.none(),
   }
 
   const rows: readonly ThreadRow[] = [

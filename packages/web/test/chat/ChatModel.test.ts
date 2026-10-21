@@ -55,8 +55,8 @@ const snapshot = (entry: HerdMachine, minutes = 0) =>
 const laptop = (rows: readonly AgentRow[], connection: MachineConnection = 'online') =>
   machine(LAPTOP, rows, { connection })
 
-const step = (previous: ChatScreenModel, entry: HerdMachine, minutes = 0) =>
-  chatScreenModel(snapshot(entry, minutes), LAPTOP, PANE, previous)
+const step = (previous: ChatScreenModel, entry: HerdMachine, minutes = 0, stale = false) =>
+  chatScreenModel(snapshot(entry, minutes), LAPTOP, PANE, previous, stale)
 
 const live = step(LOADING_CHAT, laptop([agent('w1:p1', 'working')]))
 
@@ -108,6 +108,18 @@ describe('chatScreenModel', () => {
   })
 
   it('keeps what it had while there is no snapshot', () => {
-    expect(chatScreenModel(Option.none(), LAPTOP, PANE, live)).toBe(live)
+    expect(chatScreenModel(Option.none(), LAPTOP, PANE, live, false)).toBe(live)
+  })
+
+  it('waits for the hub before calling a pane closed that only a stale herd lacks', () => {
+    const cached = step(LOADING_CHAT, laptop([]), 0, true)
+    const confirmed = step(cached, laptop([]))
+
+    expect(cached.presence).toBe('loading')
+    expect(confirmed.presence).toBe('closed')
+  })
+
+  it('still calls a pane closed while stale once it had seen Claude there', () => {
+    expect(step(live, laptop([]), 1, true).presence).toBe('closed')
   })
 })

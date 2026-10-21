@@ -36,18 +36,27 @@ export type TranscriptKey = PaneTranscriptKey | SubagentTranscriptKey
 
 export const CHAT_OPEN_TAIL = TranscriptTailBytes.make(512 * 1024)
 
-export class PaneTranscriptKey extends Data.Class<{
+export class PaneTranscriptKey extends Data.TaggedClass('PaneTranscriptKey')<{
   readonly machine: MachineId
   readonly pane: PaneId
 }> {}
 
-export class SubagentTranscriptKey extends Data.Class<{
+export class SubagentTranscriptKey extends Data.TaggedClass('SubagentTranscriptKey')<{
   readonly machine: MachineId
   readonly session: ClaudeSessionId
   readonly subagent: SubagentId
 }> {}
 
 const tailFor = (whole: boolean) => (whole ? Option.none() : Option.some(CHAT_OPEN_TAIL))
+
+const sourceOf = (key: TranscriptKey): TranscriptSource =>
+  Match.value(key).pipe(
+    Match.tagsExhaustive({
+      PaneTranscriptKey: (pane): TranscriptSource => new PaneTranscript({ pane: pane.pane }),
+      SubagentTranscriptKey: (subagent): TranscriptSource =>
+        new SubagentTranscript({ session: subagent.session, subagent: subagent.subagent }),
+    }),
+  )
 
 const isWorthShowing = (view: TranscriptView): boolean =>
   isOpened(view) || Option.isSome(view.failure)
@@ -147,38 +156,23 @@ export const transcriptRetryAtom = Atom.family((key: TranscriptKey) =>
   Atom.make(0).pipe(Atom.withLabel(`transcript retries on ${key.machine}`)),
 )
 
-export const paneTranscriptWholeAtom = Atom.family((key: PaneTranscriptKey) =>
-  Atom.make(false).pipe(Atom.withLabel(`whole transcript of ${key.pane}`)),
+export const transcriptWholeAtom = Atom.family((key: TranscriptKey) =>
+  Atom.make(false).pipe(Atom.withLabel(`whole transcript on ${key.machine}`)),
 )
 
-export const subagentTranscriptWholeAtom = Atom.family((key: SubagentTranscriptKey) =>
-  Atom.make(false).pipe(Atom.withLabel(`whole transcript of ${key.subagent}`)),
-)
+const watchableAtomOf = (key: TranscriptKey): Atom.Atom<boolean> =>
+  Match.value(key).pipe(
+    Match.tagsExhaustive({
+      PaneTranscriptKey: (pane) => paneWatchableAtom(pane),
+      SubagentTranscriptKey: (subagent) => machineWatchableAtom(subagent.machine),
+    }),
+  )
 
-export const paneTranscriptAtom = Atom.family((key: PaneTranscriptKey) =>
+export const transcriptAtom = Atom.family((key: TranscriptKey) =>
   hubRuntime.atom((get) =>
-    transcriptViews(
-      key.machine,
-      new PaneTranscript({ pane: key.pane }),
-      get(paneTranscriptWholeAtom(key)),
-      {
-        watchable: get.stream(paneWatchableAtom(key)),
-        retries: get.stream(transcriptRetryAtom(key), { withoutInitialValue: true }),
-      },
-    ),
-  ),
-)
-
-export const subagentTranscriptAtom = Atom.family((key: SubagentTranscriptKey) =>
-  hubRuntime.atom((get) =>
-    transcriptViews(
-      key.machine,
-      new SubagentTranscript({ session: key.session, subagent: key.subagent }),
-      get(subagentTranscriptWholeAtom(key)),
-      {
-        watchable: get.stream(machineWatchableAtom(key.machine)),
-        retries: get.stream(transcriptRetryAtom(key), { withoutInitialValue: true }),
-      },
-    ),
+    transcriptViews(key.machine, sourceOf(key), get(transcriptWholeAtom(key)), {
+      watchable: get.stream(watchableAtomOf(key)),
+      retries: get.stream(transcriptRetryAtom(key), { withoutInitialValue: true }),
+    }),
   ),
 )

@@ -43,15 +43,24 @@ export const LOADING_CHAT = new ChatScreenModel({
 
 const ended = (presence: ChatPresence): boolean => presence === 'exited' || presence === 'closed'
 
-const endedPresence = (seenBefore: boolean, gone: boolean): ChatPresence => {
+const endedPresence = (seenBefore: boolean, gone: boolean, stale: boolean): ChatPresence => {
   if (!seenBefore && !gone) {
     return 'notClaude'
+  }
+
+  if (!seenBefore && stale) {
+    return 'loading'
   }
 
   return gone ? 'closed' : 'exited'
 }
 
-const presenceIn = (entry: HerdMachine, pane: PaneId, previous: ChatScreenModel): ChatPresence => {
+const presenceIn = (
+  entry: HerdMachine,
+  pane: PaneId,
+  previous: ChatScreenModel,
+  stale: boolean,
+): ChatPresence => {
   if (entry.machine.connection !== 'online') {
     return 'away'
   }
@@ -63,7 +72,7 @@ const presenceIn = (entry: HerdMachine, pane: PaneId, previous: ChatScreenModel)
 
       return found === 'agent'
         ? 'live'
-        : endedPresence(Option.isSome(previous.row), found === 'gone')
+        : endedPresence(Option.isSome(previous.row), found === 'gone', stale)
     },
   })
 }
@@ -73,14 +82,15 @@ export const chatScreenModel = (
   machine: MachineId,
   pane: PaneId,
   previous: ChatScreenModel,
+  stale: boolean,
 ): ChatScreenModel =>
   Option.match(snapshot, {
     onNone: () => previous,
     onSome: ({ view, syncedAt }) => {
       const entry = findMachine(view, machine)
       const presence = Option.match(entry, {
-        onNone: () => endedPresence(Option.isSome(previous.row), true),
-        onSome: (found) => presenceIn(found, pane, previous),
+        onNone: () => endedPresence(Option.isSome(previous.row), true, stale),
+        onSome: (found) => presenceIn(found, pane, previous, stale),
       })
       const row = Option.orElse(
         Option.map(findAgent(view, machine, pane), (found) => found.row),

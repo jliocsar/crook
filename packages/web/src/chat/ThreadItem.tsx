@@ -1,10 +1,7 @@
 import { cn } from 'cn'
 import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
-import { pipe } from 'effect/Function'
-import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Schema from 'effect/Schema'
 import {
   ChevronDown,
   CircleCheck,
@@ -21,41 +18,42 @@ import {
 import type * as React from 'react'
 
 import { relativeToFolder } from '@crook/domain/Ask'
-import type { ImageBlock, PatchHunk, ToolResultBlock } from '@crook/domain/TranscriptMessage'
 import type { ChatItem, PlanStep, SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
 import { ChatItem as ChatItems, stringField, toolTitle } from '@crook/web/chat/ChatItems'
 import { Thumbs } from '@crook/web/chat/Images'
-import type { Picture } from '@crook/web/chat/Images'
 import { RowAction } from '@crook/web/chat/RowAction'
+import {
+  inputHunks,
+  omittedLabel,
+  patchHunks,
+  pathOf,
+  picturesOf,
+  resultText,
+  toolDuration,
+  treeRun,
+  withoutLineNumbers,
+} from '@crook/web/chat/ToolView'
 import { Collapse } from '@crook/web/components/Collapse'
 import { useRowFlag } from '@crook/web/components/RowMemory'
 import { CodeBlock } from '@crook/web/components/ui/code-block'
 import { DiffView } from '@crook/web/components/ui/diff-view'
-import type { DiffHunk } from '@crook/web/components/ui/diff-view'
 import { Message } from '@crook/web/components/ui/message'
 import { Response } from '@crook/web/components/ui/response'
 import { SubagentTree } from '@crook/web/components/ui/subagent-tree'
-import type { AgentRun } from '@crook/web/components/ui/subagent-tree'
 import { ToolCall } from '@crook/web/components/ui/tool-call'
 import { HIGHLIGHT_LINE_LIMIT, languageOfPath } from '@crook/web/highlight/Highlighter'
-import { runningSpan } from '@crook/web/time/Elapsed'
 
 export interface ThreadEnvironment {
   readonly now: DateTime.Utc
   readonly cwd: string
   readonly paneClosed: boolean
   readonly onShowEarlier: () => void
-  readonly onOpenRun: (run: SubagentRun) => void
+  readonly onOpenRun: Option.Option<(run: SubagentRun) => void>
 }
 
 const INLINE_ICON_SIZE = 15
 const OUTPUT_CLASS = 'max-h-56 overflow-y-auto'
-const PATH_FIELD = 'file_path'
 const SHELL_LANGUAGE = 'shellscript'
-const PANE_CLOSED_NOTE = 'Pane closed'
-const BYTES_PER_KILOBYTE = 1024
-const LINE_BREAK = '\n'
-const READ_LINE_NUMBER = /^\s*\d+(?:\t|→)/u
 
 const TOOL_ICON = new Map([
   ['Read', FileText],
@@ -70,121 +68,15 @@ const TOOL_ICON = new Map([
   ['WebSearch', Globe],
 ])
 
-const EditInput = Schema.Struct({ old_string: Schema.String, new_string: Schema.String })
-
-const decodeEditInput = Schema.decodeUnknownOption(EditInput)
-
 const STEP_ICON = {
   pending: Circle,
   in_progress: CircleDot,
   completed: CircleCheck,
 } satisfies Record<PlanStep['status'], typeof Circle>
 
-const resultText = (result: ToolResultBlock): string =>
-  pipe(
-    result.content,
-    Arr.flatMap((block) =>
-      Match.value(block).pipe(
-        Match.tag('Text', (text) => [text.text]),
-        Match.orElse(() => []),
-      ),
-    ),
-    Arr.join(LINE_BREAK),
-  )
-
-export const withoutLineNumbers = (text: string): string =>
-  pipe(
-    Option.liftPredicate(text.split(LINE_BREAK), (lines) =>
-      lines.every((line) => line === '' || READ_LINE_NUMBER.test(line)),
-    ),
-    Option.map((lines) =>
-      pipe(
-        lines,
-        Arr.map((line) => line.replace(READ_LINE_NUMBER, '')),
-        Arr.join(LINE_BREAK),
-      ),
-    ),
-    Option.getOrElse(() => text),
-  )
-
-const resultImages = (result: Option.Option<ToolResultBlock>): readonly ImageBlock[] =>
-  Option.match(result, {
-    onNone: () => [],
-    onSome: (found) =>
-      Arr.flatMap(found.content, (block) =>
-        Match.value(block).pipe(
-          Match.tag('Image', (image) => [image]),
-          Match.orElse(() => []),
-        ),
-      ),
-  })
-
-const fileName = (path: string): string => path.split('/').at(-1) ?? path
-
-const pathOf = (call: ToolCallModel): Option.Option<string> => stringField(call.input, PATH_FIELD)
-
-const picturesOf = (call: ToolCallModel): readonly Picture[] => {
-  const name = Option.getOrElse(Option.map(pathOf(call), fileName), () => `${call.name} image`)
-
-  return resultImages(call.result).map((image) => ({ image, name }))
-}
-
-const inputHunks = (call: ToolCallModel): Option.Option<readonly DiffHunk[]> =>
-  Option.map(decodeEditInput(call.input), (edit) => [
-    {
-      oldStart: 1,
-      newStart: 1,
-      lines: [
-        ...edit.old_string.split(LINE_BREAK).map((line) => `-${line}`),
-        ...edit.new_string.split(LINE_BREAK).map((line) => `+${line}`),
-      ],
-    },
-  ])
-
-const patchHunks = (call: ToolCallModel): Option.Option<readonly PatchHunk[]> =>
-  pipe(
-    call.result,
-    Option.flatMap((result) => result.patch),
-    Option.filter(Arr.isReadonlyArrayNonEmpty),
-  )
-
-const toolDuration = (call: ToolCallModel, now: DateTime.Utc): string | undefined =>
-  Option.getOrUndefined(
-    runningSpan(call.startedAt, call.finishedAt, call.status === 'running', now),
-  )
-
-const runMeta = (run: SubagentRun): string =>
-  pipe(
-    [Option.some(run.agentType), run.model],
-    Arr.getSomes,
-    Arr.filter((part) => part !== ''),
-    Arr.join(' · '),
-  )
-
-export const runStatusShown = (run: SubagentRun, paneClosed: boolean): SubagentRun['status'] =>
-  paneClosed && run.status === 'running' ? 'failed' : run.status
-
-const treeRun = (run: SubagentRun, environment: ThreadEnvironment): AgentRun => {
-  const status = runStatusShown(run, environment.paneClosed)
-
-  return {
-    id: run.toolUseId,
-    label: run.description,
-    status,
-    meta: status === 'failed' && run.status === 'running' ? PANE_CLOSED_NOTE : runMeta(run),
-    duration: Option.getOrUndefined(
-      runningSpan(run.startedAt, run.finishedAt, status === 'running', environment.now),
-    ),
-    selectable: Option.isSome(run.subagent),
-  }
-}
-
 const renderCode = (code: string, language: Option.Option<string>) => (
   <CodeBlock code={code} language={Option.getOrUndefined(language)} />
 )
-
-const omittedLabel = (byteLength: number): string =>
-  `Earlier messages not loaded (${Math.ceil(byteLength / BYTES_PER_KILOBYTE)} KB)`
 
 function OutputText({ text, failed }: { text: string; failed: boolean }) {
   return (
@@ -316,11 +208,25 @@ function SubagentRuns({
 }) {
   return (
     <SubagentTree
-      runs={runs.map((run) => treeRun(run, environment))}
+      runs={runs.map((run) =>
+        treeRun(run, {
+          now: environment.now,
+          paneClosed: environment.paneClosed,
+          opensRuns: Option.isSome(environment.onOpenRun),
+        }),
+      )}
       onSelectRun={(selected) => {
         Option.match(
-          Arr.findFirst(runs, (run) => run.toolUseId === selected.id),
-          { onNone: () => undefined, onSome: environment.onOpenRun },
+          Option.all({
+            open: environment.onOpenRun,
+            run: Arr.findFirst(runs, (run) => run.toolUseId === selected.id),
+          }),
+          {
+            onNone: () => undefined,
+            onSome: ({ open, run }) => {
+              open(run)
+            },
+          },
         )
       }}
     />

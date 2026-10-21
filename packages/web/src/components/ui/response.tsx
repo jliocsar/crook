@@ -1,7 +1,7 @@
 import { cn } from 'cn'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import type * as React from 'react'
+import * as React from 'react'
 import Markdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -56,7 +56,11 @@ const markdownComponents = (renderCode: ResponseProps['renderCode']): Components
   },
 })
 
-export function Response({ children, renderCode, className, ...rootProps }: ResponseProps) {
+export const Response = React.memo(MarkdownResponse)
+
+function MarkdownResponse({ children, renderCode, className, ...rootProps }: ResponseProps) {
+  const components = React.useMemo(() => markdownComponents(renderCode), [renderCode])
+
   return (
     <div
       data-slot="response"
@@ -69,7 +73,7 @@ export function Response({ children, renderCode, className, ...rootProps }: Resp
       <Markdown
         remarkPlugins={REMARK_PLUGINS}
         disallowedElements={DISALLOWED_ELEMENTS}
-        components={markdownComponents(renderCode)}
+        components={components}
       >
         {children}
       </Markdown>
