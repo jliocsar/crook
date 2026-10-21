@@ -655,6 +655,8 @@ happy-dom, measured:
   from `clientHeight` and its offset from `scrollTop` on a `scroll` event, so a test that needs
   rows to leave the range defines `scrollHeight` on the viewport, lets the thread follow the
   bottom, and dispatches `scroll` itself once `scrollTop` has moved.
+- Its `:focus-visible` matches any focused element, a clicked one included (read in its selector
+  code), so a test cannot tell keyboard focus from a tap through it.
 :::
 
 :::tip
@@ -666,6 +668,13 @@ testing-library call.
 :::tip
 Tailwind v4 skips gitignored files when it scans for classes, so a probe page under `tmp/` renders
 without any class only it uses (measured). Use inline styles there, or classes the app already uses.
+:::
+
+:::tip
+A region meant to scroll as a whole when its height runs out is a flex column whose children do
+not shrink. As a grid it squeezed its own scrolling child (a capped code block) to a sliver and
+never scrolled itself (measured in Chromium at 375×812 with the visual viewport shrunk). The
+phone's keyboard is emulated by redefining `visualViewport.height` and dispatching `resize` on it.
 :::
 
 ## Establishing a fact
