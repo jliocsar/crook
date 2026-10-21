@@ -6,11 +6,13 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
+import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
@@ -30,7 +32,8 @@ import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { AnswerAsk, Approve, InputDelivered, Prompt } from '@crook/domain/Command'
-import { findMachine } from '@crook/domain/HerdView'
+import { HerdReplaced, type HerdUpdate, MachineReplaced } from '@crook/domain/HerdUpdate'
+import { type HerdMachine, findMachine } from '@crook/domain/HerdView'
 import { IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
@@ -281,6 +284,25 @@ const startAgent = Effect.fn('startAgent')(function* (machine: MachineId, first:
 
 const working: HerdrScene = { status: 'working', stateChangeSeq: 41, screen: IDLE_SCREEN }
 
+const entriesIn = (update: HerdUpdate): readonly HerdMachine[] =>
+  Match.value(update).pipe(
+    Match.tagsExhaustive({
+      HerdReplaced: (replaced) => replaced.herd.machines,
+      MachineReplaced: (replaced) => [replaced.entry],
+      MachineLeft: () => [],
+    }),
+  )
+
+const showsBlocked = (machine: MachineId) => (update: HerdUpdate) =>
+  Arr.some(
+    entriesIn(update),
+    (entry) =>
+      entry.machine.id === machine &&
+      Option.exists(entry.state, (state) =>
+        Arr.some(state.agents, (row) => row.status === 'blocked'),
+      ),
+  )
+
 layer(Layer.mergeAll(testHub, BunFileSystem.layer), { excludeTestServices: true })(
   'fake herdr, real agent, real hub, headless phone',
   (live) => {
@@ -309,6 +331,44 @@ layer(Layer.mergeAll(testHub, BunFileSystem.layer), { excludeTestServices: true 
           42,
           true,
         ])
+      }),
+    )
+
+    live.effect('sends the phone only the machine whose herdr changed, not the whole herd', () =>
+      Effect.gen(function* () {
+        const changing = MachineId.make('e2e-changing')
+        const quiet = MachineId.make('e2e-quiet')
+        const blocked: HerdrScene = {
+          status: 'blocked',
+          stateChangeSeq: 42,
+          screen: yield* screenText(BLOCKED_SCREEN),
+        }
+        const herdr = yield* startAgent(changing, working)
+
+        yield* startAgent(quiet, working)
+        yield* agentWhere(changing, (row) => row.pane === PANE)
+        yield* agentWhere(quiet, (row) => row.pane === PANE)
+        const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
+        const updates = yield* Queue.unbounded<HerdUpdate>()
+
+        yield* phone.WatchHerd().pipe(
+          Stream.runForEach((update) => Queue.offer(updates, update)),
+          Effect.forkScoped,
+        )
+        const opening = yield* Queue.take(updates)
+        yield* herdr.change(blocked)
+        const change = yield* Stream.fromQueue(updates).pipe(
+          Stream.filter(showsBlocked(changing)),
+          Stream.runHead,
+          Effect.flatMap(Effect.fromOption),
+        )
+
+        expect(opening).toBeInstanceOf(HerdReplaced)
+        expect(entriesIn(opening).map((entry) => entry.machine.id)).toEqual(
+          expect.arrayContaining([changing, quiet]),
+        )
+        expect(change).toBeInstanceOf(MachineReplaced)
+        expect(entriesIn(change).map((entry) => entry.machine.id)).toEqual([changing])
       }),
     )
 

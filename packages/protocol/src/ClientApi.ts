@@ -3,7 +3,7 @@ import * as RpcGroup from 'effect/rpc/RpcGroup'
 import * as Schema from 'effect/Schema'
 
 import { Command, CommandReceipt } from '@crook/domain/Command'
-import { HerdView } from '@crook/domain/HerdView'
+import { HerdUpdate } from '@crook/domain/HerdUpdate'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { MachineConnection } from '@crook/domain/Machine'
 import { NotificationEvent, NotificationSettings } from '@crook/domain/Notifications'
@@ -55,7 +55,7 @@ export class HubAccount extends Schema.Class<HubAccount>('HubAccount')({
   email: Schema.String,
 }) {}
 
-export const WatchHerd = Rpc.make('WatchHerd', { success: HerdView, stream: true })
+export const WatchHerd = Rpc.make('WatchHerd', { success: HerdUpdate, stream: true })
 
 export const ForgetMachine = Rpc.make('ForgetMachine', {
   payload: { machine: MachineId },

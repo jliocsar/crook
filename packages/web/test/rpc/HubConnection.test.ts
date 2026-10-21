@@ -6,6 +6,7 @@ import * as Stream from 'effect/Stream'
 import * as RpcTest from 'effect/rpc/RpcTest'
 
 import { AgentStarted, StartAgent } from '@crook/domain/Command'
+import { HerdReplaced } from '@crook/domain/HerdUpdate'
 import { IdempotencyKey } from '@crook/domain/Ids'
 import { defaultNotificationPrefs, NotificationSettings } from '@crook/domain/Notifications'
 import {
@@ -41,7 +42,7 @@ const settings = new NotificationSettings({ prefs: defaultNotificationPrefs, del
 const account = new HubAccount({ email: 'owner@example.com' })
 
 const handlers = ClientApi.toLayer({
-  WatchHerd: () => Stream.make(view),
+  WatchHerd: () => Stream.make(new HerdReplaced({ herd: view })),
   ForgetMachine: ({ machine: machineId }) =>
     machineId === LAPTOP
       ? Effect.fail(new MachineStillConnected({ machine: machineId, connection: 'online' }))

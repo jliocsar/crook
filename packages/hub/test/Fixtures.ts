@@ -28,6 +28,7 @@ import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
+import { herdViews } from '@crook/domain/HerdUpdate'
 import { findMachine } from '@crook/domain/HerdView'
 import type { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
@@ -178,7 +179,7 @@ export const herdWhere = Effect.fn('herdWhere')(function* (predicate: (view: Her
 
   return yield* phone
     .WatchHerd()
-    .pipe(Stream.filter(predicate), Stream.runHead, Effect.flatMap(Effect.fromOption))
+    .pipe(herdViews, Stream.filter(predicate), Stream.runHead, Effect.flatMap(Effect.fromOption))
 }, Effect.scoped)
 
 export const machineShows = (id: MachineId, connection: MachineConnection) =>
