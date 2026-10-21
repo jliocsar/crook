@@ -48,7 +48,7 @@ import {
   TranscriptPosition,
 } from '@crook/domain/Transcript'
 import { AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
-import { ClientApi, MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
+import { ClientApi, HubAccount, MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
 import {
   AgentNotStarted,
   AskDialogUnreadable,
@@ -151,6 +151,8 @@ const demand = new TranscriptDemand({
   ],
 })
 
+const account = new HubAccount({ email: 'owner@example.com' })
+
 const emptyHerd = new HerdView({ machines: [], hubVersion: CrookVersion.make('0.0.1') })
 
 const clientApiHandlers = ClientApi.toLayer({
@@ -178,6 +180,7 @@ const clientApiHandlers = ClientApi.toLayer({
     Stream.make(new NotificationSettings({ prefs: defaultNotificationPrefs, delivery: 'noToken' })),
   SetNotificationPref: () => Effect.void,
   SendTestNotification: () => Effect.fail(new HarkNotConfigured()),
+  GetAccount: () => Effect.succeed(account),
 })
 
 layer(agentLinkHandlers)('AgentLink', (rpc) => {
@@ -277,6 +280,14 @@ layer(clientApiHandlers)('ClientApi', (rpc) => {
     }),
   )
 
+  rpc.effect('answers GetAccount with the email the connection logged in with', () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(ClientApi)
+
+      expect(yield* client.GetAccount()).toEqual(account)
+    }),
+  )
+
   rpc.effect('streams transcript events, or the reason the agent could not read them', () =>
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(ClientApi)
@@ -292,6 +303,12 @@ layer(clientApiHandlers)('ClientApi', (rpc) => {
       expect(failure).toEqual(new TranscriptReadFailed({ detail: 'EACCES' }))
     }),
   )
+})
+
+describe('Account wire shape', () => {
+  it('carries the account email through JSON', () => {
+    expect(roundTrip(HubAccount, account)).toEqual(account)
+  })
 })
 
 describe('Command wire shapes', () => {

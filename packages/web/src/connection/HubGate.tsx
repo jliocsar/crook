@@ -7,7 +7,7 @@ import { connectionAtom, linkFailureAtom } from '@crook/web/atoms/Connection'
 import { needsYouAtom } from '@crook/web/atoms/Herd'
 import { ConnectionLiveRegion } from '@crook/web/connection/ConnectionBanner'
 import { ConnectionContext } from '@crook/web/connection/ConnectionContext'
-import { LoggedOutScreen } from '@crook/web/connection/LoggedOutScreen'
+import { LOGGED_OUT, LoggedOutScreen, SESSION_EXPIRED } from '@crook/web/connection/LoggedOutScreen'
 import { logInAgain } from '@crook/web/connection/Login'
 import { Shell } from '@crook/web/navigation/Shell'
 import { ToastHost } from '@crook/web/toast/Toast'
@@ -22,7 +22,11 @@ export function HubGate() {
   }
 
   if (connection.expired) {
-    return <LoggedOutScreen onLogIn={logInAgain} />
+    return <LoggedOutScreen copy={SESSION_EXPIRED} onLogIn={logInAgain} />
+  }
+
+  if (connection.loggedOut) {
+    return <LoggedOutScreen copy={LOGGED_OUT} onLogIn={logInAgain} />
   }
 
   return (

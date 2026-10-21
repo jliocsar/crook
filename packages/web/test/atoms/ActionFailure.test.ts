@@ -1,6 +1,9 @@
 import { describe, expect, it } from '@effect/vitest'
+import * as Cause from 'effect/Cause'
 import * as Duration from 'effect/Duration'
+import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
+import * as AsyncResult from 'effect/reactivity/AsyncResult'
 
 import { PaneId } from '@crook/domain/Ids'
 import {
@@ -13,13 +16,19 @@ import {
   PaneNotCreatedByCrook,
   TaskNotDelivered,
 } from '@crook/protocol/Commands'
-import { remembersOutcome } from '@crook/web/atoms/ActionFailure'
+import {
+  failureMessage,
+  remembersOutcome,
+  UNEXPECTED_FAILURE_MESSAGE,
+} from '@crook/web/atoms/ActionFailure'
 import { HubCallDefected, HubConnectionLost } from '@crook/web/rpc/HubConnection'
 import { HubNotConnected } from '@crook/web/rpc/HubLink'
 
 import { LAPTOP } from '../HerdFixtures.ts'
 
 const pane = PaneId.make('w1:p1')
+
+const lost = new HubConnectionLost({ detail: 'socket closed' })
 
 describe('remembersOutcome', () => {
   it('holds for the failures the agent replays under the same key', () => {
@@ -47,10 +56,29 @@ describe('remembersOutcome', () => {
     expect(
       remembersOutcome(new CommandTimedOut({ machine: LAPTOP, timeout: Duration.seconds(10) })),
     ).toBe(false)
-    expect(remembersOutcome(new HubConnectionLost({ detail: 'socket closed' }))).toBe(false)
+    expect(remembersOutcome(lost)).toBe(false)
     expect(remembersOutcome(new HubCallDefected({ cause: new Error('handler crashed') }))).toBe(
       false,
     )
     expect(remembersOutcome(new HubNotConnected())).toBe(false)
+  })
+})
+
+describe('failureMessage', () => {
+  it('gives the failure sentence once the call has settled, and nothing while it retries', () => {
+    const failed = AsyncResult.fail(lost)
+
+    expect(failureMessage(failed)).toEqual(Option.some(lost.message))
+    expect(failureMessage(AsyncResult.waiting(failed))).toEqual(Option.none())
+    expect(failureMessage(AsyncResult.success(undefined))).toEqual(Option.none())
+    expect(failureMessage(AsyncResult.fromExit(Exit.failCause(Cause.interrupt())))).toEqual(
+      Option.none(),
+    )
+  })
+
+  it('names a defect as an unexpected failure rather than hiding it', () => {
+    expect(failureMessage(AsyncResult.fromExit(Exit.failCause(Cause.die('a bug'))))).toEqual(
+      Option.some(UNEXPECTED_FAILURE_MESSAGE),
+    )
   })
 })

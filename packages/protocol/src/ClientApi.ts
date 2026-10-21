@@ -46,6 +46,10 @@ export class HubStorageFailed extends Schema.TaggedError<HubStorageFailed>()('Hu
   }
 }
 
+export class HubAccount extends Schema.Class<HubAccount>('HubAccount')({
+  email: Schema.String,
+}) {}
+
 export const WatchHerd = Rpc.make('WatchHerd', { success: HerdView, stream: true })
 
 export const ForgetMachine = Rpc.make('ForgetMachine', {
@@ -94,6 +98,8 @@ export const SendTestNotification = Rpc.make('SendTestNotification', {
   error: TestNotificationFailure,
 })
 
+export const GetAccount = Rpc.make('GetAccount', { success: HubAccount })
+
 export class ClientApi extends RpcGroup.make(
   WatchHerd,
   ForgetMachine,
@@ -104,4 +110,5 @@ export class ClientApi extends RpcGroup.make(
   WatchNotificationSettings,
   SetNotificationPref,
   SendTestNotification,
+  GetAccount,
 ) {}

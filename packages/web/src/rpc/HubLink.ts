@@ -14,12 +14,16 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import type { NotificationEvent, NotificationSettings } from '@crook/domain/Notifications'
 import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
 import type { CommandFailure } from '@crook/protocol/Commands'
+import type { HubAccount, HubStorageFailed } from '@crook/protocol/ClientApi'
+import type { TestNotificationFailure } from '@crook/protocol/Hark'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
 import type {
   ForgetMachineRefused,
+  HubCallDefected,
   HubCallFailed,
   HubCalls,
   MarkSeenRefused,
@@ -38,11 +42,16 @@ import {
 } from '@crook/web/rpc/HubLinkState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
+import type { LogOutFailed } from '@crook/web/rpc/SessionCheck'
 
 type SessionFailure = HubCallFailed | HubWatchEnded
 
+type ConnectedCalls = SubscriptionRef.SubscriptionRef<Option.Option<HubCalls>>
+
 export const SYNC_NOTICE_DELAY = Duration.seconds(1)
 export const RECOVERED_NOTICE_DURATION = Duration.millis(1500)
+
+const isLoggedOut = LinkStatus.$is('LoggedOut')
 
 export class HubWatchEnded extends Schema.TaggedError<HubWatchEnded>()('HubWatchEnded', {}) {
   override get message(): string {
@@ -56,6 +65,33 @@ export class HubNotConnected extends Schema.TaggedError<HubNotConnected>()('HubN
   }
 }
 
+const whenConnected = <Success, Failure>(
+  connected: ConnectedCalls,
+  call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
+) =>
+  Effect.flatMap(
+    SubscriptionRef.get(connected),
+    (hub): Effect.Effect<Success, Failure | HubNotConnected> =>
+      Option.match(hub, {
+        onNone: () => Effect.fail(new HubNotConnected()),
+        onSome: call,
+      }),
+  )
+
+const whileConnected = <Success>(
+  connected: ConnectedCalls,
+  watch: (calls: HubCalls) => Stream.Stream<Success, HubCallFailed>,
+): Stream.Stream<Success, HubCallDefected> =>
+  SubscriptionRef.changes(connected).pipe(
+    Stream.switchMap(
+      Option.match({
+        onNone: () => Stream.empty,
+        onSome: (calls: HubCalls) =>
+          watch(calls).pipe(Stream.catchTag('HubConnectionLost', () => Stream.empty)),
+      }),
+    ),
+  )
+
 const make = Effect.gen(function* () {
   const connection = yield* HubConnection
   const cache = yield* HerdCache
@@ -64,8 +100,9 @@ const make = Effect.gen(function* () {
   const state = yield* SubscriptionRef.make(
     new HubLinkState({ status: COLD_START, herd: yield* cache.load }),
   )
-  const connected = yield* Ref.make(Option.none<HubCalls>())
+  const connected = yield* SubscriptionRef.make(Option.none<HubCalls>())
   const resyncRequests = yield* SubscriptionRef.make(0)
+  const loggedOut = yield* SubscriptionRef.make(false)
 
   const updateStatus = (step: (status: LinkStatus) => LinkStatus) =>
     SubscriptionRef.update(
@@ -82,7 +119,7 @@ const make = Effect.gen(function* () {
 
     if (firstOfSession) {
       yield* Ref.set(liveSince, Option.some(yield* Clock.currentTimeMillis))
-      yield* Ref.set(connected, Option.some(hub))
+      yield* SubscriptionRef.set(connected, Option.some(hub))
     }
 
     const snapshot = new HerdSnapshot({ view, syncedAt: yield* DateTime.now })
@@ -107,7 +144,7 @@ const make = Effect.gen(function* () {
   ) {
     const hub = yield* connection.open
 
-    yield* Effect.addFinalizer(() => Ref.set(connected, Option.none()))
+    yield* Effect.addFinalizer(() => SubscriptionRef.set(connected, Option.none()))
     yield* hub.watchHerd.pipe(Stream.runForEach((view) => receive(view, hub, liveSince)))
 
     return yield* new HubWatchEnded()
@@ -151,7 +188,19 @@ const make = Effect.gen(function* () {
     Effect.forever,
   )
 
-  const follow = (visible: boolean, online: boolean): Effect.Effect<never> => {
+  const follow = (visible: boolean, online: boolean, ended: boolean): Effect.Effect<never> => {
+    if (ended) {
+      return cache.clear.pipe(
+        Effect.andThen(
+          SubscriptionRef.set(
+            state,
+            new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
+          ),
+        ),
+        Effect.andThen(Effect.never),
+      )
+    }
+
     if (!visible) {
       return Effect.never
     }
@@ -169,9 +218,12 @@ const make = Effect.gen(function* () {
   const follower = yield* Stream.zipLatestAll(
     page.visible,
     page.online,
+    SubscriptionRef.changes(loggedOut),
     SubscriptionRef.changes(resyncRequests),
   ).pipe(
-    Stream.switchMap(([visible, online]) => Stream.fromEffect(follow(visible, online))),
+    Stream.switchMap(([visible, online, ended]) =>
+      Stream.fromEffect(follow(visible, online, ended)),
+    ),
     Stream.runDrain,
     Effect.forkScoped,
   )
@@ -187,22 +239,12 @@ const make = Effect.gen(function* () {
     )
   }).pipe(Effect.withSpan('HubLink.resync'))
 
-  const whenConnected = <Success, Failure>(
-    call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
-  ) =>
-    Effect.flatMap(Ref.get(connected), (hub): Effect.Effect<Success, Failure | HubNotConnected> =>
-      Option.match(hub, {
-        onNone: () => Effect.fail(new HubNotConnected()),
-        onSome: call,
-      }),
-    )
-
   const markSeen = Effect.fn('HubLink.markSeen')(function* (machine: MachineId, pane: PaneId) {
-    return yield* whenConnected((calls) => calls.markSeen(machine, pane))
+    return yield* whenConnected(connected, (calls) => calls.markSeen(machine, pane))
   })
 
   const forgetMachine = Effect.fn('HubLink.forgetMachine')(function* (machine: MachineId) {
-    return yield* whenConnected((calls) => calls.forgetMachine(machine))
+    return yield* whenConnected(connected, (calls) => calls.forgetMachine(machine))
   })
 
   const setPinned = Effect.fn('HubLink.setPinned')(function* (
@@ -210,7 +252,7 @@ const make = Effect.gen(function* () {
     pane: PaneId,
     pinned: boolean,
   ) {
-    return yield* whenConnected((calls) => calls.setPinned(machine, pane, pinned))
+    return yield* whenConnected(connected, (calls) => calls.setPinned(machine, pane, pinned))
   })
 
   const sendCommand = Effect.fn('HubLink.sendCommand')(function* (
@@ -218,8 +260,33 @@ const make = Effect.gen(function* () {
     key: IdempotencyKey,
     command: Command,
   ) {
-    return yield* whenConnected((calls) => calls.sendCommand(machine, key, command))
+    return yield* whenConnected(connected, (calls) => calls.sendCommand(machine, key, command))
   })
+
+  const setNotificationPref = Effect.fn('HubLink.setNotificationPref')(function* (
+    event: NotificationEvent,
+    enabled: boolean,
+  ) {
+    return yield* whenConnected(connected, (calls) => calls.setNotificationPref(event, enabled))
+  })
+
+  const sendTestNotification = whenConnected(connected, (calls) => calls.sendTestNotification).pipe(
+    Effect.withSpan('HubLink.sendTestNotification'),
+  )
+
+  const logOut = Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      yield* sessionCheck.logOut
+      yield* SubscriptionRef.set(loggedOut, true)
+      yield* restore(
+        SubscriptionRef.changes(state).pipe(
+          Stream.filter((current) => isLoggedOut(current.status)),
+          Stream.take(1),
+          Stream.runDrain,
+        ),
+      )
+    }),
+  ).pipe(Effect.withSpan('HubLink.logOut'))
 
   return HubLink.of({
     changes: Stream.merge(
@@ -231,6 +298,11 @@ const make = Effect.gen(function* () {
     forgetMachine,
     setPinned,
     sendCommand,
+    notificationSettings: whileConnected(connected, (calls) => calls.watchNotificationSettings),
+    account: whileConnected(connected, (calls) => Stream.fromEffect(calls.account)),
+    setNotificationPref,
+    sendTestNotification,
+    logOut,
   })
 })
 
@@ -256,6 +328,17 @@ export class HubLink extends Context.Service<
       key: IdempotencyKey,
       command: Command,
     ) => Effect.Effect<CommandReceipt, CommandFailure | HubCallFailed | HubNotConnected>
+    readonly notificationSettings: Stream.Stream<NotificationSettings, HubCallDefected>
+    readonly account: Stream.Stream<HubAccount, HubCallDefected>
+    readonly setNotificationPref: (
+      event: NotificationEvent,
+      enabled: boolean,
+    ) => Effect.Effect<void, HubStorageFailed | HubCallFailed | HubNotConnected>
+    readonly sendTestNotification: Effect.Effect<
+      void,
+      TestNotificationFailure | HubCallFailed | HubNotConnected
+    >
+    readonly logOut: Effect.Effect<void, LogOutFailed>
   }
 >()('@crook/web/HubLink') {
   static readonly layerWithoutBrowser = Layer.effect(this, make)
