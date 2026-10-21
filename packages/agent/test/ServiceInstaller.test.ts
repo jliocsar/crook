@@ -7,6 +7,7 @@ import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import * as Queue from 'effect/Queue'
 import * as Record from 'effect/Record'
 import * as Result from 'effect/Result'
@@ -17,7 +18,7 @@ import {
   Launchd,
   LogFile,
   ServicePlatformUnsupported,
-  ServiceSettingsMissing,
+  ServiceSettingsUnreadable,
   Systemd,
   UninstalledService,
   type ServiceTarget,
@@ -34,6 +35,7 @@ import {
   commandLine,
 } from '@crook/agent/ServiceManager'
 import { OWNER_ONLY_DIRECTORY_MODE, OWNER_ONLY_FILE_MODE } from '@crook/agent/StateDirectory'
+import { DEFAULT_AUDIT_ARGUMENT_LIMIT, REDACT_NOTHING } from '@crook/domain/Audit'
 
 import packageJson from '../package.json' with { type: 'json' }
 
@@ -54,6 +56,14 @@ const WORKSPACE_SCOPE = '@crook/'
 const INSTALLER_MODULE = 'ServiceInstaller.ts'
 const SETTING_NAME = /'((?:CROOK|HERDR|XDG)_[A-Z_]+|CLAUDE_CONFIG_DIR)'/gu
 
+const MEMBER_LEAVES: Readonly<Record<string, string>> = {
+  '@crook/agent': '@crook/agent/ServiceInstaller',
+  '@crook/claude': '@crook/claude/ClaudeRoots',
+  '@crook/domain': '@crook/domain/AbsolutePath',
+  '@crook/herdr': '@crook/herdr/HerdrClient',
+  '@crook/protocol': '@crook/protocol/Commands',
+}
+
 const refusing =
   (...verbs: readonly string[]) =>
   (call: ServiceManagerCall) =>
@@ -69,22 +79,18 @@ const refusing =
 
 const settingsTheAgentReads = Effect.fn('settingsTheAgentReads')(function* () {
   const fileSystem = yield* FileSystem.FileSystem
-  const members = pipe(
-    Record.keys(packageJson.dependencies),
-    Arr.filter((name) => name.startsWith(WORKSPACE_SCOPE)),
-    Arr.map((name) => name.slice(WORKSPACE_SCOPE.length)),
-    Arr.prepend('agent'),
-  )
-  const sources = yield* Effect.forEach(members, (member) => {
-    const directory = `${import.meta.dirname}/../../${member}/src`
+  const path = yield* Path.Path
+  const sources = yield* Effect.forEach(Record.values(MEMBER_LEAVES), (leaf) =>
+    Effect.gen(function* () {
+      const directory = path.dirname(yield* path.fromFileUrl(new URL(import.meta.resolve(leaf))))
+      const files = yield* fileSystem.readDirectory(directory, { recursive: true })
 
-    return fileSystem
-      .readDirectory(directory, { recursive: true })
-      .pipe(
-        Effect.map(Arr.filter((file) => file.endsWith('.ts') && !file.endsWith(INSTALLER_MODULE))),
-        Effect.flatMap(Effect.forEach((file) => fileSystem.readFileString(`${directory}/${file}`))),
+      return yield* Effect.forEach(
+        Arr.filter(files, (file) => file.endsWith('.ts') && !file.endsWith(INSTALLER_MODULE)),
+        (file) => fileSystem.readFileString(path.join(directory, file)),
       )
-  })
+    }),
+  )
 
   return pipe(
     Arr.flatten(sources),
@@ -314,11 +320,32 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
         Effect.flip,
       )
 
-      expect(failure).toBeInstanceOf(ServiceSettingsMissing)
+      expect(failure).toBeInstanceOf(ServiceSettingsUnreadable)
       expect(failure.message).toContain('CROOK_HUB_TOKEN')
       expect(yield* fileSystem.exists(`${home}/.config`)).toBe(false)
       expect(yield* Queue.size(calls)).toBe(0)
     }),
+  )
+
+  onDisk.effect(
+    'writes nothing and starts nothing when a carried setting is one the agent refuses',
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const home = yield* scratchHome()
+        const { context, calls } = yield* contextFor(home, {
+          environment: { CROOK_AUDIT_ARGUMENT_LIMIT: 'many' },
+        })
+        const failure = yield* installService(new Systemd(), PROGRAM).pipe(
+          Effect.provide(context),
+          Effect.flip,
+        )
+
+        expect(failure).toBeInstanceOf(ServiceSettingsUnreadable)
+        expect(failure.message).toContain('CROOK_AUDIT_ARGUMENT_LIMIT')
+        expect(yield* fileSystem.exists(`${home}/config`)).toBe(false)
+        expect(yield* calls).toEqual([])
+      }),
   )
 
   onDisk.effect('passes on a refusal from systemctl', () =>
@@ -457,7 +484,8 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
         'launchctl bootout gui/501/crook-agent',
         'launchctl print gui/501/crook-agent',
       ])
-      expect(uninstalled.stopped).toBe(true)
+      expect(uninstalled.stopped).toBe(false)
+      expect(uninstallReport(uninstalled)).toContain('crook-agent was not running')
       expect(yield* fileSystem.exists(installed.paths.definitionFile)).toBe(false)
     }),
   )
@@ -488,15 +516,26 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
       const home = yield* scratchHome()
       const names = yield* settingsTheAgentReads()
       const { installed } = yield* install(home, {
-        environment: pipe(
-          Arr.difference(names, Record.keys(environmentOf(home))),
-          Arr.map((name) => [name, `${home}/settings/${name}`] as const),
-          Record.fromEntries,
-        ),
+        environment: {
+          ...pipe(
+            Arr.difference(names, Record.keys(environmentOf(home))),
+            Arr.map((name) => [name, `${home}/settings/${name}`] as const),
+            Record.fromEntries,
+          ),
+          CROOK_AUDIT_ARGUMENT_LIMIT: String(DEFAULT_AUDIT_ARGUMENT_LIMIT),
+          CROOK_AUDIT_REDACT: REDACT_NOTHING,
+        },
       })
       const written = yield* fileSystem.readFileString(installed.paths.environmentFile)
       const writtenNames = Arr.map(written.split('\n'), (line) => line.split('=')[0] ?? '')
 
+      expect(Record.keys(MEMBER_LEAVES)).toEqual(
+        pipe(
+          Record.keys(packageJson.dependencies),
+          Arr.filter((name) => name.startsWith(WORKSPACE_SCOPE)),
+          Arr.prepend(packageJson.name),
+        ),
+      )
       expect(names).toContain('HERDR_SOCKET_PATH')
       expect(Arr.difference(names, writtenNames)).toEqual([])
     }),

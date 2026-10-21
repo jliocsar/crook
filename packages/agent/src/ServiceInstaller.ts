@@ -11,10 +11,13 @@ import * as Redacted from 'effect/Redacted'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
+import { CrookAuditLogPath, CrookAuditPolicy } from '@crook/agent/AuditLog'
 import { hooksBlock } from '@crook/agent/ClaudeHookSettings'
+import { CrookCreatedPanesPath } from '@crook/agent/CreatedPanes'
 import { CrookHookSocketPath } from '@crook/agent/HookInbox'
 import { CrookHubToken, CrookHubUrl, CrookMachineLabel } from '@crook/agent/HubLink'
 import { CrookMachineId } from '@crook/agent/MachineStateSync'
+import { CrookRecentPlacesPath } from '@crook/agent/RecentPlaces'
 import {
   type EnvironmentEntry,
   LAUNCHD_LABEL,
@@ -30,9 +33,10 @@ import {
   OWNER_ONLY_FILE_MODE,
   type WriteAtomicallyOptions,
   makeWriteAtomically,
+  xdgHome,
 } from '@crook/agent/StateDirectory'
 import { claudeRoots } from '@crook/claude/ClaudeRoots'
-import { AbsolutePath } from '@crook/domain/AbsolutePath'
+import { HerdrSocketPath } from '@crook/herdr/HerdrClient'
 
 export type ServiceTarget = Systemd | Launchd
 
@@ -80,12 +84,12 @@ export class ServicePlatformUnsupported extends Schema.TaggedError<ServicePlatfo
   }
 }
 
-export class ServiceSettingsMissing extends Schema.TaggedError<ServiceSettingsMissing>()(
-  'ServiceSettingsMissing',
+export class ServiceSettingsUnreadable extends Schema.TaggedError<ServiceSettingsUnreadable>()(
+  'ServiceSettingsUnreadable',
   { detail: Schema.String },
 ) {
   override get message(): string {
-    return `install-service reads the agent's settings from its own environment and could not: ${this.detail}. Run it as CROOK_HUB_URL=<hub address> CROOK_HUB_TOKEN=<this machine's exe.dev token> CROOK_MACHINE_ID=<machine id> crook-agent install-service; nothing was written.`
+    return `install-service reads the agent's settings from its own environment and could not: ${this.detail}. Set or correct that variable and run it again, as CROOK_HUB_URL=<hub address> CROOK_HUB_TOKEN=<this machine's exe.dev token> CROOK_MACHINE_ID=<machine id> crook-agent install-service; nothing was written.`
   }
 }
 
@@ -111,9 +115,7 @@ export class UninstalledService extends Schema.Class<UninstalledService>('Uninst
   removed: Schema.Array(Schema.String),
 }) {}
 
-const ConfigHome = Config.schema(AbsolutePath, 'XDG_CONFIG_HOME').pipe(
-  Config.orElse(() => Config.String('HOME').pipe(Config.map((home) => `${home}/.config`))),
-)
+const ConfigHome = xdgHome('XDG_CONFIG_HOME', '.config')
 
 const CrookConfigDirectory = Config.map(ConfigHome, (configHome) => `${configHome}/crook`)
 
@@ -142,6 +144,13 @@ const AgentSettings = Config.all({
   label: CrookMachineLabel,
   hookSocket: CrookHookSocketPath,
   carried: CarriedSettings,
+  carriedAsTheAgentReadsThem: Config.all([
+    HerdrSocketPath,
+    CrookAuditLogPath,
+    CrookAuditPolicy,
+    CrookCreatedPanesPath,
+    CrookRecentPlacesPath,
+  ]),
 })
 
 export const serviceTargetOf = (
@@ -274,17 +283,18 @@ const stopLaunchdAgent = Effect.fn('ServiceInstaller.stopLaunchdAgent')(function
     Effect.catchTag('ServiceManagerRefused', () => Effect.succeed(false)),
   )
 
-  yield* manager
-    .run(launchctl('bootout', service))
-    .pipe(
-      Effect.catchTag('ServiceManagerRefused', (refused) =>
-        Effect.flatMap(stillLoaded, (loaded) =>
-          loaded
-            ? Effect.fail(refused)
-            : Effect.logDebug('launchd had no crook-agent loaded to stop', refused.message),
-        ),
+  return yield* manager.run(launchctl('bootout', service)).pipe(
+    Effect.as(true),
+    Effect.catchTag('ServiceManagerRefused', (refused) =>
+      Effect.flatMap(stillLoaded, (loaded) =>
+        loaded
+          ? Effect.fail(refused)
+          : Effect.logDebug('launchd had no crook-agent loaded to stop', refused.message).pipe(
+              Effect.as(false),
+            ),
       ),
-    )
+    ),
+  )
 })
 
 export const installService = Effect.fn('ServiceInstaller.installService')(function* (
@@ -295,7 +305,7 @@ export const installService = Effect.fn('ServiceInstaller.installService')(funct
   const path = yield* Path.Path
   const files = yield* makeFiles
   const settings = yield* AgentSettings.pipe(
-    Effect.mapError((error) => new ServiceSettingsMissing({ detail: error.message })),
+    Effect.mapError((error) => new ServiceSettingsUnreadable({ detail: error.message })),
   )
   const roots = yield* claudeRoots
   const paths = yield* servicePaths(target)
@@ -334,19 +344,25 @@ export const uninstallService = Effect.fn('ServiceInstaller.uninstallService')(f
           .pipe(
             Effect.andThen(files.remove(paths.definitionFile)),
             Effect.andThen(manager.run(systemctl('daemon-reload'))),
+            Effect.as(true),
           ),
       Launchd: (launchd) =>
-        stopLaunchdAgent(launchd).pipe(Effect.andThen(files.remove(paths.definitionFile))),
+        stopLaunchdAgent(launchd).pipe(Effect.tap(files.remove(paths.definitionFile))),
     }),
   )
   const removedDefinition = yield* installed
-    ? stopAndRemoveDefinition.pipe(Effect.as(Option.some(paths.definitionFile)))
+    ? stopAndRemoveDefinition.pipe(
+        Effect.map((stopped) => Option.some({ file: paths.definitionFile, stopped })),
+      )
     : Effect.succeedNone
   const removedEnvironment = yield* files.removeIfPresent(paths.environmentFile)
 
   return new UninstalledService({
-    stopped: Option.isSome(removedDefinition),
-    removed: Arr.getSomes([removedDefinition, removedEnvironment]),
+    stopped: Option.exists(removedDefinition, (definition) => definition.stopped),
+    removed: Arr.getSomes([
+      Option.map(removedDefinition, (definition) => definition.file),
+      removedEnvironment,
+    ]),
   })
 })
 
@@ -394,7 +410,7 @@ export const uninstallReport = (uninstalled: UninstalledService) =>
       [
         uninstalled.stopped
           ? 'Stopped crook-agent and removed:'
-          : 'No crook-agent service was installed to stop. Removed what an earlier install left behind:',
+          : 'crook-agent was not running, so nothing was stopped. Removed what an earlier install left behind:',
         ...Arr.map(removed, (file) => `  ${file}`),
         "Claude's settings still name the crook hook; remove that hooks block yourself if you no longer want it.",
       ].join('\n'),

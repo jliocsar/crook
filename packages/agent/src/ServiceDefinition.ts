@@ -1,6 +1,8 @@
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 
+import { shellQuoted } from '@crook/domain/ShellQuoting'
+
 export interface EnvironmentEntry {
   readonly name: string
   readonly value: string
@@ -15,6 +17,7 @@ export interface LaunchdDefinitionInput extends ServiceDefinitionInput {
   readonly logFile: string
 }
 
+const INTERRUPTED_EXIT_CODE = 130
 const RUN_SUBCOMMAND = 'run'
 const SAFE_SHELL_WORD = /^[\w./:=@+,-]+$/u
 const SERVICE_NAME = 'crook-agent'
@@ -58,8 +61,7 @@ const systemdWord = (word: string) => `"${escapeWith(SYSTEMD_WORD_ESCAPES)(word)
 
 const xmlString = (text: string) => `    <string>${escapeWith(XML_ESCAPES)(text)}</string>`
 
-export const shellWord = (word: string) =>
-  SAFE_SHELL_WORD.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`
+export const shellWord = (word: string) => (SAFE_SHELL_WORD.test(word) ? word : shellQuoted(word))
 
 export const shellCommand = (words: readonly string[]) => Arr.map(words, shellWord).join(' ')
 
@@ -80,6 +82,7 @@ export const systemdUnit = ({ program, environmentFile }: ServiceDefinitionInput
     `ExecStart=${Arr.map([...program, RUN_SUBCOMMAND], systemdWord).join(' ')}`,
     `EnvironmentFile=${escapeWith(SYSTEMD_PATH_ESCAPES)(environmentFile)}`,
     'Restart=on-failure',
+    `SuccessExitStatus=${INTERRUPTED_EXIT_CODE}`,
     'StandardOutput=journal',
     'StandardError=journal',
     `SyslogIdentifier=${SERVICE_NAME}`,

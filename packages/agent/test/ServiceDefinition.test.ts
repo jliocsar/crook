@@ -28,6 +28,7 @@ it('writes a systemd user unit that runs this program with its settings from the
       'ExecStart="/opt/crook/crook-agent" "run"',
       'EnvironmentFile=/home/jc/.config/crook/agent.env',
       'Restart=on-failure',
+      'SuccessExitStatus=130',
       'StandardOutput=journal',
       'StandardError=journal',
       'SyslogIdentifier=crook-agent',

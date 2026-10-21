@@ -15,9 +15,14 @@ const TEMPORARY_SUFFIX = '.tmp'
 export const OWNER_ONLY_FILE_MODE = 0o600
 export const OWNER_ONLY_DIRECTORY_MODE = 0o700
 
-export const CrookStateDirectory = Config.schema(AbsolutePath, 'XDG_STATE_HOME').pipe(
-  Config.orElse(() => Config.String('HOME').pipe(Config.map((home) => `${home}/.local/state`))),
-  Config.map((stateHome) => `${stateHome}/crook`),
+export const xdgHome = (variable: string, homeSuffix: string) =>
+  Config.schema(AbsolutePath, variable).pipe(
+    Config.orElse(() => Config.String('HOME').pipe(Config.map((home) => `${home}/${homeSuffix}`))),
+  )
+
+export const CrookStateDirectory = Config.map(
+  xdgHome('XDG_STATE_HOME', '.local/state'),
+  (stateHome) => `${stateHome}/crook`,
 )
 
 export const stateFile = (variable: string, fileName: string) =>

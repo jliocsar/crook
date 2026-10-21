@@ -4,6 +4,7 @@ import * as Schema from 'effect/Schema'
 
 import { Command, CommandReceipt } from '@crook/domain/Command'
 import { AskId, IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import { shellQuoted } from '@crook/domain/ShellQuoting'
 
 export const CommandId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
   Schema.brand('CommandId'),
@@ -139,8 +140,6 @@ export class FolderNotCheckout extends Schema.TaggedError<FolderNotCheckout>()(
     return `The folder ${this.folder} is not inside a git checkout, so crook cannot make a worktree from it and started nothing. Work in the folder itself, or pick a folder inside a repository.`
   }
 }
-
-const shellQuoted = (text: string) => `'${text.replaceAll("'", String.raw`'\''`)}'`
 
 export class AgentNotStarted extends Schema.TaggedError<AgentNotStarted>()('AgentNotStarted', {
   folder: Schema.String,
