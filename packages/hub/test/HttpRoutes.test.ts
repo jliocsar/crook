@@ -27,6 +27,7 @@ import {
   RenameAgent,
   SendKeys,
 } from '@crook/domain/Command'
+import { findMachine } from '@crook/domain/HerdView'
 import { AskId, IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import {
   BrowserLoginRequired,
@@ -69,7 +70,6 @@ import {
   connect,
   hello,
   herdWhere,
-  machineIn,
   machineShows,
   machineStateWith,
   ownerLogin,
@@ -198,10 +198,10 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
         )
         const dropped = yield* machineShows(laptop, 'reconnecting')
 
-        expect(Option.flatMap(machineIn(online, laptop), (entry) => entry.state)).toEqual(
+        expect(Option.flatMap(findMachine(online, laptop), (entry) => entry.state)).toEqual(
           Option.some(stateOf(laptop, 1)),
         )
-        expect(Option.flatMap(machineIn(dropped, laptop), (entry) => entry.state)).toEqual(
+        expect(Option.flatMap(findMachine(dropped, laptop), (entry) => entry.state)).toEqual(
           Option.some(stateOf(laptop, 1)),
         )
       }),
@@ -217,11 +217,11 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
 
       yield* phone.MarkSeen({ machine: laptop, pane: PANE })
       const seen = yield* herdWhere((view) =>
-        Option.exists(machineIn(view, laptop), (entry) => entry.seen.includes(PANE)),
+        Option.exists(findMachine(view, laptop), (entry) => entry.seen.includes(PANE)),
       )
 
       expect(refused).toEqual(new MachineStillConnected({ machine: laptop, connection: 'online' }))
-      expect(Option.map(machineIn(seen, laptop), (entry) => entry.seen)).toEqual(
+      expect(Option.map(findMachine(seen, laptop), (entry) => entry.seen)).toEqual(
         Option.some([PANE]),
       )
     }),
@@ -263,7 +263,7 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
         ).toBe(true)
         expect(
           Option.map(
-            machineIn(yield* herdWhere(() => true), pinging),
+            findMachine(yield* herdWhere(() => true), pinging),
             (entry) => entry.machine.connection,
           ),
         ).toEqual(Option.some('online'))
@@ -474,7 +474,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
 
       yield* phone.SetPinned({ machine, pane, pinned: true })
       const pinned = yield* herdWhere((view) =>
-        Option.exists(machineIn(view, machine), (entry) => entry.pinned.includes(pane)),
+        Option.exists(findMachine(view, machine), (entry) => entry.pinned.includes(pane)),
       )
       const unknownPane = PaneId.make('w1:p9')
       const refused = yield* phone
@@ -485,7 +485,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
       yield* phone.ForgetMachine({ machine }).pipe(Effect.flip)
       const audited = yield* auditedOn(machine)
 
-      expect(Option.map(machineIn(pinned, machine), (entry) => entry.pinned)).toEqual(
+      expect(Option.map(findMachine(pinned, machine), (entry) => entry.pinned)).toEqual(
         Option.some([pane]),
       )
       expect(refused).toEqual(new PaneNotInHerd({ machine, pane: unknownPane }))

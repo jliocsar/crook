@@ -20,8 +20,8 @@ import type {
   TranscriptSource,
   TranscriptTailBytes,
 } from '@crook/domain/Transcript'
-import type { CommandFailure } from '@crook/protocol/Commands'
 import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
+import type { CommandFailure } from '@crook/protocol/Commands'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
 import type {

@@ -1,5 +1,4 @@
 import { expect, it } from '@effect/vitest'
-import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -12,6 +11,7 @@ import * as TestClock from 'effect/testing/TestClock'
 
 import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
+import { findMachine } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
@@ -109,17 +109,14 @@ const stateOf = (
     places: [],
   })
 
-const machineIn = (view: HerdView, id: MachineId) =>
-  Arr.findFirst(view.machines, (entry) => entry.machine.id === id)
-
 const connectionOf = (view: HerdView, id: MachineId) =>
-  Option.map(machineIn(view, id), (entry) => entry.machine.connection)
+  Option.map(findMachine(view, id), (entry) => entry.machine.connection)
 
 const seenOf = (view: HerdView, id: MachineId) =>
-  Option.map(machineIn(view, id), (entry: HerdMachine) => entry.seen)
+  Option.map(findMachine(view, id), (entry: HerdMachine) => entry.seen)
 
 const pinnedOf = (view: HerdView, id: MachineId) =>
-  Option.map(machineIn(view, id), (entry: HerdMachine) => entry.pinned)
+  Option.map(findMachine(view, id), (entry: HerdMachine) => entry.pinned)
 
 const viewWhere = Effect.fn('viewWhere')(function* (predicate: (view: HerdView) => boolean) {
   const herd = yield* Herd
@@ -238,7 +235,7 @@ it.effect('shows an attached machine online since it attached, with the hello ve
     yield* TestClock.adjust(DETACH_AFTER)
     yield* attach(LAPTOP, new Hello({ agentVersion: '0.1.0', label: Option.some('Laptop') }))
     yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1))
-    const laptop = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+    const laptop = yield* Effect.fromOption(findMachine(yield* currentView, LAPTOP))
 
     expect(laptop.machine.connection).toBe('online')
     expect(laptop.machine.label).toBe('Laptop')
@@ -256,7 +253,7 @@ it.effect('shows a dropped machine reconnecting, then offline once the grace run
 
     yield* TestClock.adjust(DETACH_AFTER)
     yield* Fiber.interrupt(attachment)
-    const dropped = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+    const dropped = yield* Effect.fromOption(findMachine(yield* currentView, LAPTOP))
 
     expect(dropped.machine.connection).toBe('reconnecting')
     expect(dropped.machine.connectionChangedAt).toEqual(
@@ -268,7 +265,7 @@ it.effect('shows a dropped machine reconnecting, then offline once the grace run
     expect(connectionOf(yield* currentView, LAPTOP)).toEqual(Option.some('reconnecting'))
 
     yield* TestClock.adjust(BEFORE_GRACE_ENDS)
-    const offline = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+    const offline = yield* Effect.fromOption(findMachine(yield* currentView, LAPTOP))
 
     expect(offline.machine.connection).toBe('offline')
     expect(offline.machine.lastSeenAt).toEqual(DateTime.makeUnsafe(Duration.toMillis(DETACH_AFTER)))
@@ -281,7 +278,7 @@ it.effect('stays online through a reconnect inside the grace, from the new conne
     yield* TestClock.adjust(BEFORE_GRACE_ENDS)
     yield* attach(LAPTOP)
     yield* TestClock.adjust(RECONNECT_GRACE)
-    const laptop = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+    const laptop = yield* Effect.fromOption(findMachine(yield* currentView, LAPTOP))
 
     expect(laptop.machine.connection).toBe('online')
     expect(laptop.machine.connectionChangedAt).toEqual(
@@ -314,7 +311,7 @@ it.effect('keeps the last published state after the machine goes offline', () =>
     yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2))
     yield* Fiber.interrupt(attachment)
     yield* TestClock.adjust(RECONNECT_GRACE)
-    const laptop = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+    const laptop = yield* Effect.fromOption(findMachine(yield* currentView, LAPTOP))
 
     expect(laptop.machine.connection).toBe('offline')
     expect(laptop.state).toEqual(Option.some(stateOf(LAPTOP, 2)))
@@ -360,7 +357,7 @@ it.effect('lists machines from the registry offline, with last seen, after a hub
       }),
     )
     const laptop = yield* hub.run(
-      Effect.flatMap(currentView, (view) => Effect.fromOption(machineIn(view, LAPTOP))),
+      Effect.flatMap(currentView, (view) => Effect.fromOption(findMachine(view, LAPTOP))),
     )
 
     expect(laptop.machine.connection).toBe('offline')
@@ -383,13 +380,13 @@ it.effect('forgets an offline machine until its agent connects again, across res
         yield* TestClock.adjust(RECONNECT_GRACE)
         yield* herd.forget(LAPTOP)
 
-        expect(machineIn(yield* currentView, LAPTOP)).toEqual(Option.none())
+        expect(findMachine(yield* currentView, LAPTOP)).toEqual(Option.none())
       }),
     )
     const afterRestart = yield* hub.run(currentView)
     const afterReconnect = yield* hub.run(Effect.andThen(attach(LAPTOP), currentView))
 
-    expect(machineIn(afterRestart, LAPTOP)).toEqual(Option.none())
+    expect(findMachine(afterRestart, LAPTOP)).toEqual(Option.none())
     expect(connectionOf(afterReconnect, LAPTOP)).toEqual(Option.some('online'))
   }),
 )
@@ -617,7 +614,7 @@ it.effect('keeps seen across a hub restart and drops it once the pane is gone', 
 it.effect('shows an agent version it cannot read as none, with the machine online anyway', () =>
   Effect.gen(function* () {
     yield* attach(LAPTOP, new Hello({ agentVersion: '0.2.0-rc.1', label: Option.none() }))
-    const laptop = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+    const laptop = yield* Effect.fromOption(findMachine(yield* currentView, LAPTOP))
 
     expect(laptop.machine.connection).toBe('online')
     expect(laptop.machine.agentVersion).toEqual(Option.none())
@@ -630,7 +627,7 @@ it.effect('follows the agent link from memory when the database refuses its writ
 
     yield* attach(LAPTOP)
     yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
-    const laptop = yield* Effect.fromOption(machineIn(yield* currentView, LAPTOP))
+    const laptop = yield* Effect.fromOption(findMachine(yield* currentView, LAPTOP))
 
     expect(laptop.machine.connection).toBe('online')
     expect(laptop.state).toEqual(Option.some(stateOf(LAPTOP, 1, [agentAt(PANE, 7)])))

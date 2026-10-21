@@ -12,10 +12,10 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { PaneId } from '@crook/domain/Ids'
+import { AgentStarted, StartAgent } from '@crook/domain/Command'
+import { IdempotencyKey, PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import { PaneTranscript, positionAfter, TranscriptPosition } from '@crook/domain/Transcript'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
-import { TranscriptOffset } from '@crook/domain/Ids'
 import { AGENT_PING_INTERVAL, HUB_RECONNECT_BASE } from '@crook/protocol/AgentLink'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { connectionView } from '@crook/web/connection/ConnectionView'
@@ -293,6 +293,30 @@ describe('HubLink', () => {
       yield* link.forgetMachine(LAPTOP)
 
       expect(yield* Ref.get(browser.forgotten)).toEqual([LAPTOP])
+    }),
+  )
+
+  it.effect('sends a command only over a live connection', () =>
+    Effect.gen(function* () {
+      const { browser, link, nextSession, settle } = yield* start()
+      const receipt = new AgentStarted({ pane: agent('w1:p9', 'idle').pane })
+      const command = new StartAgent({
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        task: Option.none(),
+      })
+      const key = IdempotencyKey.make('5b0e7d21')
+      const session = yield* nextSession
+      const beforeTheHerd = yield* Effect.flip(link.sendCommand(LAPTOP, key, command))
+
+      expect(beforeTheHerd).toBeInstanceOf(HubNotConnected)
+
+      yield* Ref.set(browser.commandAnswer, Exit.succeed(receipt))
+      yield* Queue.offer(session.views, liveView)
+      yield* settle
+
+      expect(yield* link.sendCommand(LAPTOP, key, command)).toEqual(receipt)
+      expect(yield* Ref.get(browser.sent)).toEqual([{ machine: LAPTOP, key, command }])
     }),
   )
 

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
@@ -13,6 +14,7 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
+import { AgentStarted, AnswerAsk, Decline, Prompt, SendKeys } from '@crook/domain/Command'
 import { HerdMachine } from '@crook/domain/HerdView'
 import { AskId, PaneId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
@@ -23,7 +25,7 @@ import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
 import { liveWith, renderApp } from '../AppRender.tsx'
 import { click, eventually, findByRole, present } from '../Dom.ts'
 import { agent, CROOK_TAB, CROOK_WORKSPACE, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
-import { STARTED_PANE } from '../HubFakes.ts'
+import { inputDelivered, STARTED_PANE } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 import {
   chunk,
@@ -155,6 +157,10 @@ describe('AgentChatScreen', () => {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
       const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
 
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'Run the tests' }))),
+      )
       yield* Queue.offer(transcript, opened())
       yield* Effect.promise(() => userEvent.type(field(), 'Run the tests{Enter}'))
       yield* eventually(() => {
@@ -183,6 +189,10 @@ describe('AgentChatScreen', () => {
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
 
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new SendKeys({ pane: PANE, keys: ['esc'] }))),
+      )
       yield* click(yield* findByRole('button', 'Stop (Esc)'))
       yield* eventually(() => {
         expect(Ref.getUnsafe(link.sent).map((call) => call.command)).toMatchObject([
@@ -197,6 +207,19 @@ describe('AgentChatScreen', () => {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'blocked', { ask })]))
       const composer = yield* Effect.promise(() =>
         screen.findByPlaceholderText('Or tell Claude what to do instead'),
+      )
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(
+          inputDelivered(
+            new AnswerAsk({
+              pane: PANE,
+              ask: ask.id,
+              answer: new Decline({ message: Option.some('Lint only the web package') }),
+            }),
+          ),
+        ),
       )
 
       expect(document.querySelector('[data-slot="ask-dock"]')?.textContent).toContain(
@@ -299,6 +322,7 @@ describe('AgentChatScreen', () => {
       const { link, router } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
 
       yield* Effect.promise(() => screen.findByRole('textbox'))
+      yield* Ref.set(link.commandAnswer, Exit.succeed(new AgentStarted({ pane: STARTED_PANE })))
       yield* SubscriptionRef.set(link.state, live([]))
       yield* click(yield* findByRole('button', 'Start Claude here again'))
       yield* eventually(() => {

@@ -1,7 +1,6 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import * as BunHttpServer from '@effect/platform-bun/BunHttpServer'
 import * as BunSocket from '@effect/platform-bun/BunSocket'
-import * as Arr from 'effect/Array'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
@@ -28,6 +27,7 @@ import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
+import { findMachine } from '@crook/domain/HerdView'
 import type { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
@@ -156,9 +156,6 @@ export const connect = Effect.fn('connect')(function* <Rpcs extends Rpc.Any>(
   return yield* RpcClient.make(group).pipe(Effect.provide(protocol))
 })
 
-export const machineIn = (view: HerdView, id: MachineId) =>
-  Arr.findFirst(view.machines, (entry) => entry.machine.id === id)
-
 export const herdWhere = Effect.fn('herdWhere')(function* (predicate: (view: HerdView) => boolean) {
   const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
 
@@ -169,7 +166,7 @@ export const herdWhere = Effect.fn('herdWhere')(function* (predicate: (view: Her
 
 export const machineShows = (id: MachineId, connection: MachineConnection) =>
   herdWhere((view) =>
-    Option.exists(machineIn(view, id), (entry) => entry.machine.connection === connection),
+    Option.exists(findMachine(view, id), (entry) => entry.machine.connection === connection),
   )
 
 export const realAgent = Effect.fn('realAgent')(function* (

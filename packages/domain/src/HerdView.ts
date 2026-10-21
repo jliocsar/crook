@@ -29,6 +29,11 @@ export class HerdView extends Schema.Class<HerdView>('HerdView')({
 
 const placeByMostRecentUse = Order.mapInput(byMostRecentUse, (entry: MachinePlace) => entry.place)
 
+export const isOnline = (entry: HerdMachine): boolean => entry.machine.connection === 'online'
+
+export const findMachine = (view: HerdView, machine: MachineId): Option.Option<HerdMachine> =>
+  Arr.findFirst(view.machines, (entry) => entry.machine.id === machine)
+
 export const placesOf = (entry: HerdMachine): readonly MachinePlace[] =>
   Option.match(entry.state, {
     onNone: () => [],
@@ -38,7 +43,7 @@ export const placesOf = (entry: HerdMachine): readonly MachinePlace[] =>
 export const mostRecentPlace = (herd: HerdView): Option.Option<MachinePlace> =>
   pipe(
     herd.machines,
-    Arr.filter((entry) => entry.machine.connection === 'online'),
+    Arr.filter(isOnline),
     Arr.flatMap(placesOf),
     Arr.sort(placeByMostRecentUse),
     Arr.head,

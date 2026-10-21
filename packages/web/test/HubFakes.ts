@@ -1,23 +1,17 @@
 import type * as Cause from 'effect/Cause'
 import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import * as Match from 'effect/Match'
-
-import {
-  AgentStarted,
-  InputDelivered,
-  PaneClosed,
-  PaneRenamed,
-  targetPane,
-} from '@crook/domain/Command'
+import { InputDelivered, targetPane } from '@crook/domain/Command'
 import type { Command, CommandReceipt, PaneCommand } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import { PaneId, TerminalId } from '@crook/domain/Ids'
@@ -67,6 +61,10 @@ export interface SeenCall {
   readonly pane: PaneId
 }
 
+const NO_COMMAND_ANSWER = Exit.die(
+  new Error('This test sent a command without setting its answer.'),
+)
+
 export const STARTED_PANE = PaneId.make('w1:p9')
 
 export const sourceKey = (source: TranscriptSource): string =>
@@ -84,19 +82,6 @@ export const inputDelivered = (command: PaneCommand, stateChangeSeq = 1) =>
     stateChangeSeq,
   })
 
-export const fakeReceipt = (command: Command): CommandReceipt =>
-  Match.value(command).pipe(
-    Match.tagsExhaustive({
-      Prompt: (prompt) => inputDelivered(prompt),
-      SendKeys: (keys) => inputDelivered(keys),
-      AnswerAsk: (answer) => inputDelivered(answer),
-      RenameAgent: (rename) => new PaneRenamed({ pane: rename.pane, label: rename.label }),
-      ClosePane: (close) => new PaneClosed({ pane: close.pane }),
-      StartAgent: () => new AgentStarted({ pane: STARTED_PANE }),
-      CreateWorktree: () => new AgentStarted({ pane: STARTED_PANE }),
-    }),
-  )
-
 export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   cached: Option.Option<HerdSnapshot>,
 ) {
@@ -105,6 +90,9 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const closed = yield* Ref.make(0)
   const seen = yield* Ref.make<readonly SeenCall[]>([])
   const forgotten = yield* Ref.make<readonly MachineId[]>([])
+  const sent = yield* Ref.make<readonly SentCommand[]>([])
+  const commandAnswer =
+    yield* Ref.make<Exit.Exit<CommandReceipt, CommandFailure | HubCallFailed>>(NO_COMMAND_ANSWER)
   const saved = yield* Ref.make(cached)
   const visible = yield* SubscriptionRef.make(true)
   const online = yield* SubscriptionRef.make(true)
@@ -140,8 +128,11 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
             return Stream.fromQueue(transcript)
           }),
         ),
-      sendCommand: (_machine: MachineId, _key: IdempotencyKey, command: Command) =>
-        Effect.succeed(fakeReceipt(command)),
+      sendCommand: (machine: MachineId, key: IdempotencyKey, command: Command) =>
+        Effect.andThen(
+          Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
+          Effect.flatten(Ref.get(commandAnswer)),
+        ),
     }
   })
 
@@ -182,6 +173,8 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
     closed,
     seen,
     forgotten,
+    sent,
+    commandAnswer,
     saved,
     visible,
     online,
@@ -202,9 +195,10 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   const transcripts = yield* Ref.make<ReadonlyMap<string, LinkTranscript>>(new Map())
   const resumes = yield* Ref.make<readonly TranscriptResume[]>([])
   const sent = yield* Ref.make<readonly SentCommand[]>([])
-  const commandRefusal = yield* Ref.make(
-    Option.none<CommandFailure | HubCallFailed | HubNotConnected>(),
-  )
+  const commandAnswer =
+    yield* Ref.make<Exit.Exit<CommandReceipt, CommandFailure | HubCallFailed | HubNotConnected>>(
+      NO_COMMAND_ANSWER,
+    )
   const commandAnswers = yield* Latch.make(true)
 
   const transcriptFor = Effect.fn('transcriptFor')(function* (source: TranscriptSource) {
@@ -243,17 +237,8 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
         ),
       sendCommand: (machine, key, command) =>
         Effect.andThen(
-          Effect.andThen(
-            Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
-            commandAnswers.await,
-          ),
-          Effect.flatMap(
-            Ref.get(commandRefusal),
-            Option.match({
-              onNone: () => Effect.succeed(fakeReceipt(command)),
-              onSome: Effect.fail,
-            }),
-          ),
+          Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
+          Effect.andThen(commandAnswers.await, Effect.flatten(Ref.get(commandAnswer))),
         ),
       watchTranscript: (_machine, source, resume) =>
         Stream.unwrap(
@@ -279,7 +264,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     transcriptFor,
     resumes,
     sent,
-    commandRefusal,
+    commandAnswer,
     commandAnswers,
   }
 })
