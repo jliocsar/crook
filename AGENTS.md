@@ -685,6 +685,14 @@ never scrolled itself (measured in Chromium at 375×812 with the visual viewport
 phone's keyboard is emulated by redefining `visualViewport.height` and dispatching `resize` on it.
 :::
 
+:::warning
+Never run `install-service`, `uninstall-service`, `systemctl --user` start/enable/stop or `launchctl` against the real user's session, not even with a temporary `HOME`: `systemctl --user` talks to the running user manager whatever `HOME` says. The installer reaches them only through a service whose test layer records the calls. Check a generated unit offline with `systemd-analyze verify` on a file under `tmp/`, which reports a missing binary or a bad directive and starts nothing (measured), and a plist with Python's `plistlib`.
+:::
+
+:::tip
+A `bun build --compile` binary reports its own path as `process.execPath`, and `Bun.main` sits under `/$bunfs/`; from a checkout `process.execPath` is bun and `Bun.main` is the script (measured). That is how the agent tells which command runs it.
+:::
+
 ## Establishing a fact
 
 Do not guess about Effect, oxc or Bun. Do not trust a plausible claim in a review.
