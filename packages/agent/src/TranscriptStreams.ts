@@ -30,6 +30,8 @@ import {
   TranscriptOpened,
   type TranscriptPosition,
   type TranscriptSource,
+  type TranscriptTailBytes,
+  omittedUpTo,
   positionAfter,
 } from '@crook/domain/Transcript'
 import {
@@ -117,6 +119,31 @@ const make = Effect.gen(function* () {
   const opened = (session: ClaudeSessionId) =>
     Stream.succeed<TranscriptEvent>(new TranscriptOpened({ session }))
 
+  const fromLineNearEnd = (
+    file: TranscriptFile,
+    offset: TranscriptOffset,
+    tailBytes: Option.Option<TranscriptTailBytes>,
+    read: (from: TranscriptOffset) => Stream.Stream<TranscriptEvent, FollowError>,
+  ): Stream.Stream<TranscriptEvent, FollowError> =>
+    pipe(
+      tailBytes,
+      Option.filter(() => offset === TRANSCRIPT_START),
+      Option.match({
+        onNone: () => read(offset),
+        onSome: (bytes) =>
+          Stream.unwrap(
+            Effect.map(tail.tailStart(file, bytes), (start) =>
+              start === TRANSCRIPT_START
+                ? read(start)
+                : Stream.concat(
+                    Stream.succeed<TranscriptEvent>(omittedUpTo(file.session, start)),
+                    read(start),
+                  ),
+            ),
+          ),
+      }),
+    )
+
   const live = (file: TranscriptFile, offset: TranscriptOffset) =>
     Stream.merge(
       tail.follow(file, offset),
@@ -127,30 +154,49 @@ const make = Effect.gen(function* () {
         ),
     )
 
-  const openSession = (session: ClaudeSessionId, offset: TranscriptOffset) =>
+  const openSession = (
+    session: ClaudeSessionId,
+    offset: TranscriptOffset,
+    tailBytes: Option.Option<TranscriptTailBytes>,
+  ) =>
     Stream.concat(
       opened(session),
-      Stream.unwrap(Effect.map(locator.await(session), (file) => live(file, offset))),
+      Stream.unwrap(
+        Effect.map(locator.await(session), (file) =>
+          fromLineNearEnd(file, offset, tailBytes, (from) => live(file, from)),
+        ),
+      ),
     )
 
-  const finishSession = (position: TranscriptPosition) =>
+  const finishSession = (
+    position: TranscriptPosition,
+    tailBytes: Option.Option<TranscriptTailBytes>,
+  ) =>
     Stream.unwrap(
       Effect.map(
         locator.locate(position.session),
         Option.match({
           onNone: () => Stream.empty,
-          onSome: (file) => tail.drain(file, position.offset),
+          onSome: (file) =>
+            fromLineNearEnd(file, position.offset, tailBytes, (from) => tail.drain(file, from)),
         }),
       ),
     )
 
-  const fromSession = (session: ClaudeSessionId, position: Option.Option<TranscriptPosition>) =>
+  const fromSession = (
+    session: ClaudeSessionId,
+    position: Option.Option<TranscriptPosition>,
+    tailBytes: Option.Option<TranscriptTailBytes>,
+  ) =>
     Option.match(position, {
-      onNone: () => openSession(session, TRANSCRIPT_START),
+      onNone: () => openSession(session, TRANSCRIPT_START, tailBytes),
       onSome: (at) =>
         at.session === session
-          ? openSession(session, at.offset)
-          : Stream.concat(finishSession(at), openSession(session, TRANSCRIPT_START)),
+          ? openSession(session, at.offset, tailBytes)
+          : Stream.concat(
+              finishSession(at, tailBytes),
+              openSession(session, TRANSCRIPT_START, tailBytes),
+            ),
     })
 
   const sessionsOf = (pane: PaneId) =>
@@ -164,7 +210,11 @@ const make = Effect.gen(function* () {
       Stream.changesWith(sameSession),
     )
 
-  const followPane = (pane: PaneId, from: Option.Option<TranscriptPosition>) =>
+  const followPane = (
+    pane: PaneId,
+    from: Option.Option<TranscriptPosition>,
+    tailBytes: Option.Option<TranscriptTailBytes>,
+  ) =>
     Stream.unwrap(
       Effect.map(Ref.make(from), (position) =>
         sessionsOf(pane).pipe(
@@ -172,7 +222,9 @@ const make = Effect.gen(function* () {
             Option.match({
               onNone: () => Stream.never,
               onSome: (session) =>
-                Stream.unwrap(Effect.map(Ref.get(position), (at) => fromSession(session, at))),
+                Stream.unwrap(
+                  Effect.map(Ref.get(position), (at) => fromSession(session, at, tailBytes)),
+                ),
             }),
           ),
           Stream.tap((event) => Ref.update(position, (at) => positionAfter(at, event))),
@@ -184,13 +236,18 @@ const make = Effect.gen(function* () {
     session: ClaudeSessionId,
     subagent: SubagentId,
     from: Option.Option<TranscriptPosition>,
+    tailBytes: Option.Option<TranscriptTailBytes>,
   ) =>
     Stream.concat(
       opened(session),
       Stream.unwrap(
         locator.await(session).pipe(
           Effect.flatMap((file) => locator.awaitSubagent(file, subagent)),
-          Effect.map((file) => tail.follow(file, startIn(session, from))),
+          Effect.map((file) =>
+            fromLineNearEnd(file, startIn(session, from), tailBytes, (start) =>
+              tail.follow(file, start),
+            ),
+          ),
         ),
       ),
     )
@@ -198,11 +255,13 @@ const make = Effect.gen(function* () {
   const follow = (
     source: TranscriptSource,
     from: Option.Option<TranscriptPosition>,
+    tailBytes: Option.Option<TranscriptTailBytes>,
   ): Stream.Stream<TranscriptEvent, FollowError> =>
     Match.value(source).pipe(
       Match.tagsExhaustive({
-        PaneTranscript: ({ pane }) => followPane(pane, from),
-        SubagentTranscript: ({ session, subagent }) => followSubagent(session, subagent, from),
+        PaneTranscript: ({ pane }) => followPane(pane, from, tailBytes),
+        SubagentTranscript: ({ session, subagent }) =>
+          followSubagent(session, subagent, from, tailBytes),
       }),
     )
 
@@ -210,7 +269,7 @@ const make = Effect.gen(function* () {
     const attempt = Effect.fn('TranscriptStreams.attempt')(function* (
       from: Option.Option<TranscriptPosition>,
     ): Effect.fn.Return<void, RpcClientError> {
-      return yield* follow(watch.source, from).pipe(
+      return yield* follow(watch.source, from, watch.tail).pipe(
         Stream.catch(followFailed),
         Stream.catchDefect((defect) => followDefected(Cause.die(defect))),
         Stream.runForEach((update) => link.publish(watch.id, update)),
@@ -262,6 +321,7 @@ export class TranscriptStreams extends Context.Service<
     readonly follow: (
       source: TranscriptSource,
       from: Option.Option<TranscriptPosition>,
+      tailBytes: Option.Option<TranscriptTailBytes>,
     ) => Stream.Stream<TranscriptEvent, FollowError>
     readonly serve: (
       link: TranscriptLink,

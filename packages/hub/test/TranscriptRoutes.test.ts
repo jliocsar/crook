@@ -117,11 +117,18 @@ const watchOnPhone = Effect.fn('watchOnPhone')(function* (
   const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
   const events = yield* Queue.unbounded<string>()
 
-  yield* phone.WatchTranscript({ machine, source: new PaneTranscript({ pane: PANE }), from }).pipe(
-    Stream.runForEach((event) => Queue.offer(events, describeEvent(event))),
-    Effect.ignore,
-    Effect.forkScoped,
-  )
+  yield* phone
+    .WatchTranscript({
+      machine,
+      source: new PaneTranscript({ pane: PANE }),
+      from,
+      tail: Option.none(),
+    })
+    .pipe(
+      Stream.runForEach((event) => Queue.offer(events, describeEvent(event))),
+      Effect.ignore,
+      Effect.forkScoped,
+    )
 
   return events
 })
@@ -244,6 +251,7 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
             machine: watched,
             source: new PaneTranscript({ pane }),
             from: Option.none(),
+            tail: Option.none(),
           })
           .pipe(Stream.runHead, Effect.flip)
 

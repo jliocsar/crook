@@ -10,12 +10,14 @@ import {
   TranscriptOpened,
   TranscriptPosition,
   continuesFrom,
+  omittedUpTo,
   positionAfter,
   remainderAfter,
 } from '@crook/domain/Transcript'
 import {
   AssistantMessage,
   ImageBlock,
+  OmittedLines,
   TextBlock,
   UnrecognizedEntry,
 } from '@crook/domain/TranscriptMessage'
@@ -62,6 +64,19 @@ describe('positionAfter', () => {
     expect(
       positionAfter(Option.some(at(FIRST, 800)), new TranscriptOpened({ session: CLEARED })),
     ).toEqual(Option.some(at(CLEARED, 0)))
+  })
+})
+
+describe('omittedUpTo', () => {
+  it('stands for the bytes a tail skipped, as the chunk that opens the session', () => {
+    const omitted = omittedUpTo(FIRST, TranscriptOffset.make(800))
+    const opened = positionAfter(Option.none(), new TranscriptOpened({ session: FIRST }))
+
+    expect(continuesFrom(opened, omitted)).toBe(true)
+    expect(positionAfter(opened, omitted)).toEqual(Option.some(at(FIRST, 800)))
+    expect(omitted.messages).toEqual([
+      new OmittedLines({ offset: TranscriptOffset.make(0), byteLength: 800 }),
+    ])
   })
 })
 

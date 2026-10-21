@@ -2,7 +2,12 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { ClaudeSessionId } from '@crook/domain/Ids'
-import { TranscriptEvent, TranscriptPosition, TranscriptSource } from '@crook/domain/Transcript'
+import {
+  TranscriptEvent,
+  TranscriptPosition,
+  TranscriptSource,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
 
 export const TranscriptWatchId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
   Schema.brand('TranscriptWatchId'),
@@ -13,6 +18,7 @@ export class TranscriptWatch extends Schema.Class<TranscriptWatch>('TranscriptWa
   id: TranscriptWatchId,
   source: TranscriptSource,
   from: Schema.OptionFromNullOr(TranscriptPosition),
+  tail: Schema.OptionFromNullOr(TranscriptTailBytes),
 }) {}
 
 export class TranscriptDemand extends Schema.Class<TranscriptDemand>('TranscriptDemand')({

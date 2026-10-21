@@ -17,6 +17,7 @@ import {
   TranscriptOpened,
   TranscriptPosition,
   type TranscriptSource,
+  TranscriptTailBytes,
 } from '@crook/domain/Transcript'
 import { UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
@@ -82,7 +83,7 @@ const watching = Effect.fn('watching')(function* (
 ) {
   const events = yield* Queue.unbounded<string>()
 
-  yield* transcripts.watch(LAPTOP, source, from).pipe(
+  yield* transcripts.watch(LAPTOP, source, from, Option.none()).pipe(
     Stream.runForEach((event) => Queue.offer(events, describeEvent(event))),
     Effect.catchTags({
       TranscriptReadFailed: (failure) => Queue.offer(events, `failed ${failure.message}`),
@@ -112,6 +113,23 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
         ),
       ).toEqual(Option.some([{ id: ids[0], from: Option.some(at(120)) }]))
       expect(Option.map(elsewhere, (current) => current.watches)).toEqual(Option.some([]))
+    }),
+  )
+
+  it.effect('hands the agent the tail a fresh watch asked for', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const tail = Option.some(TranscriptTailBytes.make(1))
+
+      yield* transcripts
+        .watch(LAPTOP, paneSource, Option.none(), tail)
+        .pipe(Stream.runDrain, Effect.ignore, Effect.forkScoped)
+      yield* watchIds(transcripts, LAPTOP, 1)
+      const demand = yield* transcripts.demands(LAPTOP).pipe(Stream.runHead)
+
+      expect(Option.map(demand, (current) => current.watches.map((watch) => watch.tail))).toEqual(
+        Option.some([tail]),
+      )
     }),
   )
 

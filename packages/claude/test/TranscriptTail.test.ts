@@ -11,11 +11,12 @@ import { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import {
   TranscriptOffsetBeyondEnd,
   TranscriptOffsetMidLine,
+  TAIL_READ_SIZE,
   TranscriptShrank,
   TranscriptTail,
 } from '@crook/claude/TranscriptTail'
 import { TranscriptOffset } from '@crook/domain/Ids'
-import type { TranscriptChunk } from '@crook/domain/Transcript'
+import { type TranscriptChunk, TranscriptTailBytes } from '@crook/domain/Transcript'
 
 import {
   FIXTURES,
@@ -29,6 +30,7 @@ import {
 
 const PAGE = 4096
 const LARGE_APPEND = 120 * 1024
+const LONG_LINE = 3 * TAIL_READ_SIZE
 
 const encoder = new TextEncoder()
 
@@ -145,6 +147,42 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
       )
       expect(midLine).toEqual(new TranscriptOffsetMidLine({ path: file.path, offset: 20017 }))
       expect(beyond).toBeInstanceOf(TranscriptOffsetBeyondEnd)
+    }),
+  )
+
+  live.effect('starts a tail at the line that holds the byte it was asked for', () =>
+    Effect.gen(function* () {
+      const tail = yield* TranscriptTail
+      const file = fixtureFile('plain-turn.jsonl')
+      const whole = yield* fixtureBytes('plain-turn.jsonl')
+      const bytes = TranscriptTailBytes.make(Math.floor(whole.length / 2))
+      const start = yield* tail.tailStart(file, bytes)
+      const resumed = yield* tail.drain(file, start).pipe(Stream.runCollect)
+      const everything = yield* tail.tailStart(file, TranscriptTailBytes.make(whole.length + 1))
+      const expected = messagesIn(yield* drained(file)).filter((message) => message.offset >= start)
+
+      expect(start).toBeGreaterThan(0)
+      expect(start).toBeLessThanOrEqual(whole.length - bytes)
+      expect(whole[start - 1]).toBe(0x0a)
+      expect(whole.subarray(start, whole.length - bytes).includes(0x0a)).toBe(false)
+      expect(messagesIn(resumed)).toEqual(expected)
+      expect(everything).toBe(START)
+    }),
+  )
+
+  live.effect('walks back past a read window to find the start of a long line', () =>
+    Effect.gen(function* () {
+      const tail = yield* TranscriptTail
+      const first = encoder.encode('{"type":"first"}\n')
+      const long = encoder.encode(`{"type":"${'x'.repeat(LONG_LINE)}"}\n`)
+      const content = new Uint8Array(first.length + long.length)
+
+      content.set(first)
+      content.set(long, first.length)
+      const file = yield* scratchFile(content)
+      const start = yield* tail.tailStart(file, TranscriptTailBytes.make(TAIL_READ_SIZE))
+
+      expect(start).toBe(first.length)
     }),
   )
 

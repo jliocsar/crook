@@ -6,7 +6,12 @@ import { Command, CommandReceipt } from '@crook/domain/Command'
 import { HerdView } from '@crook/domain/HerdView'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { MachineConnection } from '@crook/domain/Machine'
-import { TranscriptEvent, TranscriptPosition, TranscriptSource } from '@crook/domain/Transcript'
+import {
+  TranscriptEvent,
+  TranscriptPosition,
+  TranscriptSource,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
 import { CommandFailure } from '@crook/protocol/Commands'
 import { TranscriptFailure } from '@crook/protocol/Transcripts'
 
@@ -72,6 +77,7 @@ export const WatchTranscript = Rpc.make('WatchTranscript', {
     machine: MachineId,
     source: TranscriptSource,
     from: Schema.OptionFromNullOr(TranscriptPosition),
+    tail: Schema.OptionFromNullOr(TranscriptTailBytes),
   },
   success: TranscriptEvent,
   error: Schema.Union([MachineNotInHerd, PaneNotInHerd, ...TranscriptFailure.members]),

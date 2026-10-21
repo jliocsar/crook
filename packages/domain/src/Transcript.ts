@@ -6,7 +6,7 @@ import * as Schema from 'effect/Schema'
 
 import { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
 import { Subagent } from '@crook/domain/Subagent'
-import { TranscriptMessage } from '@crook/domain/TranscriptMessage'
+import { OmittedLines, TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 export class TranscriptPosition extends Schema.Class<TranscriptPosition>('TranscriptPosition')({
   session: ClaudeSessionId,
@@ -45,6 +45,19 @@ export const TranscriptEvent = Schema.Union([TranscriptOpened, TranscriptChunk, 
 export type TranscriptEvent = typeof TranscriptEvent.Type
 
 export const TRANSCRIPT_START = TranscriptOffset.make(0)
+
+export const TranscriptTailBytes = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
+  Schema.brand('TranscriptTailBytes'),
+)
+export type TranscriptTailBytes = typeof TranscriptTailBytes.Type
+
+export const omittedUpTo = (session: ClaudeSessionId, start: TranscriptOffset) =>
+  new TranscriptChunk({
+    session,
+    offset: TRANSCRIPT_START,
+    nextOffset: start,
+    messages: [new OmittedLines({ offset: TRANSCRIPT_START, byteLength: start })],
+  })
 
 export const continuesFrom = (
   position: Option.Option<TranscriptPosition>,
