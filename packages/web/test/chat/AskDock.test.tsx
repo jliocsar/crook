@@ -382,6 +382,52 @@ describe('the ask dock', () => {
     }),
   )
 
+  it.effect(
+    'keeps the asked call in the thread and announces nothing once the machine is offline',
+    () =>
+      Effect.gen(function* () {
+        const { link } = yield* renderApp(CHAT, blockedOn(editAsk))
+        const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+        yield* Queue.offerAll(transcript, [
+          opened(),
+          chunk(0, 20, [
+            prompt(0, 'Bump the herd'),
+            toolUse(10, 'toolu_edit', 'Edit', {
+              file_path: `${CWD}/packages/hub/src/Herd.ts`,
+              old_string: 'const herd = 1',
+              new_string: 'const herd = 2',
+            }),
+          ]),
+        ])
+        yield* Effect.promise(() => screen.findByText('Bump the herd'))
+        yield* SubscriptionRef.set(
+          link.state,
+          liveWith(
+            herd([
+              machine(
+                LAPTOP,
+                [agent('w1:p1', 'blocked', { ask: editAsk, title: 'Lint the web package' })],
+                { connection: 'offline' },
+              ),
+            ]),
+          ),
+        )
+        yield* Effect.promise(() => screen.findByText('laptop is offline'))
+        yield* eventually(() => {
+          expect(document.querySelector('[data-slot="ask-dock"]')).toBeNull()
+        })
+
+        expect(
+          screen.getByRole('button', { name: /^Edit\(packages\/hub\/src\/Herd\.ts\)/u }),
+        ).toBeDefined()
+        expect(
+          Array.from(document.querySelectorAll('[role="status"]'), (region) => region.textContent),
+        ).not.toContain('Needs you: Edit Herd.ts? (Edit)')
+        expect(screen.queryByText(/^Needs you:/u)).toBeNull()
+      }),
+  )
+
   it.effect('leaves a note in the transcript after Always, beside the call it allowed', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, blockedOn(editAsk))

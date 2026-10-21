@@ -36,26 +36,22 @@ import {
   isAnswerSettled,
   isAnswerUnderway,
 } from '@crook/web/chat/AskModel'
-import type { AlwaysNote, AskAnswerState } from '@crook/web/chat/AskModel'
+import type { AlwaysNote } from '@crook/web/chat/AskModel'
 import { isUserPrompt } from '@crook/web/chat/ChatItems'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { activityOf } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 import { useCommandAction } from '@crook/web/chat/CommandAction'
 import type { CommandAction } from '@crook/web/chat/CommandAction'
+import type { AskDockProps } from '@crook/web/chat/AskDock'
 import type { ComposerProps, ComposerMode } from '@crook/web/chat/Composer'
 import type { Restart } from '@crook/web/chat/EdgeCard'
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
-export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange'>
+export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'handle'>
 
-export interface AskDockCommands {
-  readonly ask: Ask
-  readonly state: AskAnswerState
-  readonly disabled: boolean
-  readonly onAnswer: (answer: AskAnswer) => void
-}
+export type AskDockCommands = Omit<AskDockProps, 'cwd'>
 
 export interface ChatCommands {
   readonly composer: ComposerCommands
@@ -158,9 +154,6 @@ const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
     Match.tag('AgentStarted', (started) => Option.some(started.pane)),
     Match.orElse(() => Option.none<PaneId>()),
   )
-
-export const composerMode = (openAsk: Option.Option<Ask>): ComposerMode =>
-  Option.isSome(openAsk) ? 'decline' : 'prompt'
 
 export const placeholderOf = (
   connection: ConnectionView,
@@ -297,10 +290,10 @@ export const useChatCommands = ({
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(new OpenedAgent({ machine, pane }), answer)
   const openAsk = Option.flatMap(
-    Option.filter(model.row, () => blocked),
+    Option.filter(model.row, () => blocked && model.presence === 'live'),
     (row) => row.ask,
   )
-  const mode = composerMode(openAsk)
+  const mode: ComposerMode = Option.isSome(openAsk) ? 'decline' : 'prompt'
   const answering = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(answer, ask.id)))
   const declining = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(prompt, ask.id)))
 

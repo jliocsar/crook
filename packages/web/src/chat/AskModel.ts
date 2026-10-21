@@ -72,14 +72,12 @@ const isAlreadyAnswered = Schema.is(AskNotPending)
 
 const isApproveAlways = Schema.is(ApproveAlways)
 
-const isAnswering = AskAnswerState.$is('Answering')
-
 export const isAnswered = AskAnswerState.$is('Answered')
 
-export const isAnswerUnderway = (state: AskAnswerState): boolean => isAnswering(state)
+export const isAnswerUnderway = AskAnswerState.$is('Answering')
 
 export const answerInFlight = (state: AskAnswerState): Option.Option<AskAnswer> =>
-  Option.map(Option.liftPredicate(state, isAnswering), (answering) => answering.answer)
+  Option.map(Option.liftPredicate(state, isAnswerUnderway), (answering) => answering.answer)
 
 export const isAnswerSettled = (state: AskAnswerState): boolean =>
   AskAnswerState.$is('AlreadyAnswered')(state) || AskAnswerState.$is('Refused')(state)

@@ -5,13 +5,12 @@ import * as Option from 'effect/Option'
 import type * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 
-import { isReceiptShown } from '@crook/domain/Command'
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import { findMachine } from '@crook/domain/HerdView'
 import type { HerdView } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
-import { progressOf } from '@crook/web/atoms/ActionProgress'
+import { commandProgress, progressOf } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
@@ -51,9 +50,10 @@ export const pendingAction = (
   herd: Option.Option<HerdView>,
   machine: MachineId,
 ): CommandProgress =>
-  progressOf(result, (receipt) =>
-    Option.exists(herd, (view) => isReceiptShown(receipt, agentsOf(view, machine))),
-  )
+  Option.match(herd, {
+    onNone: () => progressOf(result, () => false),
+    onSome: (view) => commandProgress(result, agentsOf(view, machine)),
+  })
 
 export const pendingActionAtom = Atom.family((key: PendingActionKey) =>
   Atom.make((get) =>

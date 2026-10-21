@@ -42,6 +42,12 @@ describe('pendingAction', () => {
     ).toStrictEqual(ActionProgress.Done({ receipt }))
   })
 
+  it('stays sent on the ack while no herd has arrived to show it in', () => {
+    expect(stateOf(AsyncResult.success(receipt), Option.none())).toStrictEqual(
+      ActionProgress.Sent({ receipt }),
+    )
+  })
+
   it('says why it failed, and gives the one unexpected-failure sentence when no error came back', () => {
     const refusal = new MachineNotInHerd({ machine: LAPTOP })
 

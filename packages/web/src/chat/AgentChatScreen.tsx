@@ -18,6 +18,7 @@ import {
   transcriptWholeAtom,
 } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
+import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
 import type { AskDockCommands, ComposerCommands } from '@crook/web/chat/ChatCommands'
@@ -83,9 +84,6 @@ interface DockProps {
 const BACK_TO_AGENTS = 'Back to Agents'
 const NOT_CLAUDE = 'Not a Claude pane'
 const PENDING_PROMPT_KEY = 'pending prompt'
-const ASK_DOCK_SELECTOR = '[data-slot="ask-dock"]'
-const COMPOSER_FIELD_SELECTOR = '[data-slot="composer"] textarea'
-const VISIBLE_FOCUS = ':focus-visible'
 
 const pendingPromptRows = (text: Option.Option<string>): readonly ThreadRow[] =>
   Option.toArray(
@@ -114,42 +112,6 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
 const hasActions = (model: ChatScreenModel): boolean =>
   Option.isSome(model.row) && (model.presence === 'live' || model.presence === 'away')
 
-const holdsVisibleAskFocus = (target: EventTarget): boolean =>
-  target instanceof Element &&
-  target.closest(ASK_DOCK_SELECTOR) !== null &&
-  target.matches(VISIBLE_FOCUS)
-
-const useFocusAfterAsk = (container: React.RefObject<HTMLDivElement | null>, askKey: string) => {
-  const askFocused = React.useRef(false)
-
-  React.useEffect(() => {
-    if (!askFocused.current) {
-      return
-    }
-
-    askFocused.current = false
-
-    const active = document.activeElement
-    const lost =
-      active === null || active === document.body || active.closest(ASK_DOCK_SELECTOR) !== null
-
-    if (lost) {
-      container.current?.querySelector<HTMLElement>(COMPOSER_FIELD_SELECTOR)?.focus()
-    }
-  }, [askKey])
-
-  return {
-    onFocus: (event: React.FocusEvent) => {
-      askFocused.current = holdsVisibleAskFocus(event.target)
-    },
-    onBlur: (event: React.FocusEvent) => {
-      if (event.relatedTarget !== null) {
-        askFocused.current = holdsVisibleAskFocus(event.relatedTarget)
-      }
-    },
-  }
-}
-
 function ChatDock({
   model,
   closedHere,
@@ -164,9 +126,7 @@ function ChatDock({
 }: DockProps) {
   const inset = useKeyboardInset()
   const [composerFocused, setComposerFocused] = React.useState(false)
-  const container = React.useRef<HTMLDivElement>(null)
   const askFocus = useFocusAfterAsk(
-    container,
     Option.match(ask, { onNone: () => '', onSome: (dock) => dock.ask.id }),
   )
 
@@ -176,7 +136,6 @@ function ChatDock({
 
   return (
     <div
-      ref={container}
       data-slot="chat-dock"
       className="border-border bg-card flex min-h-0 flex-col border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)]"
       style={inset > 0 ? { paddingBottom: inset } : undefined}
@@ -217,18 +176,16 @@ function ChatDock({
               {Option.match(ask, {
                 onNone: () => null,
                 onSome: (dock) => (
-                  <AskDock
-                    key={dock.ask.id}
-                    ask={dock.ask}
-                    cwd={cwdOf(model)}
-                    state={dock.state}
-                    disabled={dock.disabled}
-                    onAnswer={dock.onAnswer}
-                  />
+                  <AskDock key={dock.ask.id} ref={askFocus.region} cwd={cwdOf(model)} {...dock} />
                 ),
               })}
             </Collapse>
-            <Composer value={draft} onValueChange={onDraftChange} {...composer} />
+            <Composer
+              handle={askFocus.composer}
+              value={draft}
+              onValueChange={onDraftChange}
+              {...composer}
+            />
           </div>
         ),
       })}

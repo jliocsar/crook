@@ -2,7 +2,7 @@ import { cn } from 'cn'
 import * as Equal from 'effect/Equal'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import type * as React from 'react'
+import * as React from 'react'
 
 import type { Ask, AskQuestion, PermissionAsk, QuestionAsk, UnknownAsk } from '@crook/domain/Ask'
 import { Choose, Decline } from '@crook/domain/Command'
@@ -28,6 +28,7 @@ import { DiffView } from '@crook/web/components/ui/diff-view'
 import { Questionnaire } from '@crook/web/components/ui/questionnaire'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { languageOfPath } from '@crook/web/highlight/Highlighter'
+import { SectionLabel } from '@crook/web/machines/SectionLabel'
 
 export interface AskDockProps {
   readonly ask: Ask
@@ -37,11 +38,7 @@ export interface AskDockProps {
   readonly onAnswer: (answer: AskAnswer) => void
 }
 
-interface AnswerControls {
-  readonly state: AskAnswerState
-  readonly disabled: boolean
-  readonly onAnswer: (answer: AskAnswer) => void
-}
+type AnswerControls = Pick<AskDockProps, 'state' | 'disabled' | 'onAnswer'>
 
 const DETAIL_CAP = 'max-h-40 overflow-y-auto'
 const SHELL_LANGUAGE = 'shellscript'
@@ -60,12 +57,6 @@ const DECLINE_BUTTONS: readonly AskButton[] = [
 
 const locked = (controls: AnswerControls): boolean =>
   controls.disabled || isAnswerUnderway(controls.state)
-
-function NeedsYou() {
-  return (
-    <span className="text-primary text-xs font-bold tracking-[0.08em] uppercase">{NEEDS_YOU}</span>
-  )
-}
 
 function AnswerStatus({ state }: { state: AskAnswerState }) {
   return AskAnswerState.$match(state, {
@@ -184,8 +175,8 @@ function PermissionDock({
 function QuestionList({ questions }: { questions: readonly AskQuestion[] }) {
   return (
     <div className={cn('grid gap-3', DETAIL_CAP)}>
-      {questions.map((question, index) => (
-        <div key={index} className="grid gap-1">
+      {questions.map((question) => (
+        <div key={question.question} className="grid gap-1">
           <p className="text-muted-foreground font-mono text-xs">{question.header}</p>
           <p className="text-sm font-semibold">{question.question}</p>
           <ul className="text-muted-foreground list-disc ps-5 text-sm leading-5">
@@ -244,16 +235,24 @@ function UnknownDock({ ask, controls }: { ask: UnknownAsk; controls: AnswerContr
   )
 }
 
-export function AskDock({ ask, cwd, state, disabled, onAnswer }: AskDockProps) {
-  const controls: AnswerControls = { state, disabled, onAnswer }
+export function AskDock({
+  ask,
+  cwd,
+  ref,
+  ...controls
+}: AskDockProps & { readonly ref?: React.Ref<HTMLElement> }) {
+  const labelId = React.useId()
 
   return (
     <section
+      ref={ref}
       data-slot="ask-dock"
-      aria-label={NEEDS_YOU}
+      aria-labelledby={labelId}
       className="flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain pb-1 *:shrink-0"
     >
-      <NeedsYou />
+      <SectionLabel id={labelId} className="text-primary px-0 pb-0">
+        {NEEDS_YOU}
+      </SectionLabel>
       {Match.value(ask).pipe(
         Match.tagsExhaustive({
           PermissionAsk: (permission): React.ReactNode => (
@@ -267,7 +266,7 @@ export function AskDock({ ask, cwd, state, disabled, onAnswer }: AskDockProps) {
           ),
         }),
       )}
-      <AnswerStatus state={state} />
+      <AnswerStatus state={controls.state} />
     </section>
   )
 }
