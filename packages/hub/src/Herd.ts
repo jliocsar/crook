@@ -272,6 +272,9 @@ const make = Effect.gen(function* () {
       Effect.mapError(() => new PaneNotInHerd({ machine: id, pane })),
     )
 
+  const visibleNow = (id: MachineId) =>
+    Effect.flatMap(SubscriptionRef.get(entries), (current) => visible(id, HashMap.get(current, id)))
+
   const expireAfterGrace = (id: MachineId, entry: MachineEntry) =>
     entry.connection === 'reconnecting'
       ? Effect.sleep(RECONNECT_GRACE).pipe(
@@ -388,12 +391,22 @@ const make = Effect.gen(function* () {
     )
   })
 
+  const requireMachine = Effect.fn('Herd.requireMachine')(function* (id: MachineId) {
+    yield* visibleNow(id)
+  })
+
+  const requirePane = Effect.fn('Herd.requirePane')(function* (id: MachineId, pane: PaneId) {
+    yield* agentIn(id, yield* visibleNow(id), pane)
+  })
+
   return Herd.of({
     hold,
     publish,
     forget,
     markSeen,
     setPinned,
+    requireMachine,
+    requirePane,
     view: SubscriptionRef.changes(entries).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
       Stream.map(toView),
@@ -418,6 +431,11 @@ export class Herd extends Context.Service<
       pane: PaneId,
       pinned: boolean,
     ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd | SqlError>
+    readonly requireMachine: (id: MachineId) => Effect.Effect<void, MachineNotInHerd>
+    readonly requirePane: (
+      id: MachineId,
+      pane: PaneId,
+    ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd>
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {

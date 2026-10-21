@@ -38,7 +38,7 @@ packages/
 
 Schemas and their types, side by side (locality rule), plus the pure functions over them that more than one app needs. No services, no IO.
 
-- Branded ids: `MachineId`, `WorkspaceId`, `TabId`, `PaneId` (herdr's `w1:p1`), `GlobalPaneId` (`<machine>/<pane>`), `TerminalId` (herdr's `terminal_id`), `HerdrConnectionId` (see `HerdrLink`), `ClaudeSessionId`, `IdempotencyKey`, `TranscriptOffset`. All of them live together in `Ids`.
+- Branded ids: `MachineId`, `WorkspaceId`, `TabId`, `PaneId` (herdr's `w1:p1`), `GlobalPaneId` (`<machine>/<pane>`), `TerminalId` (herdr's `terminal_id`), `HerdrConnectionId` (see `HerdrLink`), `ClaudeSessionId`, `SubagentId` (the hex in `agent-<id>.jsonl`), `IdempotencyKey`, `TranscriptOffset`. All of them live together in `Ids`.
 - Entities: `Machine`, `Workspace`, `Tab`, `Pane`, `AgentRow`, `StatusBeforeHandoff`, `AgentStatus` (`idle|working|blocked|done|unknown`), `HerdrLink`, `MachineState` (one machine's whole herd), `HerdView` (all machines + connectivity).
 - `MachineState.panes` lists every pane herdr shows, agent or not, so `panePresence(state, pane)` tells `agent` (in `agents`), `noAgent` (the pane is still there: Claude exited, or it never ran one) and `gone` (the pane closed). That is the chat's end card: "Claude exited" against "This pane closed" (JC-101). An agent herdr has not re-detected yet stays `unknown`, never a status carried over from before.
 - `AgentRow.terminal` is herdr's `terminal_id`. It changes on every herdr server lifetime (stop, crash, handoff; spike S6, measured on herdr 0.9.5 only) while the pane id stays, so it is what scopes a pane's `stateChangeSeq`: two sequences are comparable only under the same terminal.
@@ -52,7 +52,11 @@ Schemas and their types, side by side (locality rule), plus the pure functions o
 - `MachineState.herdr` (`HerdrLink`) carries the agent's side of the herdr connection: a `connection` id the agent mints whenever it re-reads after losing herdr, and `lostAt`, set while the agent cannot reach herdr and the rest of the state is the last one it read. `isResync(previous, next)` holds when two states were read over different connections, `isHerdrLost(state)` while `lostAt` is set.
 - `CrookVersion`: `major.minor.patch`, compared as numbers, so the PWA can tell an agent that is behind the hub (`isBehind`). Each app reads its own `package.json` version, and the two release under one version and bump together (AGENTS.md): a hub-only bump would show "update agent" on every machine with no newer agent to install.
 - `AgentPriority` (built in JC-98): the order of one machine's agents and the needs-you count, shared by the herd list and the tab badge. See "Seen and needs-you" under 2.6.
-- Transcript model: `TranscriptMessage`, content blocks (`Text`, `Thinking`, `ToolUse`, `ToolResult`, `Image`), `TranscriptChunk { offset, messages }`.
+- Transcript model (built in JC-99), in `TranscriptMessage` and `Transcript`:
+  - Messages: `User` (with `isMeta`, `origin`, `queued`), `Assistant` (API message id, model, stop reason, `isApiError`), `System`, plus `UnrecognizedEntry { entryType }` for a kind crook does not know and `Malformed { byteLength }` for bytes that are not an entry. Each carries the byte `offset` its line starts at, so the phone can key rows on it.
+  - Blocks: `Text`, `Thinking`, `ToolUse` (input as JSON), `Image { mediaType, data }` (`mediaType` is `image/png` or `image/jpeg`, the only two spike 82 found), `ToolReference`, `ToolResult` (content blocks, plus the `PatchHunk`s of an edit and a `SubagentLaunch` when the result names one), and the user and system notes Claude writes as text or entries: `CompactSummary`, `TaskNotification`, `LocalCommand`, `LocalCommandOutput`, `Interruption`, `CompactBoundary` (with an optional `manual` or `auto` trigger, the two values spike 82 measured), `TurnDuration`, `Notice`. `Unrecognized { kind }` stands for a block kind crook does not know, and for an image of any other media type, so nothing unmeasured reaches an image URL.
+  - `Subagent` (id, type, description, model, tool use id, parent, depth, background, finished, stopped by user). The "N running" count arrives with the chat that shows it (JC-101).
+  - Stream values: `TranscriptPosition { session, offset }`, `TranscriptSource` (`PaneTranscript { pane }` or `SubagentTranscript { session, subagent }`), and `TranscriptEvent`: `TranscriptOpened { session }`, `TranscriptChunk { session, offset, nextOffset, messages }`, `SubagentsChanged { session, subagents }`. `positionAfter`, `continuesFrom` and `remainderAfter` are the one definition of where a stream stands, shared by agent, hub and phone. `remainderAfter(position, event)` is what of an event the holder of `position` does not have yet: a chunk that overlaps it is cut to the lines after it, an `Opened` for the session it is in is nothing.
 - `Ask` (permission | question | unknown) with options as key sequences.
 - Commands: the `Command` union (`Prompt { pane, text }`, `SendKeys { pane, keys }`, `RenameAgent { pane, label }`, `ClosePane { pane, confirmed }`) and `CommandReceipt` (`InputDelivered { pane, terminal, stateChangeSeq }`, `PaneRenamed { pane, label }`, `PaneClosed { pane }`). Stop is `SendKeys` with `esc`, herdr's canonical name for Escape (`interrupt(pane)`). `hasMovedSince(receipt, row)` is the phone's "done" for input: the pane shows a later `stateChangeSeq` than the one the agent read just before it sent, or a different terminal, since a sequence restarts at 0 in a new herdr lifetime and would otherwise read as "not yet" until it climbed past the old number. A rename is done once the row carries the receipt's label, a close once the pane is gone from the agents.
 - `AgentRow.label` is the name the pane was given in herdr (`pane.rename`, by crook, by hand or by a labelling plugin), trimmed, and `None` when it has none or only whitespace; `title` stays Claude's own title. `RenameAgent.label` (`PaneLabel`) must be trimmed, non-empty and free of control characters, since herdr shows it in its own TUI: the phone turns an all-blank input into `None`, which clears the name. `AgentRow.createdByCrook` says whether the pane is in the agent's `CreatedPanes`, so the phone can word a close as the confirmation up front and send `confirmed: true` from the hold, rather than learning it from a refused round trip. `agentTitle(row)` is what a card and a chat header show: the label, else the title. `HerdMachine.pinned` lists the machine's pinned panes that are in its last state.
@@ -66,15 +70,16 @@ Two `RpcGroup`s and the wire-level tagged errors. Nothing else.
   - `Attach { hello }` (streaming) → `Stream<RoutedCommand>`: the hub pushes `{ id, key, command }` down this stream for as long as the connection lives. `hello` carries the agent's version as a plain string and an optional label, so a machine is never online without them. The hub reads the string as a `CrookVersion`; one it cannot read (a prerelease, say) becomes no version, which hides the update pill instead of failing the whole `Attach`.
   - `PublishState { state: MachineState, version }`
   - `CompleteCommand { id, result }`, where `result` is a `Result<CommandReceipt, AgentCommandFailure>`
-  - `PublishTranscript { pane, chunk }` (only while some phone has that pane open)
+  - `TranscriptDemands` (streaming) → `Stream<TranscriptDemand>`: the whole set of transcript watches the hub wants from this machine, each `{ id, source, from }`, re-sent whenever a watch starts or ends. Like `Attach`, it is the hub's push channel, kept apart from `Attach` so commands and transcripts do not share a stream.
+  - `PublishTranscript { watch, update }` → `void`, failing with `TranscriptOutOfStep { watch, expected }` when the update does not continue where that watch stands. `update` is a `TranscriptEvent` or `TranscriptWatchFailed { failure }`.
 - `ClientApi` — called **by the PWA** on the hub:
   - `WatchHerd` (streaming) → `Stream<HerdView>`
-  - `WatchTranscript { pane, fromOffset }` (streaming) → `Stream<TranscriptChunk>`
+  - `WatchTranscript { machine, source, from }` (streaming) → `Stream<TranscriptEvent>`, failing with `MachineNotInHerd`, `PaneNotInHerd`, `TranscriptReadFailed`, `TranscriptResumeRejected` or `TranscriptSessionRejected`. `from` is the `{ session, nextOffset }` of the last chunk the phone holds, or null for the start.
   - `WatchScreen { pane }` (streaming) → `Stream<ScreenFrame>` (terminal fallback view)
   - `SendCommand { machine, key, command }` → `CommandReceipt`, failing with one tagged error per reason. One RPC carries every `Command` variant (`RenameAgent` and `ClosePane` joined in JC-112; `AnswerAsk`, `StartAgent` and `CreateWorktree` join as their tickets land; pinning is not a command but the hub-only `SetPinned` below, since it never reaches an agent), so the hub routes them all the same way and a new variant changes no RPC.
   - `ForgetMachine { machine }`: offline machines only. `MarkSeen { machine, pane }` needs no idempotency key: marking the same state seen twice changes nothing.
   - `SetPinned { machine, pane, pinned }` (JC-112): one RPC for pin and unpin, idempotent like `MarkSeen`, so it needs no key. Pinning wants the pane among the agents of the machine's last state; unpinning does not, so a stale pin can always be dropped.
-  - Built so far: `WatchHerd`, `ForgetMachine`, `MarkSeen`, `SetPinned`, `SendCommand`. The refusals of `ForgetMachine`, `MarkSeen` and `SetPinned` are `MachineNotInHerd`, `MachineStillConnected`, `PaneNotInHerd` and `HubStorageFailed` (the hub's database refused the write, so nothing changed).
+  - Built so far: `WatchHerd`, `ForgetMachine`, `MarkSeen`, `SetPinned`, `SendCommand`, `WatchTranscript`. The refusals of `ForgetMachine`, `MarkSeen` and `SetPinned` are `MachineNotInHerd`, `MachineStillConnected`, `PaneNotInHerd` and `HubStorageFailed` (the hub's database refused the write, so nothing changed).
   - The agent's own refusals (`AgentCommandFailure`) are `PaneNotAgent`, `PaneNotCreatedByCrook`, `HerdrRefusedCommand`, `HerdrUnavailable` and `CommandDeliveryUnknown`.
 - Serialization: `RpcSerialization.layerNdjson` (sockets need framing).
 
@@ -103,11 +108,20 @@ An Effect client for Herdr's socket API. Private like everything else, but kept 
 
 ### 2.4 `@crook/claude`
 
-- `TranscriptLocator`: session id → file path, searching configured roots (`~/.claude`, `CLAUDE_CONFIG_DIR`, comma list).
-- `TranscriptTail`: `tail(sessionId, fromOffset)` → `Stream<TranscriptChunk>` (fs watch + read from offset, splits on complete lines only).
-- `parseLine` / `parseChunk`: pure, JSONL → `TranscriptMessage`. Unknown entry types become an explicit `Unrecognized` block, never dropped silently.
-- `deriveAsk(lastMessages, screenText)`: pure. Last unmatched `ToolUse` first, screen pattern second, `unknown` with raw screen last.
-- This is the package that gets the heaviest tests: fixtures captured from real sessions.
+Built in JC-99, against the spike-82 captures and the laptop's own transcripts. Every module takes its roots or file as a value; nothing here reads herdr. Paths go through effect's `Path` service, so the services need `FileSystem` and `Path` from the entry point.
+
+- `claudeRoots`: `CROOK_CLAUDE_ROOTS` (comma list) when set, else `$HOME/.claude`, plus `CLAUDE_CONFIG_DIR` when set, deduplicated. A root that is not an absolute path is `ClaudeRootNotAbsolute`, at startup: nothing expands `~` in a systemd unit or a plist, and a relative root would make the locator wait forever under the agent's cwd, since a missing `projects` folder is a normal state. A list that ends up naming no folder (`CROOK_CLAUDE_ROOTS=,` with no `CLAUDE_CONFIG_DIR`) is `ClaudeRootsEmpty`, at startup too, for the same reason: zero roots is a locator that waits forever and logs nothing. `HOME` is read only on the default branch.
+- `FileWatch`: `watchReady(path)` (a ready signal, then the name of each changed entry) and `awaitPath(path)` (wait for a path, watching the nearest folder that exists), shared by the three services below.
+- `TranscriptLocator`: `locate(session)` globs `<root>/projects/*/<session>.jsonl` over every root and never rebuilds the folder name from the cwd. `await(session)` watches each root's `projects` folder and its project folders until the file appears: Claude writes nothing before the first prompt (spike 82), so a session with no file is a normal state, not an error. `awaitSubagent` does the same for `<session>/subagents/agent-<id>.jsonl`. A session id is only looked up when it is letters, digits and dashes (`TranscriptSessionInvalid` otherwise), so a phone cannot walk a path out of the roots.
+- `TranscriptTail`: `follow(file, from)` and `drain(file, from)` → `Stream<TranscriptChunk>`. A read is 64 KiB (effect's `FileSystem.stream` default chunk size). Only complete lines are parsed; the bytes after the last newline wait for the next read, because Claude's appends land in 4096-byte pieces and a reader can see half a line (spike 82). One chunk per read that completes at least one line, so a chunk is never empty of progress. `from` must be at most the file's size and right after a newline (`TranscriptOffsetBeyondEnd`, `TranscriptOffsetMidLine`); a file that shrinks under the tail is `TranscriptShrank`. `follow` re-reads on every watch event through a sliding buffer of one.
+- `SubagentRoster.watch(file)`: the session's `subagents/agent-<id>.meta.json` files as a sorted `Subagent` list, re-read on every change and emitted only when it differs. A meta without `agentType`, `description` or `spawnDepth`, keys spike 82 found in every meta, is skipped with a warning rather than given a made-up value. Workflow subagents (`subagents/workflows/<runId>/`, 2139 agent files against 828 flat ones in spike 82) are not listed and cannot be watched yet; the JC-101 subagent tree needs them.
+- `parseLine(bytes, offset)`: pure, one JSONL line's bytes → `readonly TranscriptMessage[]`; a blank line is no message. It takes bytes, not a decoded string, because a tear can split a multi-byte character and the decoder turns each dangling byte into U+FFFD, which re-encodes as 3 bytes: offsets counted on the string would land past the real ones.
+  - Metadata Claude keeps for itself (24 entry types, the `stop_hook_summary` and `agents_killed` system subtypes, 45 attachment types, all seen in spike 82 or the laptop's transcripts) maps to nothing. Anything else unknown becomes `UnrecognizedEntry` (`system/<subtype>`, `attachment/<type>`, or the entry type), never dropped silently.
+  - A human prompt queued while Claude works exists only as a `queued_command` attachment with `commandMode: "prompt"`, never as a user entry (0 of 262 on the laptop), so that attachment becomes `User { queued: true }`. One without `origin.kind: "human"` is skipped: it is not known who wrote it.
+  - A line that is not JSON is salvaged. Spike 82 found 55 records in the history cut mid-string with the next record glued on, no newline between (cause not proven). The parser tries each `{"parentUuid"` or `{"type"` byte offset in order and emits `Malformed` for the bytes before the first one that parses, then the recovered entry at its own offset.
+  - An image is stored twice per tool result (in the message and in `toolUseResult`); only the message copy is kept.
+- Fixtures live in `packages/claude/test/fixtures`, copied from the spike-82 captures with the session's own ids.
+- Not built yet: `deriveAsk(lastMessages, screenText)` (Ask cards).
 
 ### 2.5 `@crook/agent`
 
@@ -180,6 +194,14 @@ Audit log, agent side (built in JC-106):
 - Policy, one `auditPolicyConfig` in `@crook/domain/Audit` that agent and hub both read: `CROOK_AUDIT_ARGUMENT_LIMIT` characters per argument (default 200: decided, not measured; long enough to recognise a prompt by its opening, short enough that a pasted file does not land in the log). A string past it keeps that many characters and gains `…`; an array of strings (`keys`) spends one limit across its texts, and the last text it keeps gains the `…`, so a cut never reads as an extra key. `CROOK_AUDIT_REDACT` is a comma list, no spaces, of argument names written as `[redacted]`, or `none` to redact nothing (default none: the full prompt already sits in Claude's transcript on the same machine, at the same file mode). The names form a closed set: `pane`, `text`, `keys`, `label`, `confirmed`, `pinned`. A misspelt or padded name fails at startup rather than silently logging what it meant to hide.
 - No rotation and no retention limit yet.
 
+Transcripts (built in JC-100):
+
+- `TranscriptStreams.serve(link)` runs inside each HubLink session, beside `Attach` and the state publisher. It reads `TranscriptDemands` and keeps exactly the demanded watches running in a `FiberMap` keyed by watch id: a new id starts a fiber, a missing one interrupts it. A tail runs only while a phone watches it.
+- A pane watch follows the pane's `claudeSession` in `MachineStateSync`. It emits `TranscriptOpened`, waits for the file, then merges the tail with the subagent roster. When the session changes (`/clear` makes a new session and file at once, spike 82), it switches: whatever the old file gained since the last chunk is drained first, then the new session opens from 0. `/compact` appends to the same file, so it needs nothing.
+- A resume (`from`) in the current session continues at that offset. A resume naming another session drains that session from the offset, then opens the current one: the phone does not lose the end of a conversation it was reading when someone cleared it.
+- A subagent watch emits `TranscriptOpened` for the parent session, then follows `agent-<id>.jsonl` once it exists.
+- Every event goes out as `PublishTranscript` and waits for the hub's answer, so a slow phone slows its own watch, not the others. `TranscriptOutOfStep` restarts the watch from the position the hub expects. A library error (locate, tail, roster) is sent as `TranscriptWatchFailed` with its wire form, and the watch ends. A defect ends it the same way, as `TranscriptReadFailed` with the pretty cause, so the phone's stream fails visibly instead of hanging open. An `RpcClientError` ends it quietly, since the session is ending too.
+
 ### 2.6 `@crook/hub`
 
 ```
@@ -193,7 +215,7 @@ src/
   SeenTracker.ts          MarkSeen: per-pane seen against state_change_seq, never Herdr focus (D12)
   PinnedAgents.ts         sqlite: pinned panes per machine
   AuditTrail.ts           sqlite: append-only audit of the phone's commands and state-changing RPCs
-  TranscriptRelay.ts      fan out PublishTranscript to WatchTranscript subscribers
+  TranscriptRelay.ts      one watch per WatchTranscript; demands to agents, cursor per watch
   HarkNotifier.ts         herd transitions → Hark (Live Activity, approvals, notifications); long-polls answers into CommandRouter
   Database.ts             @effect/sql-sqlite-bun client + migrations
   AgentLinkHandlers.ts    AgentLink.toLayer(...)
@@ -264,6 +286,18 @@ CommandRouter (built in JC-103):
 - A timed-out command may still run. The phone retries with the same key, and the agent answers with the first outcome instead of running it twice. Nothing tells the agent the hub gave up, so a command queued behind a slow one still runs late: a late `esc` can interrupt a turn started after it. Commands carry no deadline today.
 - Commands are not persisted: a hub restart loses those in flight, and the phone sees them time out.
 
+Transcript relay (built in JC-100):
+
+- One watch per `WatchTranscript` call, with an id from a counter. Two phones on the same pane are two watches and two tails: sharing one would need a cache to give the later phone what the first already got, and D10 says no cache. JC-100's "start a tail on the first subscriber, stop it on the last" is read as one subscriber per watch; this awaits the owner's sign-off.
+- `WatchTranscript` asks the herd first, through the same membership rule `MarkSeen` uses (`Herd.requirePane`, `Herd.requireMachine`): the machine must be in the herd and, for a pane, the pane in its last published state (`MachineNotInHerd`, `PaneNotInHerd`). A subagent watch needs only the machine; the agent validates the session.
+- The relay keeps, per watch, the machine, the source and a cursor (`TranscriptPosition`), never the messages. `demands(machine)` is the current set with each cursor, re-sent when the set of ids changes. An agent that reconnects therefore restarts every watch from where its phone stands, and the phone's stream survives the drop with no line repeated or lost.
+- `publish` passes a chunk on only if it starts at the cursor (`continuesFrom`), else answers `TranscriptOutOfStep { expected }`. A `TranscriptOpened` for another session moves the cursor to its start. Delivery per watch is serialised, so two overlapping agent connections cannot interleave.
+- The phone's side of the inbox keeps its own position, of what it was handed, and lets through only `remainderAfter` it. The cursor moves after the inbox takes an event, as a second step, so a publish interrupted between the two (the agent's socket drops while the phone takes the event) leaves the cursor behind the phone; the reconnecting agent then resends lines the phone has, and this filter drops them. The same filter swallows the `TranscriptOpened` a restarted watch sends for the session the phone is already in, so a restart is invisible to the phone. The window is narrow in effect 4.0.5, which resumes a parked offerer synchronously inside the taker (`Queue` resumes it through `Effect.callback`, which calls `fiber.evaluate` in place), so no relay test can open it on demand; `remainderAfter` is tested on its own instead.
+- The phone's inbox holds one event, so `PublishTranscript` only returns once the previous event left for the phone: backpressure runs from the phone to the agent's tail. `TranscriptWatchFailed` removes the watch and fails the phone's stream after what was already queued (effect's `Queue.fail` delivers buffered items first, probed). An update for a watch that is gone, or that belongs to another machine, is dropped with a debug log.
+- Sizes, measured by draining 7 laptop transcripts (the 3 largest and 5 with images, 1468 chunks) and encoding each chunk as it goes on the wire: p50 12,527 B, p90 35,140 B, p99 421,705 B, max 732,560 B. The 95.5 MB transcript of a long orchestrator session became 910 chunks and 23.7 MB on the wire, drained in 612 ms on the laptop without the network. Bun's default WebSocket `maxPayloadLength` is 16 MiB (`bun-types`), over 20 times the largest chunk.
+- `from: null` means byte 0, so a phone opening a long chat cold downloads and parses all of it: that 23.7 MB, for the largest transcript on the laptop. Known cost for JC-101, not solved here; one way is a `from` that asks for the last N bytes, aligned to a line start.
+- Images travel inline as base64 in the chunk. Across 908 images on the laptop the base64 was p50 82,668 B, p99 518,524 B, max 671,428 B, and the most base64 in one line 727,536 B, all far under the payload limit, while a fetch RPC would need a hub-to-agent request path of its own. The phone decodes the base64 into a `Blob` and renders it from an object URL, which needs `img-src 'self' blob:` in the CSP (2.7): a `blob:` URL names only bytes the page made itself, with the media type it chose from the two the parser admits, where `data:` would let any inline image through. The CSP change lands with the first image the chat renders (JC-101), not before.
+
 ### 2.7 `@crook/web`
 
 ```
@@ -285,7 +319,7 @@ src/
 ```
 
 - **A pushed screen is a child route** marked `staticData.pushed`, so its parent root list stays rendered (and inert) beneath it, and a deep link still has a parent to go back to.
-- **The hub sends the CSP as a header** on every response, never a meta tag: a meta can't carry `frame-ancestors`, and Vite's dev server needs inline scripts. The policy is decided once, as `CONTENT_SECURITY_POLICY` in `@crook/web/csp/ContentSecurityPolicy`: everything `'self'`, with `default-src`, `base-uri`, `form-action` and `frame-ancestors` at `'none'`. The hub imports that leaf (JC-115) rather than restating it. `vite preview` sends the same header, so a production build is checked under it locally.
+- **The hub sends the CSP as a header** on every response, never a meta tag: a meta can't carry `frame-ancestors`, and Vite's dev server needs inline scripts. The policy is decided once, as `CONTENT_SECURITY_POLICY` in `@crook/web/csp/ContentSecurityPolicy`: everything `'self'`, with `default-src`, `base-uri`, `form-action` and `frame-ancestors` at `'none'`. Transcript images add `blob:` to `img-src` when the chat starts rendering them (2.6, JC-101). The hub imports that leaf (JC-115) rather than restating it. `vite preview` sends the same header, so a production build is checked under it locally.
 - **A push hands over its opener.** The caller passes `openedFrom(element)` as the navigation's history state, with the element that was tapped (`Pressable` and `SwipeRow` give it to `onTap`). The pushed screen reads it once, when it mounts, and returns focus there when it unmounts, falling back to whatever had focus, then to the active tab. Document focus alone can't name the opener on an iPhone, where a tap doesn't focus a button. Openers are held by weak reference and never dropped, so a screen rebuilt by Back or Forward still finds its own, and a removed element can still be collected. One element always gets the same key, and every key carries the page load's `performance.timeOrigin`, because history state outlives a reload and a counter does not. So a second tap on a row whose push is still loading asks for the location the router is already on, and the router's `navigate` drops it: pushes go through `navigate` (`Link`, `useNavigate`), never `router.history.push`, which always pushes.
 - **Every pushed entry gets its own screen.** The router remounts a route whenever its params change (`defaultRemountDeps`), so a chat opened from a chat slides in, takes focus and keeps its own opener. A screen slides in only when it arrives by a push (a higher history index than the resolved location's), so one rebuilt by Back or swapped in by a replace appears in place. Two entries with the same path share one screen: when Back lands on the earlier one, the screen comes back into use rather than staying inert. Back on a screen while a navigation is still pending skips the slide and leaves at once, which cancels a push that has not landed yet.
 - **The service worker never calls `skipWaiting`.** A new shell takes over once every crook window has closed, so a running page never loads chunks from a build it didn't come from.
@@ -305,7 +339,7 @@ Herdr says its events invalidate and its reads are authoritative. So:
 
 ### 3.2 Append-only streams with offsets
 
-Transcripts are append-only files, so they travel as `TranscriptChunk { offset, messages }`. Every consumer remembers the last offset; reconnect = `WatchTranscript { fromOffset }`. Nothing is cached in the hub (D10): the hub asks the agent to start a tail when the first phone subscribes and stops it when the last leaves.
+Transcripts are append-only files, so they travel as `TranscriptChunk { session, offset, nextOffset, messages }`. The phone remembers the `{ session, nextOffset }` of the last chunk; reconnect = `WatchTranscript { from }`. Nothing is cached in the hub (D10): the hub keeps a cursor per watch, asks the agent to start a tail when a phone subscribes and stops it when that phone leaves. A new session (after `/clear`) arrives as `TranscriptOpened`, which is the phone's cue for the "conversation cleared" divider.
 
 ### 3.3 Commands: idempotent, confirmed by state
 
@@ -374,6 +408,17 @@ Answer from phone
 phone AnswerAsk{key} ──▶ hub CommandRouter ── Attach stream ──▶ agent CommandExecutor
   ──▶ policy ──▶ herdr agent.send_keys ──▶ CompleteCommand ──▶ hub ──▶ phone "sent"
 Herdr status leaves blocked ──▶ PublishState ──▶ phone "done"
+```
+
+Phone opens a chat
+
+```
+phone WatchTranscript{machine, pane, from} ──▶ hub TranscriptRelay: new watch, cursor = from
+  ──▶ TranscriptDemands (whole set) ──▶ agent TranscriptStreams starts the watch
+agent ── PublishTranscript{watch, Opened | Chunk} ──▶ hub: continues the cursor? ──▶ phone
+                                                     └── no: TranscriptOutOfStep{expected} ──▶ agent restarts there
+agent reconnects ──▶ TranscriptDemands carries each cursor ──▶ tails resume, phone stream unbroken
+phone leaves ──▶ watch removed ──▶ TranscriptDemands without it ──▶ agent interrupts the tail
 ```
 
 ## 5. Build, run, ship

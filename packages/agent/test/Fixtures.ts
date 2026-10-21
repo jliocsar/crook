@@ -1,13 +1,16 @@
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import type * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
@@ -176,4 +179,18 @@ export const executorWith = (
     CreatedPanes.layerTest(options.created),
     options.audit ?? discardingAudit,
     herdr,
+  ])
+
+export const linkedAgentWith = (
+  herdr: Layer.Layer<HerdrClient>,
+  state: SubscriptionRef.SubscriptionRef<MachineState>,
+  options: ExecutorOptions = {},
+) =>
+  Layer.provideMerge(Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt([])), [
+    MachineStateSync.layerTest(state, options.invalidate),
+    CreatedPanes.layerTest(options.created),
+    options.audit ?? discardingAudit,
+    herdr,
+    BunFileSystem.layer,
+    Path.layer,
   ])

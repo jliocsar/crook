@@ -3,6 +3,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Match from 'effect/Match'
 import * as Stream from 'effect/Stream'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
@@ -14,9 +15,11 @@ import type { SqlError } from 'effect/sql/SqlError'
 import type { MachineId } from '@crook/domain/Ids'
 import { commandAudit } from '@crook/domain/Audit'
 import { AuditTrail } from '@crook/hub/AuditTrail'
+import type { TranscriptSource } from '@crook/domain/Transcript'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
 import { Herd } from '@crook/hub/Herd'
+import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
 import { ClientApi, HubStorageFailed } from '@crook/protocol/ClientApi'
 import { protocolSerialization } from '@crook/protocol/Serialization'
@@ -39,10 +42,19 @@ const storageFailureToWire = (error: SqlError) =>
 const routes = Effect.gen(function* () {
   const herd = yield* Herd
   const router = yield* CommandRouter
+  const transcripts = yield* TranscriptRelay
   const identity = yield* ExeDevIdentity
   const audit = yield* AuditTrail
   const serialization = yield* RpcSerialization.RpcSerialization
   const serveWeb = yield* HttpStaticServer.make({ root: yield* CrookWebRoot, spa: true })
+
+  const admitTranscript = (machine: MachineId, source: TranscriptSource) =>
+    Match.value(source).pipe(
+      Match.tagsExhaustive({
+        PaneTranscript: ({ pane }) => herd.requirePane(machine, pane),
+        SubagentTranscript: () => herd.requireMachine(machine),
+      }),
+    )
 
   const serveClientAs = (actor: string) =>
     ClientApi.toHandlers({
@@ -80,6 +92,10 @@ const routes = Effect.gen(function* () {
             ...commandAudit(command),
           }),
         ),
+      WatchTranscript: ({ machine, source, from }) =>
+        Stream.unwrap(
+          Effect.as(admitTranscript(machine, source), transcripts.watch(machine, source, from)),
+        ),
     }).pipe(
       Effect.flatMap((handlers) =>
         RpcServer.toHttpEffectWebsocket(ClientApi).pipe(Effect.flatten, Effect.provide(handlers)),
@@ -94,6 +110,8 @@ const routes = Effect.gen(function* () {
         Stream.merge(Stream.fromEffectDrain(herd.hold(machine, hello)), router.attach(machine)),
       PublishState: ({ state }) => herd.publish(machine, state),
       CompleteCommand: ({ id, result }) => router.complete(machine, id, result),
+      TranscriptDemands: () => transcripts.demands(machine),
+      PublishTranscript: ({ watch, update }) => transcripts.publish(machine, watch, update),
     }).pipe(
       Effect.flatMap((handlers) =>
         RpcServer.toHttpEffectWebsocket(AgentLink).pipe(Effect.flatten, Effect.provide(handlers)),
@@ -120,6 +138,7 @@ export const layer = HttpRouter.addAll(routes).pipe(
   Layer.provide([
     Herd.layer,
     CommandRouter.layer,
+    TranscriptRelay.layer,
     ExeDevIdentity.layer,
     AuditTrail.layer,
     protocolSerialization,

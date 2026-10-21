@@ -1,0 +1,9 @@
+{
+  "agentType": "Explore",
+  "description": "Trace booking creation validations",
+  "toolUseId": "toolu_01WomDydZvwyw7YSbEqptVDL",
+  "parentAgentId": "a1764732aa4808ef6",
+  "spawnDepth": 2,
+  "requestShape": "background",
+  "requestNonInteractive": true
+}

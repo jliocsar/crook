@@ -231,6 +231,28 @@ connection the moment its constructor returns and never dials (measured). Build 
 the scope that should own it, with `Layer.build`, and provide the resulting context.
 :::
 
+:::tip
+`Queue.fail` lets a consumer take everything buffered before it sees the failure, so failing a
+queue to end a stream drops nothing already queued (measured). `Stream.runCollect` over that stream
+still reports only the failure, so a test that needs the items as well collects them with
+`runForEach`.
+:::
+
+:::tip
+A parked `Queue.offer` is resumed synchronously inside the call that takes its message: the queue
+resumes it through `Effect.callback`, which runs the offerer's fiber in place. What the offerer
+does next has already run by the time the taker resumes, unless its op budget runs out right
+there, so a test cannot slip an interrupt between the offer and its next step (measured on
+`effect@4.0.5`). Guard such a gap by making the consumer idempotent, and test that part on its own.
+:::
+
+:::caution
+`promise/prefer-await-to-then` reads `Stream.catch(…)` and `Effect.catch(…)` as promise chaining and
+rejects them, except inside a `yield*` expression, where it stays silent (measured). Writing the
+pipeline as the body of an `Effect.fn` generator, `return yield* stream.pipe(Stream.catch(…), …)`,
+is honest code that passes; do not spell the catch as a `catchTags` list to dodge it.
+:::
+
 :::warning
 An effect `Cache` lookup that every caller abandons is interrupted and dropped from the cache, so
 the next `get` runs it again (measured). Where running twice is the bug — anything that types into
@@ -482,6 +504,14 @@ Do not guess about Effect, oxc or Bun. Do not trust a plausible claim in a revie
    found to lint" (measured — it does this even with `--no-ignore`, and even for a project nested
    under the ignored directory). Probe it from a directory outside any ignored tree.
 3. Record it here — never as a comment; `no-comments` rejects one anyway.
+:::
+
+:::warning
+`src/` also carries `@internal` exports that the shipped declarations strip, so a name found by
+grepping it can still fail to typecheck. `Schema.UnknownFromJsonString` is one, and
+`effecttsgo/prefer-schema-over-json` suggests it in its message anyway; the public spelling is
+`Schema.fromJsonString(Schema.Json)` (both measured on `effect@4.0.5`). Check a name found in `src`
+for `@internal` before building on it.
 :::
 
 ## Pull requests

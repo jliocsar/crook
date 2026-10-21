@@ -26,6 +26,11 @@ export type TerminalId = typeof TerminalId.Type
 export const HerdrConnectionId = Schema.Int.pipe(Schema.brand('HerdrConnectionId'))
 export type HerdrConnectionId = typeof HerdrConnectionId.Type
 
+export const SubagentId = Schema.NonEmptyString.check(Schema.isPattern(/^[0-9a-f]+$/u)).pipe(
+  Schema.brand('SubagentId'),
+)
+export type SubagentId = typeof SubagentId.Type
+
 export const IdempotencyKey = Schema.NonEmptyString.pipe(Schema.brand('IdempotencyKey'))
 export type IdempotencyKey = typeof IdempotencyKey.Type
 

@@ -1,0 +1,10 @@
+{
+  "agentType": "general-purpose",
+  "launchedWithDefaults": true,
+  "description": "Read hello.txt",
+  "toolUseId": "toolu_01W5pW7EVJbSou9dL9TCPQPx",
+  "spawnDepth": 1,
+  "requestShape": "background",
+  "requestNonInteractive": true,
+  "finished": true
+}

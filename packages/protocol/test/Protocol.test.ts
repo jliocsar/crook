@@ -1,5 +1,6 @@
 import { describe, expect, it, layer } from '@effect/vitest'
 import * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
@@ -18,8 +19,22 @@ import {
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
-import { HerdrConnectionId, IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
+import {
+  ClaudeSessionId,
+  HerdrConnectionId,
+  IdempotencyKey,
+  MachineId,
+  PaneId,
+  TerminalId,
+  TranscriptOffset,
+} from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import {
+  PaneTranscript,
+  TranscriptChunk,
+  TranscriptOpened,
+  TranscriptPosition,
+} from '@crook/domain/Transcript'
 import { AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { ClientApi, MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
 import {
@@ -31,6 +46,15 @@ import {
   PaneNotCreatedByCrook,
   RoutedCommand,
 } from '@crook/protocol/Commands'
+import {
+  TranscriptDemand,
+  TranscriptOutOfStep,
+  TranscriptReadFailed,
+  TranscriptResumeRejected,
+  TranscriptWatch,
+  TranscriptWatchFailed,
+  TranscriptWatchId,
+} from '@crook/protocol/Transcripts'
 
 const laptop = MachineId.make('laptop')
 const impostor = MachineId.make('work-vm')
@@ -66,6 +90,37 @@ const agentLinkHandlers = AgentLink.toLayer({
           new MachineIdMismatch({ connectedMachine: laptop, publishedMachine: state.machine }),
         ),
   CompleteCommand: () => Effect.void,
+  TranscriptDemands: () => Stream.make(demand),
+  PublishTranscript: ({ watch, update }) =>
+    Match.value(update).pipe(
+      Match.tag('TranscriptChunk', (chunk) =>
+        chunk.offset === 0
+          ? Effect.void
+          : Effect.fail(new TranscriptOutOfStep({ watch, expected: Option.some(resumeAt) })),
+      ),
+      Match.orElse(() => Effect.void),
+    ),
+})
+
+const session = ClaudeSessionId.make('309f44d5-235f-4550-a0c7-1691715aad75')
+const resumeAt = new TranscriptPosition({ session, offset: TranscriptOffset.make(800) })
+const opened = new TranscriptOpened({ session })
+
+const firstChunk = new TranscriptChunk({
+  session,
+  offset: TranscriptOffset.make(0),
+  nextOffset: TranscriptOffset.make(800),
+  messages: [],
+})
+
+const demand = new TranscriptDemand({
+  watches: [
+    new TranscriptWatch({
+      id: TranscriptWatchId.make(0),
+      source: new PaneTranscript({ pane }),
+      from: Option.some(resumeAt),
+    }),
+  ],
 })
 
 const emptyHerd = new HerdView({ machines: [], hubVersion: CrookVersion.make('0.0.1') })
@@ -87,6 +142,10 @@ const clientApiHandlers = ClientApi.toLayer({
           }),
         )
       : Effect.fail(new MachineOffline({ machine })),
+  WatchTranscript: ({ machine }) =>
+    machine === laptop
+      ? Stream.make(opened, firstChunk)
+      : Stream.fail(new TranscriptReadFailed({ detail: 'EACCES' })),
 })
 
 layer(agentLinkHandlers)('AgentLink', (rpc) => {
@@ -105,6 +164,32 @@ layer(agentLinkHandlers)('AgentLink', (rpc) => {
 
       expect(mismatch).toBeInstanceOf(MachineIdMismatch)
       expect(mismatch.message).toContain('"work-vm"')
+    }),
+  )
+
+  rpc.effect('streams transcript demands and refuses a chunk that is out of step', () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(AgentLink)
+      const watch = TranscriptWatchId.make(0)
+      const demands = yield* client.TranscriptDemands().pipe(Stream.runCollect)
+      const late = new TranscriptChunk({
+        session,
+        offset: TranscriptOffset.make(10),
+        nextOffset: TranscriptOffset.make(800),
+        messages: [],
+      })
+      const outOfStep = yield* client.PublishTranscript({ watch, update: late }).pipe(Effect.flip)
+
+      yield* client.PublishTranscript({ watch, update: firstChunk })
+      yield* client.PublishTranscript({
+        watch,
+        update: new TranscriptWatchFailed({
+          failure: new TranscriptResumeRejected({ detail: 'mid-line' }),
+        }),
+      })
+
+      expect(demands).toEqual([demand])
+      expect(outOfStep).toEqual(new TranscriptOutOfStep({ watch, expected: Option.some(resumeAt) }))
     }),
   )
 })
@@ -157,6 +242,22 @@ layer(clientApiHandlers)('ClientApi', (rpc) => {
         new InputDelivered({ pane, terminal: TerminalId.make('term_1'), stateChangeSeq: 0 }),
       )
       expect(offline).toEqual(new MachineOffline({ machine: impostor }))
+    }),
+  )
+
+  rpc.effect('streams transcript events, or the reason the agent could not read them', () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(ClientApi)
+      const source = new PaneTranscript({ pane })
+      const events = yield* client
+        .WatchTranscript({ machine: laptop, source, from: Option.none() })
+        .pipe(Stream.runCollect)
+      const failure = yield* client
+        .WatchTranscript({ machine: impostor, source, from: Option.some(resumeAt) })
+        .pipe(Stream.runCollect, Effect.flip)
+
+      expect(events).toEqual([opened, firstChunk])
+      expect(failure).toEqual(new TranscriptReadFailed({ detail: 'EACCES' }))
     }),
   )
 })

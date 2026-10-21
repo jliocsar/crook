@@ -11,6 +11,7 @@
     "test": "bun --bun vitest run --fsModuleCachePath node_modules/.vitest-cache"
   },
   "dependencies": {
+    "@crook/claude": "workspace:*",
     "@crook/domain": "workspace:*",
     "@crook/herdr": "workspace:*",
     "@crook/protocol": "workspace:*",

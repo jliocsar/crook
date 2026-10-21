@@ -6,7 +6,9 @@ import { Command, CommandReceipt } from '@crook/domain/Command'
 import { HerdView } from '@crook/domain/HerdView'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { MachineConnection } from '@crook/domain/Machine'
+import { TranscriptEvent, TranscriptPosition, TranscriptSource } from '@crook/domain/Transcript'
 import { CommandFailure } from '@crook/protocol/Commands'
+import { TranscriptFailure } from '@crook/protocol/Transcripts'
 
 export class MachineNotInHerd extends Schema.TaggedError<MachineNotInHerd>()('MachineNotInHerd', {
   machine: MachineId,
@@ -30,7 +32,7 @@ export class PaneNotInHerd extends Schema.TaggedError<PaneNotInHerd>()('PaneNotI
   pane: PaneId,
 }) {
   override get message(): string {
-    return `Machine "${this.machine}" has no agent in pane ${this.pane} in its last published state, so there is nothing to mark seen or pin. The pane most likely closed: pull to resync.`
+    return `Machine "${this.machine}" has no agent in pane ${this.pane} in its last published state. The pane most likely closed: pull to resync.`
   }
 }
 
@@ -65,10 +67,22 @@ export const SendCommand = Rpc.make('SendCommand', {
   error: CommandFailure,
 })
 
+export const WatchTranscript = Rpc.make('WatchTranscript', {
+  payload: {
+    machine: MachineId,
+    source: TranscriptSource,
+    from: Schema.OptionFromNullOr(TranscriptPosition),
+  },
+  success: TranscriptEvent,
+  error: Schema.Union([MachineNotInHerd, PaneNotInHerd, ...TranscriptFailure.members]),
+  stream: true,
+})
+
 export class ClientApi extends RpcGroup.make(
   WatchHerd,
   ForgetMachine,
   MarkSeen,
   SetPinned,
   SendCommand,
+  WatchTranscript,
 ) {}
