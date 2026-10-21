@@ -3,7 +3,6 @@ import { expect, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Effect from 'effect/Effect'
-import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -23,6 +22,7 @@ import { PendingAsks } from '@crook/agent/PendingAsks'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { emptyHookLedger } from '@crook/claude/HookLedger'
 import { LastTurn } from '@crook/claude/LastTurn'
+import { spikeScreen } from '@crook/claude/SpikeScreens'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
@@ -73,14 +73,6 @@ const TITLE = 'JC-94 End-to-end check'
 const BLOCKED_SCREEN = '12-native-bash-t20'
 const BLOCKED_COMMAND = 'echo probe-bash-native > bash-native.txt'
 const IDLE_SCREEN = ''
-
-const screenText = Effect.fn('screenText')(function* (name: string) {
-  const fileSystem = yield* FileSystem.FileSystem
-
-  return yield* fileSystem.readFileString(
-    new URL(import.meta.resolve(`@crook/claude/fixtures/spike-80/screens/${name}.txt`)).pathname,
-  )
-})
 
 const snapshotOf = (scene: HerdrScene) =>
   sessionSnapshot(
@@ -213,11 +205,8 @@ const entriesIn = (update: HerdUpdate): readonly HerdMachine[] =>
 
 const machinesTouched = (update: HerdUpdate): readonly MachineId[] =>
   Match.value(update).pipe(
-    Match.tagsExhaustive({
-      HerdReplaced: (replaced) => replaced.herd.machines.map((entry) => entry.machine.id),
-      MachineReplaced: (replaced) => [replaced.entry.machine.id],
-      MachineLeft: (left) => [left.machine],
-    }),
+    Match.tag('MachineLeft', (left) => [left.machine]),
+    Match.orElse((other) => entriesIn(other).map((entry) => entry.machine.id)),
   )
 
 const showsBlocked = (machine: MachineId) => (update: HerdUpdate) =>
@@ -245,7 +234,7 @@ layer(Layer.mergeAll(testHub, BunFileSystem.layer), { excludeTestServices: true 
         const blocked: HerdrScene = {
           status: 'blocked',
           stateChangeSeq: 42,
-          screen: yield* screenText(BLOCKED_SCREEN),
+          screen: yield* spikeScreen(BLOCKED_SCREEN),
         }
         const herdr = yield* startAgent(machine, working)
         const before = yield* agentWhere(machine, (row) => row.pane === PANE)
@@ -274,7 +263,7 @@ layer(Layer.mergeAll(testHub, BunFileSystem.layer), { excludeTestServices: true 
         const blocked: HerdrScene = {
           status: 'blocked',
           stateChangeSeq: 42,
-          screen: yield* screenText(BLOCKED_SCREEN),
+          screen: yield* spikeScreen(BLOCKED_SCREEN),
         }
         const herdr = yield* startAgent(changing, working)
 
@@ -335,7 +324,7 @@ layer(Layer.mergeAll(testHub, BunFileSystem.layer), { excludeTestServices: true 
         const blocked: HerdrScene = {
           status: 'blocked',
           stateChangeSeq: 42,
-          screen: yield* screenText(BLOCKED_SCREEN),
+          screen: yield* spikeScreen(BLOCKED_SCREEN),
         }
         const herdr = yield* startAgent(machine, blocked)
         const row = yield* agentWhere(machine, (agent) => Option.isSome(agent.ask))

@@ -73,9 +73,6 @@ export const machineStateWith = (agents: readonly AgentRow[]) =>
     places: [],
   })
 
-export const spikeScreenPath = (name: string) =>
-  new URL(import.meta.resolve(`@crook/claude/fixtures/spike-80/screens/${name}.txt`)).pathname
-
 export const AUDIT_EVERYTHING = new AuditPolicy({
   argumentLimit: DEFAULT_AUDIT_ARGUMENT_LIMIT,
   redactedArguments: [],
