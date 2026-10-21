@@ -6,15 +6,13 @@ import * as Equivalence from 'effect/Equivalence'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Random from 'effect/Random'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 
 import { hasMovedSince, hasStarted } from '@crook/domain/Command'
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import { IdempotencyKey } from '@crook/domain/Ids'
-import type { MachineId } from '@crook/domain/Ids'
+import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
@@ -42,14 +40,6 @@ export class PendingActionKey extends Data.Class<{
   readonly key: IdempotencyKey
   readonly machine: MachineId
 }> {}
-
-export const mintIdempotencyKey = Effect.map(
-  Effect.all([
-    Random.nextIntBetween(0, Number.MAX_SAFE_INTEGER),
-    Random.nextIntBetween(0, Number.MAX_SAFE_INTEGER),
-  ]),
-  ([high, low]) => IdempotencyKey.make(`${high.toString(36)}-${low.toString(36)}`),
-)
 
 export const sendCommandAtom = Atom.family((key: IdempotencyKey) =>
   hubRuntime.fn((request: CommandRequest) =>

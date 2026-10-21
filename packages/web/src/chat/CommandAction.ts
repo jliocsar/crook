@@ -1,5 +1,4 @@
 import { useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
-import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
@@ -7,12 +6,12 @@ import type { Command } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import {
   CommandRequest,
-  mintIdempotencyKey,
   PendingAction,
   pendingActionAtom,
   PendingActionKey,
   sendCommandAtom,
 } from '@crook/web/atoms/Commands'
+import { mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
 
 export interface SentAction {
   readonly fingerprint: string
@@ -30,9 +29,10 @@ interface ActionKeys {
   readonly spare: IdempotencyKey
 }
 
-const mint = () => Effect.runSync(mintIdempotencyKey)
-
-const freshKeys = (): ActionKeys => ({ current: mint(), spare: mint() })
+const freshKeys = (): ActionKeys => ({
+  current: mintIdempotencyKey(),
+  spare: mintIdempotencyKey(),
+})
 
 const isIdle = PendingAction.$is('Idle')
 const isFailed = PendingAction.$is('Failed')
@@ -60,7 +60,7 @@ export const useCommandAction = (machine: MachineId): CommandAction => {
     }
 
     sendSpare(request)
-    setKeys({ current: keys.spare, spare: mint() })
+    setKeys({ current: keys.spare, spare: mintIdempotencyKey() })
   }
 
   return { state, last, send }
