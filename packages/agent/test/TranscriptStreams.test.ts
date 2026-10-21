@@ -117,7 +117,6 @@ const defectiveStreams = Effect.fn('defectiveStreams')(function* (
   const brokenLocator = Layer.succeed(
     TranscriptLocator,
     TranscriptLocator.of({
-      roots: [],
       locate: () => Effect.die(new Error(LOCATOR_BUG)),
       await: () => Effect.die(new Error(LOCATOR_BUG)),
       awaitSubagent: () => Effect.die(new Error(LOCATOR_BUG)),

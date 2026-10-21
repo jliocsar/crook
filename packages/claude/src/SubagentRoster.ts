@@ -11,7 +11,7 @@ import type { PlatformError } from 'effect/PlatformError'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
-import { FileWatch } from '@crook/claude/FileWatch'
+import { FileWatch, readyOr } from '@crook/claude/FileWatch'
 import {
   SUBAGENT_FILE_PREFIX,
   type TranscriptFile,
@@ -129,12 +129,7 @@ const make = Effect.gen(function* () {
         Effect.as(
           fileWatch.watchReady(directory).pipe(
             Stream.mapError(unreadable),
-            Stream.filter(
-              Option.match({
-                onNone: () => true,
-                onSome: (name) => name.endsWith(META_SUFFIX),
-              }),
-            ),
+            Stream.filter(readyOr((name) => name.endsWith(META_SUFFIX))),
             Stream.buffer({ capacity: 1, strategy: 'sliding' }),
             Stream.mapEffect(() => readRoster(directory)),
             Stream.changesWith(isSameRoster),

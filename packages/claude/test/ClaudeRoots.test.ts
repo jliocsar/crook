@@ -3,7 +3,7 @@ import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Effect from 'effect/Effect'
 import * as Path from 'effect/Path'
 
-import { ClaudeRootNotAbsolute, claudeRoots } from '@crook/claude/ClaudeRoots'
+import { ClaudeRootNotAbsolute, ClaudeRootsEmpty, claudeRoots } from '@crook/claude/ClaudeRoots'
 
 const rootsWith = (environment: Record<string, string>) =>
   claudeRoots.pipe(
@@ -29,6 +29,20 @@ layer(Path.layer)('claudeRoots', (it) => {
           CLAUDE_CONFIG_DIR: '/home/dev/.claude-work',
         }),
       ).toEqual(['/home/dev/.claude', '/home/dev/.claude-work'])
+      expect(yield* rootsWith({ CROOK_CLAUDE_ROOTS: '/srv/claude' })).toEqual(['/srv/claude'])
+    }),
+  )
+
+  it.effect('refuses a CROOK_CLAUDE_ROOTS that names no folder when nothing else does', () =>
+    Effect.gen(function* () {
+      const refused = yield* rootsWith({ HOME: '/home/dev', CROOK_CLAUDE_ROOTS: ' , ' }).pipe(
+        Effect.flip,
+      )
+
+      expect(refused).toEqual(new ClaudeRootsEmpty())
+      expect(
+        yield* rootsWith({ CROOK_CLAUDE_ROOTS: ',', CLAUDE_CONFIG_DIR: '/home/dev/.claude-work' }),
+      ).toEqual(['/home/dev/.claude-work'])
     }),
   )
 

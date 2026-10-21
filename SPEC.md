@@ -174,7 +174,7 @@ Responsibilities
 - Optionally write `pane.report_metadata` tokens back into Herdr (e.g. show in the TUI sidebar that the phone is attached).
 - Seen: when a phone opens an agent's chat, the hub marks that pane seen at its current `state_change_seq`; a later transition makes it unseen again. Herdr's own Done badge is left alone, because its only way to mark seen is a focus command, which jumps every attached TUI to that pane (D12, S8).
 - One Herdr session per machine: always the default socket (or `HERDR_SOCKET_PATH`). Named sessions are out of scope for v1.
-- Config: `HERDR_SOCKET_PATH` (or default), Claude roots (`CROOK_CLAUDE_ROOTS`, comma list of absolute paths, default `~/.claude`, plus `CLAUDE_CONFIG_DIR` when set; a relative root stops the agent at startup), hub URL, exe.dev VM token for the hub VM (its signed `ctx` carries the machine id), label.
+- Config: `HERDR_SOCKET_PATH` (or default), Claude roots (`CROOK_CLAUDE_ROOTS`, comma list of absolute paths, default `~/.claude`, plus `CLAUDE_CONFIG_DIR` when set; a relative root, or a list that names no folder, stops the agent at startup), hub URL, exe.dev VM token for the hub VM (its signed `ctx` carries the machine id), label.
 
 The Herdr plugin (`herdr-plugin.toml`)
 

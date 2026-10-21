@@ -4,7 +4,7 @@ import { pipe } from 'effect/Function'
 import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Order from 'effect/Order'
+import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
 
 import { SubagentId, TranscriptOffset } from '@crook/domain/Ids'
@@ -55,6 +55,7 @@ const HUMAN_ORIGIN = 'human'
 const QUEUED_PROMPT_MODE = 'prompt'
 const ANSI_ESCAPE = String.fromCodePoint(0x1b)
 const ANSI_SEQUENCE = new RegExp(`${ANSI_ESCAPE}\\[[0-9;]*[A-Za-z]`, 'gu')
+const RECORD_OPENER = '{'.charCodeAt(0)
 const RECORD_STARTS = ['{"parentUuid"', '{"type"']
 
 const METADATA_ENTRY_TYPES = HashSet.make(
@@ -302,7 +303,7 @@ const toolResultContent = (content: Option.Option<typeof Content.Type>) =>
   Option.match(content, {
     onNone: () => Arr.empty<ToolResultContent>(),
     onSome: (found) =>
-      Schema.is(Schema.String)(found) ? [textBlock(found)] : Arr.map(found, contentBlock),
+      Predicate.isString(found) ? [textBlock(found)] : Arr.map(found, contentBlock),
   })
 
 const patchOf = (result: Option.Option<Schema.Json>) =>
@@ -374,15 +375,19 @@ const commandOutputOf = (text: string) =>
     (output) => new LocalCommandOutputBlock({ text: withoutAnsi(output) }),
   )
 
+const isTaskNotification = (raw: RawUser) => (text: string) =>
+  raw.origin?.kind === TASK_NOTIFICATION_TAG ||
+  text.trimStart().startsWith(`<${TASK_NOTIFICATION_TAG}>`)
+
 const stringContentBlock = (raw: RawUser, text: string): UserBlock =>
   pipe(
     Option.liftPredicate(raw, (entry) => entry.isCompactSummary === true),
     Option.map((): UserBlock => new CompactSummaryBlock({ text })),
     Option.orElse((): Option.Option<UserBlock> =>
-      raw.origin?.kind === TASK_NOTIFICATION_TAG ||
-      text.trimStart().startsWith(`<${TASK_NOTIFICATION_TAG}>`)
-        ? taskNotificationBlock(text)
-        : Option.none(),
+      pipe(
+        Option.liftPredicate(text, isTaskNotification(raw)),
+        Option.flatMap(taskNotificationBlock),
+      ),
     ),
     Option.orElse((): Option.Option<UserBlock> => localCommandBlock(text)),
     Option.orElse((): Option.Option<UserBlock> => commandOutputOf(text)),
@@ -390,7 +395,7 @@ const stringContentBlock = (raw: RawUser, text: string): UserBlock =>
   )
 
 const singleToolResultDetails = (raw: RawUser) =>
-  Schema.is(Schema.String)(raw.message.content) ||
+  Predicate.isString(raw.message.content) ||
   Arr.filter(raw.message.content, (value) => kindOf(value) === TOOL_RESULT_KIND).length !== 1
     ? Option.none<Schema.Json>()
     : Option.fromUndefinedOr(raw.toolUseResult)
@@ -398,7 +403,7 @@ const singleToolResultDetails = (raw: RawUser) =>
 const userBlocks = (raw: RawUser): readonly UserBlock[] => {
   const content = raw.message.content
 
-  return Schema.is(Schema.String)(content)
+  return Predicate.isString(content)
     ? [stringContentBlock(raw, content)]
     : Arr.map(content, userBlock(singleToolResultDetails(raw)))
 }
@@ -535,19 +540,19 @@ const systemEntry = (json: Schema.Json, offset: TranscriptOffset): readonly Tran
     onSome: (raw) => systemEntryOf(raw, json, offset),
   })
 
+const isQueuedHumanPrompt = (attachment: typeof RawAttachment.Type.attachment) =>
+  attachment.commandMode === QUEUED_PROMPT_MODE && attachment.origin?.kind === HUMAN_ORIGIN
+
 const queuedPrompt = (
   attachment: typeof RawAttachment.Type.attachment,
   json: Schema.Json,
   offset: TranscriptOffset,
 ): readonly TranscriptMessage[] =>
   pipe(
-    Option.fromUndefinedOr(attachment.prompt),
-    Option.filter(
-      () =>
-        attachment.commandMode === QUEUED_PROMPT_MODE && attachment.origin?.kind === HUMAN_ORIGIN,
-    ),
+    Option.liftPredicate(attachment, isQueuedHumanPrompt),
+    Option.flatMap((queued) => Option.fromUndefinedOr(queued.prompt)),
     Option.map((prompt) =>
-      Schema.is(Schema.String)(prompt)
+      Predicate.isString(prompt)
         ? [userTextBlock(prompt)]
         : Arr.map(prompt, userBlock(Option.none())),
     ),
@@ -592,44 +597,51 @@ const entry = (json: Schema.Json, offset: TranscriptOffset): readonly Transcript
 
 const decodeLine = Schema.decodeUnknownOption(Line)
 
-const byteLengthOf = (text: string) => new TextEncoder().encode(text).length
+const decoder = new TextDecoder()
 
-const occurrencesAfterStart = (text: string, start: string) =>
-  Arr.unfold(1, (from) =>
-    Option.map(
-      Option.liftPredicate(text.indexOf(start, from), (found) => found >= 0),
-      (found) => [found, found + 1] as const,
+const encoder = new TextEncoder()
+
+const recordStartBytes = Arr.map(RECORD_STARTS, (start) => encoder.encode(start))
+
+const opensRecordAt = (bytes: Uint8Array) => (at: number) =>
+  Arr.some(recordStartBytes, (start) => start.every((byte, index) => bytes[at + index] === byte))
+
+const recordStarts = (bytes: Uint8Array) =>
+  pipe(
+    Arr.unfold(1, (from) =>
+      Option.map(
+        Option.liftPredicate(bytes.indexOf(RECORD_OPENER, from), (found) => found >= 0),
+        (found) => [found, found + 1] as const,
+      ),
     ),
+    Arr.filter(opensRecordAt(bytes)),
   )
 
-const recordStarts = (text: string) =>
+const salvaged = (bytes: Uint8Array, offset: TranscriptOffset): readonly TranscriptMessage[] =>
   pipe(
-    RECORD_STARTS,
-    Arr.flatMap((start) => occurrencesAfterStart(text, start)),
-    Arr.sort(Order.Number),
-  )
-
-const salvaged = (text: string, offset: TranscriptOffset): readonly TranscriptMessage[] =>
-  pipe(
-    recordStarts(text),
+    recordStarts(bytes),
     Arr.findFirst((start) =>
-      Option.map(decodeLine(text.slice(start)), (json) => ({ start, json })),
+      Option.map(decodeLine(decoder.decode(bytes.subarray(start))), (json) => ({ start, json })),
     ),
     Option.match({
-      onNone: () => [new MalformedLine({ offset, byteLength: byteLengthOf(text) })],
-      onSome: ({ start, json }) => {
-        const prefixBytes = byteLengthOf(text.slice(0, start))
-
-        return [
-          new MalformedLine({ offset, byteLength: prefixBytes }),
-          ...entry(json, TranscriptOffset.make(offset + prefixBytes)),
-        ]
-      },
+      onNone: () => [new MalformedLine({ offset, byteLength: bytes.length })],
+      onSome: ({ start, json }) => [
+        new MalformedLine({ offset, byteLength: start }),
+        ...entry(json, TranscriptOffset.make(offset + start)),
+      ],
     }),
   )
 
-export const parseLine = (text: string, offset: TranscriptOffset): readonly TranscriptMessage[] =>
-  Option.match(decodeLine(text), {
-    onNone: () => salvaged(text, offset),
-    onSome: (json) => entry(json, offset),
-  })
+export const parseLine = (
+  bytes: Uint8Array,
+  offset: TranscriptOffset,
+): readonly TranscriptMessage[] => {
+  const text = decoder.decode(bytes)
+
+  return text.trim().length === 0
+    ? []
+    : Option.match(decodeLine(text), {
+        onNone: () => salvaged(bytes, offset),
+        onSome: (json) => entry(json, offset),
+      })
+}

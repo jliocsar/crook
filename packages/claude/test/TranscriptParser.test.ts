@@ -12,6 +12,10 @@ const LINE = TranscriptOffset.make(711)
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Json))
 
+const encoder = new TextEncoder()
+
+const lineOf = (text: string) => encoder.encode(text)
+
 layer(services, { excludeTestServices: true })('parseLine on real transcript lines', (live) => {
   live.effect(
     'keeps the prompt, the reply and the turn end of a plain turn, and drops metadata',
@@ -165,7 +169,7 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
         },
       }
 
-      expect(encodeMessages(parseLine(encodeJson(svgPaste), LINE))).toMatchObject([
+      expect(encodeMessages(parseLine(lineOf(encodeJson(svgPaste)), LINE))).toMatchObject([
         { _tag: 'User', blocks: [{ _tag: 'Unrecognized', kind: 'image' }] },
       ])
     }),
@@ -301,7 +305,7 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
         expect(yield* messagesOf('torn-mid-file.jsonl')).toEqual([
           { _tag: 'Malformed', offset: 711, byteLength: 259 },
         ])
-        expect(encodeMessages(parseLine(torn.replace(recovered, user), LINE))).toEqual([
+        expect(encodeMessages(parseLine(lineOf(torn.replace(recovered, user)), LINE))).toEqual([
           { _tag: 'Malformed', offset: 711, byteLength: 259 },
           { _tag: 'UnrecognizedEntry', offset: 970, entryType: 'future-attachment' },
         ])
@@ -312,11 +316,32 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
     Effect.gen(function* () {
       const truncated = (yield* fixtureText('truncated-final-line.jsonl')).split('\n')[2] ?? ''
 
-      expect(parseLine(truncated, LINE)).toEqual([
-        new MalformedLine({ offset: LINE, byteLength: new TextEncoder().encode(truncated).length }),
+      expect(parseLine(lineOf(truncated), LINE)).toEqual([
+        new MalformedLine({ offset: LINE, byteLength: lineOf(truncated).length }),
       ])
-      expect(parseLine('{"type": 42}', LINE)).toEqual([
+      expect(parseLine(lineOf('{"type": 42}'), LINE)).toEqual([
         new UnrecognizedEntry({ offset: LINE, entryType: 'unknown' }),
+      ])
+      expect(parseLine(lineOf(' \t'), LINE)).toEqual([])
+    }),
+  )
+
+  live.effect('counts the salvaged offset in file bytes when the tear splits a character', () =>
+    Effect.gen(function* () {
+      const whole = lineOf('{"type": "user", "message": {"content": "café')
+      const torn = whole.subarray(0, whole.length - 1)
+      const next = lineOf('{"type": "future-entry"}')
+      const glued = new Uint8Array(torn.length + next.length)
+
+      glued.set(torn)
+      glued.set(next, torn.length)
+
+      expect(parseLine(glued, LINE)).toEqual([
+        new MalformedLine({ offset: LINE, byteLength: torn.length }),
+        new UnrecognizedEntry({
+          offset: TranscriptOffset.make(LINE + torn.length),
+          entryType: 'future-entry',
+        }),
       ])
     }),
   )

@@ -211,7 +211,7 @@ const make = Effect.gen(function* () {
       from: Option.Option<TranscriptPosition>,
     ): Effect.fn.Return<void, RpcClientError> {
       return yield* follow(watch.source, from).pipe(
-        Stream.catch((error) => followFailed(error)),
+        Stream.catch(followFailed),
         Stream.catchDefect((defect) => followDefected(Cause.die(defect))),
         Stream.runForEach((update) => link.publish(watch.id, update)),
         Effect.catchTag('TranscriptOutOfStep', (outOfStep) =>

@@ -2,7 +2,6 @@ import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import type { PlatformError } from 'effect/PlatformError'
@@ -23,7 +22,7 @@ interface TailState {
 
 interface CompleteLine {
   readonly offset: number
-  readonly text: string
+  readonly bytes: Uint8Array
 }
 
 export type TailError =
@@ -82,17 +81,11 @@ const joined = (left: Uint8Array, right: Uint8Array) => {
   return both
 }
 
-const decoder = new TextDecoder()
-
 const completeLines = (complete: Uint8Array, start: number): readonly CompleteLine[] =>
   Arr.unfold(0, (from) =>
     Option.map(
       Option.liftPredicate(complete.indexOf(NEWLINE, from), (end) => end >= 0),
-      (end) =>
-        [
-          { offset: start + from, text: decoder.decode(complete.subarray(from, end)) },
-          end + 1,
-        ] as const,
+      (end) => [{ offset: start + from, bytes: complete.subarray(from, end) }, end + 1] as const,
     ),
   )
 
@@ -101,10 +94,8 @@ const chunkOf = (session: ClaudeSessionId, start: number, complete: Uint8Array):
     session,
     offset: TranscriptOffset.make(start),
     nextOffset: TranscriptOffset.make(start + complete.length),
-    messages: pipe(
-      completeLines(complete, start),
-      Arr.filter((line) => line.text.trim().length > 0),
-      Arr.flatMap((line) => parseLine(line.text, TranscriptOffset.make(line.offset))),
+    messages: Arr.flatMap(completeLines(complete, start), (line) =>
+      parseLine(line.bytes, TranscriptOffset.make(line.offset)),
     ),
   })
 

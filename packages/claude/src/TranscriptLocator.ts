@@ -11,7 +11,7 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
 import { claudeRoots } from '@crook/claude/ClaudeRoots'
-import { FileWatch } from '@crook/claude/FileWatch'
+import { FileWatch, readyOr } from '@crook/claude/FileWatch'
 import { ClaudeSessionId, type SubagentId } from '@crook/domain/Ids'
 
 export type LocateError = TranscriptSessionInvalid | TranscriptDirectoryUnreadable
@@ -114,15 +114,12 @@ const make = (roots: readonly string[]) =>
     })
 
     const watchProjectDirectory = (directory: string, session: ClaudeSessionId) =>
-      watch.watchReady(directory).pipe(
-        Stream.mapError(unreadable(directory)),
-        Stream.filter(
-          Option.match({
-            onNone: () => true,
-            onSome: (name) => name === `${session}${TRANSCRIPT_EXTENSION}`,
-          }),
-        ),
-      )
+      watch
+        .watchReady(directory)
+        .pipe(
+          Stream.mapError(unreadable(directory)),
+          Stream.filter(readyOr((name) => name === `${session}${TRANSCRIPT_EXTENSION}`)),
+        )
 
     const rootTriggers = (root: string, session: ClaudeSessionId) => {
       const projects = path.join(root, PROJECTS_DIRECTORY)
@@ -181,13 +178,12 @@ const make = (roots: readonly string[]) =>
       return target
     })
 
-    return TranscriptLocator.of({ roots, locate, await: awaitSession, awaitSubagent })
+    return TranscriptLocator.of({ locate, await: awaitSession, awaitSubagent })
   })
 
 export class TranscriptLocator extends Context.Service<
   TranscriptLocator,
   {
-    readonly roots: readonly string[]
     readonly locate: (
       session: ClaudeSessionId,
     ) => Effect.Effect<Option.Option<TranscriptFile>, LocateError>

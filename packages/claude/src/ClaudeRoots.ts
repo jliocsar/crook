@@ -18,6 +18,15 @@ export class ClaudeRootNotAbsolute extends Schema.TaggedError<ClaudeRootNotAbsol
   }
 }
 
+export class ClaudeRootsEmpty extends Schema.TaggedError<ClaudeRootsEmpty>()(
+  'ClaudeRootsEmpty',
+  {},
+) {
+  override get message(): string {
+    return 'CROOK_CLAUDE_ROOTS names no folder and CLAUDE_CONFIG_DIR is unset, so crook has no Claude folder to look for transcripts in and every chat would wait forever. Set CROOK_CLAUDE_ROOTS to a comma list of absolute paths, such as /home/you/.claude,/home/you/.claude-work, or unset it to use ~/.claude.'
+  }
+}
+
 const listedRoots = (list: string) =>
   pipe(
     list.split(ROOT_SEPARATOR),
@@ -28,20 +37,26 @@ const listedRoots = (list: string) =>
 const ClaudeRootSettings = Config.all({
   listed: Config.option(Config.String('CROOK_CLAUDE_ROOTS')),
   configDirectory: Config.option(Config.NonEmptyString('CLAUDE_CONFIG_DIR')),
-  home: Config.String('HOME'),
 })
+
+const rootsFrom = (path: Path.Path, listed: Option.Option<string>) =>
+  Option.match(listed, {
+    onNone: () => Effect.map(Config.String('HOME'), (home) => [path.join(home, DEFAULT_ROOT)]),
+    onSome: (list) => Effect.succeed(listedRoots(list)),
+  })
 
 export const claudeRoots = Effect.gen(function* () {
   const path = yield* Path.Path
-  const { listed, configDirectory, home } = yield* ClaudeRootSettings
+  const { listed, configDirectory } = yield* ClaudeRootSettings
   const roots = pipe(
-    Option.match(listed, {
-      onNone: () => [path.join(home, DEFAULT_ROOT)],
-      onSome: listedRoots,
-    }),
+    yield* rootsFrom(path, listed),
     Arr.appendAll(Option.toArray(configDirectory)),
     Arr.dedupe,
   )
+
+  if (!Arr.isReadonlyArrayNonEmpty(roots)) {
+    return yield* new ClaudeRootsEmpty()
+  }
 
   return yield* Option.match(
     Arr.findFirst(roots, (root) => !path.isAbsolute(root)),

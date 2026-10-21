@@ -8,10 +8,10 @@ import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Stream from 'effect/Stream'
 
-const isReadyOr =
-  (name: string) =>
+export const readyOr =
+  (changed: (name: string) => boolean) =>
   (event: Option.Option<string>): boolean =>
-    Option.match(event, { onNone: () => true, onSome: (changed) => changed === name })
+    Option.match(event, { onNone: () => true, onSome: changed })
 
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
@@ -42,7 +42,7 @@ const make = Effect.gen(function* () {
         : awaitPath(parent).pipe(
             Effect.andThen(
               watchReady(parent).pipe(
-                Stream.filter(isReadyOr(path.basename(target))),
+                Stream.filter(readyOr((name) => name === path.basename(target))),
                 Stream.mapEffect(() => fileSystem.exists(target)),
                 Stream.filter((appeared) => appeared),
                 Stream.runHead,

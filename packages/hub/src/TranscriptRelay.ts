@@ -66,11 +66,12 @@ const demandOf = (watchers: Watchers, machine: MachineId) =>
     ),
   })
 
+const sameWatchIds = Arr.makeEquivalence(
+  (left: TranscriptWatch, right: TranscriptWatch) => left.id === right.id,
+)
+
 const sameWatches = (self: TranscriptDemand, that: TranscriptDemand) =>
-  Arr.makeEquivalence((left: TranscriptWatch, right: TranscriptWatch) => left.id === right.id)(
-    self.watches,
-    that.watches,
-  )
+  sameWatchIds(self.watches, that.watches)
 
 const make = Effect.gen(function* () {
   const watchers = yield* SubscriptionRef.make<Watchers>(HashMap.empty())
