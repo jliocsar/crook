@@ -402,11 +402,13 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   script hung until killed (measured).
 - The router percent-encodes a path param, so a herdr pane id like `w1:p3` sits in the URL as
   `w1%3Ap3`, and the route's params hand it back decoded (measured).
+- A production build minifies the CSS, so a custom property read back at runtime is not what
+  `index.css` spells: `180ms` comes back as `.18s` and `cubic-bezier(0.22, …)` as
+  `cubic-bezier(.22, …)` (measured). The dev server and the tests serve the source, so only
+  `vite preview` shows it; a parser for a token accepts every form CSS allows.
 - Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
   with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
   renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
-- `Option.liftPredicate(value, …)` on a string literal infers `string`, not the literal (measured).
-  Bind the literal to a typed constant first.
 
 :::tip
 Checking the web app against real data, measured:

@@ -304,18 +304,21 @@ The Agents tab: every agent on every machine, one section per machine.
 - **Stale content dims to 60%.** Headers and the back button stay at full strength.
 - **Hub actions are disabled** while the hub can't act, and nothing is queued: an action never
   fires after a reconnect. Back, tabs, scrolling and opening chats keep working.
-- **A quick resync is silent.** "Syncing" and the dim show only after 1s, Nielsen's limit for a
-  delay that keeps the user's flow of thought. A cold start that paints the cached herd stays quiet
-  for that second too. After a failure, "Syncing" shows at once, so "Back online" never appears
-  before the data is fresh.
+- **A quick resync is silent.** "Syncing", the dim and the disabled actions show only after 1s,
+  Nielsen's limit for a delay that keeps the user's flow of thought. Inside that second a hub call
+  is still refused, never queued; nothing on the herd screen makes one. After a failure, "Syncing"
+  shows at once, so "Back online" never appears before the data is fresh.
+- **A cold start dims the cached herd at once,** since it may be days old, and disables the
+  actions with it. Only the banner waits the second.
 - **Machines keep their last-known status** while the hub is down. The hub, not the phone,
   decides that a machine is offline.
 - **Offline and hub unreachable read differently,** because their fixes differ.
 - **Screen readers** hear each state once, from a single status region.
 - **First load** with no cached herd shows skeleton sections (three cards, then two) at the
   card's real height.
-- **Logged out, or the session expired:** a full screen with "Log in with exe.dev". The expired
-  one says "Your session expired" and "Your agents kept running. Log in again to see them."
+- **Logged out, or the session expired:** one full screen with "Log in with exe.dev": "Your
+  session expired" and "Your agents kept running. Log in again to see them." The phone can't tell
+  the two apart, since the proxy answers both with the same redirect to its login.
 
 ## Empty states
 
