@@ -18,6 +18,7 @@ import { AuditTrail } from '@crook/hub/AuditTrail'
 import type { TranscriptSource } from '@crook/domain/Transcript'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
+import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import { Herd } from '@crook/hub/Herd'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
@@ -43,6 +44,7 @@ const routes = Effect.gen(function* () {
   const transcripts = yield* TranscriptRelay
   const identity = yield* ExeDevIdentity
   const audit = yield* AuditTrail
+  const notifier = yield* HarkNotifier
   const serialization = yield* RpcSerialization.RpcSerialization
   const serveWeb = yield* HttpStaticServer.make({ root: yield* CrookWebRoot, spa: true })
 
@@ -97,6 +99,10 @@ const routes = Effect.gen(function* () {
             transcripts.watch(machine, source, from, tail),
           ),
         ),
+      WatchNotificationSettings: () => notifier.settings,
+      SetNotificationPref: ({ event, enabled }) =>
+        notifier.setPref(event, enabled).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
+      SendTestNotification: () => notifier.sendTest,
     }).pipe(
       Effect.flatMap((handlers) =>
         RpcServer.toHttpEffectWebsocket(ClientApi).pipe(Effect.flatten, Effect.provide(handlers)),
@@ -137,7 +143,7 @@ const routes = Effect.gen(function* () {
 
 export const layer = HttpRouter.addAll(routes).pipe(
   Layer.provide([
-    Herd.layer,
+    Layer.provideMerge(HarkNotifier.layer, Herd.layer),
     CommandRouter.layer,
     TranscriptRelay.layer,
     ExeDevIdentity.layer,

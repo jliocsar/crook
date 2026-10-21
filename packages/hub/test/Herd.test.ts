@@ -62,6 +62,7 @@ const agentAt = (pane: PaneId, stateChangeSeq: number, terminal: TerminalId = BE
     stateChangeSeq,
     statusChangedAt: DateTime.makeUnsafe(0),
     beforeHandoff: Option.none(),
+    ask: Option.none(),
   })
 
 const handedOffAt = (stateChangeSeq: number, status: AgentStatus) =>
@@ -87,6 +88,7 @@ const handedOffAt = (stateChangeSeq: number, status: AgentStatus) =>
         stateChangeSeq: 5,
       }),
     ),
+    ask: Option.none(),
   })
 
 const stateOf = (
@@ -104,6 +106,7 @@ const stateOf = (
     tabs: [],
     panes: [],
     agents,
+    places: [],
   })
 
 const machineIn = (view: HerdView, id: MachineId) =>

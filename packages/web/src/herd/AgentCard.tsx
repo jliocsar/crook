@@ -2,8 +2,8 @@ import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 
+import { agentTitleOrPane } from '@crook/domain/AgentRow'
 import { StatusWord } from '@crook/web/components/StatusWord'
-import { agentTitleOrPane } from '@crook/web/herd/HerdLayout'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 
@@ -32,13 +32,22 @@ export function AgentCard({ card, now }: { card: AgentCardModel; now: DateTime.U
         <span aria-hidden="true" className="text-muted-foreground">
           ·
         </span>
-        <span className="text-muted-foreground truncate">
-          {card.workspace} · {card.tab}
-          {Option.match(row.branch, {
-            onNone: () => null,
-            onSome: (branch) => <span className="font-mono text-xs"> {branch}</span>,
-          })}
-        </span>
+        {Option.match(card.askSummary, {
+          onNone: () => (
+            <span className="text-muted-foreground truncate">
+              {card.workspace} · {card.tab}
+              {Option.match(row.branch, {
+                onNone: () => null,
+                onSome: (branch) => <span className="font-mono text-xs"> {branch}</span>,
+              })}
+            </span>
+          ),
+          onSome: (summary) => (
+            <span data-slot="ask-summary" className="text-foreground truncate font-mono text-xs">
+              {summary}
+            </span>
+          ),
+        })}
       </span>
     </span>
   )

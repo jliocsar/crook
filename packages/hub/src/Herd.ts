@@ -1,21 +1,23 @@
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as Equivalence from 'effect/Equivalence'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
+import * as PubSub from 'effect/PubSub'
 import * as Schema from 'effect/Schema'
+import type * as Scope from 'effect/Scope'
 import type { SqlError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { type SeenMark, seenMarkOf } from '@crook/domain/AgentRow'
+import { type SeenMark, isSameSeenMark, seenMarkOf } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
@@ -31,9 +33,28 @@ import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/p
 
 import packageJson from '../package.json' with { type: 'json' }
 
+import { logStorageFailure } from '@crook/hub/Database'
 import { MachineRecord, MachineRegistry } from '@crook/hub/MachineRegistry'
 import { PinRecord, PinnedAgents } from '@crook/hub/PinnedAgents'
 import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
+
+export class MachinePublished extends Data.TaggedClass('MachinePublished')<{
+  readonly machineLabel: string
+  readonly previous: Option.Option<MachineState>
+  readonly next: MachineState
+  readonly seen: HashSet.HashSet<PaneId>
+}> {}
+
+export class PaneSeen extends Data.TaggedClass('PaneSeen')<{
+  readonly machine: MachineId
+  readonly pane: PaneId
+}> {}
+
+export class MachineForgotten extends Data.TaggedClass('MachineForgotten')<{
+  readonly machine: MachineId
+}> {}
+
+export type HerdChange = MachinePublished | PaneSeen | MachineForgotten
 
 interface MachineEntry {
   readonly id: MachineId
@@ -168,11 +189,6 @@ const detached = (entry: MachineEntry, now: DateTime.Utc): MachineEntry =>
         lastSeenAt: now,
       }
 
-const isSameMark: Equivalence.Equivalence<SeenMark> = Equivalence.Struct({
-  terminal: Equivalence.String,
-  stateChangeSeq: Equivalence.Number,
-})
-
 const published = (state: MachineState) => {
   const currentMarks = HashMap.fromIterable(
     Arr.map(state.agents, (row): [PaneId, SeenMark] => [row.pane, seenMarkOf(row)]),
@@ -184,7 +200,7 @@ const published = (state: MachineState) => {
     herdrVersion: Option.some(state.herdrVersion),
     state: Option.some(state),
     seen: HashMap.filter(entry.seen, (mark, pane) =>
-      Option.exists(HashMap.get(currentMarks, pane), (current) => isSameMark(mark, current)),
+      Option.exists(HashMap.get(currentMarks, pane), (current) => isSameSeenMark(mark, current)),
     ),
   })
 }
@@ -199,11 +215,6 @@ const droppedSeenPanes = (previous: MachineEntry, next: MachineEntry) =>
     Arr.filter((pane) => !HashMap.has(next.seen, pane)),
   )
 
-const logStorageFailure = (what: string) => (error: SqlError) =>
-  Effect.logError(
-    `The hub could not store ${what} in its database, so it keeps it in memory only and loses it on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
-  )
-
 const logSeenDropFailure = (id: MachineId) => (error: SqlError) =>
   Effect.logError(
     `The hub could not delete the outdated seen marks of machine ${id} from its database, so it drops them in memory only and loads them again on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
@@ -214,6 +225,7 @@ const make = Effect.gen(function* () {
   const seenTracker = yield* SeenTracker
   const pinnedAgents = yield* PinnedAgents
   const scope = yield* Effect.scope
+  const changes = yield* PubSub.unbounded<HerdChange>()
   const records = yield* registry.all
   const marks = yield* seenTracker.all
   const pins = yield* pinnedAgents.all
@@ -321,7 +333,19 @@ const make = Effect.gen(function* () {
           seenTracker
             .dropPanes(id, panes)
             .pipe(Effect.catchTag('SqlError', logSeenDropFailure(id))),
-      }),
+      }).pipe(
+        Effect.andThen(
+          PubSub.publish(
+            changes,
+            new MachinePublished({
+              machineLabel: next.label,
+              previous: previous.state,
+              next: state,
+              seen: HashSet.fromIterable(HashMap.keys(next.seen)),
+            }),
+          ),
+        ),
+      ),
     )
   })
 
@@ -337,6 +361,7 @@ const make = Effect.gen(function* () {
         const next: MachineEntry = { ...found, forgotten: true }
 
         yield* registry.save(toRecord(next))
+        yield* PubSub.publish(changes, new MachineForgotten({ machine: id }))
 
         return Option.some(next)
       }),
@@ -356,6 +381,7 @@ const make = Effect.gen(function* () {
         const mark = seenMarkOf(row)
 
         yield* seenTracker.mark(new SeenRecord({ machine: id, pane, ...mark }))
+        yield* PubSub.publish(changes, new PaneSeen({ machine: id, pane }))
 
         return Option.some({ ...found, seen: HashMap.set(found.seen, pane, mark) })
       }),
@@ -407,6 +433,7 @@ const make = Effect.gen(function* () {
     setPinned,
     requireMachine,
     requirePane,
+    subscribeChanges: Effect.map(PubSub.subscribe(changes), Stream.fromSubscription),
     view: SubscriptionRef.changes(entries).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
       Stream.map(toView),
@@ -436,6 +463,7 @@ export class Herd extends Context.Service<
       id: MachineId,
       pane: PaneId,
     ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd>
+    readonly subscribeChanges: Effect.Effect<Stream.Stream<HerdChange>, never, Scope.Scope>
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {

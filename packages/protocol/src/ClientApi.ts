@@ -6,6 +6,7 @@ import { Command, CommandReceipt } from '@crook/domain/Command'
 import { HerdView } from '@crook/domain/HerdView'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { MachineConnection } from '@crook/domain/Machine'
+import { NotificationEvent, NotificationSettings } from '@crook/domain/Notifications'
 import {
   TranscriptEvent,
   TranscriptPosition,
@@ -13,6 +14,7 @@ import {
   TranscriptTailBytes,
 } from '@crook/domain/Transcript'
 import { CommandFailure } from '@crook/protocol/Commands'
+import { TestNotificationFailure } from '@crook/protocol/Hark'
 import { TranscriptFailure } from '@crook/protocol/Transcripts'
 
 export class MachineNotInHerd extends Schema.TaggedError<MachineNotInHerd>()('MachineNotInHerd', {
@@ -84,6 +86,20 @@ export const WatchTranscript = Rpc.make('WatchTranscript', {
   stream: true,
 })
 
+export const WatchNotificationSettings = Rpc.make('WatchNotificationSettings', {
+  success: NotificationSettings,
+  stream: true,
+})
+
+export const SetNotificationPref = Rpc.make('SetNotificationPref', {
+  payload: { event: NotificationEvent, enabled: Schema.Boolean },
+  error: HubStorageFailed,
+})
+
+export const SendTestNotification = Rpc.make('SendTestNotification', {
+  error: TestNotificationFailure,
+})
+
 export class ClientApi extends RpcGroup.make(
   WatchHerd,
   ForgetMachine,
@@ -91,4 +107,7 @@ export class ClientApi extends RpcGroup.make(
   SetPinned,
   SendCommand,
   WatchTranscript,
+  WatchNotificationSettings,
+  SetNotificationPref,
+  SendTestNotification,
 ) {}

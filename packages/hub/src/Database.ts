@@ -35,6 +35,11 @@ export const dieOnUnencodableRecord = <Success, Requirements>(
 ): Effect.Effect<Success, SqlError, Requirements> =>
   write.pipe(Effect.catchTag('SchemaError', (error) => Effect.die(error)))
 
+export const logStorageFailure = (what: string) => (error: SqlError) =>
+  Effect.logError(
+    `The hub could not store ${what} in its database, so it keeps it in memory only and loses it on restart: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
+  )
+
 export const createMachines = Effect.flatMap(
   SqlClient.SqlClient,
   (sql) => sql`
@@ -113,12 +118,37 @@ const createAudit = Effect.gen(function* () {
   `
 })
 
+const createNotifications = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+
+  yield* sql`
+    CREATE TABLE notification_prefs (
+      event TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL
+    )
+  `
+  yield* sql`
+    CREATE TABLE hark_notifications (
+      machine TEXT NOT NULL,
+      pane TEXT NOT NULL,
+      event TEXT NOT NULL,
+      terminal TEXT NOT NULL,
+      state_change_seq INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      hark_id TEXT NOT NULL,
+      PRIMARY KEY (machine, pane)
+    )
+  `
+})
+
 const migrations = SqliteMigrator.fromRecord({
   '1_machines': createMachines,
   '2_seen': createSeen,
   '3_seen_terminal': keySeenOnTerminal,
   '4_pins': createPins,
   '5_audit': createAudit,
+  '6_notifications': createNotifications,
 })
 
 export const clientAt = (filename: string) =>

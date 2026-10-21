@@ -5,13 +5,16 @@ import * as Option from 'effect/Option'
 
 import {
   type HerdReading,
+  herdContents,
   herdrLostState,
   initialMachineState,
   nextMachineState,
   withCreatedPanes,
 } from '@crook/agent/MachineStateMapping'
 import { AgentRow, StatusBeforeHandoff, seenMarkOf } from '@crook/domain/AgentRow'
+import { UnknownAsk } from '@crook/domain/Ask'
 import {
+  AskId,
   ClaudeSessionId,
   HerdrConnectionId,
   MachineId,
@@ -52,6 +55,20 @@ const reading = (agents: HerdReading['agents'], herdrVersion = HERDR_VERSION): H
   createdPanes: HashSet.empty(),
 })
 
+const initialState = (connection: HerdrConnectionId, herd: HerdReading, now: DateTime.Utc) =>
+  initialMachineState(MACHINE, { ...herdContents([], connection, herd, now), places: [] })
+
+const nextState = (
+  previous: MachineState,
+  connection: HerdrConnectionId,
+  herd: HerdReading,
+  now: DateTime.Utc,
+) =>
+  nextMachineState(previous, {
+    ...herdContents(previous.agents, connection, herd, now),
+    places: [],
+  })
+
 const tabViewedIf = (tab_id: string, viewedTab: string) =>
   new TabInfo({
     tab_id,
@@ -82,20 +99,20 @@ const handoffReading = (
       }),
       claudeSession,
       branch: Option.none(),
+      ask: Option.none(),
     },
   ]),
   tabs: [tabViewedIf(FRONT_TAB, viewedTab), tabViewedIf(BACKGROUND_TAB, viewedTab)],
 })
 
 const afterRestart = (claudeSession: Option.Option<ClaudeSessionId>) => {
-  const previous = initialMachineState(
-    MACHINE,
+  const previous = initialState(
     CONNECTION,
     handoffReading(TERMINAL_BEFORE_HANDOFF, 'blocked', 5),
     STARTED,
   )
   const restarted = Option.getOrThrow(
-    nextMachineState(
+    nextState(
       previous,
       NEXT_CONNECTION,
       handoffReading(TERMINAL_AFTER_HANDOFF, 'unknown', 0, claudeSession),
@@ -103,7 +120,7 @@ const afterRestart = (claudeSession: Option.Option<ClaudeSessionId>) => {
     ),
   )
   const detected = Option.getOrThrow(
-    nextMachineState(
+    nextState(
       restarted,
       NEXT_CONNECTION,
       handoffReading(TERMINAL_AFTER_HANDOFF, 'blocked', 1, claudeSession),
@@ -115,13 +132,12 @@ const afterRestart = (claudeSession: Option.Option<ClaudeSessionId>) => {
 }
 
 const nextOf = (previous: MachineState, next: HerdReading, now: DateTime.Utc) =>
-  Option.getOrThrow(nextMachineState(previous, NEXT_CONNECTION, next, now))
+  Option.getOrThrow(nextState(previous, NEXT_CONNECTION, next, now))
 
 const throughHandoff = (
   before: AgentInfo['agent_status'],
   redetectedAs: AgentInfo['agent_status'],
-  previous: MachineState = initialMachineState(
-    MACHINE,
+  previous: MachineState = initialState(
     CONNECTION,
     handoffReading(TERMINAL_BEFORE_HANDOFF, before, 5),
     STARTED,
@@ -150,11 +166,15 @@ const statusOf = (state: MachineState) =>
 
 describe('MachineStateMapping', () => {
   it('maps a herdr reading to version 0, stamping every status with the read time', () => {
-    const state = initialMachineState(
-      MACHINE,
+    const state = initialState(
       CONNECTION,
       reading([
-        { info: agentInfo(), claudeSession: Option.some(SESSION), branch: Option.some('main') },
+        {
+          info: agentInfo(),
+          claudeSession: Option.some(SESSION),
+          branch: Option.some('main'),
+          ask: Option.none(),
+        },
       ]),
       STARTED,
     )
@@ -183,13 +203,13 @@ describe('MachineStateMapping', () => {
         stateChangeSeq: 14162,
         statusChangedAt: STARTED,
         beforeHandoff: Option.none(),
+        ask: Option.none(),
       }),
     ])
   })
 
   it('prefers the foreground cwd and falls back through the title fields', () => {
-    const state = initialMachineState(
-      MACHINE,
+    const state = initialState(
       CONNECTION,
       reading([
         {
@@ -200,6 +220,7 @@ describe('MachineStateMapping', () => {
           }),
           claudeSession: Option.none(),
           branch: Option.none(),
+          ask: Option.none(),
         },
       ]),
       STARTED,
@@ -212,25 +233,32 @@ describe('MachineStateMapping', () => {
 
   it('carries the name the pane was given in herdr, and none for a blank or absent one', () => {
     const agents = [
-      { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
       {
         info: agentInfo({ pane_id: 'w1:p2' }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p3' }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p4' }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
     ]
-    const state = initialMachineState(
-      MACHINE,
+    const state = initialState(
       CONNECTION,
       {
         ...reading(agents),
@@ -253,20 +281,21 @@ describe('MachineStateMapping', () => {
 
   it('marks the panes crook created, and bumps the version only when that record changes', () => {
     const agents = [
-      { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
       {
         info: agentInfo({ pane_id: 'w1:p2' }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
     ]
     const created = HashSet.make(PaneId.make('w1:p2'))
-    const state = initialMachineState(
-      MACHINE,
-      CONNECTION,
-      { ...reading(agents), createdPanes: created },
-      STARTED,
-    )
+    const state = initialState(CONNECTION, { ...reading(agents), createdPanes: created }, STARTED)
     const forgotten = Option.getOrThrow(withCreatedPanes(state, HashSet.empty()))
 
     expect(state.agents.map((row) => row.createdByCrook)).toEqual([false, true])
@@ -275,29 +304,62 @@ describe('MachineStateMapping', () => {
     expect(forgotten.agents.map((row) => row.createdByCrook)).toEqual([false, false])
   })
 
-  it('keeps the version when a re-read changes nothing', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
-    const previous = initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED)
+  it('publishes an ask only while the agent it belongs to is blocked', () => {
+    const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: '' })
+    const blocked = {
+      info: agentInfo({ agent_status: 'blocked' }),
+      claudeSession: Option.none(),
+      branch: Option.none(),
+      ask: Option.some(ask),
+    }
+    const working = { ...blocked, info: agentInfo({ agent_status: 'working' }) }
+    const undetected = {
+      ...blocked,
+      info: agentInfo({ agent_status: 'blocked', state_change_seq: 0 }),
+    }
+    const asksOf = (agents: HerdReading['agents']) =>
+      initialState(CONNECTION, reading(agents), STARTED).agents.map((row) => row.ask)
 
-    expect(nextMachineState(previous, CONNECTION, reading(agents), LATER)).toEqual(Option.none())
+    expect(asksOf([blocked])).toEqual([Option.some(ask)])
+    expect(asksOf([working])).toEqual([Option.none()])
+    expect(asksOf([undetected])).toEqual([Option.none()])
+  })
+
+  it('keeps the version when a re-read changes nothing', () => {
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
+    const previous = initialState(CONNECTION, reading(agents), STARTED)
+
+    expect(nextState(previous, CONNECTION, reading(agents), LATER)).toEqual(Option.none())
   })
 
   it('bumps the version and restamps only the agent whose status moved', () => {
-    const previous = initialMachineState(
-      MACHINE,
+    const previous = initialState(
       CONNECTION,
       reading([
-        { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+        {
+          info: agentInfo(),
+          claudeSession: Option.none(),
+          branch: Option.none(),
+          ask: Option.none(),
+        },
         {
           info: agentInfo({ pane_id: 'w1:p2' }),
           claudeSession: Option.none(),
           branch: Option.none(),
+          ask: Option.none(),
         },
       ]),
       STARTED,
     )
     const next = Option.getOrThrow(
-      nextMachineState(
+      nextState(
         previous,
         CONNECTION,
         reading([
@@ -305,11 +367,13 @@ describe('MachineStateMapping', () => {
             info: agentInfo({ agent_status: 'blocked' }),
             claudeSession: Option.none(),
             branch: Option.none(),
+            ask: Option.none(),
           },
           {
             info: agentInfo({ pane_id: 'w1:p2' }),
             claudeSession: Option.none(),
             branch: Option.none(),
+            ask: Option.none(),
           },
         ]),
         LATER,
@@ -324,14 +388,20 @@ describe('MachineStateMapping', () => {
   })
 
   it('bumps the version on a title change without restamping the status', () => {
-    const previous = initialMachineState(
-      MACHINE,
+    const previous = initialState(
       CONNECTION,
-      reading([{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]),
+      reading([
+        {
+          info: agentInfo(),
+          claudeSession: Option.none(),
+          branch: Option.none(),
+          ask: Option.none(),
+        },
+      ]),
       STARTED,
     )
     const next = Option.getOrThrow(
-      nextMachineState(
+      nextState(
         previous,
         CONNECTION,
         reading([
@@ -339,6 +409,7 @@ describe('MachineStateMapping', () => {
             info: agentInfo({ terminal_title_stripped: Option.some('MEM-690 mobile cut') }),
             claudeSession: Option.none(),
             branch: Option.none(),
+            ask: Option.none(),
           },
         ]),
         LATER,
@@ -350,19 +421,23 @@ describe('MachineStateMapping', () => {
   })
 
   it('bumps the version when herdr itself is updated under a running agent', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
-    const previous = initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED)
-    const next = Option.getOrThrow(
-      nextMachineState(previous, CONNECTION, reading(agents, '0.9.5'), LATER),
-    )
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
+    const previous = initialState(CONNECTION, reading(agents), STARTED)
+    const next = Option.getOrThrow(nextState(previous, CONNECTION, reading(agents, '0.9.5'), LATER))
 
     expect(next.version).toBe(1)
     expect(next.herdrVersion).toBe('0.9.5')
   })
 
   it('lists every pane herdr shows, so a pane whose agent exited stays apart from a closed one', () => {
-    const state = initialMachineState(
-      MACHINE,
+    const state = initialState(
       CONNECTION,
       {
         ...reading([]),
@@ -380,23 +455,33 @@ describe('MachineStateMapping', () => {
   })
 
   it('bumps the version for a re-read over a new herdr connection even when the herd is unchanged', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
-    const previous = initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED)
-    const next = Option.getOrThrow(
-      nextMachineState(previous, NEXT_CONNECTION, reading(agents), LATER),
-    )
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
+    const previous = initialState(CONNECTION, reading(agents), STARTED)
+    const next = Option.getOrThrow(nextState(previous, NEXT_CONNECTION, reading(agents), LATER))
 
     expect(next.version).toBe(1)
     expect(next.herdr.connection).toBe(NEXT_CONNECTION)
   })
 
   it('marks the state lost once, on the same connection, until a read clears it', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
-    const previous = initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED)
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
+    const previous = initialState(CONNECTION, reading(agents), STARTED)
     const lost = Option.getOrThrow(herdrLostState(previous, LATER))
-    const recovered = Option.getOrThrow(
-      nextMachineState(lost, NEXT_CONNECTION, reading(agents), LATER),
-    )
+    const recovered = Option.getOrThrow(nextState(lost, NEXT_CONNECTION, reading(agents), LATER))
 
     expect(lost.version).toBe(1)
     expect(lost.herdr.connection).toBe(CONNECTION)
@@ -419,6 +504,7 @@ describe('MachineStateMapping', () => {
         }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
     ]
     const after = [
@@ -431,12 +517,11 @@ describe('MachineStateMapping', () => {
         }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
     ]
-    const previous = initialMachineState(MACHINE, CONNECTION, reading(before), STARTED)
-    const next = Option.getOrThrow(
-      nextMachineState(previous, NEXT_CONNECTION, reading(after), LATER),
-    )
+    const previous = initialState(CONNECTION, reading(before), STARTED)
+    const next = Option.getOrThrow(nextState(previous, NEXT_CONNECTION, reading(after), LATER))
 
     expect(
       next.agents.map((row) => [row.pane, row.terminal, row.status, row.stateChangeSeq]),
@@ -505,10 +590,10 @@ describe('MachineStateMapping', () => {
 
   it('reads a status at sequence 0 as unknown on a first sighting and on an identical re-read', () => {
     const firstSighting = handoffReading(TERMINAL_AFTER_HANDOFF, 'idle', 0)
-    const state = initialMachineState(MACHINE, CONNECTION, firstSighting, STARTED)
+    const state = initialState(CONNECTION, firstSighting, STARTED)
 
     expect(statusOf(state)).toEqual([['unknown', STARTED, Option.none()]])
-    expect(nextMachineState(state, CONNECTION, firstSighting, LATER)).toEqual(Option.none())
+    expect(nextState(state, CONNECTION, firstSighting, LATER)).toEqual(Option.none())
   })
 
   it('keeps the status and seen mark from before the first of two handoffs', () => {
@@ -538,14 +623,13 @@ describe('MachineStateMapping', () => {
   })
 
   it('does not invent a status before a handoff for an agent that was unknown already', () => {
-    const previous = initialMachineState(
-      MACHINE,
+    const previous = initialState(
       CONNECTION,
       handoffReading(TERMINAL_BEFORE_HANDOFF, 'unknown', 0),
       STARTED,
     )
     const resynced = Option.getOrThrow(
-      nextMachineState(
+      nextState(
         previous,
         NEXT_CONNECTION,
         handoffReading(TERMINAL_AFTER_HANDOFF, 'unknown', 0),

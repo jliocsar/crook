@@ -31,6 +31,9 @@ export const SubagentId = Schema.NonEmptyString.check(Schema.isPattern(/^[0-9a-f
 )
 export type SubagentId = typeof SubagentId.Type
 
+export const AskId = Schema.NonEmptyString.pipe(Schema.brand('AskId'))
+export type AskId = typeof AskId.Type
+
 export const IdempotencyKey = Schema.NonEmptyString.pipe(Schema.brand('IdempotencyKey'))
 export type IdempotencyKey = typeof IdempotencyKey.Type
 

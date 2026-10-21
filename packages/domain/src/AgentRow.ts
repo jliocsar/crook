@@ -1,7 +1,11 @@
+import * as Equivalence from 'effect/Equivalence'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
+import * as Str from 'effect/String'
 
 import { AgentStatus } from '@crook/domain/AgentStatus'
+import { Ask, askSummary } from '@crook/domain/Ask'
 import { ClaudeSessionId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 
 export type SeenMark = Pick<AgentRow, 'terminal' | 'stateChangeSeq'>
@@ -30,6 +34,7 @@ export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   stateChangeSeq: StateChangeSeq,
   statusChangedAt: Schema.DateTimeUtcFromString,
   beforeHandoff: Schema.OptionFromNullOr(StatusBeforeHandoff),
+  ask: Schema.OptionFromNullOr(Ask),
 }) {}
 
 export const seenMarkOf = (row: AgentRow): SeenMark =>
@@ -38,4 +43,19 @@ export const seenMarkOf = (row: AgentRow): SeenMark =>
     onSome: (before) => ({ terminal: before.terminal, stateChangeSeq: before.stateChangeSeq }),
   })
 
+export const isSameSeenMark: Equivalence.Equivalence<SeenMark> = Equivalence.Struct({
+  terminal: Equivalence.String,
+  stateChangeSeq: Equivalence.Number,
+})
+
 export const agentTitle = (row: AgentRow): string => Option.getOrElse(row.label, () => row.title)
+
+export const agentTitleOrPane = (row: AgentRow): string =>
+  pipe(
+    agentTitle(row),
+    Option.liftPredicate(Str.isNonEmpty),
+    Option.getOrElse(() => row.pane),
+  )
+
+export const pendingAskSummary = (row: AgentRow): Option.Option<string> =>
+  Option.flatMap(row.ask, (ask) => askSummary(ask, row.cwd))

@@ -8,7 +8,7 @@ import * as Option from 'effect/Option'
 import * as Record from 'effect/Record'
 import * as Schema from 'effect/Schema'
 
-import type { Command } from '@crook/domain/Command'
+import type { AskAnswer, Command } from '@crook/domain/Command'
 
 export interface AuditedOperation {
   readonly operation: string
@@ -33,6 +33,12 @@ export const AuditArgumentName = Schema.Literals([
   'label',
   'confirmed',
   'pinned',
+  'ask',
+  'answer',
+  'choice',
+  'kind',
+  'folder',
+  'branch',
 ])
 export type AuditArgumentName = typeof AuditArgumentName.Type
 
@@ -120,6 +126,16 @@ export const auditPolicyConfig = ({
     ),
   }).pipe(Config.map((fields) => new AuditPolicy(fields)))
 
+const answerAudit = (answer: AskAnswer): AuditArguments =>
+  Match.value(answer).pipe(
+    Match.tagsExhaustive({
+      Approve: () => ({ answer: 'Approve' }),
+      ApproveAlways: () => ({ answer: 'ApproveAlways' }),
+      Decline: (decline) => ({ answer: 'Decline', text: Option.getOrNull(decline.message) }),
+      Choose: (choose) => ({ answer: 'Choose', choice: choose.answer }),
+    }),
+  )
+
 export const commandAudit = (command: Command): AuditedOperation =>
   Match.value(command).pipe(
     Match.tagsExhaustive({
@@ -138,6 +154,23 @@ export const commandAudit = (command: Command): AuditedOperation =>
       ClosePane: (close) => ({
         operation: 'ClosePane',
         arguments: { pane: close.pane, confirmed: close.confirmed },
+      }),
+      AnswerAsk: (answerAsk) => ({
+        operation: 'AnswerAsk',
+        arguments: { pane: answerAsk.pane, ask: answerAsk.ask, ...answerAudit(answerAsk.answer) },
+      }),
+      StartAgent: (start) => ({
+        operation: 'StartAgent',
+        arguments: { kind: start.kind, folder: start.folder, text: Option.getOrNull(start.task) },
+      }),
+      CreateWorktree: (create) => ({
+        operation: 'CreateWorktree',
+        arguments: {
+          kind: create.kind,
+          folder: create.folder,
+          branch: create.branch,
+          text: Option.getOrNull(create.task),
+        },
       }),
     }),
   )

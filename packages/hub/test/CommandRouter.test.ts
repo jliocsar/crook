@@ -1,17 +1,19 @@
 import { expect, it } from '@effect/vitest'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { InputDelivered, Prompt } from '@crook/domain/Command'
+import { InputDelivered, Prompt, StartAgent } from '@crook/domain/Command'
 import { IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import { CommandRouter } from '@crook/hub/CommandRouter'
-import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
+import { COMMAND_TIMEOUT, LAUNCH_COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
 import {
   CommandTimedOut,
   MachineOffline,
@@ -105,6 +107,31 @@ it.effect('times out when the agent never answers, and drops the late answer', (
 
     expect(timedOut).toEqual(new CommandTimedOut({ machine: LAPTOP, timeout: COMMAND_TIMEOUT }))
     expect(yield* Fiber.join(resending).pipe(Effect.flip)).toEqual(new PaneNotAgent({ pane: PANE }))
+  }),
+)
+
+it.effect('waits for a launch as long as starting an agent and handing it its task can take', () =>
+  Effect.gen(function* () {
+    const router = yield* startRouter
+    yield* attachAgent(router, LAPTOP)
+    const start = new StartAgent({
+      kind: 'claude',
+      folder: '/home/jliocsar/Projects/crook',
+      task: Option.none(),
+    })
+    const sending = yield* Effect.forkChild(router.send(LAPTOP, ACTION, start), {
+      startImmediately: true,
+    })
+
+    yield* TestClock.adjust(COMMAND_TIMEOUT)
+    const pendingAfterInputTimeout = sending.pollUnsafe()
+
+    yield* TestClock.adjust(Duration.subtract(LAUNCH_COMMAND_TIMEOUT, COMMAND_TIMEOUT))
+
+    expect(pendingAfterInputTimeout).toBeUndefined()
+    expect(yield* Fiber.join(sending).pipe(Effect.flip)).toEqual(
+      new CommandTimedOut({ machine: LAPTOP, timeout: LAUNCH_COMMAND_TIMEOUT }),
+    )
   }),
 )
 

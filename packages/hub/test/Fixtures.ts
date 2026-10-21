@@ -23,6 +23,7 @@ import type * as Rpc from 'effect/rpc/Rpc'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
+import { GitBranches } from '@crook/agent/GitBranches'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
@@ -83,6 +84,7 @@ export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[
     stateChangeSeq: 7,
     statusChangedAt: DateTime.makeUnsafe(0),
     beforeHandoff: Option.none(),
+    ask: Option.none(),
     ...fields,
   })
 
@@ -100,6 +102,7 @@ export const machineStateWith = (
     tabs: [],
     panes: [],
     agents,
+    places: [],
   })
 
 export const configFor = (origin: string) =>
@@ -189,6 +192,7 @@ export const realAgent = Effect.fn('realAgent')(function* (
         CreatedPanes.layerTest(),
         discardingAgentAudit,
         herdr,
+        Layer.provide(GitBranches.layer, [BunFileSystem.layer, Path.layer]),
         BunFileSystem.layer,
         Path.layer,
       ],

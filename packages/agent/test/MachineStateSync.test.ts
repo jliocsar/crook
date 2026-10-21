@@ -15,10 +15,14 @@ import * as TestClock from 'effect/testing/TestClock'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
+import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
-import { StatusBeforeHandoff } from '@crook/domain/AgentRow'
-import { ClaudeSessionId, PaneId } from '@crook/domain/Ids'
+import { PendingAsks } from '@crook/agent/PendingAsks'
+import { type AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import { type Ask, UnknownAsk } from '@crook/domain/Ask'
+import { AskId, ClaudeSessionId, PaneId } from '@crook/domain/Ids'
 import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
+import { Checkout, Place } from '@crook/domain/Place'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -124,6 +128,8 @@ const statusPanes = (subscription: FakeSubscription) =>
 const startSync = Effect.fn('startSync')(function* (
   initial: SessionSnapshot,
   subscribeFailures: readonly HerdrSubscriptionError[] = [],
+  asks: ReadonlyMap<string, Ask> = new Map(),
+  recentPlaces: Layer.Layer<RecentPlaces> = RecentPlaces.layerTest(),
 ) {
   const readStarted = yield* Queue.unbounded<void>()
   const replies = yield* Queue.unbounded<SessionSnapshot>()
@@ -149,6 +155,8 @@ const startSync = Effect.fn('startSync')(function* (
     Layer.provideMerge(MachineStateSync.layer, [
       herdr,
       CreatedPanes.layerTest(),
+      PendingAsks.layerTest(asks),
+      recentPlaces,
       ClaudeSessions.layerTest(
         new Map([
           ['w1:p1', SESSION],
@@ -223,6 +231,29 @@ it.effect('re-reads on every event and bumps the version only when the state cha
     const state = yield* stateAt(sync, 1)
 
     expect(state.agents.map((row) => row.status)).toEqual(['blocked'])
+  }),
+)
+
+it.effect('publishes the ask of a blocked agent, and drops it once the agent moves on', () =>
+  Effect.gen(function* () {
+    const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: '' })
+    const { sync, subscriptions, answerRead } = yield* startSync(
+      working,
+      [],
+      new Map([['w1:p1', ask]]),
+    )
+    const subscription = yield* Queue.take(subscriptions)
+
+    yield* answerRead(working)
+    yield* Queue.offer(subscription.events, paneClosed)
+    yield* answerRead(sessionSnapshot([agentInfo({ agent_status: 'blocked' })]))
+    const blocked = yield* stateAt(sync, 1)
+    yield* Queue.offer(subscription.events, paneClosed)
+    yield* answerRead(working)
+    const movedOn = yield* stateAt(sync, 2)
+
+    expect(blocked.agents.map((row) => row.ask)).toEqual([Option.some(ask)])
+    expect(movedOn.agents.map((row) => row.ask)).toEqual([Option.none()])
   }),
 )
 
@@ -564,4 +595,34 @@ it.effect('drops a tab that vanished with only the pane_exited of its last pane'
     expect(state.tabs.map((tab) => tab.id)).toEqual(['w1:t1'])
     expect(panePresence(state, PaneId.make('w1:p7'))).toBe('gone')
   }),
+)
+
+it.effect(
+  'shows each read to the recent places and publishes their answer in the same version',
+  () =>
+    Effect.gen(function* () {
+      const observed = yield* Queue.unbounded<{
+        readonly agents: readonly AgentRow[]
+        readonly firstSightAt: DateTime.Utc
+      }>()
+      const place = new Place({
+        folder: '/home/jliocsar/Projects/crook',
+        checkout: Option.some(new Checkout({ branch: Option.some(BRANCH) })),
+        usedAt: DateTime.makeUnsafe('2026-10-21T13:27:00Z'),
+      })
+      const recentPlaces = Layer.succeed(
+        RecentPlaces,
+        RecentPlaces.of({
+          observe: (agents, firstSightAt) =>
+            Effect.as(Queue.offer(observed, { agents, firstSightAt }), [place]),
+        }),
+      )
+      const { sync } = yield* startSync(working, [], new Map(), recentPlaces)
+      const seen = yield* Queue.take(observed)
+      const published = yield* stateAt(sync, 0)
+
+      expect(seen.agents.map((row) => row.pane)).toEqual(['w1:p1'])
+      expect(seen.agents.map((row) => row.statusChangedAt)).toEqual([seen.firstSightAt])
+      expect(published.places).toEqual([place])
+    }),
 )

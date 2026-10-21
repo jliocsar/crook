@@ -12,7 +12,7 @@ import * as Stream from 'effect/Stream'
 
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
-import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
+import { commandTimeout } from '@crook/protocol/AgentLink'
 import {
   type AgentCommandFailure,
   CommandId,
@@ -84,6 +84,7 @@ const make = Effect.gen(function* () {
     const outbox = yield* newestOutbox(machine)
     const id = CommandId.make(yield* Ref.getAndUpdate(nextId, (current) => current + 1))
     const reply = yield* Deferred.make<CommandReceipt, AgentCommandFailure>()
+    const timeout = commandTimeout(command)
 
     return yield* Effect.acquireUseRelease(
       Ref.update(pending, HashMap.set(id, { machine, reply })),
@@ -95,8 +96,8 @@ const make = Effect.gen(function* () {
           ),
           Effect.andThen(Deferred.await(reply)),
           Effect.timeoutOrElse({
-            duration: COMMAND_TIMEOUT,
-            orElse: () => Effect.fail(new CommandTimedOut({ machine, timeout: COMMAND_TIMEOUT })),
+            duration: timeout,
+            orElse: () => Effect.fail(new CommandTimedOut({ machine, timeout })),
           }),
         ),
       () => Ref.update(pending, HashMap.remove(id)),

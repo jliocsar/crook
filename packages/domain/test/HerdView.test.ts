@@ -6,7 +6,7 @@ import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { CrookVersion } from '@crook/domain/CrookVersion'
-import { HerdMachine, HerdView } from '@crook/domain/HerdView'
+import { HerdMachine, HerdView, mostRecentPlace } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
   ClaudeSessionId,
@@ -22,6 +22,7 @@ import {
 import { Machine } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
+import { Place } from '@crook/domain/Place'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
 
@@ -46,6 +47,7 @@ const agentRow = (pane: string, claudeSession: Option.Option<ClaudeSessionId>) =
     stateChangeSeq: 7,
     statusChangedAt: observedAt,
     beforeHandoff: Option.none(),
+    ask: Option.none(),
   })
 
 const herd = new HerdView({
@@ -82,6 +84,7 @@ const herd = new HerdView({
             agentRow('w1:p1', Option.some(ClaudeSessionId.make('session-1'))),
             agentRow('w1:p2', Option.none()),
           ],
+          places: [],
         }),
       ),
     }),
@@ -115,6 +118,60 @@ describe('HerdView', () => {
     expect(encoded.machines[1]?.state).toBeNull()
     expect(encoded.machines[1]?.machine.agentVersion).toBeNull()
     expect(encoded.machines[0]?.machine.lastSeenAt).toBe('2026-10-17T14:00:00.000Z')
+  })
+})
+
+describe('mostRecentPlace', () => {
+  const placeAt = (folder: string, usedAt: string) =>
+    new Place({ folder, checkout: Option.none(), usedAt: DateTime.makeUnsafe(usedAt) })
+
+  const machineWith = (id: MachineId, connection: 'online' | 'offline', places: readonly Place[]) =>
+    new HerdMachine({
+      machine: new Machine({
+        id,
+        label: id,
+        connection,
+        connectionChangedAt: observedAt,
+        lastSeenAt: observedAt,
+        agentVersion: Option.none(),
+        herdrVersion: Option.none(),
+      }),
+      state: Option.some(
+        new MachineState({
+          machine: id,
+          version: MachineStateVersion.make(1),
+          herdrVersion: '0.9.5',
+          herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
+          workspaces: [],
+          tabs: [],
+          panes: [],
+          agents: [],
+          places,
+        }),
+      ),
+      seen: [],
+      pinned: [],
+    })
+
+  it('picks the folder used last on a machine that is online', () => {
+    const latest = placeAt('/home/jliocsar/Projects/crook', '2026-10-21T13:00:00Z')
+    const offlineLatest = placeAt('/home/jliocsar/.dotfiles', '2026-10-21T14:00:00Z')
+    const view = new HerdView({
+      hubVersion: CrookVersion.make('0.1.0'),
+      machines: [
+        machineWith(laptop, 'online', [placeAt('/home/jliocsar/scratch', '2026-10-20T13:00:00Z')]),
+        machineWith(MachineId.make('desktop'), 'online', [latest]),
+        machineWith(MachineId.make('work-vm'), 'offline', [offlineLatest]),
+      ],
+    })
+
+    expect(mostRecentPlace(view)).toEqual(
+      Option.some({ machine: MachineId.make('desktop'), place: latest }),
+    )
+  })
+
+  it('has no default when no online machine reported a folder', () => {
+    expect(mostRecentPlace(herd)).toEqual(Option.none())
   })
 })
 

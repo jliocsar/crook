@@ -21,7 +21,7 @@ interface TailState {
   readonly pending: Uint8Array
 }
 
-interface CompleteLine {
+export interface CompleteLine {
   readonly offset: number
   readonly bytes: Uint8Array
 }
@@ -81,7 +81,7 @@ const joined = (left: Uint8Array, right: Uint8Array) => {
   return both
 }
 
-const completeLines = (complete: Uint8Array, start: number): readonly CompleteLine[] =>
+export const completeLines = (complete: Uint8Array, start: number): readonly CompleteLine[] =>
   Arr.unfold(0, (from) =>
     Option.map(
       Option.liftPredicate(complete.indexOf(NEWLINE, from), (end) => end >= 0),

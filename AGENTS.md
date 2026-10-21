@@ -150,6 +150,11 @@ writes `@crook/domain/Ids`, the same leaf-only rule the `effect` imports follow.
 tests import it through that specifier too; the package resolves itself through its `exports`
 (measured).
 
+A fixture that another member's tests read stays in the member that owns it, exported as
+`"./fixtures/*": "./test/fixtures/*"`, and the reader turns it into a path with
+`new URL(import.meta.resolve('@crook/<member>/fixtures/…')).pathname`, which resolves under
+`bun --bun vitest` (measured). A copy drifts from the capture it was taken from.
+
 ## Rules
 
 Leaf imports only: `effect/Effect`, `effect/cli/Command`.
@@ -179,6 +184,16 @@ feeding one go in a single `Layer.provide(target, [a, b, c])`, which is what
 A data-last combinator stored in a variable before it meets its input — `const retry = Effect.retry({ … })`
 — infers `unknown` for the error, and `effecttsgo/any-unknown-in-error-context` reports every effect it
 touches. Apply it inline (measured).
+
+`Effect.filter` with an effectful predicate and a `concurrency` option returns what it keeps in
+the order the predicates finished, not in input order (read in `effect@4.0.5`'s source; a test
+saw a sorted list come back shuffled). Where order matters, `Effect.forEach` into `Option`s and
+`Arr.getSomes` keeps it.
+
+A fiber forked into a scope that closes before the fiber first runs never runs any of its effect
+(measured: a step forked from inside a `forkScoped` fiber never started when the session scope
+closed right after the fork). Work that must happen once it is accepted is forked into the scope
+that owns it directly, by the fiber that accepted it, and only the follow-up goes in a child.
 
 An `Effect<A>` is assignable to `Effect<void>`: a service method typed `Effect<void>` accepts
 `Queue.offer(…)` or `Effect.forkIn(scope)` as they are, and `begone-slop/no-effect-asvoid` rejects
@@ -253,6 +268,21 @@ pipeline as the body of an `Effect.fn` generator, `return yield* stream.pipe(Str
 is honest code that passes; do not spell the catch as a `catchTags` list to dodge it.
 :::
 
+:::tip
+Every end of an effect `Socket`, a clean close included, surfaces as a `SocketError` whose reason is
+`SocketCloseError` (read in its source; a peer's FIN is code 1000). A stream that should simply
+end there catches that reason with `Stream.catchReason(…, () => Stream.empty)`, inside a
+`yield*`; `begone-slop/no-silent-error-swallow` rejects the `Effect.catchReason` that returns
+`Effect.void` (measured).
+
+A socket server built without `allowHalfOpen: true` closes a connection the moment it reads the
+client's end, before its handler has done anything with the bytes; with it, the connection closes
+when the handler's scope does, so a client that waits for the close knows the handler finished
+(measured: a handler sleeping 300 ms held its client 312 ms with it, 11.5 ms without). The handler
+acquires the reader in its own scope (`Socket.readerBytes`) for that to hold; `Socket.toStream`
+scopes the reader to the stream and closes the connection when the stream ends.
+:::
+
 :::warning
 An effect `Cache` lookup that every caller abandons is interrupted and dropped from the cache, so
 the next `get` runs it again (measured). Where running twice is the bug — anything that types into
@@ -262,6 +292,11 @@ a terminal — make the `get` uninterruptible, so a started lookup always finish
 :::tip
 A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
 `effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
+
+`Arr.filterMap` takes a function returning a `Result`, not an `Option`, in `effect@4.0.5` (measured: a
+type error). Keep an `Option` pipeline on `Arr.flatMap` or `Arr.getSomes`. `Arr.replicate` and
+`Arr.makeBy` clamp the count to at least 1 (read in their source), so a count that can be zero is
+guarded before the call.
 
 `RpcTest` wires client to server without serialization (read in its source), so it cannot catch a
 wire type that fails to encode. Round-trip such a schema through
@@ -386,6 +421,8 @@ The ones with behaviour worth knowing before you trip on them:
 - `statement-order` — imports > type-defs > constants > functions > variables > modules > exports.
   Single-line `SCREAMING_CASE` constants form two groups, private above exported, no blank line
   inside a group and one around it. A private one may sit below an exported one only if it reads it.
+- `statement-order` ranks a module-level `SCREAMING_SNAKE_CASE` array or `Map` with the single-line
+  constants, so a private one sits above the exported group like a primitive does (measured).
 - `expect-padding` — a run of `expect()` is ONE block: blank line around it, none inside. Applies to
   test files only, via an `.oxlintrc.json` override.
 - `padding-line-between-statements` — the vertical-spacing spec, ported from `@stylistic`; oxlint has
@@ -454,6 +491,17 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   `index.css` spells: `180ms` comes back as `.18s` and `cubic-bezier(0.22, …)` as
   `cubic-bezier(.22, …)` (measured). The dev server and the tests serve the source, so only
   `vite preview` shows it; a parser for a token accepts every form CSS allows.
+- A screen never hands a callback to a hub call it starts. The call can outlive the screen, and
+  the callback then acts on a screen that is gone: a forget's "go back" that lands after the user
+  already went back pops a second history entry. The screen reads the call's result atom and acts
+  on it from an effect, which runs only while it is mounted. A setter from `useAtom` or
+  `useAtomSet` in `promiseExit` mode keeps the call running after the screen unmounts, because
+  it holds a subscription until the result settles (read in its source, and a test that leaves
+  mid-forget sees the forget land).
+- `Effect.catchTag` does not typecheck over a generic error union such as `Failure | RpcClientError`
+  (measured: TS2345, the tag narrows to `{ readonly _tag: unknown }`). A `Schema.Error` there is
+  caught with `Effect.catchIf(Schema.is(X), …)`; `instanceof` is the other spelling, and
+  `effecttsgo/instance-of-schema` rejects it.
 - Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
   with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
   renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
@@ -468,15 +516,29 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   its own host check, and the `Host` it compares against must be a fixed name, never another
   request header: a DNS-rebound page sends a matching `Host` and `Origin`.
 
+:::warning
+A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
+:::
+
 :::tip
 Checking the web app against real data, measured:
 
+- The agent has no entrypoint yet. A probe script composes its layers and dials the hub directly
+  with the two headers the proxy would add, `X-ExeDev-Email` and `X-ExeDev-Token-Ctx` carrying
+  `{"machine":"<id>"}`; the token header is then not needed. Every herdr-reading layer needs
+  `HerdrClient` under it, not merged beside it.
+- The hub refuses to start on a `CROOK_HUB_ORIGIN` that is not https, a local one included. Any
+  https name works locally, because the Vite proxy sends that same value as the socket's `Origin`.
+- `pkill -f <pattern>` also matches the shell that runs it when the pattern is in its own command
+  line, and kills the call. Stop what you started by its saved pid.
 - A named herdr session runs headless with `herdr --session <name> server`. From inside a herdr
   pane, unset `HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID` and `HERDR_ENV`, and point
   `HERDR_SOCKET_PATH` at the named session's socket, or every command lands in the user's own
   session. Never use the default one.
 - `herdr pane report-agent` puts an agent with a chosen status in any shell pane, and
-  `release-agent` takes it out, so a herd in every state needs no running Claude.
+  `release-agent` takes it out, so a herd in every state needs no running Claude. Such a fake
+  takes no keys: `agent.send_keys` answers it `agent_not_ready`, so key delivery is tested
+  against scripted herdr responses instead.
 - The agent takes an agent's title from the pane's terminal title before herdr's own `title`. An
   OSC 0 escape sets it, and a shell prompt resets it, so hold the pane in a long `sleep` after it.
 - A browser tab shows the install screen. An init script that makes `navigator.standalone` true

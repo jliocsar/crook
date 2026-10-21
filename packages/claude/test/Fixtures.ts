@@ -3,14 +3,18 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
+import { HookPayload } from '@crook/claude/HookPayload'
+import { LastTurn } from '@crook/claude/LastTurn'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import { TranscriptTail } from '@crook/claude/TranscriptTail'
 import { ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
+import { parseLine } from '@crook/claude/TranscriptParser'
 import { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 export const FIXTURES = `${import.meta.dirname}/fixtures`
@@ -23,7 +27,7 @@ export const WATCHERS_SETTLED = Duration.times(SLOWEST_MEASURED_WATCH_INSTALL, 1
 export const platform = Layer.mergeAll(BunFileSystem.layer, Path.layer)
 
 export const services = Layer.provideMerge(
-  Layer.mergeAll(TranscriptTail.layer, SubagentRoster.layer),
+  Layer.mergeAll(TranscriptTail.layer, SubagentRoster.layer, LastTurn.layer),
   platform,
 )
 
@@ -48,4 +52,53 @@ export const fixtureText = Effect.fn('fixtureText')(function* (name: string) {
   const fileSystem = yield* FileSystem.FileSystem
 
   return yield* fileSystem.readFileString(`${FIXTURES}/${name}`)
+})
+
+const SpikeHookRecord = Schema.fromJsonString(
+  Schema.Struct({ phase: Schema.String, payload: Schema.optionalKey(Schema.Unknown) }),
+)
+
+const decodeHookPayload = Schema.decodeUnknownOption(HookPayload)
+
+export const spikeScreen = (name: string) => fixtureText(`spike-80/screens/${name}.txt`)
+
+export const spikeHooks = Effect.fn('spikeHooks')(function* (name: string) {
+  const text = yield* fixtureText(`spike-80/hooks/${name}.hooks.jsonl`)
+
+  return text
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => Schema.decodeSync(SpikeHookRecord)(line))
+    .filter((record) => record.phase === 'start')
+    .flatMap((record) => Option.toArray(decodeHookPayload(record.payload)))
+})
+
+export const spikeTranscriptLines = Effect.fn('spikeTranscriptLines')(function* (
+  name: string,
+  lineCount: number,
+) {
+  const text = yield* fixtureText(`spike-80/transcripts/${name}.transcript.jsonl`)
+  const lines = text
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .slice(0, lineCount)
+    .map((line) => `${line}\n`)
+
+  return lines.join('')
+})
+
+export const spikeTranscript = Effect.fn('spikeTranscript')(function* (
+  name: string,
+  lineCount: number,
+) {
+  const encoder = new TextEncoder()
+  const lines = (yield* spikeTranscriptLines(name, lineCount)).split('\n').filter(Boolean)
+  const offsets = lines.reduce<readonly number[]>(
+    (starts, line) => [...starts, (starts.at(-1) ?? 0) + encoder.encode(`${line}\n`).length],
+    [0],
+  )
+
+  return lines.flatMap((line, index) =>
+    parseLine(encoder.encode(`${line}\n`), TranscriptOffset.make(offsets[index] ?? 0)),
+  )
 })

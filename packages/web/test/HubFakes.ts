@@ -1,6 +1,7 @@
 import type * as Cause from 'effect/Cause'
 import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
@@ -13,8 +14,9 @@ import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
-import type { HubCallFailed } from '@crook/web/rpc/HubConnection'
+import type { ForgetMachineRefused, HubCallFailed } from '@crook/web/rpc/HubConnection'
 import { HubLink } from '@crook/web/rpc/HubLink'
+import type { HubNotConnected } from '@crook/web/rpc/HubLink'
 import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
@@ -35,6 +37,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const opened = yield* Ref.make(0)
   const closed = yield* Ref.make(0)
   const seen = yield* Ref.make<readonly SeenCall[]>([])
+  const forgotten = yield* Ref.make<readonly MachineId[]>([])
   const saved = yield* Ref.make(cached)
   const visible = yield* SubscriptionRef.make(true)
   const online = yield* SubscriptionRef.make(true)
@@ -52,6 +55,8 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
       watchHerd: Stream.fromQueue(views),
       markSeen: (machine: MachineId, pane: PaneId) =>
         Ref.update(seen, (calls) => [...calls, { machine, pane }]),
+      forgetMachine: (machine: MachineId) =>
+        Ref.update(forgotten, (machines) => [...machines, machine]),
     }
   })
 
@@ -91,6 +96,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
     opened,
     closed,
     seen,
+    forgotten,
     saved,
     visible,
     online,
@@ -103,6 +109,11 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   const state = yield* SubscriptionRef.make(initial)
   const seen = yield* Ref.make<readonly SeenCall[]>([])
   const resyncs = yield* Ref.make(0)
+  const forgotten = yield* Ref.make<readonly MachineId[]>([])
+  const forgetRefusal = yield* Ref.make(
+    Option.none<ForgetMachineRefused | HubCallFailed | HubNotConnected>(),
+  )
+  const forgetAnswers = yield* Latch.make(true)
 
   const layer = Layer.succeed(
     HubLink,
@@ -110,10 +121,21 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
       changes: SubscriptionRef.changes(state),
       resync: Ref.update(resyncs, (count) => count + 1),
       markSeen: (machine, pane) => Ref.update(seen, (calls) => [...calls, { machine, pane }]),
+      forgetMachine: (machine) =>
+        Effect.andThen(
+          forgetAnswers.await,
+          Effect.flatMap(
+            Ref.get(forgetRefusal),
+            Option.match({
+              onNone: () => Ref.update(forgotten, (machines) => [...machines, machine]),
+              onSome: Effect.fail,
+            }),
+          ),
+        ),
     }),
   )
 
-  return { layer, state, seen, resyncs }
+  return { layer, state, seen, resyncs, forgotten, forgetRefusal, forgetAnswers }
 })
 
 export const dropSession = (session: FakeSession, error: HubCallFailed) =>

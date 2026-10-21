@@ -8,10 +8,9 @@ import * as Semaphore from 'effect/Semaphore'
 import type * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { makeEnsureParentDirectory, stateFile } from '@crook/agent/StateDirectory'
+import { makeWriteAtomically, stateFile } from '@crook/agent/StateDirectory'
 import { PaneId } from '@crook/domain/Ids'
 
-const TEMPORARY_SUFFIX = '.tmp'
 const UNREADABLE_SUFFIX = '.unreadable'
 
 export const CrookCreatedPanesPath = stateFile('CROOK_CREATED_PANES_PATH', 'created-panes.json')
@@ -47,7 +46,7 @@ export class CreatedPanesNotSetAside extends Schema.TaggedError<CreatedPanesNotS
 
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
-  const ensureParentDirectory = yield* makeEnsureParentDirectory
+  const writeAtomically = yield* makeWriteAtomically
   const file = yield* CrookCreatedPanesPath
   const unreadableFile = `${file}${UNREADABLE_SUFFIX}`
   const writing = yield* Semaphore.make(1)
@@ -78,20 +77,10 @@ const make = Effect.gen(function* () {
   )
   const panes = yield* SubscriptionRef.make(stored)
 
-  const save = (next: HashSet.HashSet<PaneId>) => {
-    const temporary = `${file}${TEMPORARY_SUFFIX}`
-
-    return ensureParentDirectory(file).pipe(
-      Effect.andThen(
-        fileSystem.writeFileString(
-          temporary,
-          Schema.encodeSync(CreatedPanesFile)(Array.from(next)),
-        ),
-      ),
-      Effect.andThen(fileSystem.rename(temporary, file)),
+  const save = (next: HashSet.HashSet<PaneId>) =>
+    writeAtomically(file, Schema.encodeSync(CreatedPanesFile)(Array.from(next))).pipe(
       Effect.mapError((cause) => new CreatedPanesUnwritable({ path: file, cause })),
     )
-  }
 
   const change = (update: (current: HashSet.HashSet<PaneId>) => HashSet.HashSet<PaneId>) =>
     writing.withPermits(1)(

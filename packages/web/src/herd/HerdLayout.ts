@@ -2,10 +2,9 @@ import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
-import * as Str from 'effect/String'
 
 import { needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
-import { type AgentRow, agentTitle } from '@crook/domain/AgentRow'
+import { type AgentRow, pendingAskSummary } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
@@ -17,6 +16,7 @@ export interface AgentCardModel {
   readonly needsYou: boolean
   readonly workspace: string
   readonly tab: string
+  readonly askSummary: Option.Option<string>
 }
 
 export type SectionBody = Data.TaggedEnum<{
@@ -63,6 +63,7 @@ const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
     needsYou: loud(row),
     workspace: labelOf(workspaces, row.workspace),
     tab: labelOf(tabs, row.tab),
+    askSummary: pendingAskSummary(row),
   }))
 }
 
@@ -80,7 +81,7 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
   return Arr.every(view.machines, hasNoAgents) ? Option.some('nothingRunning') : Option.none()
 }
 
-const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
+export const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
   if (isOffline(herdMachine.machine)) {
     return SectionBody.Offline()
   }
@@ -105,13 +106,6 @@ export const herdLayout = (view: HerdView): HerdLayout => {
     })),
   }
 }
-
-export const agentTitleOrPane = (row: AgentRow): string =>
-  pipe(
-    agentTitle(row),
-    Option.liftPredicate(Str.isNonEmpty),
-    Option.getOrElse(() => row.pane),
-  )
 
 export const findAgent = (
   view: HerdView,

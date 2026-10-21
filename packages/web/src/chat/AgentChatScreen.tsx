@@ -2,10 +2,11 @@ import { useAtomMount, useAtomValue } from '@effect/atom-react/Hooks'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
+import { agentTitleOrPane } from '@crook/domain/AgentRow'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { herdAtom, OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import { StatusWord } from '@crook/web/components/StatusWord'
-import { agentTitleOrPane, findAgent } from '@crook/web/herd/HerdLayout'
+import { findAgent } from '@crook/web/herd/HerdLayout'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
 
 export function AgentChatScreen({ machine, pane }: { machine: MachineId; pane: PaneId }) {

@@ -1,4 +1,5 @@
 import { describe, expect, it, layer } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -8,18 +9,28 @@ import * as Stream from 'effect/Stream'
 import * as RpcTest from 'effect/rpc/RpcTest'
 
 import {
+  AgentStarted,
+  AnswerAsk,
+  Approve,
+  Choose,
   ClosePane,
+  CreateWorktree,
+  Decline,
   InputDelivered,
   PaneClosed,
+  PaneCommand,
   PaneRenamed,
   Prompt,
   RenameAgent,
   SendKeys,
+  StartAgent,
+  targetPane,
 } from '@crook/domain/Command'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
+  AskId,
   ClaudeSessionId,
   HerdrConnectionId,
   IdempotencyKey,
@@ -29,6 +40,7 @@ import {
   TranscriptOffset,
 } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { NotificationSettings, defaultNotificationPrefs } from '@crook/domain/Notifications'
 import {
   PaneTranscript,
   TranscriptChunk,
@@ -38,14 +50,29 @@ import {
 import { AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { ClientApi, MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
 import {
+  AgentNotStarted,
+  AskDialogUnreadable,
+  AskNotPending,
+  AskOptionUnavailable,
   CommandDeliveryUnknown,
   CommandId,
+  DeclineMessageUndelivered,
+  QuestionnaireUnsupported,
   CommandResult,
+  FolderNotFound,
+  HerdrAnswerUnreadable,
   MachineOffline,
   PaneNotAgent,
   PaneNotCreatedByCrook,
   RoutedCommand,
+  TaskNotDelivered,
 } from '@crook/protocol/Commands'
+import {
+  HarkNotConfigured,
+  HarkRateLimited,
+  HarkRefused,
+  TestNotificationFailure,
+} from '@crook/protocol/Hark'
 import {
   TranscriptDemand,
   TranscriptOutOfStep,
@@ -70,6 +97,7 @@ const emptyState = (machine: MachineId) =>
     tabs: [],
     panes: [],
     agents: [],
+    places: [],
   })
 
 const roundTrip = <Codec extends Schema.Codec<unknown, unknown>>(
@@ -134,10 +162,10 @@ const clientApiHandlers = ClientApi.toLayer({
   SetPinned: ({ machine, pane: pinnedPane, pinned }) =>
     pinned ? Effect.void : Effect.fail(new PaneNotInHerd({ machine, pane: pinnedPane })),
   SendCommand: ({ machine, command }) =>
-    machine === laptop
+    machine === laptop && Schema.is(PaneCommand)(command)
       ? Effect.succeed(
           new InputDelivered({
-            pane: command.pane,
+            pane: targetPane(command),
             terminal: TerminalId.make('term_1'),
             stateChangeSeq: 0,
           }),
@@ -147,6 +175,10 @@ const clientApiHandlers = ClientApi.toLayer({
     machine === laptop
       ? Stream.make(opened, firstChunk)
       : Stream.fail(new TranscriptReadFailed({ detail: 'EACCES' })),
+  WatchNotificationSettings: () =>
+    Stream.make(new NotificationSettings({ prefs: defaultNotificationPrefs, delivery: 'noToken' })),
+  SetNotificationPref: () => Effect.void,
+  SendTestNotification: () => Effect.fail(new HarkNotConfigured()),
 })
 
 layer(agentLinkHandlers)('AgentLink', (rpc) => {
@@ -312,4 +344,141 @@ describe('Command wire shapes', () => {
     expect(roundTrip(CommandResult, closed)).toEqual(closed)
     expect(roundTrip(CommandResult, notOurs)).toEqual(notOurs)
   })
+
+  it('carries every answer to an ask, and every way it can fail, through JSON', () => {
+    const ask = AskId.make('toolu_01XXC3')
+    const answers = [
+      new Approve({}),
+      new Decline({ message: Option.some('use printf') }),
+      new Decline({ message: Option.none() }),
+      new Choose({ answer: 'Green' }),
+    ].map(
+      (answer, index) =>
+        new RoutedCommand({
+          id: CommandId.make(10 + index),
+          key: IdempotencyKey.make(`answer-${index}`),
+          command: new AnswerAsk({ pane, ask, answer }),
+        }),
+    )
+    const failures = [
+      new AskNotPending({ pane, ask }),
+      new AskDialogUnreadable({ pane }),
+      new AskOptionUnavailable({ pane, option: 'Purple' }),
+      new QuestionnaireUnsupported({ pane }),
+      new DeclineMessageUndelivered({ pane, reason: 'herdr did not confirm the prompt in time' }),
+    ].map((failure) => Result.fail(failure))
+
+    expect(answers.map((routed) => roundTrip(RoutedCommand, routed))).toEqual(answers)
+    expect(failures.map((result) => roundTrip(CommandResult, result))).toEqual(failures)
+  })
+
+  it('carries a launch, its receipt and every way it fails through JSON', () => {
+    const start = new RoutedCommand({
+      id: CommandId.make(10),
+      key: IdempotencyKey.make('action-4'),
+      command: new StartAgent({
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        task: Option.some('continue'),
+      }),
+    })
+    const worktree = new RoutedCommand({
+      id: CommandId.make(11),
+      key: IdempotencyKey.make('action-5'),
+      command: new CreateWorktree({
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        branch: 'feat/jc-111-new-agent',
+        task: Option.none(),
+      }),
+    })
+    const started = Result.succeed(new AgentStarted({ pane: PaneId.make('w2:p1') }))
+    const missing = Result.fail(new FolderNotFound({ folder: '/home/jliocsar/gone' }))
+    const notStarted = Result.fail(
+      new AgentNotStarted({
+        folder: '/home/jliocsar/Projects/crook-feat-jc-111-new-agent',
+        worktree: Option.some('/home/jliocsar/Projects/crook-feat-jc-111-new-agent'),
+        code: 'timeout',
+        detail: 'timed out waiting for agent state',
+      }),
+    )
+    const notDelivered = Result.fail(
+      new TaskNotDelivered({
+        pane: PaneId.make('w2:p1'),
+        code: 'agent_prompt_stalled',
+        detail: 'agent did not start working',
+      }),
+    )
+    const unreadable = Result.fail(
+      new HerdrAnswerUnreadable({
+        method: 'session.snapshot',
+        issue: 'Missing key at ["snapshot"]["workspaces"]',
+      }),
+    )
+
+    expect(roundTrip(RoutedCommand, start)).toEqual(start)
+    expect(roundTrip(RoutedCommand, worktree)).toEqual(worktree)
+    expect(roundTrip(CommandResult, started)).toEqual(started)
+    expect(roundTrip(CommandResult, missing)).toEqual(missing)
+    expect(roundTrip(CommandResult, notStarted)).toEqual(notStarted)
+    expect(roundTrip(CommandResult, notDelivered)).toEqual(notDelivered)
+    expect(roundTrip(CommandResult, unreadable)).toEqual(unreadable)
+  })
+
+  it('mentions a worktree left on disk only when the launch made one', () => {
+    const inFolder = new AgentNotStarted({
+      folder: '/home/jliocsar/Projects/crook',
+      worktree: Option.none(),
+      code: 'timeout',
+      detail: 'timed out waiting for agent state',
+    })
+    const inWorktree = new AgentNotStarted({
+      folder: "/home/jliocsar/Julio's Projects/crook-fix-reconnect",
+      worktree: Option.some("/home/jliocsar/Julio's Projects/crook-fix-reconnect"),
+      code: 'timeout',
+      detail: 'timed out waiting for agent state',
+    })
+
+    expect(inFolder.message).not.toContain('worktree')
+    expect(inWorktree.message).toContain(
+      String.raw`git worktree remove '/home/jliocsar/Julio'\''s Projects/crook-fix-reconnect'`,
+    )
+  })
+})
+
+describe('Notification wire shapes', () => {
+  it('carries the notification settings and each test-notification failure through JSON', () => {
+    const settings = new NotificationSettings({
+      prefs: { ...defaultNotificationPrefs, finished: false },
+      delivery: 'ready',
+    })
+    const failures = [
+      new HarkNotConfigured(),
+      new HarkRefused({ status: 403, explanation: Option.some('Missing scope') }),
+      new HarkRateLimited({ retryAfterSeconds: Option.some(60) }),
+      new HarkRateLimited({ retryAfterSeconds: Option.none() }),
+    ]
+
+    expect(roundTrip(NotificationSettings, settings)).toEqual(settings)
+    expect(Arr.map(failures, (failure) => roundTrip(TestNotificationFailure, failure))).toEqual(
+      failures,
+    )
+  })
+})
+
+layer(clientApiHandlers)('ClientApi notification settings', (rpc) => {
+  rpc.effect('streams the settings and carries why a test notification failed', () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(ClientApi)
+      const settings = yield* client.WatchNotificationSettings().pipe(Stream.runCollect)
+      const testFailure = yield* client.SendTestNotification().pipe(Effect.flip)
+
+      yield* client.SetNotificationPref({ event: 'finished', enabled: false })
+
+      expect(settings).toEqual([
+        new NotificationSettings({ prefs: defaultNotificationPrefs, delivery: 'noToken' }),
+      ])
+      expect(testFailure).toBeInstanceOf(HarkNotConfigured)
+    }),
+  )
 })

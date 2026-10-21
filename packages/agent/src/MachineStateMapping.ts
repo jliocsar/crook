@@ -8,6 +8,7 @@ import * as Str from 'effect/String'
 import * as Struct from 'effect/Struct'
 
 import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import type { Ask } from '@crook/domain/Ask'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
@@ -21,6 +22,7 @@ import {
 } from '@crook/domain/Ids'
 import { MachineState, MachineStateVersion, isHerdrLost } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
+import type { Place } from '@crook/domain/Place'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
 import type { AgentInfo, PaneInfo, TabInfo, WorkspaceInfo } from '@crook/herdr/Records'
@@ -29,6 +31,7 @@ export interface ResolvedAgent {
   readonly info: AgentInfo
   readonly claudeSession: Option.Option<ClaudeSessionId>
   readonly branch: Option.Option<string>
+  readonly ask: Option.Option<Ask>
 }
 
 export interface HerdReading {
@@ -40,13 +43,17 @@ export interface HerdReading {
   readonly createdPanes: HashSet.HashSet<PaneId>
 }
 
-interface MachineStateContents {
+export interface HerdContents {
   readonly herdrVersion: string
   readonly herdr: HerdrLink
   readonly workspaces: readonly Workspace[]
   readonly tabs: readonly Tab[]
   readonly panes: readonly Pane[]
   readonly agents: readonly AgentRow[]
+}
+
+export interface MachineStateContents extends HerdContents {
+  readonly places: readonly Place[]
 }
 
 const isSameMachineState = Schema.toEquivalence(MachineState)
@@ -172,15 +179,16 @@ const toAgentRow =
       stateChangeSeq: info.state_change_seq,
       statusChangedAt: statusChangedAt(previous, carried, status, now),
       beforeHandoff: keptBeforeHandoff(carried, status),
+      ask: Option.filter(resolved.ask, () => status === 'blocked'),
     })
   }
 
-const herdContents = (
+export const herdContents = (
   previousAgents: readonly AgentRow[],
   connection: HerdrConnectionId,
   reading: HerdReading,
   now: DateTime.Utc,
-): MachineStateContents => ({
+): HerdContents => ({
   herdrVersion: reading.herdrVersion,
   herdr: new HerdrLink({ connection, lostAt: Option.none() }),
   workspaces: reading.workspaces.map(toWorkspace),
@@ -209,23 +217,13 @@ const withChangedContents = (
 
 export const initialMachineState = (
   machine: MachineId,
-  connection: HerdrConnectionId,
-  reading: HerdReading,
-  now: DateTime.Utc,
-): MachineState =>
-  new MachineState({
-    machine,
-    version: MachineStateVersion.make(0),
-    ...herdContents([], connection, reading, now),
-  })
+  contents: MachineStateContents,
+): MachineState => new MachineState({ machine, version: MachineStateVersion.make(0), ...contents })
 
 export const nextMachineState = (
   previous: MachineState,
-  connection: HerdrConnectionId,
-  reading: HerdReading,
-  now: DateTime.Utc,
-): Option.Option<MachineState> =>
-  withChangedContents(previous, herdContents(previous.agents, connection, reading, now))
+  contents: MachineStateContents,
+): Option.Option<MachineState> => withChangedContents(previous, contents)
 
 export const withCreatedPanes = (
   previous: MachineState,
@@ -243,6 +241,7 @@ export const withCreatedPanes = (
           Struct.evolve(row, { createdByCrook: () => HashSet.has(createdPanes, row.pane) }),
         ),
     ),
+    places: previous.places,
   })
 
 export const herdrLostState = (
@@ -261,6 +260,7 @@ export const herdrLostState = (
           tabs: state.tabs,
           panes: state.panes,
           agents: state.agents,
+          places: state.places,
         }),
     ),
   )
