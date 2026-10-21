@@ -17,14 +17,17 @@ import * as SqlClient from 'effect/sql/SqlClient'
 
 import { REDACTED } from '@crook/domain/Audit'
 import {
+  AnswerAsk,
+  Approve,
   ClosePane,
+  Decline,
   InputDelivered,
   PaneRenamed,
   Prompt,
   RenameAgent,
   SendKeys,
 } from '@crook/domain/Command'
-import { IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
+import { AskId, IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import {
   BrowserLoginRequired,
   ExeDevIdentity,
@@ -47,6 +50,7 @@ import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protoc
 import { ClientApi, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import {
+  AskNotPending,
   type CommandResult,
   MachineOffline,
   PaneNotAgent,
@@ -75,6 +79,7 @@ import {
 
 const EVIL_ORIGIN = 'https://evil.example'
 const STRANGER = 'someone@example.com'
+const ASK = AskId.make('toolu_01XXC3bash')
 
 const stateOf = (machine: MachineId, version: number) =>
   machineStateWith(machine, version, [agentRow()])
@@ -285,6 +290,8 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
             RenameAgent: (rename) =>
               Result.succeed(new PaneRenamed({ pane: rename.pane, label: rename.label })),
             ClosePane: (close) => Result.fail(new PaneNotCreatedByCrook({ pane: close.pane })),
+            AnswerAsk: (answer) =>
+              Result.fail(new AskNotPending({ pane: answer.pane, ask: answer.ask })),
           }),
         ),
       )
@@ -297,11 +304,19 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
       const refused = yield* phone
         .SendCommand({ machine, key, command: new SendKeys({ pane, keys: ['esc'] }) })
         .pipe(Effect.flip)
+      const stale = yield* phone
+        .SendCommand({
+          machine,
+          key,
+          command: new AnswerAsk({ pane, ask: ASK, answer: new Approve({}) }),
+        })
+        .pipe(Effect.flip)
 
       expect(receipt).toEqual(
         new InputDelivered({ pane, terminal: TerminalId.make('term_1'), stateChangeSeq: 4 }),
       )
       expect(refused).toEqual(new PaneNotAgent({ pane }))
+      expect(stale).toEqual(new AskNotPending({ pane, ask: ASK }))
     }),
   )
 
@@ -365,6 +380,14 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
               RenameAgent: (rename) =>
                 Result.succeed(new PaneRenamed({ pane: rename.pane, label: rename.label })),
               ClosePane: (close) => Result.fail(new PaneNotCreatedByCrook({ pane: close.pane })),
+              AnswerAsk: (answer) =>
+                Result.succeed(
+                  new InputDelivered({
+                    pane: answer.pane,
+                    terminal: TerminalId.make('term_1'),
+                    stateChangeSeq: 4,
+                  }),
+                ),
             }),
           ),
         )
@@ -381,6 +404,15 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         const notOurs = yield* phone
           .SendCommand({ machine, key, command: new ClosePane({ pane, confirmed: false }) })
           .pipe(Effect.flip)
+        yield* phone.SendCommand({
+          machine,
+          key,
+          command: new AnswerAsk({
+            pane,
+            ask: ASK,
+            answer: new Decline({ message: Option.some('use printf instead') }),
+          }),
+        })
         const audited = yield* auditedOn(machine)
 
         expect(notOurs).toEqual(new PaneNotCreatedByCrook({ pane }))
@@ -410,6 +442,14 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
             Option.some(key),
             'failed',
             Option.some('PaneNotCreatedByCrook'),
+          ],
+          [
+            OWNER,
+            'AnswerAsk',
+            { pane, ask: ASK, answer: 'Decline', text: REDACTED },
+            Option.some(key),
+            'succeeded',
+            Option.none(),
           ],
         ])
       }),

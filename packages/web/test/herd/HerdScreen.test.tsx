@@ -6,6 +6,8 @@ import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
+import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
+import { AskId } from '@crook/domain/Ids'
 import { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
@@ -47,6 +49,31 @@ describe('HerdScreen', () => {
       expect(screen.getByText('feat/jc-93')).toBeDefined()
       expect(screen.getByText('3m')).toBeDefined()
       expect(screen.getByText('2h')).toBeDefined()
+    }),
+  )
+
+  it.effect('shows what a blocked agent asks in place of where it runs', () =>
+    Effect.gen(function* () {
+      const ask = new PermissionAsk({
+        id: AskId.make('toolu_01XXC3'),
+        source: 'hook',
+        tool: 'Bash',
+        plugin: Option.none(),
+        action: new RunCommand({ command: 'bun run lint' }),
+        options: [],
+        dialog: Option.none(),
+      })
+
+      yield* renderApp(
+        '/',
+        liveWith(
+          herd([machine(LAPTOP, [agent('w1:p2', 'blocked', { title: 'Wire the hub link', ask })])]),
+        ),
+      )
+      const summary = yield* Effect.promise(() => screen.findByText('Bash bun run lint'))
+
+      expect(summary.getAttribute('data-slot')).toBe('ask-summary')
+      expect(summary.closest('[data-slot="agent-card"]')?.textContent).not.toContain('crook · web')
     }),
   )
 

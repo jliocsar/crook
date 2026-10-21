@@ -1,0 +1,33 @@
+/home/jliocsar/Projects/crook/tmp/spikes/scratch-80/launc
+h.sh codemode /home/jliocsar/Projects/crook/tmp/spikes/sc
+ratch-80/hooks-6.jsonl f3a79029-c60f-4e4a-ab85-2fc88cbde2
+3e /home/jliocsar/Projects/claude-codemode
+λ ~/Projects/crook/tmp/spikes/scratch-80/sandbox/ /home/j
+liocsar/Projects/crook/tmp/spikes/scratch-80/launch.sh co
+demode /home/jliocsar/Projects/crook/tmp/spikes/scratch-8
+0/hooks-6.jsonl f3a79029-c60f-4e4a-ab85-2fc88cbde23e /hom
+e/jliocsar/Projects/claude-codemode
+ ▐▛███▛█   Claude Code v2.1.303
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   ~/…/crook/tmp/spikes/scratch-80/sandbox
+
+
+❯ Run exactly this shell command and nothing else: echo
+  cm6-bash > cm6-bash.txt
+
+● codemode - run (MCP)(code: "const r = await
+                      tools.call(\"Bash\", { command:
+                      \"echo cm6-bash > cm6-bash.txt\"
+                      }); return r;")
+
+─────────────────────────────────────────────────────────
+ Bash command · from the codemode plugin
+ Run shell command
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ echo cm6-bash > cm6-bash.txt
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+
+ Esc to cancel · Tab to amend

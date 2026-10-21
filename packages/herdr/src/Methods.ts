@@ -44,6 +44,22 @@ export const PaneCloseMethod = makeMethod('pane.close', {
   result: Schema.Struct({ type: Schema.Literal('ok') }),
 })
 
+export const PaneReadSource = Schema.Literals([
+  'visible',
+  'recent',
+  'recent_unwrapped',
+  'detection',
+])
+export type PaneReadSource = typeof PaneReadSource.Type
+
+export const PaneReadMethod = makeMethod('pane.read', {
+  params: Schema.Struct({ pane_id: Schema.String, source: PaneReadSource }),
+  result: Schema.Struct({
+    type: Schema.Literal('pane_read'),
+    read: Schema.Struct({ pane_id: Schema.String, text: Schema.String, truncated: Schema.Boolean }),
+  }),
+})
+
 export const PaneProcessInfoMethod = makeMethod('pane.process_info', {
   params: Schema.Struct({ pane_id: Schema.String }),
   result: Schema.Struct({

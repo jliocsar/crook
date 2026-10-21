@@ -150,6 +150,11 @@ writes `@crook/domain/Ids`, the same leaf-only rule the `effect` imports follow.
 tests import it through that specifier too; the package resolves itself through its `exports`
 (measured).
 
+A fixture that another member's tests read stays in the member that owns it, exported as
+`"./fixtures/*": "./test/fixtures/*"`, and the reader turns it into a path with
+`new URL(import.meta.resolve('@crook/<member>/fixtures/…')).pathname`, which resolves under
+`bun --bun vitest` (measured). A copy drifts from the capture it was taken from.
+
 ## Rules
 
 Leaf imports only: `effect/Effect`, `effect/cli/Command`.
@@ -253,6 +258,21 @@ pipeline as the body of an `Effect.fn` generator, `return yield* stream.pipe(Str
 is honest code that passes; do not spell the catch as a `catchTags` list to dodge it.
 :::
 
+:::tip
+Every end of an effect `Socket`, a clean close included, surfaces as a `SocketError` whose reason is
+`SocketCloseError` (read in its source; a peer's FIN is code 1000). A stream that should simply
+end there catches that reason with `Stream.catchReason(…, () => Stream.empty)`, inside a
+`yield*`; `begone-slop/no-silent-error-swallow` rejects the `Effect.catchReason` that returns
+`Effect.void` (measured).
+
+A socket server built without `allowHalfOpen: true` closes a connection the moment it reads the
+client's end, before its handler has done anything with the bytes; with it, the connection closes
+when the handler's scope does, so a client that waits for the close knows the handler finished
+(measured: a handler sleeping 300 ms held its client 312 ms with it, 11.5 ms without). The handler
+acquires the reader in its own scope (`Socket.readerBytes`) for that to hold; `Socket.toStream`
+scopes the reader to the stream and closes the connection when the stream ends.
+:::
+
 :::warning
 An effect `Cache` lookup that every caller abandons is interrupted and dropped from the cache, so
 the next `get` runs it again (measured). Where running twice is the bug — anything that types into
@@ -262,6 +282,11 @@ a terminal — make the `get` uninterruptible, so a started lookup always finish
 :::tip
 A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
 `effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
+
+`Arr.filterMap` takes a function returning a `Result`, not an `Option`, in `effect@4.0.5` (measured: a
+type error). Keep an `Option` pipeline on `Arr.flatMap` or `Arr.getSomes`. `Arr.replicate` and
+`Arr.makeBy` clamp the count to at least 1 (read in their source), so a count that can be zero is
+guarded before the call.
 
 `RpcTest` wires client to server without serialization (read in its source), so it cannot catch a
 wire type that fails to encode. Round-trip such a schema through
@@ -386,6 +411,8 @@ The ones with behaviour worth knowing before you trip on them:
 - `statement-order` — imports > type-defs > constants > functions > variables > modules > exports.
   Single-line `SCREAMING_CASE` constants form two groups, private above exported, no blank line
   inside a group and one around it. A private one may sit below an exported one only if it reads it.
+- `statement-order` ranks a module-level `SCREAMING_SNAKE_CASE` array or `Map` with the single-line
+  constants, so a private one sits above the exported group like a primitive does (measured).
 - `expect-padding` — a run of `expect()` is ONE block: blank line around it, none inside. Applies to
   test files only, via an `.oxlintrc.json` override.
 - `padding-line-between-statements` — the vertical-spacing spec, ported from `@stylistic`; oxlint has
@@ -476,7 +503,9 @@ Checking the web app against real data, measured:
   `HERDR_SOCKET_PATH` at the named session's socket, or every command lands in the user's own
   session. Never use the default one.
 - `herdr pane report-agent` puts an agent with a chosen status in any shell pane, and
-  `release-agent` takes it out, so a herd in every state needs no running Claude.
+  `release-agent` takes it out, so a herd in every state needs no running Claude. Such a fake
+  takes no keys: `agent.send_keys` answers it `agent_not_ready`, so key delivery is tested
+  against scripted herdr responses instead.
 - The agent takes an agent's title from the pane's terminal title before herdr's own `title`. An
   OSC 0 escape sets it, and a shell prompt resets it, so hold the pane in a long `sleep` after it.
 - A browser tab shows the install screen. An init script that makes `navigator.standalone` true

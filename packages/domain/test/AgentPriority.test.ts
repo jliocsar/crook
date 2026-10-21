@@ -43,6 +43,7 @@ const agent = (pane: string, status: AgentStatus, minutesIn: number) =>
     stateChangeSeq: 1,
     statusChangedAt: DateTime.addDuration(START, Duration.minutes(minutesIn)),
     beforeHandoff: Option.none(),
+    ask: Option.none(),
   })
 
 const machineWith = (

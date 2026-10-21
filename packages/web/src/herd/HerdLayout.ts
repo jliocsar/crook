@@ -4,7 +4,7 @@ import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
 import { needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
-import type { AgentRow } from '@crook/domain/AgentRow'
+import { type AgentRow, pendingAskSummary } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
@@ -16,6 +16,7 @@ export interface AgentCardModel {
   readonly needsYou: boolean
   readonly workspace: string
   readonly tab: string
+  readonly askSummary: Option.Option<string>
 }
 
 export type SectionBody = Data.TaggedEnum<{
@@ -62,6 +63,7 @@ const agentCards = (herdMachine: HerdMachine): AgentCardModel[] => {
     needsYou: loud(row),
     workspace: labelOf(workspaces, row.workspace),
     tab: labelOf(tabs, row.tab),
+    askSummary: pendingAskSummary(row),
   }))
 }
 

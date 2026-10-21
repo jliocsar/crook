@@ -2,7 +2,7 @@ import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 
 import { AgentRow } from '@crook/domain/AgentRow'
-import { PaneId } from '@crook/domain/Ids'
+import { AskId, PaneId } from '@crook/domain/Ids'
 
 const WITHOUT_CONTROL_CHARACTERS = /^\P{Cc}*$/u
 
@@ -33,7 +33,28 @@ export class ClosePane extends Schema.TaggedClass<ClosePane>()('ClosePane', {
   confirmed: Schema.Boolean,
 }) {}
 
-export const Command = Schema.Union([Prompt, SendKeys, RenameAgent, ClosePane])
+export class Approve extends Schema.TaggedClass<Approve>()('Approve', {}) {}
+
+export class ApproveAlways extends Schema.TaggedClass<ApproveAlways>()('ApproveAlways', {}) {}
+
+export class Decline extends Schema.TaggedClass<Decline>()('Decline', {
+  message: Schema.OptionFromNullOr(Schema.NonEmptyString),
+}) {}
+
+export class Choose extends Schema.TaggedClass<Choose>()('Choose', {
+  answer: Schema.NonEmptyString,
+}) {}
+
+export const AskAnswer = Schema.Union([Approve, ApproveAlways, Decline, Choose])
+export type AskAnswer = typeof AskAnswer.Type
+
+export class AnswerAsk extends Schema.TaggedClass<AnswerAsk>()('AnswerAsk', {
+  pane: PaneId,
+  ask: AskId,
+  answer: AskAnswer,
+}) {}
+
+export const Command = Schema.Union([Prompt, SendKeys, RenameAgent, ClosePane, AnswerAsk])
 export type Command = typeof Command.Type
 
 export class InputDelivered extends Schema.TaggedClass<InputDelivered>()('InputDelivered', {
@@ -63,6 +84,7 @@ export const targetPane = (command: Command): PaneId =>
       SendKeys: (sendKeys) => sendKeys.pane,
       RenameAgent: (rename) => rename.pane,
       ClosePane: (close) => close.pane,
+      AnswerAsk: (answer) => answer.pane,
     }),
   )
 

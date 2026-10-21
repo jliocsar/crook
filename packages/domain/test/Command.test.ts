@@ -6,8 +6,10 @@ import * as Schema from 'effect/Schema'
 
 import { AgentRow, agentTitle } from '@crook/domain/AgentRow'
 import {
+  AnswerAsk,
   ClosePane,
   Command,
+  Decline,
   InputDelivered,
   RenameAgent,
   SendKeys,
@@ -15,7 +17,7 @@ import {
   interrupt,
   targetPane,
 } from '@crook/domain/Command'
-import { PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import { AskId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 
 const pane = PaneId.make('w1:p1')
 const terminal = TerminalId.make('term_65e4959ec32112')
@@ -42,6 +44,7 @@ const rowAt = (
     stateChangeSeq,
     statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
     beforeHandoff: Option.none(),
+    ask: Option.none(),
   })
 
 describe('Command', () => {
@@ -63,6 +66,38 @@ describe('Command', () => {
 
   it('interrupts with the esc key herdr names canonically', () => {
     expect(interrupt(pane)).toEqual(new SendKeys({ pane, keys: ['esc'] }))
+  })
+})
+
+describe('AnswerAsk', () => {
+  it('decodes an answer to an ask and targets its pane', () => {
+    const decoded = Schema.decodeSync(Command)({
+      _tag: 'AnswerAsk',
+      pane: 'w1:p1',
+      ask: 'toolu_01XXC3',
+      answer: { _tag: 'Decline', message: 'use printf' },
+    })
+
+    expect(decoded).toEqual(
+      new AnswerAsk({
+        pane,
+        ask: AskId.make('toolu_01XXC3'),
+        answer: new Decline({ message: Option.some('use printf') }),
+      }),
+    )
+    expect(targetPane(decoded)).toBe(pane)
+  })
+
+  it('rejects a decline with an empty message and a choice of nothing', () => {
+    const decode = Schema.decodeUnknownResult(Command)
+    const emptyDecline = { _tag: 'Decline', message: '' }
+    const emptyChoice = { _tag: 'Choose', answer: '' }
+
+    expect(
+      [emptyDecline, emptyChoice].map((answer) =>
+        Result.isFailure(decode({ _tag: 'AnswerAsk', pane: 'w1:p1', ask: 'toolu_1', answer })),
+      ),
+    ).toEqual([true, true])
   })
 })
 

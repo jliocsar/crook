@@ -61,6 +61,7 @@ const rowWith = (
     stateChangeSeq,
     statusChangedAt: DateTime.makeUnsafe(0),
     beforeHandoff: Option.none(),
+    ask: Option.none(),
     ...fields,
   })
 

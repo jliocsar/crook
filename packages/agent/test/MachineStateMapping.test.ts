@@ -11,7 +11,9 @@ import {
   withCreatedPanes,
 } from '@crook/agent/MachineStateMapping'
 import { AgentRow, StatusBeforeHandoff, seenMarkOf } from '@crook/domain/AgentRow'
+import { UnknownAsk } from '@crook/domain/Ask'
 import {
+  AskId,
   ClaudeSessionId,
   HerdrConnectionId,
   MachineId,
@@ -82,6 +84,7 @@ const handoffReading = (
       }),
       claudeSession,
       branch: Option.none(),
+      ask: Option.none(),
     },
   ]),
   tabs: [tabViewedIf(FRONT_TAB, viewedTab), tabViewedIf(BACKGROUND_TAB, viewedTab)],
@@ -154,7 +157,12 @@ describe('MachineStateMapping', () => {
       MACHINE,
       CONNECTION,
       reading([
-        { info: agentInfo(), claudeSession: Option.some(SESSION), branch: Option.some('main') },
+        {
+          info: agentInfo(),
+          claudeSession: Option.some(SESSION),
+          branch: Option.some('main'),
+          ask: Option.none(),
+        },
       ]),
       STARTED,
     )
@@ -183,6 +191,7 @@ describe('MachineStateMapping', () => {
         stateChangeSeq: 14162,
         statusChangedAt: STARTED,
         beforeHandoff: Option.none(),
+        ask: Option.none(),
       }),
     ])
   })
@@ -200,6 +209,7 @@ describe('MachineStateMapping', () => {
           }),
           claudeSession: Option.none(),
           branch: Option.none(),
+          ask: Option.none(),
         },
       ]),
       STARTED,
@@ -212,21 +222,29 @@ describe('MachineStateMapping', () => {
 
   it('carries the name the pane was given in herdr, and none for a blank or absent one', () => {
     const agents = [
-      { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
       {
         info: agentInfo({ pane_id: 'w1:p2' }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p3' }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p4' }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
     ]
     const state = initialMachineState(
@@ -253,11 +271,17 @@ describe('MachineStateMapping', () => {
 
   it('marks the panes crook created, and bumps the version only when that record changes', () => {
     const agents = [
-      { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
       {
         info: agentInfo({ pane_id: 'w1:p2' }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
     ]
     const created = HashSet.make(PaneId.make('w1:p2'))
@@ -275,8 +299,38 @@ describe('MachineStateMapping', () => {
     expect(forgotten.agents.map((row) => row.createdByCrook)).toEqual([false, false])
   })
 
+  it('publishes an ask only while the agent it belongs to is blocked', () => {
+    const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: '' })
+    const blocked = {
+      info: agentInfo({ agent_status: 'blocked' }),
+      claudeSession: Option.none(),
+      branch: Option.none(),
+      ask: Option.some(ask),
+    }
+    const working = { ...blocked, info: agentInfo({ agent_status: 'working' }) }
+    const undetected = {
+      ...blocked,
+      info: agentInfo({ agent_status: 'blocked', state_change_seq: 0 }),
+    }
+    const asksOf = (agents: HerdReading['agents']) =>
+      initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED).agents.map(
+        (row) => row.ask,
+      )
+
+    expect(asksOf([blocked])).toEqual([Option.some(ask)])
+    expect(asksOf([working])).toEqual([Option.none()])
+    expect(asksOf([undetected])).toEqual([Option.none()])
+  })
+
   it('keeps the version when a re-read changes nothing', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
     const previous = initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED)
 
     expect(nextMachineState(previous, CONNECTION, reading(agents), LATER)).toEqual(Option.none())
@@ -287,11 +341,17 @@ describe('MachineStateMapping', () => {
       MACHINE,
       CONNECTION,
       reading([
-        { info: agentInfo(), claudeSession: Option.none(), branch: Option.none() },
+        {
+          info: agentInfo(),
+          claudeSession: Option.none(),
+          branch: Option.none(),
+          ask: Option.none(),
+        },
         {
           info: agentInfo({ pane_id: 'w1:p2' }),
           claudeSession: Option.none(),
           branch: Option.none(),
+          ask: Option.none(),
         },
       ]),
       STARTED,
@@ -305,11 +365,13 @@ describe('MachineStateMapping', () => {
             info: agentInfo({ agent_status: 'blocked' }),
             claudeSession: Option.none(),
             branch: Option.none(),
+            ask: Option.none(),
           },
           {
             info: agentInfo({ pane_id: 'w1:p2' }),
             claudeSession: Option.none(),
             branch: Option.none(),
+            ask: Option.none(),
           },
         ]),
         LATER,
@@ -327,7 +389,14 @@ describe('MachineStateMapping', () => {
     const previous = initialMachineState(
       MACHINE,
       CONNECTION,
-      reading([{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]),
+      reading([
+        {
+          info: agentInfo(),
+          claudeSession: Option.none(),
+          branch: Option.none(),
+          ask: Option.none(),
+        },
+      ]),
       STARTED,
     )
     const next = Option.getOrThrow(
@@ -339,6 +408,7 @@ describe('MachineStateMapping', () => {
             info: agentInfo({ terminal_title_stripped: Option.some('MEM-690 mobile cut') }),
             claudeSession: Option.none(),
             branch: Option.none(),
+            ask: Option.none(),
           },
         ]),
         LATER,
@@ -350,7 +420,14 @@ describe('MachineStateMapping', () => {
   })
 
   it('bumps the version when herdr itself is updated under a running agent', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
     const previous = initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED)
     const next = Option.getOrThrow(
       nextMachineState(previous, CONNECTION, reading(agents, '0.9.5'), LATER),
@@ -380,7 +457,14 @@ describe('MachineStateMapping', () => {
   })
 
   it('bumps the version for a re-read over a new herdr connection even when the herd is unchanged', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
     const previous = initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED)
     const next = Option.getOrThrow(
       nextMachineState(previous, NEXT_CONNECTION, reading(agents), LATER),
@@ -391,7 +475,14 @@ describe('MachineStateMapping', () => {
   })
 
   it('marks the state lost once, on the same connection, until a read clears it', () => {
-    const agents = [{ info: agentInfo(), claudeSession: Option.none(), branch: Option.none() }]
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
     const previous = initialMachineState(MACHINE, CONNECTION, reading(agents), STARTED)
     const lost = Option.getOrThrow(herdrLostState(previous, LATER))
     const recovered = Option.getOrThrow(
@@ -419,6 +510,7 @@ describe('MachineStateMapping', () => {
         }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
     ]
     const after = [
@@ -431,6 +523,7 @@ describe('MachineStateMapping', () => {
         }),
         claudeSession: Option.none(),
         branch: Option.none(),
+        ask: Option.none(),
       },
     ]
     const previous = initialMachineState(MACHINE, CONNECTION, reading(before), STARTED)

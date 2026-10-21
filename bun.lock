@@ -38,6 +38,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@crook/domain": "workspace:*",
+        "diff": "8.0.4",
         "effect": "4.0.5",
       },
       "devDependencies": {

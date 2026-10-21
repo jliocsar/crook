@@ -21,6 +21,7 @@ const rowTitled = (pane: string, title: string, label: Option.Option<string> = O
     stateChangeSeq: 0,
     statusChangedAt: DateTime.makeUnsafe(0),
     beforeHandoff: Option.none(),
+    ask: Option.none(),
   })
 
 describe('agentTitleOrPane', () => {

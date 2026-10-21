@@ -8,6 +8,7 @@ import * as Str from 'effect/String'
 import * as Struct from 'effect/Struct'
 
 import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
+import type { Ask } from '@crook/domain/Ask'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
@@ -29,6 +30,7 @@ export interface ResolvedAgent {
   readonly info: AgentInfo
   readonly claudeSession: Option.Option<ClaudeSessionId>
   readonly branch: Option.Option<string>
+  readonly ask: Option.Option<Ask>
 }
 
 export interface HerdReading {
@@ -172,6 +174,7 @@ const toAgentRow =
       stateChangeSeq: info.state_change_seq,
       statusChangedAt: statusChangedAt(previous, carried, status, now),
       beforeHandoff: keptBeforeHandoff(carried, status),
+      ask: Option.filter(resolved.ask, () => status === 'blocked'),
     })
   }
 

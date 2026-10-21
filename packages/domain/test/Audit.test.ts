@@ -13,8 +13,18 @@ import {
   auditExit,
   commandAudit,
 } from '@crook/domain/Audit'
-import { ClosePane, Prompt, RenameAgent, SendKeys } from '@crook/domain/Command'
-import { PaneId } from '@crook/domain/Ids'
+import {
+  AnswerAsk,
+  Approve,
+  ApproveAlways,
+  Choose,
+  ClosePane,
+  Decline,
+  Prompt,
+  RenameAgent,
+  SendKeys,
+} from '@crook/domain/Command'
+import { AskId, PaneId } from '@crook/domain/Ids'
 
 const pane = PaneId.make('w1:p1')
 
@@ -43,6 +53,27 @@ describe('commandAudit', () => {
     expect(commandAudit(new ClosePane({ pane, confirmed: true }))).toEqual({
       operation: 'ClosePane',
       arguments: { pane: 'w1:p1', confirmed: true },
+    })
+  })
+
+  it('records which answer an ask got, keeping a decline message as text', () => {
+    const ask = AskId.make('toolu_01XXC3')
+    const answered = (answer: AnswerAsk['answer']) =>
+      commandAudit(new AnswerAsk({ pane, ask, answer })).arguments
+
+    expect(answered(new Approve({}))).toEqual({ pane, ask, answer: 'Approve' })
+    expect(answered(new ApproveAlways({}))).toEqual({ pane, ask, answer: 'ApproveAlways' })
+    expect(answered(new Decline({ message: Option.none() }))).toEqual({
+      pane,
+      ask,
+      answer: 'Decline',
+      text: null,
+    })
+    expect(answered(new Choose({ answer: 'Green' }))).toEqual({
+      pane,
+      ask,
+      answer: 'Choose',
+      choice: 'Green',
     })
   })
 

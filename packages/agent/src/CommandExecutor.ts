@@ -8,6 +8,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 
+import { AskAnswers } from '@crook/agent/AskAnswers'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandPolicy } from '@crook/agent/CommandPolicy'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
@@ -15,11 +16,13 @@ import { paneLabel } from '@crook/agent/MachineStateMapping'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import {
+  type AnswerAsk,
   type Command,
   type CommandReceipt,
   InputDelivered,
   PaneClosed,
   PaneRenamed,
+  targetPane,
 } from '@crook/domain/Command'
 import type { IdempotencyKey } from '@crook/domain/Ids'
 import { HerdrClient } from '@crook/herdr/HerdrClient'
@@ -32,6 +35,7 @@ import {
 import {
   type AgentCommandFailure,
   CommandDeliveryUnknown,
+  type DeclineMessageUndelivered,
   HerdrRefusedCommand,
   HerdrUnavailable,
   PaneNotAgent,
@@ -42,10 +46,26 @@ interface Execution {
   readonly command: Command
 }
 
+type DeliveryOutcome = Result.Result<CommandReceipt, CommandDeliveryUnknown>
+
 const SLOWEST_MEASURED_PROMPT = Duration.millis(403)
 
 export const COMMAND_REPLAY_CAPACITY = 1024
 export const HERDR_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_PROMPT, 10)
+
+const answerOf = (command: Command) =>
+  Match.value(command).pipe(
+    Match.tag('AnswerAsk', (answer) => Option.some(answer)),
+    Match.orElse(() => Option.none<AnswerAsk>()),
+  )
+
+const declineMessageOf = (command: Command) =>
+  Option.flatMap(answerOf(command), (answer) =>
+    Match.value(answer.answer).pipe(
+      Match.tag('Decline', (decline) => decline.message),
+      Match.orElse(() => Option.none<string>()),
+    ),
+  )
 
 const inputDelivered = (row: AgentRow): CommandReceipt =>
   new InputDelivered({
@@ -60,6 +80,28 @@ const make = Effect.gen(function* () {
   const sync = yield* MachineStateSync
   const createdPanes = yield* CreatedPanes
   const audit = yield* AuditLog
+  const answers = yield* AskAnswers
+
+  const afterDelivery = (
+    command: Command,
+    outcome: DeliveryOutcome,
+    budget: Duration.Duration,
+  ): Effect.Effect<
+    Result.Result<CommandReceipt, CommandDeliveryUnknown | DeclineMessageUndelivered>
+  > =>
+    Option.match(
+      Option.filter(declineMessageOf(command), () => Result.isSuccess(outcome)),
+      {
+        onNone: () => Effect.succeed(outcome),
+        onSome: (text) =>
+          answers.promptAfterDecline(targetPane(command), text, budget).pipe(
+            Effect.as(outcome),
+            Effect.catchTag('DeclineMessageUndelivered', (error) =>
+              Effect.succeed(Result.fail(error)),
+            ),
+          ),
+      },
+    )
 
   const deliver = (command: Command, row: AgentRow) =>
     Match.value(command).pipe(
@@ -87,6 +129,7 @@ const make = Effect.gen(function* () {
           herdr
             .request(PaneCloseMethod, { pane_id: close.pane })
             .pipe(Effect.as(new PaneClosed({ pane: close.pane }))),
+        AnswerAsk: (answer) => answers.answer(answer, row).pipe(Effect.as(inputDelivered(row))),
       }),
     )
 
@@ -106,10 +149,11 @@ const make = Effect.gen(function* () {
       }),
     )
 
-  const run = Effect.fn('CommandExecutor.run')(function* ({ command }: Execution) {
-    const row = yield* policy.admit(command)
-
-    return yield* deliver(command, row).pipe(
+  const delivered = (
+    command: Command,
+    row: AgentRow,
+  ): Effect.Effect<DeliveryOutcome, AgentCommandFailure> =>
+    deliver(command, row).pipe(
       Effect.map(Result.succeed),
       Effect.timeoutOrElse({
         duration: HERDR_DELIVERY_TIMEOUT,
@@ -125,10 +169,39 @@ const make = Effect.gen(function* () {
           Effect.fail(new HerdrRefusedCommand({ code: rejected.code, detail: rejected.detail })),
         HerdrRequestInvalid: (invalid) => Effect.die(invalid),
       }),
-      Effect.tap((outcome) =>
-        Result.match(outcome, { onFailure: () => Effect.void, onSuccess: settle }),
+    )
+
+  const runAdmitted = Effect.fn('CommandExecutor.runAdmitted')(function* (command: Command) {
+    const row = yield* policy.admit(command)
+
+    yield* Option.match(answerOf(command), {
+      onNone: () => Effect.void,
+      onSome: (answer) => answers.refuseAnswered(answer, row),
+    })
+
+    const [spent, outcome] = yield* Effect.timed(delivered(command, row))
+
+    yield* Option.match(answerOf(command), {
+      onNone: () => Effect.void,
+      onSome: (answer) => answers.remember(answer, row),
+    })
+
+    return yield* afterDelivery(
+      command,
+      outcome,
+      Duration.max(Duration.subtract(HERDR_DELIVERY_TIMEOUT, spent), Duration.zero),
+    ).pipe(
+      Effect.tap((settled) =>
+        Result.match(settled, { onFailure: () => Effect.void, onSuccess: settle }),
       ),
     )
+  })
+
+  const run = Effect.fn('CommandExecutor.run')(function* ({ command }: Execution) {
+    return yield* Option.match(answerOf(command), {
+      onNone: () => runAdmitted(command),
+      onSome: (answer) => answers.exclusive(answer.pane, runAdmitted(command)),
+    })
   })
 
   const outcomes = yield* Cache.makeWith(run, {
@@ -162,5 +235,7 @@ export class CommandExecutor extends Context.Service<
     ) => Effect.Effect<CommandReceipt, AgentCommandFailure>
   }
 >()('@crook/agent/CommandExecutor') {
-  static readonly layer = Layer.effect(this, make).pipe(Layer.provide(CommandPolicy.layer))
+  static readonly layer = Layer.effect(this, make).pipe(
+    Layer.provide([CommandPolicy.layer, AskAnswers.layer]),
+  )
 }

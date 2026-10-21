@@ -9,7 +9,11 @@ import * as Stream from 'effect/Stream'
 import * as RpcTest from 'effect/rpc/RpcTest'
 
 import {
+  AnswerAsk,
+  Approve,
+  Choose,
   ClosePane,
+  Decline,
   InputDelivered,
   PaneClosed,
   PaneRenamed,
@@ -21,6 +25,7 @@ import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
+  AskId,
   ClaudeSessionId,
   HerdrConnectionId,
   IdempotencyKey,
@@ -40,8 +45,13 @@ import {
 import { AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { ClientApi, MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
 import {
+  AskDialogUnreadable,
+  AskNotPending,
+  AskOptionUnavailable,
   CommandDeliveryUnknown,
   CommandId,
+  DeclineMessageUndelivered,
+  QuestionnaireUnsupported,
   CommandResult,
   MachineOffline,
   PaneNotAgent,
@@ -317,6 +327,33 @@ describe('Command wire shapes', () => {
     expect(roundTrip(CommandResult, renamed)).toEqual(renamed)
     expect(roundTrip(CommandResult, closed)).toEqual(closed)
     expect(roundTrip(CommandResult, notOurs)).toEqual(notOurs)
+  })
+
+  it('carries every answer to an ask, and every way it can fail, through JSON', () => {
+    const ask = AskId.make('toolu_01XXC3')
+    const answers = [
+      new Approve({}),
+      new Decline({ message: Option.some('use printf') }),
+      new Decline({ message: Option.none() }),
+      new Choose({ answer: 'Green' }),
+    ].map(
+      (answer, index) =>
+        new RoutedCommand({
+          id: CommandId.make(10 + index),
+          key: IdempotencyKey.make(`answer-${index}`),
+          command: new AnswerAsk({ pane, ask, answer }),
+        }),
+    )
+    const failures = [
+      new AskNotPending({ pane, ask }),
+      new AskDialogUnreadable({ pane }),
+      new AskOptionUnavailable({ pane, option: 'Purple' }),
+      new QuestionnaireUnsupported({ pane }),
+      new DeclineMessageUndelivered({ pane, reason: 'herdr did not confirm the prompt in time' }),
+    ].map((failure) => Result.fail(failure))
+
+    expect(answers.map((routed) => roundTrip(RoutedCommand, routed))).toEqual(answers)
+    expect(failures.map((result) => roundTrip(CommandResult, result))).toEqual(failures)
   })
 })
 

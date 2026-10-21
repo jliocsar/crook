@@ -1,0 +1,18 @@
+  ⎿  []
+
+● AskUserQuestion isn't available in this session. it's not in my tool list, and searching codemode for it came up
+  empty. so here's the question in plain text:
+
+  which color do you prefer?
+  1. red (warm)
+  2. green (calm)
+  3. blue (cool)
+
+  pick one and i'll repeat it back.
+
+✻ Worked for 7s · done 3:13 PM
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  -- INSERT -- ⏸ manual mode on                                                                                 /rc

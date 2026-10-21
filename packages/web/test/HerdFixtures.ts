@@ -3,6 +3,7 @@ import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
 
 import { AgentRow } from '@crook/domain/AgentRow'
+import type { Ask } from '@crook/domain/Ask'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
@@ -37,6 +38,7 @@ export const agent = (
     readonly secondsAgo?: number
     readonly seq?: number
     readonly branch?: string
+    readonly ask?: Ask
   } = {},
 ) =>
   new AgentRow({
@@ -54,6 +56,7 @@ export const agent = (
     stateChangeSeq: options.seq ?? 1,
     statusChangedAt: DateTime.subtractDuration(START, Duration.seconds(options.secondsAgo ?? 0)),
     beforeHandoff: Option.none(),
+    ask: Option.fromUndefinedOr(options.ask),
   })
 
 export const machine = (
