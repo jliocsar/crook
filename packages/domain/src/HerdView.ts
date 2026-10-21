@@ -1,9 +1,20 @@
+import * as Arr from 'effect/Array'
+import * as DateTime from 'effect/DateTime'
+import { pipe } from 'effect/Function'
+import * as Option from 'effect/Option'
+import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
 import { CrookVersion } from '@crook/domain/CrookVersion'
-import { PaneId } from '@crook/domain/Ids'
+import { type MachineId, PaneId } from '@crook/domain/Ids'
 import { Machine } from '@crook/domain/Machine'
 import { MachineState } from '@crook/domain/MachineState'
+import type { Place } from '@crook/domain/Place'
+
+export interface MachinePlace {
+  readonly machine: MachineId
+  readonly place: Place
+}
 
 export class HerdMachine extends Schema.Class<HerdMachine>('HerdMachine')({
   machine: Machine,
@@ -16,3 +27,23 @@ export class HerdView extends Schema.Class<HerdView>('HerdView')({
   machines: Schema.Array(HerdMachine),
   hubVersion: CrookVersion,
 }) {}
+
+const byMostRecentUse = Order.mapInput(
+  Order.flip(DateTime.Order),
+  (entry: MachinePlace) => entry.place.usedAt,
+)
+
+export const placesOf = (entry: HerdMachine): readonly MachinePlace[] =>
+  Option.match(entry.state, {
+    onNone: () => [],
+    onSome: (state) => state.places.map((place) => ({ machine: entry.machine.id, place })),
+  })
+
+export const mostRecentPlace = (herd: HerdView): Option.Option<MachinePlace> =>
+  pipe(
+    herd.machines,
+    Arr.filter((entry) => entry.machine.connection === 'online'),
+    Arr.flatMap(placesOf),
+    Arr.sort(byMostRecentUse),
+    Arr.head,
+  )

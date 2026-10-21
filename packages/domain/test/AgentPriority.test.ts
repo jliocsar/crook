@@ -76,6 +76,7 @@ const machineWith = (
         tabs: [],
         panes: [],
         agents,
+        places: [],
       }),
       () => options.published ?? true,
     ),

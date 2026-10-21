@@ -59,6 +59,34 @@ export class CommandDeliveryUnknown extends Schema.TaggedError<CommandDeliveryUn
   }
 }
 
+export class FolderNotFound extends Schema.TaggedError<FolderNotFound>()('FolderNotFound', {
+  folder: Schema.String,
+}) {
+  override get message(): string {
+    return `There is no folder ${this.folder} on the machine, so crook started nothing: herdr would have opened the new tab in the home folder instead. Pick a folder that exists, or check the path for a typo.`
+  }
+}
+
+export class AgentNotStarted extends Schema.TaggedError<AgentNotStarted>()('AgentNotStarted', {
+  folder: Schema.String,
+  code: Schema.String,
+  detail: Schema.String,
+}) {
+  override get message(): string {
+    return `Claude did not start in ${this.folder}: herdr answered ${this.code}, ${this.detail}. crook closed the tab it opened for it, apart from a new worktree, which stays on disk with its workspace. Look at the machine, then start the agent again as a new action.`
+  }
+}
+
+export class TaskNotDelivered extends Schema.TaggedError<TaskNotDelivered>()('TaskNotDelivered', {
+  pane: PaneId,
+  code: Schema.String,
+  detail: Schema.String,
+}) {
+  override get message(): string {
+    return `Claude started in pane ${this.pane}, but herdr did not deliver the task: ${this.code}, ${this.detail}. Claude may be waiting at a dialog, such as the folder trust prompt: open the agent, answer it, and send the task from its chat.`
+  }
+}
+
 export class MachineOffline extends Schema.TaggedError<MachineOffline>()('MachineOffline', {
   machine: MachineId,
 }) {
@@ -82,6 +110,9 @@ export const AgentCommandFailure = Schema.Union([
   HerdrRefusedCommand,
   HerdrUnavailable,
   CommandDeliveryUnknown,
+  FolderNotFound,
+  AgentNotStarted,
+  TaskNotDelivered,
 ])
 export type AgentCommandFailure = typeof AgentCommandFailure.Type
 

@@ -1,10 +1,12 @@
 import * as Duration from 'effect/Duration'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schedule from 'effect/Schedule'
 import * as Rpc from 'effect/rpc/Rpc'
 import * as RpcGroup from 'effect/rpc/RpcGroup'
 import * as Schema from 'effect/Schema'
 
+import type { Command } from '@crook/domain/Command'
 import { MachineId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
 import { CommandId, CommandResult, RoutedCommand } from '@crook/protocol/Commands'
@@ -18,8 +20,15 @@ import {
 export const AGENT_PING_INTERVAL = Duration.seconds(5)
 export const AGENT_SOCKET_OPEN_TIMEOUT = Duration.seconds(10)
 export const COMMAND_TIMEOUT = AGENT_PING_INTERVAL
+export const AGENT_READY_TIMEOUT = Duration.seconds(30)
+export const PROMPT_START_WINDOW = Duration.seconds(5)
 export const HUB_RECONNECT_BASE = Duration.millis(77)
 export const RECONNECT_CAP = AGENT_PING_INTERVAL
+
+export const LAUNCH_COMMAND_TIMEOUT = Duration.sum(
+  Duration.sum(AGENT_READY_TIMEOUT, PROMPT_START_WINDOW),
+  COMMAND_TIMEOUT,
+)
 
 export const reconnectBackoff = (base: Duration.Duration) =>
   Schedule.min([Schedule.exponential(base), Schedule.spaced(RECONNECT_CAP)])
@@ -28,6 +37,18 @@ export const stayedHealthy = (liveSince: Option.Option<number>, now: number): bo
   Option.exists(liveSince, (first) => now - first >= Duration.toMillis(RECONNECT_CAP))
 
 export const hubReconnectSchedule = reconnectBackoff(HUB_RECONNECT_BASE)
+
+export const commandTimeout = (command: Command): Duration.Duration =>
+  Match.value(command).pipe(
+    Match.tagsExhaustive({
+      Prompt: () => COMMAND_TIMEOUT,
+      SendKeys: () => COMMAND_TIMEOUT,
+      RenameAgent: () => COMMAND_TIMEOUT,
+      ClosePane: () => COMMAND_TIMEOUT,
+      StartAgent: () => LAUNCH_COMMAND_TIMEOUT,
+      CreateWorktree: () => LAUNCH_COMMAND_TIMEOUT,
+    }),
+  )
 
 export class MachineIdMismatch extends Schema.TaggedError<MachineIdMismatch>()(
   'MachineIdMismatch',

@@ -13,7 +13,14 @@ import {
   auditExit,
   commandAudit,
 } from '@crook/domain/Audit'
-import { ClosePane, Prompt, RenameAgent, SendKeys } from '@crook/domain/Command'
+import {
+  ClosePane,
+  CreateWorktree,
+  Prompt,
+  RenameAgent,
+  SendKeys,
+  StartAgent,
+} from '@crook/domain/Command'
 import { PaneId } from '@crook/domain/Ids'
 
 const pane = PaneId.make('w1:p1')
@@ -43,6 +50,36 @@ describe('commandAudit', () => {
     expect(commandAudit(new ClosePane({ pane, confirmed: true }))).toEqual({
       operation: 'ClosePane',
       arguments: { pane: 'w1:p1', confirmed: true },
+    })
+    expect(
+      commandAudit(
+        new StartAgent({
+          kind: 'claude',
+          folder: '/home/jliocsar/Projects/crook',
+          task: Option.none(),
+        }),
+      ),
+    ).toEqual({
+      operation: 'StartAgent',
+      arguments: { kind: 'claude', folder: '/home/jliocsar/Projects/crook', text: null },
+    })
+    expect(
+      commandAudit(
+        new CreateWorktree({
+          kind: 'claude',
+          folder: '/home/jliocsar/Projects/crook',
+          branch: 'feat/jc-111-new-agent',
+          task: Option.some('add the new agent sheet'),
+        }),
+      ),
+    ).toEqual({
+      operation: 'CreateWorktree',
+      arguments: {
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        branch: 'feat/jc-111-new-agent',
+        text: 'add the new agent sheet',
+      },
     })
   })
 

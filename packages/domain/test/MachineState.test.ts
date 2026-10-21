@@ -63,6 +63,7 @@ const stateOn = (herdr: HerdrLink, status: AgentStatus = 'unknown') =>
         beforeHandoff: Option.none(),
       }),
     ],
+    places: [],
   })
 
 describe('panePresence', () => {

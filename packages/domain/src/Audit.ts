@@ -33,6 +33,9 @@ export const AuditArgumentName = Schema.Literals([
   'label',
   'confirmed',
   'pinned',
+  'kind',
+  'folder',
+  'branch',
 ])
 export type AuditArgumentName = typeof AuditArgumentName.Type
 
@@ -138,6 +141,19 @@ export const commandAudit = (command: Command): AuditedOperation =>
       ClosePane: (close) => ({
         operation: 'ClosePane',
         arguments: { pane: close.pane, confirmed: close.confirmed },
+      }),
+      StartAgent: (start) => ({
+        operation: 'StartAgent',
+        arguments: { kind: start.kind, folder: start.folder, text: Option.getOrNull(start.task) },
+      }),
+      CreateWorktree: (create) => ({
+        operation: 'CreateWorktree',
+        arguments: {
+          kind: create.kind,
+          folder: create.folder,
+          branch: create.branch,
+          text: Option.getOrNull(create.task),
+        },
       }),
     }),
   )

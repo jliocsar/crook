@@ -100,6 +100,7 @@ export const machineStateWith = (
     tabs: [],
     panes: [],
     agents,
+    places: [],
   })
 
 export const configFor = (origin: string) =>

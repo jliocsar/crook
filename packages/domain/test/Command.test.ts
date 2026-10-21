@@ -6,12 +6,16 @@ import * as Schema from 'effect/Schema'
 
 import { AgentRow, agentTitle } from '@crook/domain/AgentRow'
 import {
+  AgentStarted,
   ClosePane,
   Command,
+  CreateWorktree,
   InputDelivered,
   RenameAgent,
   SendKeys,
+  StartAgent,
   hasMovedSince,
+  hasStarted,
   interrupt,
   targetPane,
 } from '@crook/domain/Command'
@@ -112,6 +116,75 @@ describe('rename and close', () => {
   it('targets the pane every command names', () => {
     expect(targetPane(new RenameAgent({ pane, label: Option.some('Herd') }))).toBe(pane)
     expect(targetPane(new ClosePane({ pane, confirmed: true }))).toBe(pane)
+  })
+})
+
+describe('starting an agent', () => {
+  const decode = Schema.decodeUnknownResult(Command)
+
+  it('decodes a start with or without a task, and a worktree with its branch', () => {
+    expect(
+      Schema.decodeSync(Command)({
+        _tag: 'StartAgent',
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        task: null,
+      }),
+    ).toEqual(
+      new StartAgent({
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        task: Option.none(),
+      }),
+    )
+    expect(
+      Schema.decodeSync(Command)({
+        _tag: 'CreateWorktree',
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        branch: 'feat/jc-111-new-agent',
+        task: 'add the new agent sheet',
+      }),
+    ).toEqual(
+      new CreateWorktree({
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        branch: 'feat/jc-111-new-agent',
+        task: Option.some('add the new agent sheet'),
+      }),
+    )
+  })
+
+  it('rejects a relative folder, an agent other than Claude, an empty task and a branch with a space', () => {
+    const startIn = (folder: string) =>
+      decode({ _tag: 'StartAgent', kind: 'claude', folder, task: null })
+
+    expect(Result.isFailure(startIn('Projects/crook'))).toBe(true)
+    expect(Result.isFailure(startIn('/home/jliocsar/\u001b[2J'))).toBe(true)
+    expect(
+      Result.isFailure(decode({ _tag: 'StartAgent', kind: 'codex', folder: '/tmp', task: null })),
+    ).toBe(true)
+    expect(
+      Result.isFailure(decode({ _tag: 'StartAgent', kind: 'claude', folder: '/tmp', task: '' })),
+    ).toBe(true)
+    expect(
+      Result.isFailure(
+        decode({
+          _tag: 'CreateWorktree',
+          kind: 'claude',
+          folder: '/home/jliocsar/Projects/crook',
+          branch: 'new agent',
+          task: null,
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('holds once the pane it started shows up among the agents', () => {
+    const started = new AgentStarted({ pane: PaneId.make('w1:p2') })
+
+    expect(hasStarted(started, [rowAt(pane, 1), rowAt(PaneId.make('w1:p2'), 1)])).toBe(true)
+    expect(hasStarted(started, [rowAt(pane, 1)])).toBe(false)
   })
 })
 

@@ -88,6 +88,7 @@ export const machine = (
           (row) => new Pane({ id: row.pane, workspace: row.workspace, tab: row.tab }),
         ),
         agents,
+        places: [],
       }),
     ),
     seen: (options.seen ?? []).map((pane) => PaneId.make(pane)),
