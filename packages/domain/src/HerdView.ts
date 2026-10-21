@@ -29,6 +29,8 @@ export class HerdView extends Schema.Class<HerdView>('HerdView')({
 
 const placeByMostRecentUse = Order.mapInput(byMostRecentUse, (entry: MachinePlace) => entry.place)
 
+export const byMachineId = Order.mapInput(Order.String, (entry: HerdMachine) => entry.machine.id)
+
 export const isOnline = (entry: HerdMachine): boolean => entry.machine.connection === 'online'
 
 export const findMachine = (view: HerdView, machine: MachineId): Option.Option<HerdMachine> =>

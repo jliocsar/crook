@@ -2,12 +2,11 @@ import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as Struct from 'effect/Struct'
 
-import { HerdMachine, HerdView, findMachine } from '@crook/domain/HerdView'
+import { HerdMachine, HerdView, byMachineId, findMachine } from '@crook/domain/HerdView'
 import { MachineId } from '@crook/domain/Ids'
 
 export class HerdReplaced extends Schema.TaggedClass<HerdReplaced>()('HerdReplaced', {
@@ -27,10 +26,8 @@ export type HerdUpdate = typeof HerdUpdate.Type
 
 const isSameEntry = Schema.toEquivalence(HerdMachine)
 
-const byMachineId = Order.mapInput(Order.String, (entry: HerdMachine) => entry.machine.id)
-
-const isUnchangedIn = (herd: HerdView) => (entry: HerdMachine) =>
-  Option.exists(findMachine(herd, entry.machine.id), (before) => isSameEntry(before, entry))
+const isChangedFrom = (herd: HerdView) => (entry: HerdMachine) =>
+  !Option.exists(findMachine(herd, entry.machine.id), (before) => isSameEntry(before, entry))
 
 const isGoneFrom = (herd: HerdView) => (entry: HerdMachine) =>
   Option.isNone(findMachine(herd, entry.machine.id))
@@ -43,13 +40,13 @@ const machineUpdatesBetween = (previous: HerdView, next: HerdView): readonly Her
     Arr.appendAll(
       pipe(
         next.machines,
-        Arr.filter((entry) => !isUnchangedIn(previous)(entry)),
+        Arr.filter(isChangedFrom(previous)),
         Arr.map((entry): HerdUpdate => new MachineReplaced({ entry })),
       ),
     ),
   )
 
-export const herdUpdatesBetween = (previous: HerdView, next: HerdView): readonly HerdUpdate[] =>
+const herdUpdatesBetween = (previous: HerdView, next: HerdView): readonly HerdUpdate[] =>
   previous.hubVersion === next.hubVersion
     ? machineUpdatesBetween(previous, next)
     : [new HerdReplaced({ herd: next })]
