@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc",
-    "test": "bun --bun vitest run"
+    "test": "bun --bun vitest run --fsModuleCachePath node_modules/.vitest-cache"
   },
   "dependencies": {
     "@crook/domain": "workspace:*",
