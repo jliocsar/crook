@@ -5,12 +5,14 @@ import * as Option from 'effect/Option'
 import { Check, ChevronDown, Clipboard, WrapText } from 'lucide-react'
 import * as React from 'react'
 
+import { useHighlightedLines } from '@crook/web/highlight/Highlighter'
+
 type CopyState = 'idle' | 'copied' | 'error'
 
 export type CodeBlockProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   code: string
-  filename?: string
-  language?: string
+  filename?: string | undefined
+  language?: string | undefined
   showLineNumbers?: boolean
   highlightLines?: readonly number[]
   maxLines?: number
@@ -84,6 +86,7 @@ const useCopy = (code: string) => {
 
 function CodeLine({
   line,
+  content,
   number,
   marked,
   gutter,
@@ -91,6 +94,7 @@ function CodeLine({
   wrapped,
 }: {
   line: string
+  content: Option.Option<React.ReactNode>
   number: number
   marked: boolean
   gutter: number
@@ -117,7 +121,7 @@ function CodeLine({
       <span
         className={cn('min-w-0', wrapped ? 'break-words whitespace-pre-wrap' : 'whitespace-pre')}
       >
-        {line === '' ? ' ' : line}
+        {line === '' ? ' ' : Option.getOrElse(content, () => line)}
       </span>
     </span>
   )
@@ -245,6 +249,7 @@ export function CodeBlock({
   const clipped = collapsible && !expanded
   const shown = clipped ? lines.slice(0, maxLines) : lines
   const label = filename ?? language
+  const highlighted = useHighlightedLines(code, Option.fromUndefinedOr(language))
 
   return (
     <div
@@ -271,6 +276,7 @@ export function CodeBlock({
       <div className="relative">
         <pre
           data-slot="code-block-code"
+          data-shiki={Option.isSome(highlighted) || undefined}
           tabIndex={0}
           className={cn(
             'text-foreground m-0 overflow-x-auto rounded-none bg-transparent px-0 py-2.5 font-[family-name:var(--font-mono),monospace] text-xs leading-relaxed',
@@ -282,6 +288,7 @@ export function CodeBlock({
               <CodeLine
                 key={index + 1}
                 line={line}
+                content={Option.flatMap(highlighted, (rows) => Option.fromUndefinedOr(rows[index]))}
                 number={index + 1}
                 marked={marked.has(index + 1)}
                 gutter={String(lines.length).length}
