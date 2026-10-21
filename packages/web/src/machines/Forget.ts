@@ -20,9 +20,9 @@ export const useForgetMachine = (
 ) => {
   const [result, request] = useAtom(forgetMachineAtom(machine), { mode: 'promiseExit' })
   const [requested, setRequested] = React.useState(false)
-  const settled = Option.filter(
-    Option.liftPredicate(result, () => requested),
-    (current) => !AsyncResult.isWaiting(current),
+  const settled = Option.liftPredicate(
+    result,
+    (current) => requested && !AsyncResult.isWaiting(current),
   )
 
   React.useEffect(() => {
