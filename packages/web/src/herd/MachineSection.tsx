@@ -8,6 +8,7 @@ import { Dimmed } from '@crook/web/components/Dimmed'
 import { MachineBadge } from '@crook/web/components/MachineBadge'
 import type { MachineSectionModel } from '@crook/web/herd/HerdLayout'
 import { SPRING } from '@crook/web/motion/Springs'
+import { needsYouLabel } from '@crook/web/herd/NeedsYouLabel'
 
 const COLLAPSED_CHEVRON_DEGREES = -90
 
@@ -40,7 +41,7 @@ export function MachineSection({
           </span>
           <MachineBadge machine={machine} now={now} plain />
           <span className="text-muted-foreground ml-auto truncate font-mono text-xs tabular-nums">
-            {needsYou > 0 ? `${needsYou} need you` : null}
+            {needsYou > 0 ? needsYouLabel(needsYou) : null}
           </span>
           <motion.span
             aria-hidden="true"

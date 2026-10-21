@@ -44,7 +44,7 @@ built.
   - the label (display, 20/28, 620);
   - a plain Status Pill for the machine (online, reconnecting with a spinner, or "offline · 2h
     ago");
-  - "N need you" on the right, or nothing;
+  - "N need you" on the right ("1 needs you" for one), or nothing;
   - a chevron to collapse the section.
     An offline machine shows one sentence instead of its agents. A reconnecting machine's list dims
     to 60%.

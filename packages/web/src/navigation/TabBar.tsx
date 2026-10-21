@@ -4,6 +4,7 @@ import { Bot, Server, Settings } from 'lucide-react'
 import { COLUMN_STYLE } from '@crook/web/navigation/Column'
 import { SECTIONS_LABEL } from '@crook/web/navigation/Focus'
 import { useAnyScreenPushed } from '@crook/web/navigation/Pushed'
+import { needsYouLabel } from '@crook/web/herd/NeedsYouLabel'
 
 const ACTIVE_STROKE = 2.25
 const IDLE_STROKE = 1.75
@@ -60,7 +61,7 @@ export function TabBar({ needsYou = 0 }: { needsYou?: number }) {
                 </span>
                 {label}
                 {to === '/' && needsYou > 0 ? (
-                  <span className="sr-only">, {needsYou} need you</span>
+                  <span className="sr-only">, {needsYouLabel(needsYou)}</span>
                 ) : null}
               </>
             )}
