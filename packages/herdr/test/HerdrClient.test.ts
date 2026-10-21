@@ -20,6 +20,7 @@ import {
   HerdrEventsLost,
   HerdrPaneBusy,
   HerdrPaneNotFound,
+  HerdrPromptStalled,
   HerdrRequestRejected,
   HerdrResponseInvalid,
   type HerdrSubscriptionError,
@@ -33,6 +34,7 @@ import {
   PaneCloseMethod,
   PaneProcessInfoMethod,
   PaneRenameMethod,
+  PaneSendInputMethod,
   Ping,
   SessionSnapshotMethod,
   WorktreeCreateMethod,
@@ -131,6 +133,10 @@ const AGENT_STARTED_LINE =
 const PANE_BUSY_LINE =
   '{"id":"agent.start","error":{"code":"agent_pane_busy","message":"agent target pane w1:p2 is not an available shell"}}'
 
+const PROMPT_STALLED_LINE =
+  '{"id":"agent.prompt","error":{"code":"agent_prompt_stalled","message":"agent w1:p2 did not start working"}}'
+
+const INPUT_SENT_LINE = '{"id":"pane.send_input","result":{"type":"ok"}}'
 const STARTED_LINE = '{"id":"events.subscribe","result":{"type":"subscription_started"}}'
 
 const PANE_CLOSED_LINE =
@@ -253,6 +259,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
         const created = yield* client.request(WorktreeCreateMethod, {
           cwd: '/home/jliocsar/probe/repo',
           branch: 'probe/wt',
+          path: '/home/jliocsar/probe/wt',
         })
         const started = yield* client.request(AgentStartMethod, {
           name: 'crook-1',
@@ -272,7 +279,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
         expect(started.agent.agent_status).toBe('unknown')
         expect(started.argv).toEqual(['claude'])
         expect(requests.map((request) => request.params)).toEqual([
-          { cwd: '/home/jliocsar/probe/repo', branch: 'probe/wt' },
+          { cwd: '/home/jliocsar/probe/repo', branch: 'probe/wt', path: '/home/jliocsar/probe/wt' },
           { name: 'crook-1', kind: 'claude', pane_id: 'w1:p2' },
         ])
       }),
@@ -291,6 +298,43 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
           detail: 'agent target pane w1:p2 is not an available shell',
         }),
       )
+    }),
+  )
+
+  it.effect('fails with HerdrPromptStalled when the agent did not start working on a prompt', () =>
+    Effect.gen(function* () {
+      const { client } = yield* fakeHerdr([replyOnce(PROMPT_STALLED_LINE)])
+      const stalled = yield* client
+        .request(AgentPromptMethod, { target: 'w1:p2', text: 'go', wait: { until: ['working'] } })
+        .pipe(Effect.flip)
+
+      expect(stalled).toEqual(
+        new HerdrPromptStalled({
+          method: 'agent.prompt',
+          detail: 'agent w1:p2 did not start working',
+        }),
+      )
+    }),
+  )
+
+  it.effect('types into a pane with pane.send_input', () =>
+    Effect.gen(function* () {
+      const { client, received } = yield* fakeHerdr([replyOnce(INPUT_SENT_LINE)])
+      const sent = yield* client.request(PaneSendInputMethod, {
+        pane_id: 'w1:p2',
+        text: ' unset CLAUDECODE',
+        keys: ['enter'],
+      })
+      const request = yield* Queue.take(received).pipe(
+        Effect.flatMap(Schema.decodeEffect(SentRequest)),
+      )
+
+      expect(sent).toEqual({ type: 'ok' })
+      expect(request.params).toEqual({
+        pane_id: 'w1:p2',
+        text: ' unset CLAUDECODE',
+        keys: ['enter'],
+      })
     }),
   )
 

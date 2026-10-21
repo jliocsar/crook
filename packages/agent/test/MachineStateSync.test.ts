@@ -21,7 +21,7 @@ import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStat
 import { type AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import { ClaudeSessionId, PaneId } from '@crook/domain/Ids'
 import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
-import { Place } from '@crook/domain/Place'
+import { Checkout, Place } from '@crook/domain/Place'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -586,7 +586,7 @@ it.effect('shows each agent to the recent places and publishes the places they a
     const seen = yield* Queue.take(observed)
     const place = new Place({
       folder: '/home/jliocsar/Projects/crook',
-      branch: Option.some(BRANCH),
+      checkout: Option.some(new Checkout({ branch: Option.some(BRANCH) })),
       usedAt: DateTime.makeUnsafe('2026-10-21T13:27:00Z'),
     })
 

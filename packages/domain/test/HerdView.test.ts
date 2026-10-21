@@ -122,7 +122,7 @@ describe('HerdView', () => {
 
 describe('mostRecentPlace', () => {
   const placeAt = (folder: string, usedAt: string) =>
-    new Place({ folder, branch: Option.none(), usedAt: DateTime.makeUnsafe(usedAt) })
+    new Place({ folder, checkout: Option.none(), usedAt: DateTime.makeUnsafe(usedAt) })
 
   const machineWith = (id: MachineId, connection: 'online' | 'offline', places: readonly Place[]) =>
     new HerdMachine({

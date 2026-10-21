@@ -1,5 +1,6 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import { describe, expect, it, layer } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -17,7 +18,9 @@ import * as TestClock from 'effect/testing/TestClock'
 import {
   PANE_BUSY_RETRY_LIMIT,
   SCRUBBED_ENVIRONMENT,
+  UNSET_CLAUDE_CHILD_VARIABLES,
   mintAgentName,
+  worktreePathBeside,
 } from '@crook/agent/AgentLauncher'
 import { CommandExecutor, LAUNCH_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
@@ -37,6 +40,7 @@ import {
   AgentStartMethod,
   AgentWaitMethod,
   PaneCloseMethod,
+  PaneSendInputMethod,
   SessionSnapshotMethod,
   TabCreateMethod,
   WorkspaceCreateMethod,
@@ -57,7 +61,9 @@ import {
 import {
   AgentNotStarted,
   CommandDeliveryUnknown,
+  FolderNotCheckout,
   FolderNotFound,
+  FolderUnreadable,
   TaskNotDelivered,
 } from '@crook/protocol/Commands'
 
@@ -72,14 +78,21 @@ import {
 } from './Fixtures'
 
 const FIRST_ACTION = IdempotencyKey.make('6a0f3c2e-7d41-4b8a-9e15-2c7f0a9d3b61')
+const SECOND_ACTION = IdempotencyKey.make('0c5d8e21-4b3f-4a9e-8d17-5e2f9b6a1c40')
 const NEW_PANE = PaneId.make('w1:p7')
-const WORKTREE_ROOT_PANE = 'w3:p1'
+const OTHER_NEW_PANE = PaneId.make('w1:p8')
+const WORKTREE_ROOT_PANE = PaneId.make('w3:p1')
 const WORKTREE_CLAUDE_PANE = PaneId.make('w3:p2')
 const TASK = 'Fix the flaky reconnect test'
+const WORKTREE_BRANCH = 'fix/reconnect'
+const NO_PERMISSIONS = 0o000
+const OWNER_PERMISSIONS = 0o700
 
 const SentLine = Schema.fromJsonString(
   Schema.Struct({ id: Schema.String, method: Schema.String, params: Schema.Unknown }),
 )
+
+const StartedName = Schema.Struct({ name: Schema.String })
 
 const sentRequests = (requests: readonly SentRequest[]) =>
   requests.map((request) => Schema.decodeSync(SentLine)(request.line))
@@ -132,6 +145,15 @@ const tabCreated = (pane: string, workspace: string, cwd: string) =>
     root_pane: newPane(pane, workspace, cwd),
   })
 
+const worktreeCreated = (checkout: string) =>
+  scriptedResult(WorktreeCreateMethod, {
+    type: 'worktree_created',
+    workspace: new WorkspaceInfo(Struct.evolve(workspaceInfo, { workspace_id: () => 'w3' })),
+    tab: tabInfo,
+    root_pane: newPane(WORKTREE_ROOT_PANE, 'w3', checkout),
+    worktree: new WorktreeInfo({ path: checkout, branch: Option.some(WORKTREE_BRANCH) }),
+  })
+
 const launchedAgent = (pane: string) =>
   agentInfo({ pane_id: pane, agent_status: 'unknown', state_change_seq: 0 })
 
@@ -148,9 +170,17 @@ const agentReady = (pane: string) =>
     agent: agentInfo({ pane_id: pane, agent_status: 'idle', state_change_seq: 1 }),
   })
 
+const inputSent = scriptedResult(PaneSendInputMethod, { type: 'ok' })
+
 const prompted = scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })
 
 const closed = scriptedResult(PaneCloseMethod, { type: 'ok' })
+
+const unsetSent = (pane: PaneId) => ({
+  id: 'pane.send_input',
+  method: 'pane.send_input',
+  params: { pane_id: pane, text: UNSET_CLAUDE_CHILD_VARIABLES, keys: ['enter'] },
+})
 
 const startLauncher = Effect.fn('startLauncher')(function* (
   responses: readonly ScriptedResponse[],
@@ -175,6 +205,24 @@ const temporaryFolder = Effect.gen(function* () {
   return yield* fileSystem.makeTempDirectoryScoped()
 })
 
+const gitCheckout = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const folder = yield* temporaryFolder
+
+  yield* fileSystem.makeDirectory(`${folder}/.git`)
+  yield* fileSystem.writeFileString(`${folder}/.git/HEAD`, 'ref: refs/heads/main\n')
+
+  return folder
+})
+
+const createWorktreeIn = (folder: string) =>
+  new CreateWorktree({
+    kind: 'claude',
+    folder,
+    branch: WORKTREE_BRANCH,
+    task: Option.some(TASK),
+  })
+
 describe('mintAgentName', () => {
   it('takes the lowest crook number no live agent is called', () => {
     expect(mintAgentName([])).toBe('crook-1')
@@ -182,7 +230,17 @@ describe('mintAgentName', () => {
     expect(mintAgentName(['crook-2'])).toBe('crook-1')
     expect(mintAgentName(['crook-1', 'crook-2', 'crook-3'])).toBe('crook-4')
   })
+})
 
+describe('worktreePathBeside', () => {
+  it('puts the checkout next to the one it came from, named like herdr names its own', () => {
+    expect(worktreePathBeside('/home/jliocsar/Projects/crook', 'fix/flaky-reconnect')).toBe(
+      '/home/jliocsar/Projects/crook-fix-flaky-reconnect',
+    )
+  })
+})
+
+describe('launch bounds', () => {
   it('leaves the hub time to hear how a launch ended', () => {
     expect(
       Duration.isLessThan(
@@ -202,6 +260,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         const { executor, createdPanes, sent } = yield* startLauncher([
           snapshotOf([workspaceAt(folder)], [agentInfo({ name: Option.some('crook-1') })]),
           tabCreated(NEW_PANE, 'w1', folder),
+          inputSent,
           agentStarted(NEW_PANE),
           agentReady(NEW_PANE),
           prompted,
@@ -219,6 +278,8 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
             method: 'tab.create',
             params: { workspace_id: 'w1', cwd: folder, env: SCRUBBED_ENVIRONMENT },
           },
+          { id: 'session.snapshot', method: 'session.snapshot', params: {} },
+          unsetSent(NEW_PANE),
           {
             id: 'agent.start',
             method: 'agent.start',
@@ -258,6 +319,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
             tab: tabInfo,
             root_pane: newPane('w2:p1', 'w2', folder),
           }),
+          inputSent,
           agentStarted('w2:p1'),
           agentReady('w2:p1'),
         ])
@@ -271,6 +333,8 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         expect(requests.map((request) => request.method)).toEqual([
           'session.snapshot',
           'workspace.create',
+          'session.snapshot',
+          'pane.send_input',
           'agent.start',
           'agent.wait',
         ])
@@ -284,6 +348,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
       const { executor, sent } = yield* startLauncher([
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
+        inputSent,
         scriptedRejection(AgentStartMethod, 'agent_pane_busy', 'not an available shell'),
         agentStarted(NEW_PANE),
         agentReady(NEW_PANE),
@@ -301,6 +366,35 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
     }),
   )
 
+  onDisk.effect('gives two launches running at once different agent names', () =>
+    Effect.gen(function* () {
+      const folder = yield* temporaryFolder
+      const { executor, sent } = yield* startLauncher([
+        snapshotOf([workspaceAt(folder)]),
+        tabCreated(NEW_PANE, 'w1', folder),
+        tabCreated(OTHER_NEW_PANE, 'w1', folder),
+        inputSent,
+        scriptedRejection(AgentStartMethod, 'agent_pane_busy', 'not an available shell'),
+        agentStarted(NEW_PANE),
+        agentReady(NEW_PANE),
+      ])
+      const start = new StartAgent({ kind: 'claude', folder, task: Option.none() })
+      const launching = yield* Effect.all(
+        [executor.execute(FIRST_ACTION, start), executor.execute(SECOND_ACTION, start)],
+        { concurrency: 'unbounded' },
+      ).pipe(Effect.forkChild)
+
+      yield* TestClock.adjust(PANE_BUSY_RETRY_LIMIT)
+      const receipts = yield* Fiber.join(launching)
+      const names = (yield* sent)
+        .filter((request) => request.method === 'agent.start')
+        .map((request) => Schema.decodeUnknownSync(StartedName)(request.params).name)
+
+      expect(receipts.map((receipt) => receipt.pane).toSorted()).toEqual([NEW_PANE, OTHER_NEW_PANE])
+      expect(Arr.dedupe(names).toSorted()).toEqual(['crook-1', 'crook-2'])
+    }),
+  )
+
   onDisk.effect('refuses a folder that does not exist and asks herdr for nothing', () =>
     Effect.gen(function* () {
       const folder = `${yield* temporaryFolder}/gone`
@@ -314,12 +408,41 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
     }),
   )
 
+  onDisk.effect('says a folder it may not look at is unreadable, not missing', () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem
+      const parent = yield* temporaryFolder
+      const folder = `${parent}/locked`
+
+      yield* fileSystem.makeDirectory(folder)
+      const { executor, sent } = yield* startLauncher([snapshotOf([workspaceInfo])])
+      const refused = yield* fileSystem
+        .chmod(parent, NO_PERMISSIONS)
+        .pipe(
+          Effect.andThen(
+            executor
+              .execute(
+                FIRST_ACTION,
+                new StartAgent({ kind: 'claude', folder, task: Option.none() }),
+              )
+              .pipe(Effect.flip),
+          ),
+          Effect.ensuring(Effect.orDie(fileSystem.chmod(parent, OWNER_PERMISSIONS))),
+        )
+
+      expect(refused).toBeInstanceOf(FolderUnreadable)
+      expect(refused).toMatchObject({ folder })
+      expect(yield* sent).toEqual([])
+    }),
+  )
+
   onDisk.effect('closes the tab it opened when Claude never became ready, and remembers that', () =>
     Effect.gen(function* () {
       const folder = yield* temporaryFolder
       const { executor, createdPanes, sent } = yield* startLauncher([
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
+        inputSent,
         agentStarted(NEW_PANE),
         scriptedRejection(AgentWaitMethod, 'timeout', 'timed out waiting for agent'),
         closed,
@@ -335,6 +458,8 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
       expect(requests.map((request) => request.method)).toEqual([
         'session.snapshot',
         'tab.create',
+        'session.snapshot',
+        'pane.send_input',
         'agent.start',
         'agent.wait',
         'pane.close',
@@ -351,6 +476,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
       const { executor, createdPanes, sent } = yield* startLauncher([
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
+        inputSent,
         agentStarted(NEW_PANE),
         agentReady(NEW_PANE),
         scriptedRejection(AgentPromptMethod, 'agent_blocked', 'agent is blocked'),
@@ -368,6 +494,28 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
     }),
   )
 
+  onDisk.effect('counts a typed task Claude was slow to start on as delivered', () =>
+    Effect.gen(function* () {
+      const folder = yield* temporaryFolder
+      const { executor, sent } = yield* startLauncher([
+        snapshotOf([workspaceAt(folder)]),
+        tabCreated(NEW_PANE, 'w1', folder),
+        inputSent,
+        agentStarted(NEW_PANE),
+        agentReady(NEW_PANE),
+        scriptedRejection(AgentPromptMethod, 'agent_prompt_stalled', 'did not start working'),
+      ])
+      const receipt = yield* executor.execute(
+        FIRST_ACTION,
+        new StartAgent({ kind: 'claude', folder, task: Option.some(TASK) }),
+      )
+      const requests = yield* sent
+
+      expect(receipt).toEqual(new AgentStarted({ pane: NEW_PANE }))
+      expect(requests.filter((request) => request.method === 'agent.prompt')).toHaveLength(1)
+    }),
+  )
+
   onDisk.effect('reports an unknown delivery when herdr hangs up while creating the tab', () =>
     Effect.gen(function* () {
       const folder = yield* temporaryFolder
@@ -381,44 +529,30 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
   )
 
   onDisk.effect(
-    'creates a worktree, starts Claude in a scrubbed tab there and closes the pane herdr opened',
+    'creates a worktree beside the checkout, starts Claude in a tab there, closes the herdr pane',
     () =>
       Effect.gen(function* () {
-        const folder = yield* temporaryFolder
-        const checkout = `${folder}-fix-reconnect`
+        const folder = yield* gitCheckout
+        const checkout = worktreePathBeside(folder, WORKTREE_BRANCH)
         const { executor, createdPanes, sent } = yield* startLauncher([
-          snapshotOf([workspaceAt(folder)]),
-          scriptedResult(WorktreeCreateMethod, {
-            type: 'worktree_created',
-            workspace: new WorkspaceInfo(
-              Struct.evolve(workspaceInfo, { workspace_id: () => 'w3' }),
-            ),
-            tab: tabInfo,
-            root_pane: newPane(WORKTREE_ROOT_PANE, 'w3', checkout),
-            worktree: new WorktreeInfo({ path: checkout, branch: Option.some('fix/reconnect') }),
-          }),
+          worktreeCreated(checkout),
           tabCreated(WORKTREE_CLAUDE_PANE, 'w3', checkout),
+          snapshotOf([workspaceAt(folder)]),
+          inputSent,
           agentStarted(WORKTREE_CLAUDE_PANE),
           agentReady(WORKTREE_CLAUDE_PANE),
           closed,
           prompted,
         ])
-        const receipt = yield* executor.execute(
-          FIRST_ACTION,
-          new CreateWorktree({
-            kind: 'claude',
-            folder,
-            branch: 'fix/reconnect',
-            task: Option.some(TASK),
-          }),
-        )
+        const receipt = yield* executor.execute(FIRST_ACTION, createWorktreeIn(folder))
         const requests = yield* sent
 
         expect(receipt).toEqual(new AgentStarted({ pane: WORKTREE_CLAUDE_PANE }))
         expect(requests.map((request) => [request.method, request.params])).toEqual([
-          ['session.snapshot', {}],
-          ['worktree.create', { cwd: folder, branch: 'fix/reconnect' }],
+          ['worktree.create', { cwd: folder, branch: WORKTREE_BRANCH, path: checkout }],
           ['tab.create', { workspace_id: 'w3', cwd: checkout, env: SCRUBBED_ENVIRONMENT }],
+          ['session.snapshot', {}],
+          ['pane.send_input', unsetSent(WORKTREE_CLAUDE_PANE).params],
           ['agent.start', { name: 'crook-1', kind: 'claude', pane_id: WORKTREE_CLAUDE_PANE }],
           [
             'agent.wait',
@@ -440,5 +574,52 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         ])
         expect(Array.from(yield* createdPanes.current)).toEqual([WORKTREE_CLAUDE_PANE])
       }),
+  )
+
+  onDisk.effect('closes both worktree panes when Claude never became ready there', () =>
+    Effect.gen(function* () {
+      const folder = yield* gitCheckout
+      const checkout = worktreePathBeside(folder, WORKTREE_BRANCH)
+      const { executor, createdPanes, sent } = yield* startLauncher([
+        worktreeCreated(checkout),
+        tabCreated(WORKTREE_CLAUDE_PANE, 'w3', checkout),
+        snapshotOf([workspaceAt(folder)]),
+        inputSent,
+        agentStarted(WORKTREE_CLAUDE_PANE),
+        scriptedRejection(AgentWaitMethod, 'timeout', 'timed out waiting for agent'),
+        closed,
+      ])
+      const failed = yield* executor
+        .execute(FIRST_ACTION, createWorktreeIn(folder))
+        .pipe(Effect.flip)
+      const requests = yield* sent
+
+      expect(failed).toEqual(
+        new AgentNotStarted({
+          folder: checkout,
+          code: 'timeout',
+          detail: 'timed out waiting for agent',
+        }),
+      )
+      expect(
+        requests
+          .filter((request) => request.method === 'pane.close')
+          .map((request) => request.params),
+      ).toEqual([{ pane_id: WORKTREE_CLAUDE_PANE }, { pane_id: WORKTREE_ROOT_PANE }])
+      expect(HashSet.size(yield* createdPanes.current)).toBe(0)
+    }),
+  )
+
+  onDisk.effect('refuses a worktree from a folder outside git and asks herdr for nothing', () =>
+    Effect.gen(function* () {
+      const folder = yield* temporaryFolder
+      const { executor, sent } = yield* startLauncher([worktreeCreated(folder)])
+      const refused = yield* executor
+        .execute(FIRST_ACTION, createWorktreeIn(folder))
+        .pipe(Effect.flip)
+
+      expect(refused).toEqual(new FolderNotCheckout({ folder }))
+      expect(yield* sent).toEqual([])
+    }),
   )
 })

@@ -24,11 +24,8 @@ export const AGENT_READY_TIMEOUT = Duration.seconds(30)
 export const PROMPT_START_WINDOW = Duration.seconds(5)
 export const HUB_RECONNECT_BASE = Duration.millis(77)
 export const RECONNECT_CAP = AGENT_PING_INTERVAL
-
-export const LAUNCH_COMMAND_TIMEOUT = Duration.sum(
-  Duration.sum(AGENT_READY_TIMEOUT, PROMPT_START_WINDOW),
-  COMMAND_TIMEOUT,
-)
+export const LAUNCH_HERDR_WAIT = Duration.sum(AGENT_READY_TIMEOUT, PROMPT_START_WINDOW)
+export const LAUNCH_COMMAND_TIMEOUT = Duration.sum(LAUNCH_HERDR_WAIT, COMMAND_TIMEOUT)
 
 export const reconnectBackoff = (base: Duration.Duration) =>
   Schedule.min([Schedule.exponential(base), Schedule.spaced(RECONNECT_CAP)])

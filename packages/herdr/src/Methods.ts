@@ -82,8 +82,17 @@ export const WorkspaceCreateMethod = makeMethod('workspace.create', {
   }),
 })
 
+export const PaneSendInputMethod = makeMethod('pane.send_input', {
+  params: Schema.Struct({
+    pane_id: Schema.String,
+    text: Schema.String,
+    keys: Schema.Array(Schema.String),
+  }),
+  result: Schema.Struct({ type: Schema.Literal('ok') }),
+})
+
 export const WorktreeCreateMethod = makeMethod('worktree.create', {
-  params: Schema.Struct({ cwd: Schema.String, branch: Schema.String }),
+  params: Schema.Struct({ cwd: Schema.String, branch: Schema.String, path: Schema.String }),
   result: Schema.Struct({
     type: Schema.Literal('worktree_created'),
     workspace: WorkspaceInfo,

@@ -67,13 +67,31 @@ export class FolderNotFound extends Schema.TaggedError<FolderNotFound>()('Folder
   }
 }
 
+export class FolderUnreadable extends Schema.TaggedError<FolderUnreadable>()('FolderUnreadable', {
+  folder: Schema.String,
+  reason: Schema.String,
+}) {
+  override get message(): string {
+    return `crook could not look at the folder ${this.folder} on the machine (${this.reason}), so it started nothing. Check that the agent runs as a user who can read that folder, then start the agent again.`
+  }
+}
+
+export class FolderNotCheckout extends Schema.TaggedError<FolderNotCheckout>()(
+  'FolderNotCheckout',
+  { folder: Schema.String },
+) {
+  override get message(): string {
+    return `The folder ${this.folder} is not inside a git checkout, so crook cannot make a worktree from it and started nothing. Work in the folder itself, or pick a folder inside a repository.`
+  }
+}
+
 export class AgentNotStarted extends Schema.TaggedError<AgentNotStarted>()('AgentNotStarted', {
   folder: Schema.String,
   code: Schema.String,
   detail: Schema.String,
 }) {
   override get message(): string {
-    return `Claude did not start in ${this.folder}: herdr answered ${this.code}, ${this.detail}. crook closed the tab it opened for it, apart from a new worktree, which stays on disk with its workspace. Look at the machine, then start the agent again as a new action.`
+    return `Claude did not start in ${this.folder}: herdr answered ${this.code}, ${this.detail}. crook closed the panes it opened for it; a new worktree stays on disk. Look at the machine, then start the agent again as a new action.`
   }
 }
 
@@ -83,7 +101,7 @@ export class TaskNotDelivered extends Schema.TaggedError<TaskNotDelivered>()('Ta
   detail: Schema.String,
 }) {
   override get message(): string {
-    return `Claude started in pane ${this.pane}, but herdr did not deliver the task: ${this.code}, ${this.detail}. Claude may be waiting at a dialog, such as the folder trust prompt: open the agent, answer it, and send the task from its chat.`
+    return `Claude started in pane ${this.pane}, but herdr refused the task before typing any of it: ${this.code}, ${this.detail}. Claude is most likely waiting at a dialog, such as the folder trust prompt: open the agent, answer it, and send the task from its chat.`
   }
 }
 
@@ -111,6 +129,8 @@ export const AgentCommandFailure = Schema.Union([
   HerdrUnavailable,
   CommandDeliveryUnknown,
   FolderNotFound,
+  FolderUnreadable,
+  FolderNotCheckout,
   AgentNotStarted,
   TaskNotDelivered,
 ])

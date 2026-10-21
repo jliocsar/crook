@@ -15,11 +15,9 @@ import type * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { GitBranches } from '@crook/agent/GitBranches'
-import { makeEnsureParentDirectory, stateFile } from '@crook/agent/StateDirectory'
+import { makeWriteAtomically, stateFile } from '@crook/agent/StateDirectory'
 import type { AgentRow } from '@crook/domain/AgentRow'
-import { Place } from '@crook/domain/Place'
-
-const TEMPORARY_SUFFIX = '.tmp'
+import { Checkout, Place, byMostRecentUse } from '@crook/domain/Place'
 
 export const RECENT_PLACES_CAPACITY = 15
 
@@ -35,8 +33,8 @@ const RecentPlacesFile = Schema.fromJsonString(Schema.Array(UsedFolder))
 const isSameUse = Schema.toEquivalence(Schema.Array(UsedFolder))
 const isSamePlaces = Schema.toEquivalence(Schema.Array(Place))
 
-const byMostRecentUse = Order.combine(
-  Order.mapInput(Order.flip(DateTime.Order), (used: UsedFolder) => used.usedAt),
+const byMostRecentUseThenFolder = Order.combine(
+  byMostRecentUse,
   Order.mapInput(Order.String, (used: UsedFolder) => used.folder),
 )
 
@@ -81,14 +79,14 @@ export const mergeUsedFolders = (
     Arr.groupBy((used) => used.folder),
     Record.values,
     Arr.map(latestUse),
-    Arr.sort(byMostRecentUse),
+    Arr.sort(byMostRecentUseThenFolder),
     Arr.take(RECENT_PLACES_CAPACITY),
   )
 
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const gitBranches = yield* GitBranches
-  const ensureParentDirectory = yield* makeEnsureParentDirectory
+  const writeAtomically = yield* makeWriteAtomically
   const file = yield* CrookRecentPlacesPath
   const writing = yield* Semaphore.make(1)
 
@@ -100,41 +98,52 @@ const make = Effect.gen(function* () {
     ),
   )
 
-  const branchOf = (folder: string) =>
-    gitBranches
-      .branchOf(folder)
+  const checkoutOf = (folder: string) =>
+    gitBranches.checkoutOf(folder).pipe(
+      Effect.map(Option.map((found) => new Checkout({ branch: found.branch }))),
+      Effect.catchTag('GitMetadataUnreadable', (error) =>
+        Effect.as(Effect.logWarning(error.message), Option.none<Checkout>()),
+      ),
+    )
+
+  const stillThere = (folder: string) =>
+    fileSystem
+      .exists(folder)
       .pipe(
-        Effect.catchTag('GitMetadataUnreadable', (error) =>
-          Effect.as(Effect.logWarning(error.message), Option.none<string>()),
+        Effect.catchTag('PlatformError', (error) =>
+          Effect.as(Effect.logWarning(error.message), true),
         ),
       )
 
-  const withBranches = (used: readonly UsedFolder[]) =>
+  const placeOf = (entry: UsedFolder) =>
+    Effect.map(
+      checkoutOf(entry.folder),
+      (checkout) => new Place({ folder: entry.folder, checkout, usedAt: entry.usedAt }),
+    )
+
+  const resolvePlaces = (used: readonly UsedFolder[]) =>
     Effect.forEach(
       used,
       (entry) =>
-        Effect.map(
-          branchOf(entry.folder),
-          (branch) => new Place({ folder: entry.folder, branch, usedAt: entry.usedAt }),
+        stillThere(entry.folder).pipe(
+          Effect.flatMap((present) =>
+            present ? Effect.map(placeOf(entry), Option.some) : Effect.succeedNone,
+          ),
         ),
       { concurrency: 'unbounded' },
-    )
+    ).pipe(Effect.map(Arr.getSomes))
 
-  const save = (next: readonly UsedFolder[]) => {
-    const temporary = `${file}${TEMPORARY_SUFFIX}`
-
-    return ensureParentDirectory(file).pipe(
-      Effect.andThen(
-        fileSystem.writeFileString(temporary, Schema.encodeSync(RecentPlacesFile)(next)),
+  const save = Effect.fn('RecentPlaces.save')(function* (next: readonly UsedFolder[]) {
+    return yield* Schema.encodeEffect(RecentPlacesFile)(next).pipe(
+      Effect.flatMap((content) => writeAtomically(file, content)),
+      Effect.catch((cause) =>
+        Effect.logWarning(new RecentPlacesUnwritable({ path: file, cause }).message),
       ),
-      Effect.andThen(fileSystem.rename(temporary, file)),
-      Effect.mapError((cause) => new RecentPlacesUnwritable({ path: file, cause })),
-      Effect.catchTag('RecentPlacesUnwritable', (error) => Effect.logWarning(error.message)),
     )
-  }
+  })
 
   const used = yield* Ref.make(stored)
-  const places = yield* SubscriptionRef.make<readonly Place[]>(yield* withBranches(stored))
+  const places = yield* SubscriptionRef.make<readonly Place[]>(yield* resolvePlaces(stored))
 
   const observe = (agents: readonly AgentRow[]) =>
     writing.withPermits(1)(
@@ -147,7 +156,7 @@ const make = Effect.gen(function* () {
           yield* Ref.set(used, next)
         }
 
-        const resolved = yield* withBranches(next)
+        const resolved = yield* resolvePlaces(next)
 
         if (!isSamePlaces(resolved, yield* SubscriptionRef.get(places))) {
           yield* SubscriptionRef.set(places, resolved)

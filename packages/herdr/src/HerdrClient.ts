@@ -28,6 +28,7 @@ export type HerdrRequestError =
   | HerdrPaneNotFound
   | HerdrAgentNotFound
   | HerdrPaneBusy
+  | HerdrPromptStalled
   | HerdrResponseInvalid
 
 export type HerdrSubscriptionError = HerdrRequestError | HerdrEventsLost
@@ -47,6 +48,7 @@ const EVENTS_LOST_CODE = 'events_lost'
 const PANE_NOT_FOUND_CODE = 'pane_not_found'
 const AGENT_NOT_FOUND_CODE = 'agent_not_found'
 const PANE_BUSY_CODE = 'agent_pane_busy'
+const PROMPT_STALLED_CODE = 'agent_prompt_stalled'
 
 export class HerdrUnreachable extends Schema.TaggedError<HerdrUnreachable>()('HerdrUnreachable', {
   socketPath: Schema.String,
@@ -108,6 +110,15 @@ export class HerdrPaneBusy extends Schema.TaggedError<HerdrPaneBusy>()('HerdrPan
 }) {
   override get message(): string {
     return `Herdr reported agent_pane_busy for ${this.method}: ${this.detail}. The pane is not at an interactive shell yet, most likely because it was created a moment ago: try again shortly.`
+  }
+}
+
+export class HerdrPromptStalled extends Schema.TaggedError<HerdrPromptStalled>()(
+  'HerdrPromptStalled',
+  { method: Schema.String, detail: Schema.String },
+) {
+  override get message(): string {
+    return `Herdr reported agent_prompt_stalled for ${this.method}: ${this.detail}. Herdr typed the prompt and pressed Enter, but the agent did not start working within herdr's 5 s window: look at the agent before sending it again, since it has the text already.`
   }
 }
 
@@ -184,6 +195,10 @@ const rejection = (method: string, response: HerdrErrorResponse) =>
       () => new HerdrAgentNotFound({ method, detail: response.error.message }),
     ),
     Match.when(PANE_BUSY_CODE, () => new HerdrPaneBusy({ method, detail: response.error.message })),
+    Match.when(
+      PROMPT_STALLED_CODE,
+      () => new HerdrPromptStalled({ method, detail: response.error.message }),
+    ),
     Match.orElse(
       (code) => new HerdrRequestRejected({ method, code, detail: response.error.message }),
     ),

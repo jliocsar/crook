@@ -1,5 +1,4 @@
 import * as Arr from 'effect/Array'
-import * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
@@ -9,7 +8,7 @@ import { CrookVersion } from '@crook/domain/CrookVersion'
 import { type MachineId, PaneId } from '@crook/domain/Ids'
 import { Machine } from '@crook/domain/Machine'
 import { MachineState } from '@crook/domain/MachineState'
-import type { Place } from '@crook/domain/Place'
+import { type Place, byMostRecentUse } from '@crook/domain/Place'
 
 export interface MachinePlace {
   readonly machine: MachineId
@@ -28,10 +27,7 @@ export class HerdView extends Schema.Class<HerdView>('HerdView')({
   hubVersion: CrookVersion,
 }) {}
 
-const byMostRecentUse = Order.mapInput(
-  Order.flip(DateTime.Order),
-  (entry: MachinePlace) => entry.place.usedAt,
-)
+const placeByMostRecentUse = Order.mapInput(byMostRecentUse, (entry: MachinePlace) => entry.place)
 
 export const placesOf = (entry: HerdMachine): readonly MachinePlace[] =>
   Option.match(entry.state, {
@@ -44,6 +40,6 @@ export const mostRecentPlace = (herd: HerdView): Option.Option<MachinePlace> =>
     herd.machines,
     Arr.filter((entry) => entry.machine.connection === 'online'),
     Arr.flatMap(placesOf),
-    Arr.sort(byMostRecentUse),
+    Arr.sort(placeByMostRecentUse),
     Arr.head,
   )

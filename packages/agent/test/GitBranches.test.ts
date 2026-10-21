@@ -89,6 +89,20 @@ layer(Layer.provideMerge(GitBranches.layer, services), { excludeTestServices: tr
       }),
     )
 
+    live.effect('tells a detached checkout from a folder outside git, and names its root', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const gitBranches = yield* GitBranches
+        const detached = yield* checkout(DETACHED_HEAD)
+        const outside = yield* fileSystem.makeTempDirectoryScoped()
+
+        expect(yield* gitBranches.checkoutOf(`${detached}/repo/packages/agent`)).toEqual(
+          Option.some({ root: `${detached}/repo`, branch: Option.none() }),
+        )
+        expect(yield* gitBranches.checkoutOf(outside)).toEqual(Option.none())
+      }),
+    )
+
     live.effect('finds a checkout made in a folder after an earlier read found none', () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem

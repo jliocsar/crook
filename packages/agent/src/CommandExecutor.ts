@@ -32,7 +32,7 @@ import {
   PaneCloseMethod,
   PaneRenameMethod,
 } from '@crook/herdr/Methods'
-import { AGENT_READY_TIMEOUT, PROMPT_START_WINDOW } from '@crook/protocol/AgentLink'
+import { LAUNCH_HERDR_WAIT } from '@crook/protocol/AgentLink'
 import {
   type AgentCommandFailure,
   CommandDeliveryUnknown,
@@ -50,11 +50,7 @@ const SLOWEST_MEASURED_PROMPT = Duration.millis(403)
 
 export const COMMAND_REPLAY_CAPACITY = 1024
 export const HERDR_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_PROMPT, 10)
-
-export const LAUNCH_DELIVERY_TIMEOUT = Duration.sum(
-  Duration.sum(AGENT_READY_TIMEOUT, PROMPT_START_WINDOW),
-  HERDR_DELIVERY_TIMEOUT,
-)
+export const LAUNCH_DELIVERY_TIMEOUT = Duration.sum(LAUNCH_HERDR_WAIT, HERDR_DELIVERY_TIMEOUT)
 
 const inputDelivered = (row: AgentRow): CommandReceipt =>
   new InputDelivered({
@@ -143,6 +139,7 @@ const make = Effect.gen(function* () {
       Effect.catchTags({
         HerdrConnectionClosed: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrResponseInvalid: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
+        HerdrPromptStalled: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrUnreachable: () => Effect.fail(new HerdrUnavailable()),
         HerdrPaneNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
         HerdrAgentNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),

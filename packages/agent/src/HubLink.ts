@@ -1,6 +1,7 @@
 import * as BunSocket from '@effect/platform-bun/BunSocket'
 import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Redacted from 'effect/Redacted'
 import * as Schedule from 'effect/Schedule'
@@ -81,24 +82,31 @@ const make = (connect: HubConnect, hello: Hello) =>
     const sync = yield* MachineStateSync
     const executor = yield* CommandExecutor
     const transcripts = yield* TranscriptStreams
+    const launches = yield* Effect.scope
 
-    const complete = (client: AgentLinkClient, routed: RoutedCommand) =>
+    const answer = (client: AgentLinkClient, routed: RoutedCommand) =>
       executor.execute(routed.key, routed.command).pipe(
         Effect.result,
         Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
         Effect.annotateLogs('command', routed.id),
       )
 
+    const answerLaunch = (client: AgentLinkClient, routed: RoutedCommand) =>
+      executor.execute(routed.key, routed.command).pipe(
+        Effect.result,
+        Effect.forkIn(launches),
+        Effect.flatMap(Fiber.join),
+        Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
+        Effect.annotateLogs('command', routed.id),
+        Effect.tapError((error) => Effect.logWarning(error.message)),
+        Effect.ignore,
+        Effect.forkScoped,
+      )
+
     const holdAttach = (client: AgentLinkClient) =>
       client.Attach({ hello }).pipe(
         Stream.mapEffect((routed) =>
-          isLaunch(routed.command)
-            ? complete(client, routed).pipe(
-                Effect.tapError((error) => Effect.logWarning(error.message)),
-                Effect.ignore,
-                Effect.forkScoped,
-              )
-            : complete(client, routed),
+          isLaunch(routed.command) ? answerLaunch(client, routed) : answer(client, routed),
         ),
         Stream.runDrain,
         Effect.andThen(Effect.fail(new HubAttachEnded())),

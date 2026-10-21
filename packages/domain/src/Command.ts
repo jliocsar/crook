@@ -1,12 +1,12 @@
 import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 
+import { AbsolutePath } from '@crook/domain/AbsolutePath'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { PaneId } from '@crook/domain/Ids'
 
 const WITHOUT_CONTROL_CHARACTERS = /^\P{Cc}*$/u
 const WITHOUT_WHITESPACE_OR_CONTROL_CHARACTERS = /^[^\s\p{Cc}]+$/u
-const ABSOLUTE_PATH_PREFIX = '/'
 
 export const INTERRUPT_KEY = 'esc'
 
@@ -38,10 +38,7 @@ export class ClosePane extends Schema.TaggedClass<ClosePane>()('ClosePane', {
 export const AgentKind = Schema.Literals(['claude'])
 export type AgentKind = typeof AgentKind.Type
 
-export const FolderPath = Schema.String.check(
-  Schema.isStartingWith(ABSOLUTE_PATH_PREFIX),
-  Schema.isPattern(WITHOUT_CONTROL_CHARACTERS),
-)
+export const FolderPath = AbsolutePath.check(Schema.isPattern(WITHOUT_CONTROL_CHARACTERS))
 
 export const WorktreeBranch = Schema.String.check(
   Schema.isPattern(WITHOUT_WHITESPACE_OR_CONTROL_CHARACTERS),
