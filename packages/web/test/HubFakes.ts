@@ -1,6 +1,7 @@
 import type * as Cause from 'effect/Cause'
 import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
@@ -9,8 +10,10 @@ import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
+import type { CommandFailure } from '@crook/protocol/Commands'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
@@ -30,6 +33,16 @@ export interface SeenCall {
   readonly pane: PaneId
 }
 
+export interface SentCommand {
+  readonly machine: MachineId
+  readonly key: IdempotencyKey
+  readonly command: Command
+}
+
+const NO_COMMAND_ANSWER = Exit.die(
+  new Error('This test sent a command without setting its answer.'),
+)
+
 export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   cached: Option.Option<HerdSnapshot>,
 ) {
@@ -38,6 +51,9 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const closed = yield* Ref.make(0)
   const seen = yield* Ref.make<readonly SeenCall[]>([])
   const forgotten = yield* Ref.make<readonly MachineId[]>([])
+  const sent = yield* Ref.make<readonly SentCommand[]>([])
+  const commandAnswer =
+    yield* Ref.make<Exit.Exit<CommandReceipt, CommandFailure | HubCallFailed>>(NO_COMMAND_ANSWER)
   const saved = yield* Ref.make(cached)
   const visible = yield* SubscriptionRef.make(true)
   const online = yield* SubscriptionRef.make(true)
@@ -57,6 +73,11 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
         Ref.update(seen, (calls) => [...calls, { machine, pane }]),
       forgetMachine: (machine: MachineId) =>
         Ref.update(forgotten, (machines) => [...machines, machine]),
+      sendCommand: (machine: MachineId, key: IdempotencyKey, command: Command) =>
+        Effect.andThen(
+          Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
+          Effect.flatten(Ref.get(commandAnswer)),
+        ),
     }
   })
 
@@ -97,6 +118,8 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
     closed,
     seen,
     forgotten,
+    sent,
+    commandAnswer,
     saved,
     visible,
     online,
@@ -114,6 +137,12 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     Option.none<ForgetMachineRefused | HubCallFailed | HubNotConnected>(),
   )
   const forgetAnswers = yield* Latch.make(true)
+  const sent = yield* Ref.make<readonly SentCommand[]>([])
+  const commandAnswer =
+    yield* Ref.make<Exit.Exit<CommandReceipt, CommandFailure | HubCallFailed | HubNotConnected>>(
+      NO_COMMAND_ANSWER,
+    )
+  const commandAnswers = yield* Latch.make(true)
 
   const layer = Layer.succeed(
     HubLink,
@@ -132,10 +161,26 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
             }),
           ),
         ),
+      sendCommand: (machine, key, command) =>
+        Effect.andThen(
+          Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
+          Effect.andThen(commandAnswers.await, Effect.flatten(Ref.get(commandAnswer))),
+        ),
     }),
   )
 
-  return { layer, state, seen, resyncs, forgotten, forgetRefusal, forgetAnswers }
+  return {
+    layer,
+    state,
+    seen,
+    resyncs,
+    forgotten,
+    forgetRefusal,
+    forgetAnswers,
+    sent,
+    commandAnswer,
+    commandAnswers,
+  }
 })
 
 export const dropSession = (session: FakeSession, error: HubCallFailed) =>

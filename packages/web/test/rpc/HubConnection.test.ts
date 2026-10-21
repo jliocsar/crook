@@ -1,9 +1,14 @@
 import { describe, expect, it, layer } from '@effect/vitest'
 import * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Stream from 'effect/Stream'
 import * as RpcTest from 'effect/rpc/RpcTest'
 
+import { AgentStarted, StartAgent } from '@crook/domain/Command'
+import { IdempotencyKey } from '@crook/domain/Ids'
 import { ClientApi, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
+import { FolderNotFound } from '@crook/protocol/Commands'
 import {
   agentSocketUrl,
   callsFrom,
@@ -13,9 +18,15 @@ import {
 
 import { agent, DESK, herd, LAPTOP, machine } from '../HerdFixtures.ts'
 
+const MISSING_FOLDER = '/home/jliocsar/Projects/nowhere'
+
 const view = herd([machine(LAPTOP, [agent('w1:p1', 'done')])])
 
 const missingPane = agent('w1:p9', 'idle').pane
+
+const startedPane = agent('w1:p8', 'idle').pane
+
+const launchKey = IdempotencyKey.make('3f1c2a9e')
 
 const handlers = ClientApi.toLayer({
   WatchHerd: () => Stream.make(view),
@@ -28,7 +39,15 @@ const handlers = ClientApi.toLayer({
       ? Effect.fail(new PaneNotInHerd({ machine: machineId, pane }))
       : Effect.void,
   SetPinned: () => Effect.die('SetPinned is not part of this test.'),
-  SendCommand: () => Effect.die('SendCommand is not part of this test.'),
+  SendCommand: ({ command }) =>
+    Match.value(command).pipe(
+      Match.tag('StartAgent', (start) =>
+        start.folder === MISSING_FOLDER
+          ? Effect.fail(new FolderNotFound({ folder: start.folder }))
+          : Effect.succeed(new AgentStarted({ pane: startedPane })),
+      ),
+      Match.orElse(() => Effect.die('Only StartAgent is part of this test.')),
+    ),
   WatchTranscript: () => Stream.die('WatchTranscript is not part of this test.'),
   WatchNotificationSettings: () =>
     Stream.die('WatchNotificationSettings is not part of this test.'),
@@ -88,6 +107,25 @@ layer(handlers)('callsFrom', (withHandlers) => {
       const refusal = yield* Effect.flip(calls.forgetMachine(LAPTOP))
 
       expect(refusal).toBeInstanceOf(MachineStillConnected)
+    }),
+  )
+
+  withHandlers.effect('sends a launch and passes its receipt and its refusals through', () =>
+    Effect.gen(function* () {
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+      const launch = (folder: string) =>
+        new StartAgent({ kind: 'claude', folder, task: Option.some('Fix the banner') })
+      const receipt = yield* calls.sendCommand(
+        LAPTOP,
+        launchKey,
+        launch('/home/jliocsar/Projects/crook'),
+      )
+      const refusal = yield* Effect.flip(
+        calls.sendCommand(LAPTOP, launchKey, launch(MISSING_FOLDER)),
+      )
+
+      expect(receipt).toEqual(new AgentStarted({ pane: startedPane }))
+      expect(refusal).toBeInstanceOf(FolderNotFound)
     }),
   )
 })

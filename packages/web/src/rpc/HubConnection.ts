@@ -9,8 +9,9 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import { RpcClientError } from 'effect/rpc/RpcClientError'
 import * as Socket from 'effect/socket/Socket'
 
+import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import type {
@@ -19,6 +20,7 @@ import type {
   MachineStillConnected,
   PaneNotInHerd,
 } from '@crook/protocol/ClientApi'
+import type { CommandFailure } from '@crook/protocol/Commands'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
@@ -39,6 +41,11 @@ export interface HubCalls {
   readonly forgetMachine: (
     machine: MachineId,
   ) => Effect.Effect<void, ForgetMachineRefused | HubCallFailed>
+  readonly sendCommand: (
+    machine: MachineId,
+    key: IdempotencyKey,
+    command: Command,
+  ) => Effect.Effect<CommandReceipt, CommandFailure | HubCallFailed>
 }
 
 const SECURE_PAGE_PROTOCOL = 'https:'
@@ -92,6 +99,7 @@ export const callsFrom = (client: ClientApiClient): HubCalls => ({
   ),
   markSeen: (machine, pane) => hubCall(client.MarkSeen({ machine, pane })),
   forgetMachine: (machine) => hubCall(client.ForgetMachine({ machine })),
+  sendCommand: (machine, key, command) => hubCall(client.SendCommand({ machine, key, command })),
 })
 
 export const connectTo = (url: URL): Effect.Effect<HubCalls, never, Scope.Scope> =>
