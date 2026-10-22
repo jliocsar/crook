@@ -301,7 +301,7 @@ function CompactedDivider({ summary }: { summary: Option.Option<string> }) {
   const [open, setOpen] = useRowFlag('summary', false)
 
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-1 gap-2">
       <Divider>Conversation compacted</Divider>
       {Option.match(summary, {
         onNone: () => null,
