@@ -229,6 +229,11 @@ version with the hub's to offer "update agent", so a hub-only bump would flag ev
 no newer agent exists. Versions stay plain `major.minor.patch`: the hub reads its own strictly, so
 its tests fail on anything else, and an agent version it cannot read shows as no version rather
 than keeping the machine offline.
+
+A bump writes the version into every `package.json`, the root's and the workspace entries in the
+lockfile included, and into the herdr plugin's manifest, which a test holds to the agent's
+version. Run the gate on the bump commit before pushing its tag: `check-version` reads only the
+two apps, so a tag pushed after it alone failed the release gate on the manifest (measured).
 :::
 
 :::caution
