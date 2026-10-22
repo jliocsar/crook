@@ -24,6 +24,7 @@ import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
+import { HubConnectionStatus } from '@crook/agent/HubConnection'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
@@ -212,7 +213,11 @@ export const agentOver = Effect.fn('agentOver')(function* <Failure>(
   return Layer.provide(
     HubLink.layerWith(yield* hubDialFor(machine), hello),
     Layer.provideMerge(
-      Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt(claudeRoots)),
+      Layer.mergeAll(
+        CommandExecutor.layer,
+        TranscriptStreams.layerAt(claudeRoots),
+        HubConnectionStatus.layer,
+      ),
       foundation,
     ),
   )

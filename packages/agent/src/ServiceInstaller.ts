@@ -11,6 +11,7 @@ import * as Redacted from 'effect/Redacted'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
+import { CrookStatusSocketPath } from '@crook/agent/AgentStatus'
 import { CrookAuditLogPath, CrookAuditPolicy } from '@crook/agent/AuditLog'
 import { hooksBlock } from '@crook/agent/ClaudeHookSettings'
 import { CrookCreatedPanesPath } from '@crook/agent/CreatedPanes'
@@ -156,6 +157,7 @@ const AgentSettings = Config.all({
   machine: CrookMachineId,
   label: CrookMachineLabel,
   hookSocket: CrookHookSocketPath,
+  statusSocket: CrookStatusSocketPath,
   carried: CarriedSettings,
 })
 
@@ -182,9 +184,11 @@ export const runningServiceTarget = Effect.suspend(() =>
 
 const launchdDomain = (target: Launchd) => `gui/${target.userId}`
 
-const launchdService = (target: Launchd) => `${launchdDomain(target)}/${LAUNCHD_LABEL}`
+export const launchdService = (target: Launchd) => `${launchdDomain(target)}/${LAUNCHD_LABEL}`
 
-const servicePaths = Effect.fn('ServiceInstaller.servicePaths')(function* (target: ServiceTarget) {
+export const servicePaths = Effect.fn('ServiceInstaller.servicePaths')(function* (
+  target: ServiceTarget,
+) {
   const configDirectory = yield* CrookConfigDirectory
   const environmentFile = `${configDirectory}/${ENVIRONMENT_FILE_NAME}`
 
@@ -219,6 +223,7 @@ const environmentOf = (
       ),
     ),
     Arr.append({ name: 'CROOK_HOOK_SOCKET_PATH', value: settings.hookSocket }),
+    Arr.append({ name: 'CROOK_STATUS_SOCKET_PATH', value: settings.statusSocket }),
     Arr.appendAll(settings.carried),
   )
 
@@ -264,7 +269,7 @@ const makeFiles = Effect.gen(function* () {
   return { write, present, remove, removeIfPresent }
 })
 
-const startCalls = (target: ServiceTarget, paths: ServicePaths) =>
+export const startCalls = (target: ServiceTarget, definitionFile: string) =>
   Match.value(target).pipe(
     Match.tagsExhaustive({
       Systemd: () => [
@@ -274,12 +279,12 @@ const startCalls = (target: ServiceTarget, paths: ServicePaths) =>
       ],
       Launchd: (launchd) => [
         launchctl('enable', launchdService(launchd)),
-        launchctl('bootstrap', launchdDomain(launchd), paths.definitionFile),
+        launchctl('bootstrap', launchdDomain(launchd), definitionFile),
       ],
     }),
   )
 
-const stopLaunchdAgent = Effect.fn('ServiceInstaller.stopLaunchdAgent')(function* (
+export const stopLaunchdAgent = Effect.fn('ServiceInstaller.stopLaunchdAgent')(function* (
   launchd: Launchd,
 ) {
   const manager = yield* ServiceManager
@@ -324,7 +329,7 @@ export const installService = Effect.fn('ServiceInstaller.installService')(funct
     Match.tagsExhaustive({ Systemd: () => Effect.void, Launchd: stopLaunchdAgent }),
   )
   yield* files.write(paths.definitionFile, definition)
-  yield* Effect.forEach(startCalls(target, paths), manager.run, { discard: true })
+  yield* Effect.forEach(startCalls(target, paths.definitionFile), manager.run, { discard: true })
 
   return new InstalledService({
     target,

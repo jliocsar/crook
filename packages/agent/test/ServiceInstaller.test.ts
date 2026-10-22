@@ -42,7 +42,7 @@ import packageJson from '../package.json' with { type: 'json' }
 interface Run {
   readonly target?: ServiceTarget
   readonly environment?: Record<string, string>
-  readonly answer?: (call: ServiceManagerCall) => Effect.Effect<void, ServiceManagerRefused>
+  readonly answer?: (call: ServiceManagerCall) => Effect.Effect<string, ServiceManagerRefused>
 }
 
 const PROGRAM = ['/opt/crook/crook-agent']
@@ -75,7 +75,7 @@ const refusing =
             detail: `${call.program} refused`,
           }),
         )
-      : Effect.void
+      : Effect.succeed('')
 
 const settingsTheAgentReads = Effect.fn('settingsTheAgentReads')(function* () {
   const fileSystem = yield* FileSystem.FileSystem
@@ -193,6 +193,7 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
           `CROOK_HUB_TOKEN="${TOKEN}"`,
           'CROOK_MACHINE_ID="laptop"',
           `CROOK_HOOK_SOCKET_PATH="${home}/state/crook/hook.sock"`,
+          `CROOK_STATUS_SOCKET_PATH="${home}/state/crook/status.sock"`,
           `XDG_STATE_HOME="${home}/state"`,
           '',
         ].join('\n'),
@@ -357,7 +358,8 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceInstaller', (onD
         detail: 'Job for crook-agent.service failed.',
       })
       const failure = yield* install(home, {
-        answer: (call) => (call.args.includes('restart') ? Effect.fail(refusal) : Effect.void),
+        answer: (call) =>
+          call.args.includes('restart') ? Effect.fail(refusal) : Effect.succeed(''),
       }).pipe(Effect.flip)
 
       expect(failure).toEqual(refusal)

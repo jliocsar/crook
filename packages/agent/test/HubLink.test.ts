@@ -3,6 +3,8 @@ import { expect, it, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Clock from 'effect/Clock'
 import * as ConfigProvider from 'effect/ConfigProvider'
+import * as Context from 'effect/Context'
+import * as DateTime from 'effect/DateTime'
 import * as Deferred from 'effect/Deferred'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -24,6 +26,7 @@ import * as RpcTest from 'effect/rpc/RpcTest'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { PANE_BUSY_RETRY_LIMIT } from '@crook/agent/AgentLauncher'
+import { HubConnectionStatus, HubOffline, HubOnline } from '@crook/agent/HubConnection'
 import * as HubLink from '@crook/agent/HubLink'
 import { InputDelivered, Prompt, SendKeys, StartAgent } from '@crook/domain/Command'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
@@ -190,8 +193,16 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
     return yield* RpcTest.makeClient(AgentLink).pipe(Effect.provide(handlers))
   })
 
+  const hubConnection = Context.get(
+    yield* Layer.build(HubConnectionStatus.layer),
+    HubConnectionStatus,
+  )
+
   yield* Layer.build(
-    Layer.provide(HubLink.layerWith(connect, hello), yield* agentWith(state, sent, responses)),
+    Layer.provide(HubLink.layerWith(connect, hello), [
+      yield* agentWith(state, sent, responses),
+      Layer.succeed(HubConnectionStatus, hubConnection),
+    ]),
   )
 
   return {
@@ -201,6 +212,7 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
     requests: sent,
     sent: Queue.clear(sent),
     attempts: Ref.get(attempts),
+    hubConnection: hubConnection.current,
   }
 })
 
@@ -236,6 +248,29 @@ it.effect('republishes the current state when it reconnects after the hub ends A
     expect(yield* Queue.take(received)).toEqual(stateAt(1))
     expect(yield* attempts).toEqual(backoffTimeline(1, TICK))
   }),
+)
+
+it.effect(
+  'reports the hub online once it accepted a publish, and offline with the reason once the link ends',
+  () =>
+    Effect.gen(function* () {
+      const { received, hubConnection } = yield* startLink({ attachLifetime: Option.some(TICK) })
+      const startedAt = DateTime.makeUnsafe(0)
+
+      yield* Queue.take(received)
+      yield* TestClock.adjust(Duration.zero)
+
+      expect(yield* hubConnection).toEqual(new HubOnline({ since: startedAt }))
+
+      yield* TestClock.adjust(TICK)
+
+      expect(yield* hubConnection).toEqual(
+        new HubOffline({
+          since: DateTime.makeUnsafe(Duration.toMillis(TICK)),
+          lastFailure: Option.some(new HubLink.HubAttachEnded().message),
+        }),
+      )
+    }),
 )
 
 it.effect('doubles the delay after each failed connection, up to the ping interval', () =>
@@ -452,6 +487,7 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
       yield* Layer.build(
         Layer.provide(HubLink.layer, [
           yield* agentWith(state, sent, inputResponses),
+          HubConnectionStatus.layer,
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
               CROOK_HUB_URL: `ws://${hub.url.host}${AGENT_PATH}`,
@@ -494,6 +530,7 @@ layer(Layer.empty, { excludeTestServices: true })('HubLink over a real socket', 
       yield* Layer.build(
         Layer.provide(HubLink.layer, [
           yield* agentWith(state, sent, inputResponses),
+          HubConnectionStatus.layer,
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
               CROOK_HUB_URL: `ws://${hub.url.host}${AGENT_PATH}`,
