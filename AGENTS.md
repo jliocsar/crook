@@ -248,6 +248,12 @@ the code.
 `@effect/vitest`'s `layer(L)(name, (it) => …)` hands out an `it` without `.live`. A test that needs
 the real clock or real IO (sockets, temp dirs) passes `layer(L, { excludeTestServices: true })` and
 keeps writing `it.effect`.
+
+A test that moves the `TestClock` past an effect which does real IO first, such as a launch that
+stats its folder, waits for a sign the IO is over, like the request the effect sends next, before
+it adjusts. Otherwise the adjust can run while the IO is still out, and the sleep registered after
+it never wakes. Two such tests failed only with every member's suite running at once, in CI and
+locally, and passed alone (measured).
 :::
 
 :::warning

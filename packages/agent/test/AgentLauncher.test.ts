@@ -434,6 +434,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
       ).pipe(Effect.forkChild)
 
       yield* untilSent(AgentStartMethod.name)
+      yield* untilSent(AgentStartMethod.name)
       yield* TestClock.adjust(PANE_BUSY_RETRY_LIMIT)
       const receipts = yield* Fiber.join(launching)
       const names = (yield* sent)

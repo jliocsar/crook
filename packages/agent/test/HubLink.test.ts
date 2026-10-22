@@ -357,7 +357,7 @@ it.effect('runs each command the hub pushes down Attach and answers it with its 
 
 it.effect('reconnects at once when the link drops while a launch is still running', () =>
   Effect.gen(function* () {
-    const { attempts } = yield* startLink({
+    const { attempts, requests } = yield* startLink({
       attachLifetime: Option.some(TICK),
       commands: [
         routed(
@@ -369,6 +369,10 @@ it.effect('reconnects at once when the link drops while a launch is still runnin
       responses: launchStuckAtABusyShell,
     })
 
+    yield* Stream.fromQueue(requests).pipe(
+      Stream.takeUntil((request) => request.method === 'agent.start'),
+      Stream.runDrain,
+    )
     yield* TestClock.adjust(Duration.sum(TICK, HUB_RECONNECT_BASE))
     const reconnected = yield* attempts
 
