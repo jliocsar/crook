@@ -1,14 +1,13 @@
-import * as BunSocketServer from '@effect/platform-bun/BunSocketServer'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
-import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
 import * as Socket from 'effect/socket/Socket'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { makeEnsureParentDirectory, stateFile } from '@crook/agent/StateDirectory'
+import { readAllText, serveLocalSocket } from '@crook/agent/LocalSocket'
+import { stateFile } from '@crook/agent/StateDirectory'
 import {
   type HookLedger,
   type PendingPermission,
@@ -50,19 +49,12 @@ const fromLedger = (ledger: SubscriptionRef.SubscriptionRef<HookLedger>) =>
   })
 
 const make = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem.FileSystem
-  const ensureParentDirectory = yield* makeEnsureParentDirectory
   const path = yield* CrookHookSocketPath
   const ledger = yield* SubscriptionRef.make(emptyHookLedger)
 
   const receive = Effect.fn('HookInbox.receive')(function* (socket: Socket.Socket) {
     const pull = yield* Socket.readerBytes(socket)
-    const text = yield* Stream.fromEffectRepeat(pull).pipe(
-      Stream.flattenArray,
-      Stream.decodeText,
-      Stream.catchReason('SocketError', 'SocketCloseError', () => Stream.empty),
-      Stream.mkString,
-    )
+    const text = yield* readAllText(pull)
     const payload = yield* Schema.decodeEffect(HookPayloadFromJson)(text)
 
     yield* SubscriptionRef.update(ledger, (current) => recordHook(current, payload))
@@ -74,16 +66,7 @@ const make = Effect.gen(function* () {
     )
   })
 
-  const listen = Effect.fn('HookInbox.listen')(function* () {
-    yield* ensureParentDirectory(path)
-    yield* fileSystem.remove(path, { force: true })
-
-    const server = yield* BunSocketServer.make({ path, allowHalfOpen: true })
-
-    yield* server.run(receiveOrIgnore).pipe(Effect.forkScoped)
-  })
-
-  yield* listen().pipe(
+  yield* serveLocalSocket(path, receiveOrIgnore, { allowHalfOpen: true }).pipe(
     Effect.catch((cause) => Effect.logError(new HookSocketUnavailable({ path, cause }).message)),
   )
 

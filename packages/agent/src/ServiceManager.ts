@@ -49,28 +49,28 @@ const make = Effect.gen(function* () {
 
   const outcomeOf = Effect.fn('ServiceManager.outcomeOf')(function* (call: ServiceManagerCall) {
     const handle = yield* spawner.spawn(ChildProcess.make(call.program, call.args))
-    const [detail, , exitCode] = yield* Effect.all(
+    const [detail, output, exitCode] = yield* Effect.all(
       [
         Stream.mkString(Stream.decodeText(handle.stderr)),
-        Stream.runDrain(handle.stdout),
+        Stream.mkString(Stream.decodeText(handle.stdout)),
         handle.exitCode,
       ],
       { concurrency: 'unbounded' },
     )
 
-    return { detail: detail.trim(), exitCode }
+    return { detail: detail.trim(), output, exitCode }
   }, Effect.scoped)
 
   const run = Effect.fn('ServiceManager.run')(function* (call: ServiceManagerCall) {
     const command = commandLine(call)
-    const { detail, exitCode } = yield* outcomeOf(call).pipe(
+    const { detail, output, exitCode } = yield* outcomeOf(call).pipe(
       Effect.catchTag('PlatformError', (error) =>
         Effect.fail(new ServiceManagerNotRun({ command, detail: error.message })),
       ),
     )
 
     return yield* exitCode === SUCCESS_EXIT_CODE
-      ? Effect.void
+      ? Effect.succeed(output)
       : Effect.fail(new ServiceManagerRefused({ command, exitCode, detail }))
   })
 
@@ -82,15 +82,15 @@ export class ServiceManager extends Context.Service<
   {
     readonly run: (
       call: ServiceManagerCall,
-    ) => Effect.Effect<void, ServiceManagerRefused | ServiceManagerNotRun>
+    ) => Effect.Effect<string, ServiceManagerRefused | ServiceManagerNotRun>
   }
 >()('@crook/agent/ServiceManager') {
   static readonly layer = Layer.effect(this, make)
 
   static readonly layerTest = (
     calls: Queue.Queue<ServiceManagerCall>,
-    answer: (call: ServiceManagerCall) => Effect.Effect<void, ServiceManagerRefused> = () =>
-      Effect.void,
+    answer: (call: ServiceManagerCall) => Effect.Effect<string, ServiceManagerRefused> = () =>
+      Effect.succeed(''),
   ) =>
     Layer.succeed(
       this,

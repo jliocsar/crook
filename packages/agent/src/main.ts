@@ -10,6 +10,7 @@ import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { hooksBlock } from '@crook/agent/ClaudeHookSettings'
 import { forwardHook } from '@crook/agent/HookForwarder'
 import { runningProgram } from '@crook/agent/RunningProgram'
+import * as ServiceControl from '@crook/agent/ServiceControl'
 import * as ServiceInstaller from '@crook/agent/ServiceInstaller'
 import { ServiceManager } from '@crook/agent/ServiceManager'
 
@@ -70,8 +71,56 @@ const uninstallService = Command.make('uninstall-service', {}, () =>
   ),
 )
 
+const status = Command.make('status', {}, () =>
+  Effect.gen(function* () {
+    const target = yield* ServiceInstaller.runningServiceTarget
+    const current = yield* ServiceControl.agentServiceStatus(target)
+
+    yield* Console.log(ServiceControl.statusReport(current))
+  }),
+).pipe(
+  Command.withDescription(
+    "Show the service's state, the running agent's version and its link to the hub.",
+  ),
+)
+
+const start = Command.make('start', {}, () =>
+  Effect.gen(function* () {
+    const target = yield* ServiceInstaller.runningServiceTarget
+    const outcome = yield* ServiceControl.startService(target)
+
+    yield* Console.log(ServiceControl.startReport(outcome))
+  }),
+).pipe(
+  Command.withDescription(
+    'Start the installed crook-agent service, unless an agent already answers or no service is installed. The crook plugin for Herdr runs this when Herdr starts.',
+  ),
+)
+
+const restart = Command.make('restart', {}, () =>
+  Effect.gen(function* () {
+    const target = yield* ServiceInstaller.runningServiceTarget
+    const answer = yield* ServiceControl.restartService(target)
+
+    yield* Console.log(ServiceControl.restartReport(answer))
+  }),
+).pipe(
+  Command.withDescription(
+    'Restart the installed crook-agent service, and wait until the new agent answers on the status socket.',
+  ),
+)
+
 const crookAgent = Command.make('crook-agent').pipe(
-  Command.withSubcommands([run, installService, uninstallService, hook, hookSettings]),
+  Command.withSubcommands([
+    run,
+    status,
+    start,
+    restart,
+    installService,
+    uninstallService,
+    hook,
+    hookSettings,
+  ]),
 )
 
 BunRuntime.runMain(

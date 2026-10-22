@@ -1,10 +1,12 @@
 import * as Layer from 'effect/Layer'
 
+import * as StatusSocket from '@crook/agent/StatusSocket'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
+import { HubConnectionStatus } from '@crook/agent/HubConnection'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { PendingAsks } from '@crook/agent/PendingAsks'
@@ -22,4 +24,9 @@ const machineServices = Layer.provideMerge(
   Layer.provideMerge(MachineStateSync.layer, machineFacts),
 )
 
-export const layer = Layer.provide(HubLink.layer, machineServices)
+const hubLink = Layer.provide(HubLink.layer, machineServices)
+
+export const layer = Layer.provide(
+  Layer.mergeAll(StatusSocket.layer, hubLink),
+  HubConnectionStatus.layer,
+)

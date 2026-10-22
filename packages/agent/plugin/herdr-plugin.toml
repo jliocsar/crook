@@ -1,0 +1,61 @@
+id = "crook"
+name = "crook"
+version = "0.0.1"
+min_herdr_version = "0.9.5"
+description = "Connect this machine's crook agent to a hub and keep it running."
+platforms = ["linux", "macos"]
+
+[[startup]]
+command = ["sh", "crook.sh", "startup"]
+
+[[actions]]
+id = "connect"
+title = "crook: connect to hub"
+description = "Ask for the hub's address and token, then install and start the crook agent service."
+contexts = ["global"]
+command = ["sh", "crook.sh", "open", "connect"]
+
+[[actions]]
+id = "status"
+title = "crook: status"
+description = "Show the crook agent service, the agent's version and its link to the hub."
+contexts = ["global"]
+command = ["sh", "crook.sh", "open", "status"]
+
+[[actions]]
+id = "restart"
+title = "crook: restart agent"
+description = "Restart the crook agent service and show its status."
+contexts = ["global"]
+command = ["sh", "crook.sh", "open", "restart"]
+
+[[actions]]
+id = "update"
+title = "crook: update agent"
+description = "Install the crook agent version you pick with the signed release installer, then restart it."
+contexts = ["global"]
+command = ["sh", "crook.sh", "open", "update"]
+
+[[panes]]
+id = "connect"
+title = "crook: connect to hub"
+placement = "popup"
+command = ["sh", "crook.sh", "connect"]
+
+[[panes]]
+id = "status"
+title = "crook: status"
+placement = "popup"
+command = ["sh", "crook.sh", "status"]
+
+[[panes]]
+id = "restart"
+title = "crook: restart agent"
+placement = "popup"
+command = ["sh", "crook.sh", "restart"]
+
+[[panes]]
+id = "update"
+title = "crook: update agent"
+placement = "popup"
+command = ["sh", "crook.sh", "update"]

@@ -12,6 +12,7 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
+import { HubConnectionStatus } from '@crook/agent/HubConnection'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
@@ -83,6 +84,7 @@ const make = (connect: HubConnect, hello: Hello) =>
     const executor = yield* CommandExecutor
     const transcripts = yield* TranscriptStreams
     const launches = yield* Effect.scope
+    const connection = yield* HubConnectionStatus
 
     const answer = (client: AgentLinkClient, routed: RoutedCommand) =>
       executor.execute(routed.key, routed.command).pipe(
@@ -133,7 +135,7 @@ const make = (connect: HubConnect, hello: Hello) =>
       yield* Effect.all(
         [
           holdAttach(client),
-          publishChanges(client, health.markHealthy),
+          publishChanges(client, Effect.andThen(health.markHealthy, connection.online)),
           transcripts.serve(transcriptLinkOf(client)),
         ],
         {
@@ -142,7 +144,9 @@ const make = (connect: HubConnect, hello: Hello) =>
         },
       ).pipe(
         Effect.catchDefect((cause) => Effect.fail(new HubCallDefected({ cause }))),
-        Effect.tapError((error) => Effect.logWarning(error.message)),
+        Effect.tapError((error) =>
+          Effect.andThen(Effect.logWarning(error.message), connection.offline(error.message)),
+        ),
         Effect.catch((error) =>
           Effect.flatMap(health.stayedHealthy, (healthy) =>
             healthy ? Effect.void : Effect.fail(error),
