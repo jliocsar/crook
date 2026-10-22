@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
@@ -9,13 +10,6 @@ import * as Record from 'effect/Record'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import {
-  type AgentAnswerUnreadable,
-  CrookStatusSocketPath,
-  type NoAgentAnswered,
-  type RunningAgent,
-  askRunningAgent,
-} from '@crook/agent/AgentStatus'
 import type { HubConnection } from '@crook/agent/HubConnection'
 import { agentVersion } from '@crook/agent/HubLink'
 import { SYSTEMD_UNIT_NAME } from '@crook/agent/ServiceDefinition'
@@ -28,6 +22,15 @@ import {
   stopLaunchdAgent,
 } from '@crook/agent/ServiceInstaller'
 import { ServiceManager, launchctl, systemctl } from '@crook/agent/ServiceManager'
+import {
+  AGENT_STARTUP_TIMEOUT,
+  type AgentAnswerUnreadable,
+  CrookStatusSocketPath,
+  type NoAgentAnswered,
+  type RunningAgent,
+  askRunningAgent,
+  awaitAgentOtherThan,
+} from '@crook/agent/StatusSocket'
 
 export type ServiceState = ServiceAbsent | SystemdUnitState | LaunchdAgentState
 
@@ -35,19 +38,19 @@ export type StartOutcome =
   | AgentAlreadyRunning
   | OtherAgentRunning
   | ServiceAbsent
-  | LaunchdAgentState
+  | ServiceAlreadyLoaded
   | ServiceStarted
 
-export interface AgentStatus {
+export type AgentAnswer = Result.Result<RunningAgent, NoAgentAnswered | AgentAnswerUnreadable>
+
+export interface AgentServiceStatus {
   readonly service: ServiceState
-  readonly running: Result.Result<RunningAgent, NoAgentAnswered | AgentAnswerUnreadable>
+  readonly running: AgentAnswer
 }
 
 const UNIT_PROPERTIES = ['ActiveState', 'SubState', 'UnitFileState']
 const UNKNOWN_PROPERTY = 'unknown'
 const SHOWN_PROPERTY = /^(\w+)=(.*)$/u
-
-export const RESTART_REPORT = 'Restarted the crook-agent service.'
 
 const CONNECT_HINT =
   'Run "Connect to hub" from the crook plugin in Herdr, or crook-agent install-service, to install it.'
@@ -75,6 +78,11 @@ export class AgentAlreadyRunning extends Schema.TaggedClass<AgentAlreadyRunning>
 export class OtherAgentRunning extends Schema.TaggedClass<OtherAgentRunning>()(
   'OtherAgentRunning',
   { detail: Schema.String },
+) {}
+
+export class ServiceAlreadyLoaded extends Schema.TaggedClass<ServiceAlreadyLoaded>()(
+  'ServiceAlreadyLoaded',
+  {},
 ) {}
 
 export class ServiceStarted extends Schema.TaggedClass<ServiceStarted>()('ServiceStarted', {}) {}
@@ -174,13 +182,13 @@ export const serviceState = Effect.fn('ServiceControl.serviceState')(function* (
   )
 })
 
-export const agentStatus = Effect.fn('ServiceControl.agentStatus')(function* (
+export const agentServiceStatus = Effect.fn('ServiceControl.agentServiceStatus')(function* (
   target: ServiceTarget,
 ) {
   const socket = yield* CrookStatusSocketPath
   const service = yield* serviceState(target)
   const running = yield* Effect.result(askRunningAgent(socket))
-  const status: AgentStatus = { service, running }
+  const status: AgentServiceStatus = { service, running }
 
   return status
 })
@@ -201,7 +209,7 @@ const startLaunchdAgent = Effect.fn('ServiceControl.startLaunchdAgent')(function
   const loaded = yield* launchdLoaded(launchd)
 
   if (loaded) {
-    return new LaunchdAgentState({ loaded })
+    return new ServiceAlreadyLoaded()
   }
 
   yield* Effect.forEach(startCalls(launchd, definitionFile), manager.run, { discard: true })
@@ -266,18 +274,25 @@ const restartLaunchdAgent = Effect.fn('ServiceControl.restartLaunchdAgent')(func
 export const restartService = Effect.fn('ServiceControl.restartService')(function* (
   target: ServiceTarget,
 ) {
+  const socket = yield* CrookStatusSocketPath
   const installed = yield* installedDefinition(target)
 
   if (Result.isFailure(installed)) {
     return yield* new ServiceNotInstalled({ definitionFile: installed.failure.definitionFile })
   }
 
-  return yield* Match.value(target).pipe(
+  const previous = yield* Effect.option(askRunningAgent(socket))
+
+  yield* Match.value(target).pipe(
     Match.tagsExhaustive({
       Systemd: () => restartSystemdUnit(),
       Launchd: (launchd) => restartLaunchdAgent(launchd, installed.success),
     }),
   )
+
+  const answer: AgentAnswer = yield* Effect.result(awaitAgentOtherThan(socket, previous))
+
+  return answer
 })
 
 const serviceLine = (service: ServiceState) =>
@@ -307,7 +322,7 @@ const hubLine = (hub: HubConnection) =>
     }),
   )
 
-const runningLines = (running: AgentStatus['running']) =>
+const runningLines = (running: AgentAnswer) =>
   Result.match(running, {
     onFailure: (failure) => [`Agent: not answering. ${failure.message}`],
     onSuccess: (agent) => [
@@ -321,7 +336,7 @@ const runningLines = (running: AgentStatus['running']) =>
     ],
   })
 
-export const statusReport = (status: AgentStatus) =>
+export const statusReport = (status: AgentServiceStatus) =>
   [
     `crook-agent v${agentVersion}`,
     `Service: ${serviceLine(status.service)}`,
@@ -337,7 +352,23 @@ export const startReport = (outcome: StartOutcome) =>
         `A crook agent is already running, so nothing was started. ${other.detail}`,
       ServiceAbsent: () =>
         `crook-agent is not installed as a service yet, so nothing was started. ${CONNECT_HINT}`,
-      LaunchdAgentState: () => 'crook-agent is already loaded in launchd, so nothing was started.',
+      ServiceAlreadyLoaded: () =>
+        'crook-agent is already loaded in launchd, so nothing was started.',
       ServiceStarted: () => 'Started the crook-agent service.',
     }),
   )
+
+export const restartReport = (answer: AgentAnswer) =>
+  Result.match(answer, {
+    onSuccess: (agent) =>
+      `Restarted the crook-agent service. crook-agent v${agent.agentVersion} answers as process ${agent.processId}.`,
+    onFailure: (failure) =>
+      Match.value(failure).pipe(
+        Match.tagsExhaustive({
+          NoAgentAnswered: (silent) =>
+            `Restarted the crook-agent service, but no new agent answered within ${Duration.format(AGENT_STARTUP_TIMEOUT)}. ${silent.message} Its logs say why.`,
+          AgentAnswerUnreadable: (unreadable) =>
+            `Restarted the crook-agent service. ${unreadable.message}`,
+        }),
+      ),
+  })

@@ -74,7 +74,7 @@ const uninstallService = Command.make('uninstall-service', {}, () =>
 const status = Command.make('status', {}, () =>
   Effect.gen(function* () {
     const target = yield* ServiceInstaller.runningServiceTarget
-    const current = yield* ServiceControl.agentStatus(target)
+    const current = yield* ServiceControl.agentServiceStatus(target)
 
     yield* Console.log(ServiceControl.statusReport(current))
   }),
@@ -100,11 +100,15 @@ const start = Command.make('start', {}, () =>
 const restart = Command.make('restart', {}, () =>
   Effect.gen(function* () {
     const target = yield* ServiceInstaller.runningServiceTarget
+    const answer = yield* ServiceControl.restartService(target)
 
-    yield* ServiceControl.restartService(target)
-    yield* Console.log(ServiceControl.RESTART_REPORT)
+    yield* Console.log(ServiceControl.restartReport(answer))
   }),
-).pipe(Command.withDescription('Restart the installed crook-agent service.'))
+).pipe(
+  Command.withDescription(
+    'Restart the installed crook-agent service, and wait until the new agent answers on the status socket.',
+  ),
+)
 
 const crookAgent = Command.make('crook-agent').pipe(
   Command.withSubcommands([

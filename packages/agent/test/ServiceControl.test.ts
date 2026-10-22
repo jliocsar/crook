@@ -1,24 +1,25 @@
 import * as BunServices from '@effect/platform-bun/BunServices'
 import { expect, it, layer } from '@effect/vitest'
 import * as ConfigProvider from 'effect/ConfigProvider'
+import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 
-import * as AgentStatus from '@crook/agent/AgentStatus'
 import { HubConnectionStatus } from '@crook/agent/HubConnection'
 import { agentVersion } from '@crook/agent/HubLink'
 import {
   AgentAlreadyRunning,
   LaunchdAgentState,
-  RESTART_REPORT,
   ServiceAbsent,
+  ServiceAlreadyLoaded,
   ServiceNotInstalled,
   ServiceStarted,
   SystemdUnitState,
-  agentStatus,
+  agentServiceStatus,
+  restartReport,
   restartService,
   serviceState,
   startReport,
@@ -33,6 +34,7 @@ import {
   ServiceManagerRefused,
   commandLine,
 } from '@crook/agent/ServiceManager'
+import * as StatusSocket from '@crook/agent/StatusSocket'
 
 interface Run {
   readonly answer?: (call: ServiceManagerCall) => Effect.Effect<string, ServiceManagerRefused>
@@ -95,12 +97,30 @@ const plistFile = (home: string) => `${home}/Library/LaunchAgents/crook-agent.pl
 
 const runningAgentAt = Effect.fn('runningAgentAt')(function* (home: string) {
   yield* Layer.build(
-    Layer.provide(AgentStatus.layer, [
+    Layer.provide(StatusSocket.layer, [
       HubConnectionStatus.layer,
       ConfigProvider.layer(
         ConfigProvider.fromUnknown({ HOME: home, XDG_STATE_HOME: `${home}/state` }),
       ),
     ]),
+  )
+})
+
+const signallingOn =
+  (verb: string, started: Deferred.Deferred<void>) =>
+  (call: ServiceManagerCall): Effect.Effect<string, ServiceManagerRefused> =>
+    call.args.includes(verb)
+      ? Deferred.succeed(started, undefined).pipe(Effect.as(''))
+      : Effect.succeed('')
+
+const agentStartingAfter = Effect.fn('agentStartingAfter')(function* (
+  started: Deferred.Deferred<void>,
+  home: string,
+) {
+  yield* Deferred.await(started).pipe(
+    Effect.andThen(Effect.sleep(StatusSocket.SLOWEST_MEASURED_STARTUP)),
+    Effect.andThen(runningAgentAt(home)),
+    Effect.forkScoped,
   )
 })
 
@@ -167,7 +187,7 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceControl', (onDis
       yield* installedAt(unitFile(home))
       yield* runningAgentAt(home)
 
-      const status = yield* agentStatus(new Systemd()).pipe(provide)
+      const status = yield* agentServiceStatus(new Systemd()).pipe(provide)
       const report = statusReport(status)
 
       expect(Result.isSuccess(status.running)).toBe(true)
@@ -183,7 +203,7 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceControl', (onDis
   onDisk.effect('says no agent answers when nothing listens on the status socket', () =>
     Effect.gen(function* () {
       const { socket, provide } = yield* scratch()
-      const report = statusReport(yield* agentStatus(new Systemd()).pipe(provide))
+      const report = statusReport(yield* agentServiceStatus(new Systemd()).pipe(provide))
 
       expect(report).toContain('Service: not installed')
       expect(report).toContain(`Agent: not answering. No crook agent answered on ${socket}`)
@@ -247,36 +267,58 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceControl', (onDis
         'launchctl enable gui/501/crook-agent',
         `launchctl bootstrap gui/501 ${plistFile(unloaded.home)}`,
       ])
-      expect(yield* startService(target).pipe(loaded.provide)).toEqual(
-        new LaunchdAgentState({ loaded: true }),
-      )
+      expect(yield* startService(target).pipe(loaded.provide)).toEqual(new ServiceAlreadyLoaded())
       expect(yield* loaded.calls).toEqual(['launchctl print gui/501/crook-agent'])
     }),
   )
 
-  onDisk.effect('restarts an installed unit, and refuses one that is not installed', () =>
+  onDisk.effect('restarts an installed unit and waits for the new agent to answer', () =>
     Effect.gen(function* () {
-      const installed = yield* scratch()
+      const started = yield* Deferred.make<void>()
+      const installed = yield* scratch({ answer: signallingOn('restart', started) })
       const missing = yield* scratch()
 
       yield* installedAt(unitFile(installed.home))
-      yield* restartService(new Systemd()).pipe(installed.provide)
+      yield* agentStartingAfter(started, installed.home)
 
+      const answer = yield* restartService(new Systemd()).pipe(installed.provide)
       const refused = yield* restartService(new Systemd()).pipe(missing.provide, Effect.flip)
 
       expect(yield* installed.calls).toEqual(['systemctl --user restart crook-agent.service'])
+      expect(restartReport(answer)).toBe(
+        `Restarted the crook-agent service. crook-agent v${agentVersion} answers as process ${process.pid}.`,
+      )
       expect(refused).toEqual(new ServiceNotInstalled({ definitionFile: unitFile(missing.home) }))
       expect(yield* missing.calls).toEqual([])
-      expect(RESTART_REPORT).toBe('Restarted the crook-agent service.')
+    }),
+  )
+
+  onDisk.effect('says so when only the agent from before the restart answers', () =>
+    Effect.gen(function* () {
+      const { home, provide } = yield* scratch()
+
+      yield* installedAt(unitFile(home))
+      yield* runningAgentAt(home)
+
+      const report = restartReport(yield* restartService(new Systemd()).pipe(provide))
+
+      expect(report).toContain(
+        'Restarted the crook-agent service, but no new agent answered within',
+      )
+      expect(report).toContain(`process ${process.pid}, the agent from before, still answers`)
     }),
   )
 
   onDisk.effect('restarts a launchd agent by booting it out and loading it again', () =>
     Effect.gen(function* () {
       const target: ServiceTarget = new Launchd({ userId: MAC_USER })
-      const { home, provide, calls } = yield* scratch()
+      const started = yield* Deferred.make<void>()
+      const { home, provide, calls } = yield* scratch({
+        answer: signallingOn('bootstrap', started),
+      })
 
       yield* installedAt(plistFile(home))
+      yield* agentStartingAfter(started, home)
       yield* restartService(target).pipe(provide)
 
       expect(yield* calls).toEqual([

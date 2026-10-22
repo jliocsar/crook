@@ -1,23 +1,25 @@
 import * as BunSocket from '@effect/platform-bun/BunSocket'
-import * as BunSocketServer from '@effect/platform-bun/BunSocketServer'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+import * as Schedule from 'effect/Schedule'
 import * as Schema from 'effect/Schema'
 import * as Socket from 'effect/socket/Socket'
-import * as Stream from 'effect/Stream'
 
 import { HubConnection, HubConnectionStatus } from '@crook/agent/HubConnection'
 import { agentVersion } from '@crook/agent/HubLink'
-import { makeEnsureParentDirectory, stateFile } from '@crook/agent/StateDirectory'
+import { readAllText, serveLocalSocket } from '@crook/agent/LocalSocket'
+import { stateFile } from '@crook/agent/StateDirectory'
 
 const SLOWEST_MEASURED_ANSWER = Duration.millis(21.269)
 const STATUS_REQUEST = 'status\n'
+const STATUS_ANSWER_TIMEOUT = Duration.times(SLOWEST_MEASURED_ANSWER, 10)
 
-export const STATUS_ANSWER_TIMEOUT = Duration.times(SLOWEST_MEASURED_ANSWER, 10)
+export const SLOWEST_MEASURED_STARTUP = Duration.millis(249.5)
+export const AGENT_STARTUP_TIMEOUT = Duration.times(SLOWEST_MEASURED_STARTUP, 10)
 
 export const CrookStatusSocketPath = stateFile('CROOK_STATUS_SOCKET_PATH', 'status.sock')
 
@@ -58,13 +60,11 @@ export class AgentAnswerUnreadable extends Schema.TaggedError<AgentAnswerUnreada
 }
 
 const serve = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem.FileSystem
-  const ensureParentDirectory = yield* makeEnsureParentDirectory
   const path = yield* CrookStatusSocketPath
   const hub = yield* HubConnectionStatus
   const startedAt = yield* DateTime.now
 
-  const answer = Effect.fn('AgentStatus.answer')(function* (socket: Socket.Socket) {
+  const answer = Effect.fn('StatusSocket.answer')(function* (socket: Socket.Socket) {
     const pull = yield* Socket.readerBytes(socket)
 
     yield* pull.pipe(Effect.timeout(STATUS_ANSWER_TIMEOUT))
@@ -81,7 +81,9 @@ const serve = Effect.gen(function* () {
     yield* writer.write(yield* Schema.encodeEffect(RunningAgentJson)(report))
   }, Effect.scoped)
 
-  const answerOrIgnore = Effect.fn('AgentStatus.answerOrIgnore')(function* (socket: Socket.Socket) {
+  const answerOrIgnore = Effect.fn('StatusSocket.answerOrIgnore')(function* (
+    socket: Socket.Socket,
+  ) {
     return yield* answer(socket).pipe(
       Effect.catch((error) =>
         Effect.logDebug(`Could not answer a status request: ${error.message}`),
@@ -89,16 +91,7 @@ const serve = Effect.gen(function* () {
     )
   })
 
-  const listen = Effect.fn('AgentStatus.listen')(function* () {
-    yield* ensureParentDirectory(path)
-    yield* fileSystem.remove(path, { force: true })
-
-    const server = yield* BunSocketServer.make({ path })
-
-    yield* server.run(answerOrIgnore).pipe(Effect.forkScoped)
-  })
-
-  yield* listen().pipe(
+  yield* serveLocalSocket(path, answerOrIgnore, { allowHalfOpen: false }).pipe(
     Effect.catch((cause) => Effect.logError(new StatusSocketUnavailable({ path, cause }).message)),
   )
 })
@@ -111,22 +104,17 @@ const socketFailure = (error: Socket.SocketError) =>
     Match.orElse(() => error.message),
   )
 
-const readAnswer = Effect.fn('AgentStatus.readAnswer')(function* (path: string) {
+const readAnswer = Effect.fn('StatusSocket.readAnswer')(function* (path: string) {
   const socket = yield* BunSocket.makeNet({ path })
   const pull = yield* Socket.readerBytes(socket)
   const writer = yield* socket.writer
 
   yield* writer.write(STATUS_REQUEST)
 
-  return yield* Stream.fromEffectRepeat(pull).pipe(
-    Stream.flattenArray,
-    Stream.decodeText,
-    Stream.catchReason('SocketError', 'SocketCloseError', () => Stream.empty),
-    Stream.mkString,
-  )
+  return yield* readAllText(pull)
 }, Effect.scoped)
 
-export const askRunningAgent = Effect.fn('AgentStatus.askRunningAgent')(function* (path: string) {
+export const askRunningAgent = Effect.fn('StatusSocket.askRunningAgent')(function* (path: string) {
   const text = yield* readAnswer(path).pipe(
     Effect.timeout(STATUS_ANSWER_TIMEOUT),
     Effect.catchTags({
@@ -144,5 +132,41 @@ export const askRunningAgent = Effect.fn('AgentStatus.askRunningAgent')(function
 
   return yield* Schema.decodeEffect(RunningAgentJson)(text).pipe(
     Effect.mapError((error) => new AgentAnswerUnreadable({ path, detail: error.message })),
+  )
+})
+
+const isNoAnswer = (error: NoAgentAnswered | AgentAnswerUnreadable) =>
+  Match.value(error).pipe(
+    Match.tag('NoAgentAnswered', () => true),
+    Match.orElse(() => false),
+  )
+
+const askAgentOtherThan = Effect.fn('StatusSocket.askAgentOtherThan')(function* (
+  path: string,
+  previous: Option.Option<RunningAgent>,
+) {
+  const running = yield* askRunningAgent(path)
+
+  if (Option.exists(previous, (before) => before.processId === running.processId)) {
+    return yield* new NoAgentAnswered({
+      path,
+      detail: `process ${running.processId}, the agent from before, still answers`,
+    })
+  }
+
+  return running
+})
+
+export const awaitAgentOtherThan = Effect.fn('StatusSocket.awaitAgentOtherThan')(function* (
+  path: string,
+  previous: Option.Option<RunningAgent>,
+) {
+  return yield* askAgentOtherThan(path, previous).pipe(
+    Effect.retry({
+      while: isNoAnswer,
+      schedule: Schedule.spaced(SLOWEST_MEASURED_ANSWER).pipe(
+        Schedule.upTo({ duration: AGENT_STARTUP_TIMEOUT }),
+      ),
+    }),
   )
 })

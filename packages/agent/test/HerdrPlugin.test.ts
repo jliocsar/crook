@@ -16,11 +16,14 @@ interface Sandbox {
   readonly agentCalls: string
   readonly installerCalls: string
   readonly herdrCalls: string
+  readonly herdrSockets: string
+  readonly pluginState: string
 }
 
 interface Run {
   readonly input?: string
   readonly withAgent?: boolean
+  readonly failing?: string
 }
 
 const PLUGIN_DIRECTORY = `${import.meta.dirname}/../plugin`
@@ -32,6 +35,7 @@ const LOCAL_ID = /^[\w:-]+$/u
 const PLUGIN_ID = /^[\w.:-]+$/u
 const HUB_URL = 'wss://my-hub.exe.xyz/rpc/agent'
 const TOKEN = 'exe1.secret-machine-token'
+const SESSION_SOCKET = '/run/user/1000/herdr-session.sock'
 
 const Entry = Schema.Struct({ id: Schema.String, command: Schema.Array(Schema.String) })
 
@@ -49,6 +53,13 @@ const encoder = new TextEncoder()
 
 const FAKE_AGENT = `#!/bin/sh
 printf '%s|%s|%s|%s\\n' "$*" "\${CROOK_HUB_URL:-}" "\${CROOK_HUB_TOKEN:-}" "\${CROOK_MACHINE_ID:-}" >> "$AGENT_CALLS"
+if [ "$1" = install-service ]; then
+  printf '%s\\n' "\${HERDR_SOCKET_PATH-unset}" >> "$HERDR_SOCKETS"
+fi
+if [ "$1" = "\${FAKE_AGENT_FAILS:-}" ]; then
+  printf 'Unknown subcommand %s\\n' "$1" >&2
+  exit 1
+fi
 printf 'fake crook-agent %s\\n' "$*"
 `
 
@@ -87,6 +98,8 @@ const sandboxWith = Effect.fn('sandboxWith')(function* (run: Run) {
     agentCalls: `${root}/agent-calls`,
     installerCalls: `${root}/installer-calls`,
     herdrCalls: `${root}/herdr-calls`,
+    herdrSockets: `${root}/herdr-sockets`,
+    pluginState: `${root}/plugin-state`,
   }
 
   yield* fileSystem.makeDirectory(sandbox.plugin, { recursive: true })
@@ -122,6 +135,10 @@ const runPlugin = Effect.fn('runPlugin')(function* (args: readonly string[], run
       CROOK_INSTALL_DIR: sandbox.installDirectory,
       HERDR_BIN_PATH: `${sandbox.root}/fakes/herdr`,
       HERDR_PLUGIN_ID: 'crook',
+      HERDR_PLUGIN_STATE_DIR: sandbox.pluginState,
+      HERDR_SOCKET_PATH: SESSION_SOCKET,
+      FAKE_AGENT_FAILS: run.failing ?? '',
+      HERDR_SOCKETS: sandbox.herdrSockets,
       AGENT_CALLS: sandbox.agentCalls,
       INSTALLER_CALLS: sandbox.installerCalls,
       HERDR_CALLS: sandbox.herdrCalls,
@@ -139,6 +156,7 @@ const runPlugin = Effect.fn('runPlugin')(function* (args: readonly string[], run
     agentCalls: yield* callsIn(sandbox.agentCalls),
     installerCalls: yield* callsIn(sandbox.installerCalls),
     herdrCalls: yield* callsIn(sandbox.herdrCalls),
+    herdrSockets: yield* callsIn(sandbox.herdrSockets),
   }
 })
 
@@ -177,10 +195,7 @@ layer(BunServices.layer, { excludeTestServices: true })('herdr plugin', (live) =
         paneIds.map((id) => ['sh', SCRIPT, 'open', id]),
       )
       expect(plugin.panes.map((pane) => [pane.placement, pane.command])).toEqual(
-        paneIds.map((id) => [
-          'popup',
-          ['sh', '-c', `exec sh "$HERDR_PLUGIN_ROOT/${SCRIPT}" ${id}`],
-        ]),
+        paneIds.map((id) => ['popup', ['sh', SCRIPT, id]]),
       )
     }),
   )
@@ -214,15 +229,51 @@ layer(BunServices.layer, { excludeTestServices: true })('herdr plugin', (live) =
     }),
   )
 
-  live.effect('connects with the address, token and machine name it asks for', () =>
-    Effect.gen(function* () {
-      const result = yield* runPlugin(['connect'], {
-        input: `${HUB_URL}\n${TOKEN}\nlaptop\n\n`,
-      })
+  live.effect(
+    'connects with the address, token and machine name it asks for, and never prints the token',
+    () =>
+      Effect.gen(function* () {
+        const result = yield* runPlugin(['connect'], {
+          input: `${HUB_URL}\n${TOKEN}\nlaptop\n\n`,
+        })
 
-      expect(result.exitCode).toBe(0)
-      expect(result.agentCalls).toEqual([`install-service|${HUB_URL}|${TOKEN}|laptop`])
-      expect(result.output).not.toContain(TOKEN)
+        expect(result.exitCode).toBe(0)
+        expect(result.agentCalls).toEqual([`install-service|${HUB_URL}|${TOKEN}|laptop`])
+        expect(result.output).not.toContain(TOKEN)
+      }),
+  )
+
+  live.effect(
+    "keeps the install report, Claude's hooks block included, in the plugin's state",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const result = yield* runPlugin(['connect'], { input: `${HUB_URL}\n${TOKEN}\nlaptop\n\n` })
+        const report = `${result.sandbox.pluginState}/connect-report.txt`
+
+        expect(yield* fileSystem.readFileString(report)).toBe('fake crook-agent install-service\n')
+        expect(result.output).toContain('fake crook-agent install-service')
+        expect(result.output).toContain(`is saved in ${report}.`)
+      }),
+  )
+
+  live.effect("installs the service for herdr's default socket, not the session it runs in", () =>
+    Effect.gen(function* () {
+      const result = yield* runPlugin(['connect'], { input: `${HUB_URL}\n${TOKEN}\nlaptop\n\n` })
+
+      expect(result.herdrSockets).toEqual(['unset'])
+    }),
+  )
+
+  live.effect('points at the update action when the agent cannot run a command', () =>
+    Effect.gen(function* () {
+      const result = yield* runPlugin(['startup'], { failing: 'start' })
+
+      expect(result.exitCode).toBe(1)
+      expect(result.output).toContain('Unknown subcommand start')
+      expect(result.output).toContain(
+        'is older than the start, status and restart commands this plugin runs',
+      )
     }),
   )
 

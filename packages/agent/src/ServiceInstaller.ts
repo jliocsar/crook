@@ -11,7 +11,7 @@ import * as Redacted from 'effect/Redacted'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import { CrookStatusSocketPath } from '@crook/agent/AgentStatus'
+import { CrookStatusSocketPath } from '@crook/agent/StatusSocket'
 import { CrookAuditLogPath, CrookAuditPolicy } from '@crook/agent/AuditLog'
 import { hooksBlock } from '@crook/agent/ClaudeHookSettings'
 import { CrookCreatedPanesPath } from '@crook/agent/CreatedPanes'

@@ -40,22 +40,22 @@ command = ["sh", "crook.sh", "open", "update"]
 id = "connect"
 title = "crook: connect to hub"
 placement = "popup"
-command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/crook.sh\" connect"]
+command = ["sh", "crook.sh", "connect"]
 
 [[panes]]
 id = "status"
 title = "crook: status"
 placement = "popup"
-command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/crook.sh\" status"]
+command = ["sh", "crook.sh", "status"]
 
 [[panes]]
 id = "restart"
 title = "crook: restart agent"
 placement = "popup"
-command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/crook.sh\" restart"]
+command = ["sh", "crook.sh", "restart"]
 
 [[panes]]
 id = "update"
 title = "crook: update agent"
 placement = "popup"
-command = ["sh", "-c", "exec sh \"$HERDR_PLUGIN_ROOT/crook.sh\" update"]
+command = ["sh", "crook.sh", "update"]

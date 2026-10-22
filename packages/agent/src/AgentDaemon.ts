@@ -1,6 +1,6 @@
 import * as Layer from 'effect/Layer'
 
-import * as AgentStatus from '@crook/agent/AgentStatus'
+import * as StatusSocket from '@crook/agent/StatusSocket'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
@@ -27,6 +27,6 @@ const machineServices = Layer.provideMerge(
 const hubLink = Layer.provide(HubLink.layer, machineServices)
 
 export const layer = Layer.provide(
-  Layer.mergeAll(AgentStatus.layer, hubLink),
+  Layer.mergeAll(StatusSocket.layer, hubLink),
   HubConnectionStatus.layer,
 )

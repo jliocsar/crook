@@ -13,7 +13,7 @@ import {
   NoAgentAnswered,
   askRunningAgent,
   layer as statusLayer,
-} from '@crook/agent/AgentStatus'
+} from '@crook/agent/StatusSocket'
 import { HubConnectionStatus, HubOnline } from '@crook/agent/HubConnection'
 import { agentVersion } from '@crook/agent/HubLink'
 
@@ -52,7 +52,7 @@ const answerEveryoneWith = Effect.fn('answerEveryoneWith')(function* (path: stri
   yield* server.run(answer).pipe(Effect.forkScoped)
 })
 
-layer(BunServices.layer, { excludeTestServices: true })('AgentStatus', (live) => {
+layer(BunServices.layer, { excludeTestServices: true })('StatusSocket', (live) => {
   live.effect('answers with its version, its process and its link to the hub', () =>
     Effect.gen(function* () {
       const path = yield* scratchSocket()
