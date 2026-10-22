@@ -12,10 +12,10 @@
     "build": "bun run --filter '*' --if-present build",
     "release:build": "bun packages/release/src/main.ts build",
     "release:build:host": "bun packages/release/src/main.ts build --host",
-    "lint": "oxlint --deny-warnings --no-error-on-unmatched-pattern",
-    "lint:fix": "oxlint --fix --deny-warnings --no-error-on-unmatched-pattern",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check",
+    "lint": "oxlint --deny-warnings --no-error-on-unmatched-pattern --disable-nested-config",
+    "lint:fix": "oxlint --fix --deny-warnings --no-error-on-unmatched-pattern --disable-nested-config",
+    "fmt": "oxfmt --disable-nested-config",
+    "fmt:check": "oxfmt --check --disable-nested-config",
     "prepare": "husky && effect-tsgo patch --oxlint"
   },
   "devDependencies": {

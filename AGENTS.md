@@ -22,6 +22,12 @@ compiler option is a release of that package, exactly like a rule.
 
 `lint` passes `--no-error-on-unmatched-pattern`: this repo carries no product code, and oxlint
 otherwise exits non-zero when it matches no files, failing the gate on an empty template.
+
+Every oxlint and oxfmt call, the hooks' included, also passes `--disable-nested-config`. An agent
+worktree under `.claude/worktrees/` carries its own `.oxlintrc.json` and `.oxfmtrc.json`, and both
+tools let a nested config govern its directory, so the root's `.claude` ignore did not reach it:
+the push hook failed on another agent's half-done worktree, once per tool (measured). This repo
+tracks one config of each, so nothing else changes.
 :::
 
 The 81 `effecttsgo/*` Effect rules come from `@effect/tsgo`'s `recommended` preset, which
