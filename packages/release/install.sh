@@ -115,7 +115,7 @@ sha256_of() {
 
 latest_tag() {
   if has gh; then
-    gh release view --repo "$REPOSITORY" --json tagName --jq .tagName
+    gh api "repos/$REPOSITORY/releases/latest" --jq .tag_name
   else
     curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPOSITORY/releases/latest" | sed 's#.*/tag/##'
   fi
@@ -123,8 +123,11 @@ latest_tag() {
 
 download() {
   if has gh; then
-    gh release download "v$version" --repo "$REPOSITORY" --pattern "$1" --dir "$work" --clobber ||
-      fail "could not download $1 of v$version with gh. Check that gh is logged in (gh auth status) and can read $REPOSITORY."
+    asset="$(gh api "repos/$REPOSITORY/releases/tags/v$version" --jq ".assets[] | select(.name == \"$1\") | .id")" ||
+      fail "could not read the assets of v$version with gh. Check that gh is logged in (gh auth status), or that GH_HOST names an exe.dev GitHub integration that can read $REPOSITORY."
+    [ -n "$asset" ] || fail "v$version has no asset named $1, so nothing was installed."
+    gh api -H 'Accept: application/octet-stream' "repos/$REPOSITORY/releases/assets/$asset" >"$work/$1" ||
+      fail "could not download $1 of v$version with gh. Check that gh is logged in (gh auth status), or that GH_HOST names an exe.dev GitHub integration that can read $REPOSITORY."
   else
     curl -fsSL -o "$work/$1" "https://github.com/$REPOSITORY/releases/download/v$version/$1" ||
       fail "could not download $1 of v$version. $REPOSITORY is private, so install the GitHub CLI, log in with gh auth login and run this again."

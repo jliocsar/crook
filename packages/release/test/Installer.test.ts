@@ -32,18 +32,21 @@ const EXECUTABLE = 0o755
 
 const FAKE_GH = `#!/bin/sh
 printf '%s\\n' "$*" >> "$GH_CALLS"
-if [ "$1 $2" = 'release view' ]; then
-  printf 'v${VERSION}\\n'
-  exit 0
-fi
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --pattern) pattern="$2"; shift 2 ;;
-    --dir) directory="$2"; shift 2 ;;
-    *) shift ;;
+for argument in "$@"; do
+  case "$argument" in
+    repos/*) path="$argument" ;;
+    *) ;;
   esac
 done
-cp "$FAKE_RELEASE/$pattern" "$directory/$pattern"
+case "$path" in
+  */releases/latest) printf 'v${VERSION}\\n' ;;
+  */releases/tags/*)
+    name="$(printf '%s' "$*" | sed -n 's/.*name == "\\([^"]*\\)".*/\\1/p')"
+    [ ! -e "$FAKE_RELEASE/$name" ] || printf '%s\\n' "$name"
+    ;;
+  */releases/assets/*) cat "$FAKE_RELEASE/\${path##*/}" ;;
+  *) exit 1 ;;
+esac
 `
 
 const fakeCosign = (exitCode: number) => `#!/bin/sh
@@ -141,7 +144,7 @@ layer(BunServices.layer)('install.sh', (it) => {
       expect(result.output).toContain(`installed ${sandbox.installed}/crook-agent ${VERSION}`)
       expect(cosignCalls).toContain(`--certificate-identity ${SIGNED_BY}`)
       expect(cosignCalls).toContain(`--certificate-oidc-issuer ${GITHUB_ISSUER}`)
-      expect(ghCalls).toContain(`release download v${VERSION} --repo jliocsar/crook`)
+      expect(ghCalls).toContain(`api repos/jliocsar/crook/releases/tags/v${VERSION}`)
       expect(installed).toBe(fakeAgent(honestRelease))
       expect(leftInCache).toEqual([])
     }),
