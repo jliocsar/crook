@@ -24,6 +24,7 @@ interface Run {
   readonly input?: string
   readonly withAgent?: boolean
   readonly failing?: string
+  readonly refusing?: string
 }
 
 const PLUGIN_DIRECTORY = `${import.meta.dirname}/../plugin`
@@ -58,6 +59,10 @@ if [ "$1" = install-service ]; then
 fi
 if [ "$1" = "\${FAKE_AGENT_FAILS:-}" ]; then
   printf 'USAGE\\n  crook-agent <subcommand> [flags]\\n' >&2
+  exit 1
+fi
+if [ "$1" = "\${FAKE_AGENT_REFUSES:-}" ]; then
+  printf 'crook-agent is not installed as a service.\\n' >&2
   exit 1
 fi
 printf 'fake crook-agent %s\\n' "$*"
@@ -138,6 +143,7 @@ const runPlugin = Effect.fn('runPlugin')(function* (args: readonly string[], run
       HERDR_PLUGIN_STATE_DIR: sandbox.pluginState,
       HERDR_SOCKET_PATH: SESSION_SOCKET,
       FAKE_AGENT_FAILS: run.failing ?? '',
+      FAKE_AGENT_REFUSES: run.refusing ?? '',
       HERDR_SOCKETS: sandbox.herdrSockets,
       AGENT_CALLS: sandbox.agentCalls,
       INSTALLER_CALLS: sandbox.installerCalls,
@@ -270,9 +276,20 @@ layer(BunServices.layer, { excludeTestServices: true })('herdr plugin', (live) =
       const result = yield* runPlugin(['startup'], { failing: 'start' })
 
       expect(result.exitCode).toBe(1)
+      expect(result.output).toContain('USAGE')
       expect(result.output).toContain(
-        'crook-agent start failed. If it printed USAGE, fake crook-agent --version is older than the start, status and restart commands this plugin runs',
+        'crook-agent start failed: fake crook-agent --version is older than the start, status and restart commands this plugin runs',
       )
+    }),
+  )
+
+  live.effect('passes on a refusal that is not about the release, with nothing added', () =>
+    Effect.gen(function* () {
+      const result = yield* runPlugin(['startup'], { refusing: 'start' })
+
+      expect(result.exitCode).toBe(1)
+      expect(result.output).toContain('crook-agent is not installed as a service.')
+      expect(result.output).not.toContain('is older than')
     }),
   )
 
@@ -324,6 +341,16 @@ layer(BunServices.layer, { excludeTestServices: true })('herdr plugin', (live) =
       expect(picked.installerCalls).toEqual(['--version 0.2.0 agent'])
       expect(picked.agentCalls).toEqual(['--version|||', 'restart|||'])
       expect(latest.installerCalls).toEqual(['agent'])
+    }),
+  )
+
+  live.effect('closes the update with a failure when the restart after it fails', () =>
+    Effect.gen(function* () {
+      const result = yield* runPlugin(['update'], { input: '\n\n', refusing: 'restart' })
+
+      expect(result.installerCalls).toEqual(['agent'])
+      expect(result.agentCalls).toEqual(['--version|||', 'restart|||'])
+      expect(result.exitCode).toBe(1)
     }),
   )
 

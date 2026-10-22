@@ -284,20 +284,26 @@ export const startCalls = (target: ServiceTarget, definitionFile: string) =>
     }),
   )
 
+export const launchdLoaded = Effect.fn('ServiceInstaller.launchdLoaded')(function* (
+  launchd: Launchd,
+) {
+  const manager = yield* ServiceManager
+
+  return yield* manager.run(launchctl('print', launchdService(launchd))).pipe(
+    Effect.as(true),
+    Effect.catchTag('ServiceManagerRefused', () => Effect.succeed(false)),
+  )
+})
+
 export const stopLaunchdAgent = Effect.fn('ServiceInstaller.stopLaunchdAgent')(function* (
   launchd: Launchd,
 ) {
   const manager = yield* ServiceManager
-  const service = launchdService(launchd)
-  const stillLoaded = manager.run(launchctl('print', service)).pipe(
-    Effect.as(true),
-    Effect.catchTag('ServiceManagerRefused', () => Effect.succeed(false)),
-  )
 
-  return yield* manager.run(launchctl('bootout', service)).pipe(
+  return yield* manager.run(launchctl('bootout', launchdService(launchd))).pipe(
     Effect.as(true),
     Effect.catchTag('ServiceManagerRefused', (refused) =>
-      Effect.flatMap(stillLoaded, (loaded) =>
+      Effect.flatMap(launchdLoaded(launchd), (loaded) =>
         loaded
           ? Effect.fail(refused)
           : Effect.logDebug('launchd had no crook-agent loaded to stop', refused.message).pipe(

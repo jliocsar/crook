@@ -32,12 +32,19 @@ agent_program() {
 }
 
 run_agent() {
-  if "$agent" "$@"; then
-    return 0
-  else
-    failed=$?
+  program="$1"
+  shift
+  failed=0
+  output="$("$program" "$@" 2>&1)" || failed=$?
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output"
   fi
-  say "crook-agent $1 failed. If it printed USAGE, $("$agent" --version 2>/dev/null || say 'this crook-agent') is older than the start, status and restart commands this plugin runs; install a newer release with \"crook: update agent\"."
+  case "$failed:$output" in
+    0:*) ;;
+    *USAGE*)
+      say "crook-agent $1 failed: $("$program" --version 2>/dev/null || say 'this crook-agent') is older than the start, status and restart commands this plugin runs. Install a newer release with \"crook: update agent\"."
+      ;;
+  esac
   return "$failed"
 }
 
@@ -97,7 +104,7 @@ not_installed() {
 
 status_screen() {
   if agent="$(agent_program)"; then
-    run_agent status || true
+    run_agent "$agent" status || true
   else
     not_installed
   fi
@@ -129,7 +136,7 @@ startup() {
     say 'crook-agent is not installed on this machine, so there is nothing to start.'
     exit 0
   fi
-  run_agent start
+  run_agent "$agent" start
 }
 
 open_pane() {
@@ -196,7 +203,7 @@ restart() {
     not_installed
     finish 1
   fi
-  run_agent restart || true
+  run_agent "$agent" restart || true
   say ''
   status_screen
   refresh_loop
@@ -216,10 +223,13 @@ update() {
   fi
   install_agent "$@" || finish 1
   say ''
-  if agent="$(agent_program)"; then
-    run_agent restart || true
-  fi
-  finish 0
+  agent="$(agent_program)" || {
+    say "The installer finished, but no crook-agent is in $install_directory or on PATH, so nothing was restarted."
+    finish 1
+  }
+  restarted=0
+  run_agent "$agent" restart || restarted=1
+  finish "$restarted"
 }
 
 case "${1:-}" in

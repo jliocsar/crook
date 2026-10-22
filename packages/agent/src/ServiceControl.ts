@@ -16,12 +16,12 @@ import { SYSTEMD_UNIT_NAME } from '@crook/agent/ServiceDefinition'
 import {
   type Launchd,
   type ServiceTarget,
-  launchdService,
+  launchdLoaded,
   servicePaths,
   startCalls,
   stopLaunchdAgent,
 } from '@crook/agent/ServiceInstaller'
-import { ServiceManager, launchctl, systemctl } from '@crook/agent/ServiceManager'
+import { ServiceManager, systemctl } from '@crook/agent/ServiceManager'
 import {
   AGENT_STARTUP_TIMEOUT,
   type AgentAnswerUnreadable,
@@ -142,15 +142,6 @@ const installedDefinition = Effect.fn('ServiceControl.installedDefinition')(func
   return installed
     ? Result.succeed(definitionFile)
     : Result.fail(new ServiceAbsent({ definitionFile }))
-})
-
-const launchdLoaded = Effect.fn('ServiceControl.launchdLoaded')(function* (launchd: Launchd) {
-  const manager = yield* ServiceManager
-
-  return yield* manager.run(launchctl('print', launchdService(launchd))).pipe(
-    Effect.as(true),
-    Effect.catchTag('ServiceManagerRefused', () => Effect.succeed(false)),
-  )
 })
 
 const systemdUnitState = Effect.fn('ServiceControl.systemdUnitState')(function* () {
