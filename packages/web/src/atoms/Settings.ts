@@ -8,25 +8,29 @@ import { herdAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
-export const notificationSettingsAtom = hubRuntime.atom(
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const link = yield* HubLink
+export const notificationSettingsAtom = hubRuntime
+  .atom(
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const link = yield* HubLink
 
-      return link.notificationSettings
-    }),
-  ),
-)
+        return link.notificationSettings
+      }),
+    ),
+  )
+  .pipe(Atom.keepAlive)
 
-export const accountAtom = hubRuntime.atom(
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const link = yield* HubLink
+export const accountAtom = hubRuntime
+  .atom(
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const link = yield* HubLink
 
-      return link.account
-    }),
-  ),
-)
+        return link.account
+      }),
+    ),
+  )
+  .pipe(Atom.keepAlive)
 
 export const hubVersionAtom = Atom.make((get) =>
   Option.map(get(herdAtom), (snapshot) => snapshot.view.hubVersion),

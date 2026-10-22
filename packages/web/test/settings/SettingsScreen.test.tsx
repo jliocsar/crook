@@ -63,6 +63,50 @@ describe('SettingsScreen', () => {
     }),
   )
 
+  it.effect('shows skeleton rows until the hub has sent the settings', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp('/', liveWith(view))
+
+      yield* link.settingsReads.close
+      yield* Effect.promise(() => router.navigate({ to: '/settings' }))
+      yield* findByRole('heading', 'Settings')
+
+      expect(screen.getByText('Loading your notification settings')).toBeDefined()
+      expect(screen.getByText('Loading your account')).toBeDefined()
+      expect(screen.queryByRole('switch')).toBeNull()
+      expect(screen.queryByText('Approvals')).toBeNull()
+
+      yield* link.settingsReads.open
+      yield* eventually(() => {
+        expect(switchOf('Approvals').getAttribute('aria-checked')).toBe('true')
+      })
+
+      expect(screen.queryByText('Loading your notification settings')).toBeNull()
+      expect(valueOf('Account', 'Logged in as')).toBe(OWNER_EMAIL)
+    }),
+  )
+
+  it.effect('shows the last settings at once when the screen is opened again', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp('/settings', liveWith(view))
+
+      yield* eventually(() => {
+        expect(switchOf('Finished').getAttribute('aria-checked')).toBe('true')
+      })
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByRole('switch', { name: 'Finished' })).toBeNull()
+      })
+      yield* link.settingsReads.close
+      yield* Effect.promise(() => router.navigate({ to: '/settings' }))
+      yield* findByRole('heading', 'Settings')
+
+      expect(switchOf('Finished').getAttribute('aria-checked')).toBe('true')
+      expect(valueOf('Account', 'Logged in as')).toBe(OWNER_EMAIL)
+      expect(screen.queryByText('Loading your notification settings')).toBeNull()
+    }),
+  )
+
   it.effect('writes a switch to the hub and shows what the hub then holds', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/settings', liveWith(view))

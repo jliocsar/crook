@@ -83,12 +83,17 @@ function NoTokenNotice() {
 
 function TogglesLoading() {
   return (
-    <div aria-hidden="true" className="border-border border-t">
+    <div role="status" data-slot="toggles-skeleton" className="border-border border-t">
+      <span className="sr-only">Loading your notification settings</span>
       {NOTIFICATION_ROWS.map((row) => (
         <div key={row.event} className="flex min-h-14 items-center gap-3 px-4 py-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-base leading-6">{row.label}</p>
-            <p className="text-muted-foreground text-xs leading-4">{row.detail}</p>
+          <div className="grid min-w-0 flex-1 grid-cols-1">
+            <div className="flex h-6 items-center">
+              <Skeleton className="w-24" />
+            </div>
+            <div className="flex h-4 items-center">
+              <Skeleton className="h-3 w-48" />
+            </div>
           </div>
           <Skeleton className="h-7 w-12 rounded-full" />
         </div>

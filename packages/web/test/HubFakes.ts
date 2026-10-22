@@ -263,6 +263,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
 
   const settings = yield* SubscriptionRef.make(readySettings)
   const account = yield* SubscriptionRef.make(new HubAccount({ email: OWNER_EMAIL }))
+  const settingsReads = yield* Latch.make(true)
   const prefWrites = yield* Ref.make<readonly PrefWrite[]>([])
   const prefAttempts = yield* Ref.make<readonly PrefWrite[]>([])
   const prefRefusal = yield* Ref.make(
@@ -351,8 +352,10 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
           Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
           Effect.andThen(commandAnswers.await, Effect.flatten(Ref.get(commandAnswer))),
         ),
-      notificationSettings: SubscriptionRef.changes(settings),
-      account: SubscriptionRef.changes(account),
+      notificationSettings: Stream.unwrap(
+        Effect.as(settingsReads.await, SubscriptionRef.changes(settings)),
+      ),
+      account: Stream.unwrap(Effect.as(settingsReads.await, SubscriptionRef.changes(account))),
       setNotificationPref: (event, enabled) =>
         Effect.andThen(
           Ref.update(prefAttempts, (attempts) => [...attempts, { event, enabled }]),
@@ -419,6 +422,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     commandAnswers,
     settings,
     account,
+    settingsReads,
     prefWrites,
     prefAttempts,
     prefRefusal,

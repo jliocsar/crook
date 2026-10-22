@@ -30,7 +30,12 @@ function AccountEmail({
   return Option.match(AsyncResult.value(account), {
     onNone: () =>
       Option.match(failureMessage(account), {
-        onNone: () => <Skeleton className="ml-auto w-40" />,
+        onNone: () => (
+          <span role="status" className="block">
+            <span className="sr-only">Loading your account</span>
+            <Skeleton className="ml-auto w-40" />
+          </span>
+        ),
         onSome: (message) => <span className="text-destructive font-sans">{message}</span>,
       }),
     onSome: (known) => known.email,

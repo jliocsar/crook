@@ -578,6 +578,9 @@ rule.
 - **Hub**: Status (connected, connecting, syncing, unreachable or offline, as a plain Status Pill
   that follows the banner), Address (the host the page came from, which is the hub's) and Version
   (the hub's).
+- **First load**: each switch row is a Skeleton of its label, detail and switch, and the email is a
+  Skeleton bar; a gray pill alone read as a switch that was off. Opened again, Settings shows what
+  it last had at once and updates in place.
 - **Stale**: the switches dim with the rest of the stale content and are disabled with the other
   hub actions, and so is the test.
 - **Decided against**: quiet hours or pause (iOS Focus covers it), per-machine or per-agent
