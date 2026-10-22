@@ -41,6 +41,7 @@ import { agent, CROOK_TAB, CROOK_WORKSPACE, herd, LAPTOP, machine, START } from 
 import { inputDelivered, STARTED_PANE } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 import {
+  caughtUp,
   chunk,
   CWD,
   opened,
@@ -843,6 +844,117 @@ describe('AgentChatScreen', () => {
           { _tag: 'SendKeys', keys: ['esc'] },
           { _tag: 'SendKeys', keys: ['esc'] },
         ])
+      })
+    }),
+  )
+})
+
+describe('AgentChatScreen loading', () => {
+  const current = () =>
+    liveWith(
+      herd([
+        laptopWith([agent('w1:p1', 'idle', { claudeSession: SESSION })], { agentVersion: '0.0.1' }),
+      ]),
+    )
+  const source = new PaneTranscript({ pane: PANE })
+
+  it.effect('shows a skeleton until the agent has sent the backlog, then all of it at once', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, current())
+      const transcript = yield* link.transcriptFor(source)
+
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [said(0, 'Older line.')])])
+      yield* wait(50)
+
+      expect(screen.getByText('Loading the conversation')).toBeDefined()
+      expect(screen.queryByText('Older line.')).toBeNull()
+
+      yield* Queue.offerAll(transcript, [chunk(10, 20, [said(10, 'Newer line.')]), caughtUp(20)])
+      yield* Effect.promise(() => screen.findByText('Newer line.'))
+
+      expect(screen.getByText('Older line.')).toBeDefined()
+      expect(screen.queryByText('Loading the conversation')).toBeNull()
+
+      yield* Queue.offer(transcript, chunk(20, 30, [said(20, 'Live line.')]))
+
+      expect(yield* Effect.promise(() => screen.findByText('Live line.'))).toBeDefined()
+    }),
+  )
+
+  it.effect(
+    'streams every chunk from an agent older than the hub, which never says it caught up',
+    () =>
+      Effect.gen(function* () {
+        const { link } = yield* renderApp(
+          CHAT,
+          liveWith(herd([laptopWith([agent('w1:p1', 'idle')], { agentVersion: '0.0.0' })])),
+        )
+
+        yield* Queue.offerAll(yield* link.transcriptFor(source), [
+          opened(),
+          chunk(0, 10, [said(0, 'Older line.')]),
+        ])
+
+        expect(yield* Effect.promise(() => screen.findByText('Older line.'))).toBeDefined()
+      }),
+  )
+
+  it.effect('opens a chat again where it left off, and shows the rest once it caught up', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp(CHAT, current())
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Seen before.')]),
+        caughtUp(10),
+      ])
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByText('Seen before.')).toBeNull()
+      })
+      yield* Effect.promise(() =>
+        router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+      )
+
+      expect(yield* Effect.promise(() => screen.findByText('Seen before.'))).toBeDefined()
+      expect(screen.queryByText('Loading the conversation')).toBeNull()
+
+      yield* eventually(() => {
+        expect(
+          Ref.getUnsafe(link.resumes).map((resume) =>
+            Option.map(resume.from, (position) => position.offset),
+          ),
+        ).toEqual([Option.none(), Option.some(10)])
+      })
+
+      const resumed = yield* link.transcriptFor(source)
+
+      yield* Queue.offerAll(resumed, [opened(), chunk(10, 20, [said(10, 'Missed while away.')])])
+      yield* wait(50)
+
+      expect(screen.queryByText('Missed while away.')).toBeNull()
+      expect(screen.getByText('Seen before.')).toBeDefined()
+
+      yield* Queue.offer(resumed, caughtUp(20))
+
+      expect(yield* Effect.promise(() => screen.findByText('Missed while away.'))).toBeDefined()
+    }),
+  )
+
+  it.effect('saves the chat on this device once the agent caught up', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, current())
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Kept for later.')]),
+        caughtUp(10),
+      ])
+      yield* eventually(() => {
+        expect(
+          Array.from(Ref.getUnsafe(link.storedTranscripts).values(), (entry) => entry.key),
+        ).toEqual([[LAPTOP, 'pane', PANE, SESSION]])
       })
     }),
   )

@@ -14,7 +14,11 @@ import { FileWatch } from '@crook/claude/FileWatch'
 import type { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import { parseLine } from '@crook/claude/TranscriptParser'
 import { type ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
-import { TranscriptChunk, type TranscriptTailBytes } from '@crook/domain/Transcript'
+import {
+  TranscriptCaughtUp,
+  TranscriptChunk,
+  type TranscriptTailBytes,
+} from '@crook/domain/Transcript'
 
 interface TailState {
   readonly consumed: number
@@ -25,6 +29,8 @@ export interface CompleteLine {
   readonly offset: number
   readonly bytes: Uint8Array
 }
+
+export type TailEvent = TranscriptChunk | TranscriptCaughtUp
 
 export type TailError =
   | TranscriptUnreadable
@@ -231,23 +237,35 @@ const make = Effect.gen(function* () {
       })
     })
 
-    return Stream.unwrap(
+    const available = Stream.unwrap(
       Effect.as(
         checkSize,
         Stream.paginate<void, TranscriptChunk, TailError>(undefined, () => readOnce),
       ),
     )
+
+    const caughtUp = Effect.map(
+      Ref.get(state),
+      (current) =>
+        new TranscriptCaughtUp({ session, offset: TranscriptOffset.make(current.consumed) }),
+    )
+
+    return { available, caughtUp }
   })
 
-  const drain = (file: TranscriptFile, from: TranscriptOffset) => Stream.unwrap(open(file, from))
+  const drain = (file: TranscriptFile, from: TranscriptOffset) =>
+    Stream.unwrap(Effect.map(open(file, from), ({ available }) => available))
 
   const follow = (file: TranscriptFile, from: TranscriptOffset) =>
     Stream.unwrap(
-      Effect.map(open(file, from), (available) =>
+      Effect.map(open(file, from), ({ available, caughtUp }) =>
         fileWatch.watchReady(file.path).pipe(
           Stream.mapError(unreadableFile(file)),
           Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-          Stream.flatMap(() => available),
+          Stream.zipWithIndex,
+          Stream.flatMap(([, index]): Stream.Stream<TailEvent, TailError> =>
+            index === 0 ? Stream.concat(available, Stream.fromEffect(caughtUp)) : available,
+          ),
         ),
       ),
     )
@@ -274,7 +292,7 @@ export class TranscriptTail extends Context.Service<
     readonly follow: (
       file: TranscriptFile,
       from: TranscriptOffset,
-    ) => Stream.Stream<TranscriptChunk, TailError>
+    ) => Stream.Stream<TailEvent, TailError>
     readonly drain: (
       file: TranscriptFile,
       from: TranscriptOffset,

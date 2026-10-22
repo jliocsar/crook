@@ -5,6 +5,7 @@ import * as Schema from 'effect/Schema'
 import { ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
 import {
   SubagentsChanged,
+  TranscriptCaughtUp,
   TranscriptChunk,
   TranscriptEvent,
   TranscriptOpened,
@@ -64,6 +65,40 @@ describe('positionAfter', () => {
     expect(
       positionAfter(Option.some(at(FIRST, 800)), new TranscriptOpened({ session: CLEARED })),
     ).toEqual(Option.some(at(CLEARED, 0)))
+  })
+})
+
+describe('TranscriptCaughtUp', () => {
+  it('leaves the position where the last chunk put it', () => {
+    const read = Option.some(at(FIRST, 800))
+
+    expect(
+      positionAfter(
+        read,
+        new TranscriptCaughtUp({ session: FIRST, offset: TranscriptOffset.make(800) }),
+      ),
+    ).toEqual(read)
+  })
+
+  it('passes on only for the session the position is in', () => {
+    const position = Option.some(at(FIRST, 800))
+    const caughtUp = new TranscriptCaughtUp({ session: FIRST, offset: TranscriptOffset.make(800) })
+
+    expect(remainderAfter(position, caughtUp)).toEqual(Option.some(caughtUp))
+    expect(
+      remainderAfter(
+        position,
+        new TranscriptCaughtUp({ session: CLEARED, offset: TranscriptOffset.make(0) }),
+      ),
+    ).toEqual(Option.none())
+    expect(remainderAfter(Option.none(), caughtUp)).toEqual(Option.none())
+  })
+
+  it('crosses the wire as JSON and comes back equal', () => {
+    const line = Schema.fromJsonString(Schema.toCodecJson(TranscriptEvent))
+    const caughtUp = new TranscriptCaughtUp({ session: FIRST, offset: TranscriptOffset.make(800) })
+
+    expect(Schema.decodeSync(line)(Schema.encodeSync(line)(caughtUp))).toEqual(caughtUp)
   })
 })
 

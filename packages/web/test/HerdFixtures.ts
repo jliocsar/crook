@@ -9,6 +9,7 @@ import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
+  type ClaudeSessionId,
   HerdrConnectionId,
   MachineId,
   PaneId,
@@ -41,6 +42,7 @@ export const agent = (
     readonly branch?: string
     readonly ask?: Ask
     readonly createdByCrook?: boolean
+    readonly claudeSession?: ClaudeSessionId
   } = {},
 ) =>
   new AgentRow({
@@ -54,7 +56,7 @@ export const agent = (
     createdByCrook: options.createdByCrook ?? false,
     cwd: '/home/jliocsar/Projects/crook',
     branch: Option.fromUndefinedOr(options.branch),
-    claudeSession: Option.none(),
+    claudeSession: Option.fromUndefinedOr(options.claudeSession),
     stateChangeSeq: options.seq ?? 1,
     statusChangedAt: DateTime.subtractDuration(START, Duration.seconds(options.secondsAgo ?? 0)),
     beforeHandoff: Option.none(),

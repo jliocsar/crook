@@ -30,6 +30,7 @@ export class TranscriptView extends Data.Class<{
   readonly position: Option.Option<TranscriptPosition>
   readonly lines: readonly TranscriptLine[]
   readonly subagents: readonly Subagent[]
+  readonly catchingUp: boolean
   readonly failure: Option.Option<TranscriptWatchFailure>
 }> {}
 
@@ -37,10 +38,17 @@ export const EMPTY_TRANSCRIPT = new TranscriptView({
   position: Option.none(),
   lines: [],
   subagents: [],
+  catchingUp: false,
   failure: Option.none(),
 })
 
 export const isOpened = (view: TranscriptView): boolean => Option.isSome(view.position)
+
+export const isShowable = (view: TranscriptView): boolean =>
+  (isOpened(view) && !view.catchingUp) || Option.isSome(view.failure)
+
+export const catchingUpFrom = (view: TranscriptView, awaitsCaughtUp: boolean): TranscriptView =>
+  new TranscriptView(Struct.evolve(view, { catchingUp: () => awaitsCaughtUp }))
 
 const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly TranscriptLine[] =>
   Match.value(event).pipe(
@@ -52,6 +60,7 @@ const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly Tran
           TranscriptLine.Message({ session: chunk.session, message }),
         ),
       SubagentsChanged: () => [],
+      TranscriptCaughtUp: () => [],
     }),
   )
 
@@ -61,7 +70,14 @@ const subagentsAfter = (view: TranscriptView, event: TranscriptEvent): readonly 
       TranscriptOpened: () => [],
       TranscriptChunk: () => view.subagents,
       SubagentsChanged: (changed) => changed.subagents,
+      TranscriptCaughtUp: () => view.subagents,
     }),
+  )
+
+const catchingUpAfter = (view: TranscriptView, event: TranscriptEvent): boolean =>
+  Match.value(event).pipe(
+    Match.tag('TranscriptCaughtUp', () => false),
+    Match.orElse(() => view.catchingUp),
   )
 
 const recovered = (view: TranscriptView): TranscriptView =>
@@ -82,6 +98,7 @@ export const applyTranscriptEvent = (
           position: positionAfter(view.position, fresh),
           lines: [...view.lines, ...freshLines(view, fresh)],
           subagents: subagentsAfter(view, fresh),
+          catchingUp: catchingUpAfter(view, fresh),
           failure: Option.none(),
         }),
     }),

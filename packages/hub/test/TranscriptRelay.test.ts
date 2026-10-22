@@ -12,6 +12,7 @@ import * as Stream from 'effect/Stream'
 import { ClaudeSessionId, MachineId, PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import {
   PaneTranscript,
+  TranscriptCaughtUp,
   TranscriptChunk,
   type TranscriptEvent,
   TranscriptOpened,
@@ -57,6 +58,7 @@ const describeEvent = (event: TranscriptEvent) =>
       TranscriptChunk: (chunk) =>
         `chunk ${chunk.offset}-${chunk.nextOffset} ${chunk.messages.length}`,
       SubagentsChanged: (changed) => `subagents ${changed.subagents.length}`,
+      TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.offset}`,
     }),
   )
 
@@ -156,6 +158,30 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
           Queue.take,
         ),
       ).toEqual([`opened ${SESSION}`, 'chunk 0-10 1', 'chunk 10-20 1'])
+    }),
+  )
+
+  it.effect('passes on that the agent caught up, without moving the position', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* watching(transcripts, paneSource, Option.none())
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+
+      yield* transcripts.publish(LAPTOP, id, opened)
+      yield* transcripts.publish(LAPTOP, id, chunkBetween(0, 10))
+      yield* transcripts.publish(
+        LAPTOP,
+        id,
+        new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(10) }),
+      )
+      yield* transcripts.publish(LAPTOP, id, chunkBetween(10, 20))
+
+      expect(
+        yield* Effect.forEach(
+          Arr.makeBy(4, () => events),
+          Queue.take,
+        ),
+      ).toEqual([`opened ${SESSION}`, 'chunk 0-10 1', 'caught up 10', 'chunk 10-20 1'])
     }),
   )
 

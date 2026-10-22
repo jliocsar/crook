@@ -74,6 +74,7 @@ const describe = (event: TranscriptEvent) =>
         `chunk ${chunk.session} ${chunk.offset}-${chunk.nextOffset} ${chunk.messages.length}`,
       SubagentsChanged: (changed) =>
         `subagents ${changed.session} ${changed.subagents.map((subagent) => subagent.id).join(',')}`,
+      TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.session} ${caughtUp.offset}`,
     }),
   )
 
@@ -181,6 +182,7 @@ const fakeHub = Effect.fn('fakeHub')(function* (
         TranscriptOpened: (opened) =>
           Effect.andThen(move(watch, opened), record(watch, describe(opened))),
         SubagentsChanged: (changed) => record(watch, describe(changed)),
+        TranscriptCaughtUp: (caughtUp) => record(watch, describe(caughtUp)),
         TranscriptChunk: (chunk) =>
           Effect.flatMap(positionOf(watch), (at) =>
             continuesFrom(at, chunk)
@@ -213,13 +215,19 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           streams.follow(new PaneTranscript({ pane: PANE }), Option.none(), Option.none()),
         )
 
-        expect(yield* Queue.take(events)).toBe(`opened ${FIRST_SESSION}`)
+        expect(yield* takeAll(events, 2)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `caught up ${FIRST_SESSION} 0`,
+        ])
 
         const first = userLine('first')
 
         yield* append(transcriptPath(root, FIRST_SESSION), first)
 
-        expect(yield* Queue.take(events)).toBe(`chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`)
+        expect(yield* takeAll(events, 2)).toEqual([
+          `chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
+          `caught up ${FIRST_SESSION} ${bytesOf(first)}`,
+        ])
 
         const second = userLine('second')
 
@@ -268,9 +276,10 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           streams.follow(new PaneTranscript({ pane: PANE }), Option.none(), Option.none()),
         )
 
-        expect(yield* takeAll(events, 2)).toEqual([
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
+          `caught up ${FIRST_SESSION} ${bytesOf(before)}`,
         ])
 
         yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
@@ -365,9 +374,10 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           ),
         )
 
-        expect(yield* takeAll(events, 2)).toEqual([
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
+          `caught up ${FIRST_SESSION} ${bytesOf(before)}`,
         ])
 
         yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
@@ -476,9 +486,10 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           streams.follow(new PaneTranscript({ pane: PANE }), Option.none(), Option.none()),
         )
 
-        expect(yield* takeAll(events, 2)).toEqual([
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`,
+          `caught up ${FIRST_SESSION} ${bytesOf(line)}`,
         ])
 
         yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
@@ -583,9 +594,10 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
         yield* Effect.forkScoped(streams.serve(hub.link))
         yield* Queue.offer(demands, new TranscriptDemand({ watches: [watchFor(WATCH)] }))
 
-        expect(yield* takeAll(hub.accepted, 2)).toEqual([
+        expect(yield* takeAll(hub.accepted, 3)).toEqual([
           `0 opened ${FIRST_SESSION}`,
           `0 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
+          `0 caught up ${FIRST_SESSION} ${bytesOf(first)}`,
         ])
 
         yield* Queue.offer(demands, new TranscriptDemand({ watches: [] }))
@@ -594,9 +606,10 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           new TranscriptDemand({ watches: [watchFor(REPLACEMENT_WATCH)] }),
         )
 
-        expect(yield* takeAll(hub.accepted, 2)).toEqual([
+        expect(yield* takeAll(hub.accepted, 3)).toEqual([
           `1 opened ${FIRST_SESSION}`,
           `1 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
+          `1 caught up ${FIRST_SESSION} ${bytesOf(first)}`,
         ])
 
         yield* append(transcriptPath(root, FIRST_SESSION), second)

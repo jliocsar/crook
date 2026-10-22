@@ -9,12 +9,15 @@ import { MachineNotInHerd } from '@crook/protocol/ClientApi'
 import { LAPTOP } from '../HerdFixtures.ts'
 import {
   applyTranscriptEvent,
+  catchingUpFrom,
   EMPTY_TRANSCRIPT,
   failedWith,
+  isShowable,
   TranscriptLine,
 } from '@crook/web/chat/TranscriptState'
 
 import {
+  caughtUp,
   chunk,
   NEXT_SESSION,
   opened,
@@ -102,5 +105,45 @@ describe('applyTranscriptEvent', () => {
     expect(applyTranscriptEvent(failed, chunk(10, 20, [said(10, 'back')])).failure).toEqual(
       Option.none(),
     )
+  })
+})
+
+describe('isShowable', () => {
+  const failure = new MachineNotInHerd({ machine: LAPTOP })
+
+  it('holds back a watch that awaits the agent catching up until it has', () => {
+    const awaiting = catchingUpFrom(EMPTY_TRANSCRIPT, true)
+    const partway = Arr.reduce(
+      [opened(), chunk(0, 10, [prompt(0, 'hi')])],
+      awaiting,
+      applyTranscriptEvent,
+    )
+    const done = applyTranscriptEvent(partway, caughtUp(10))
+
+    expect(isShowable(partway)).toBe(false)
+    expect(isShowable(done)).toBe(true)
+    expect(offsets(done.lines)).toEqual(['old 0'])
+    expect(isShowable(applyTranscriptEvent(done, chunk(10, 20, [said(10, 'hello')])))).toBe(true)
+  })
+
+  it('shows every opened view of a watch that does not await catching up', () => {
+    const opening = catchingUpFrom(EMPTY_TRANSCRIPT, false)
+
+    expect(isShowable(opening)).toBe(false)
+    expect(isShowable(applyTranscriptEvent(opening, opened()))).toBe(true)
+  })
+
+  it('shows a failure while the watch still catches up', () => {
+    expect(isShowable(failedWith(catchingUpFrom(EMPTY_TRANSCRIPT, true), failure))).toBe(true)
+  })
+
+  it('ignores a catch-up of another session', () => {
+    const partway = Arr.reduce(
+      [opened(), chunk(0, 10, [prompt(0, 'hi')])],
+      catchingUpFrom(EMPTY_TRANSCRIPT, true),
+      applyTranscriptEvent,
+    )
+
+    expect(isShowable(applyTranscriptEvent(partway, caughtUp(0, NEXT_SESSION)))).toBe(false)
   })
 })

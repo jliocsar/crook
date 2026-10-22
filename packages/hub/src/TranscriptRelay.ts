@@ -151,6 +151,7 @@ const make = Effect.gen(function* () {
               TranscriptOpened: (opened) => forward(id, watcher, opened),
               TranscriptChunk: (chunk) => append(id, watcher, chunk),
               SubagentsChanged: (changed) => forward(id, watcher, changed),
+              TranscriptCaughtUp: (caughtUp) => forward(id, watcher, caughtUp),
               TranscriptWatchFailed: (failed) => fail(id, watcher, failed.failure),
             }),
           ),
