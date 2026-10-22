@@ -63,6 +63,7 @@ const describeEvent = (event: TranscriptEvent) =>
       TranscriptChunk: (chunk) =>
         `chunk ${chunk.session} ${chunk.offset}-${chunk.nextOffset} ${chunk.messages.length}`,
       SubagentsChanged: (changed) => `subagents ${changed.session} ${changed.subagents.length}`,
+      TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.session} ${caughtUp.offset}`,
     }),
   )
 
@@ -162,9 +163,10 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       yield* startAgent(machine, root, state)
       const events = yield* watchOnPhone(machine, Option.none(), Option.none())
 
-      expect(yield* takeAll(events, 2)).toEqual([
+      expect(yield* takeAll(events, 3)).toEqual([
         `opened ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
+        `caught up ${FIRST_SESSION} ${bytesOf(first)}`,
       ])
 
       yield* append(root, FIRST_SESSION, second)
@@ -254,18 +256,20 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       const agent = yield* startAgent(machine, root, state)
       const events = yield* watchOnPhone(machine, Option.none(), Option.none())
 
-      expect(yield* takeAll(events, 2)).toEqual([
+      expect(yield* takeAll(events, 3)).toEqual([
         `opened ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
+        `caught up ${FIRST_SESSION} ${bytesOf(before)}`,
       ])
 
       yield* Scope.close(agent, Exit.void)
       yield* append(root, FIRST_SESSION, during)
       yield* startAgent(machine, root, state)
 
-      expect(yield* Queue.take(events)).toBe(
+      expect(yield* takeAll(events, 2)).toEqual([
         `chunk ${FIRST_SESSION} ${bytesOf(before)}-${bytesOf(before + during)} 1`,
-      )
+        `caught up ${FIRST_SESSION} ${bytesOf(before + during)}`,
+      ])
     }),
   )
 

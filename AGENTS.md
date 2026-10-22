@@ -640,6 +640,8 @@ Checking the web app against real data, measured:
   `LANG` hands none of Claude's variables to its panes. `command claude --permission-mode default`
   typed into one skips a user's shell function that turns auto mode on, and starts in manual mode,
   so a Bash command it runs asks first (measured).
+- `herdr pane report-agent --agent-session-id` does not put the id where the agent reads it: `agent get` showed no `agent_session` afterwards (measured on herdr 0.9.5). A probe that needs a pane's Claude session without a real Claude runs a copy of `sleep` named `claude` in the pane with `CLAUDE_CONFIG_DIR` set, and writes `<that dir>/sessions/<pid>.json` holding the session id and the process start time from field 22 of `/proc/<pid>/stat`, which is the pid-file route the agent resolves sessions through.
+- The installed agent's `run` dials `CROOK_HUB_URL` (the `/rpc/agent` path included) with its token, and a local hub wants the two exe.dev headers instead, so a probe puts a small Bun WebSocket proxy between them that adds `X-ExeDev-Email` and `X-ExeDev-Token-Ctx`.
 - agent-browser scrolls an element into view before it clicks it, which moves the scroll container
   around it. A scroll position read after such a click is the tool's, not the app's.
 - herdr keeps its plugin registry under `$XDG_CONFIG_HOME/herdr`, and plugins are global to the

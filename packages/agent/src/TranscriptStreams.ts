@@ -26,6 +26,7 @@ import type { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@cro
 import {
   SubagentsChanged,
   TRANSCRIPT_START,
+  TranscriptCaughtUp,
   type TranscriptEvent,
   TranscriptOpened,
   type TranscriptPosition,
@@ -158,15 +159,27 @@ const make = Effect.gen(function* () {
     session: ClaudeSessionId,
     offset: TranscriptOffset,
     tailBytes: Option.Option<TranscriptTailBytes>,
-  ) =>
-    Stream.concat(
+  ) => {
+    const following = (file: TranscriptFile) =>
+      fromLineNearEnd(file, offset, tailBytes, (from) => live(file, from))
+
+    return Stream.concat(
       opened(session),
       Stream.unwrap(
-        Effect.map(locator.await(session), (file) =>
-          fromLineNearEnd(file, offset, tailBytes, (from) => live(file, from)),
+        Effect.map(
+          locator.locate(session),
+          Option.match({
+            onSome: following,
+            onNone: () =>
+              Stream.concat(
+                Stream.succeed<TranscriptEvent>(new TranscriptCaughtUp({ session, offset })),
+                Stream.unwrap(Effect.map(locator.await(session), following)),
+              ),
+          }),
         ),
       ),
     )
+  }
 
   const finishSession = (
     position: TranscriptPosition,

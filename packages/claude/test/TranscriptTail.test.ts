@@ -5,6 +5,7 @@ import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
@@ -15,9 +16,10 @@ import {
   TAIL_READ_SIZE,
   TranscriptShrank,
   TranscriptTail,
+  type TailEvent,
 } from '@crook/claude/TranscriptTail'
 import { TranscriptOffset } from '@crook/domain/Ids'
-import { type TranscriptChunk, TranscriptTailBytes } from '@crook/domain/Transcript'
+import { TranscriptCaughtUp, TranscriptChunk, TranscriptTailBytes } from '@crook/domain/Transcript'
 
 import {
   FIXTURES,
@@ -34,6 +36,8 @@ const LARGE_APPEND = 120 * 1024
 const LONG_LINE = 3 * TAIL_READ_SIZE
 
 const encoder = new TextEncoder()
+
+const isChunk = Schema.is(TranscriptChunk)
 
 const messagesIn = (chunks: readonly TranscriptChunk[]) =>
   encodeMessages(chunks.flatMap((chunk) => chunk.messages))
@@ -59,12 +63,35 @@ const following = Effect.fn('following')(function* (file: TranscriptFile, from: 
   const chunks = yield* Queue.unbounded<TranscriptChunk>()
 
   yield* tail.follow(file, from).pipe(
+    Stream.filter(isChunk),
     Stream.runForEach((chunk) => Queue.offer(chunks, chunk)),
     Effect.forkScoped,
   )
 
   return chunks
 })
+
+const followingAll = Effect.fn('followingAll')(function* (
+  file: TranscriptFile,
+  from: TranscriptOffset,
+) {
+  const tail = yield* TranscriptTail
+  const events = yield* Queue.unbounded<TailEvent>()
+
+  yield* tail.follow(file, from).pipe(
+    Stream.runForEach((event) => Queue.offer(events, event)),
+    Effect.forkScoped,
+  )
+
+  return events
+})
+
+const takeThroughCaughtUp = (events: Queue.Queue<TailEvent>): Effect.Effect<readonly TailEvent[]> =>
+  Effect.flatMap(Queue.take(events), (event) =>
+    isChunk(event)
+      ? Effect.map(takeThroughCaughtUp(events), (rest) => [event, ...rest])
+      : Effect.succeed([event]),
+  )
 
 const takeUntilOffset = (
   chunks: Queue.Queue<TranscriptChunk>,
@@ -200,6 +227,62 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
     }),
   )
 
+  live.effect(
+    'announces it caught up once the backlog is read, and only then streams what is appended',
+    () =>
+      Effect.gen(function* () {
+        const turn = yield* fixtureBytes('tool-use-and-result.jsonl')
+        const copies = Math.ceil(LARGE_APPEND / turn.length) + 1
+        const backlog = new Uint8Array(turn.length * copies)
+
+        Arr.makeBy(copies, (copy) => backlog.set(turn, copy * turn.length))
+        const file = yield* scratchFile(backlog)
+        const events = yield* followingAll(file, START)
+        const throughCaughtUp = yield* takeThroughCaughtUp(events)
+
+        yield* append(file, turn)
+        const afterCaughtUp = yield* Queue.take(events)
+        const backlogChunks = Arr.filter(throughCaughtUp, isChunk)
+
+        expect(backlog.length).toBeGreaterThan(TAIL_READ_SIZE)
+        expect(backlogChunks.length).toBeGreaterThan(1)
+        expect(Arr.last(throughCaughtUp)).toEqual(
+          Option.some(
+            new TranscriptCaughtUp({
+              session: SESSION,
+              offset: TranscriptOffset.make(backlog.length),
+            }),
+          ),
+        )
+        expect(Arr.last(backlogChunks).pipe(Option.map((chunk) => chunk.nextOffset))).toEqual(
+          Option.some(backlog.length),
+        )
+        expect(afterCaughtUp).toMatchObject({
+          offset: backlog.length,
+          nextOffset: backlog.length + turn.length,
+        })
+      }),
+  )
+
+  live.effect('reports a cut last line as not yet caught up to', () =>
+    Effect.gen(function* () {
+      const whole = yield* fixtureBytes('plain-turn.jsonl')
+      const lastNewlineInPage = whole.subarray(0, PAGE).lastIndexOf(NEWLINE) + 1
+      const file = yield* scratchFile(whole.subarray(0, PAGE))
+      const events = yield* followingAll(file, START)
+      const throughCaughtUp = yield* takeThroughCaughtUp(events)
+
+      expect(Arr.last(throughCaughtUp)).toEqual(
+        Option.some(
+          new TranscriptCaughtUp({
+            session: SESSION,
+            offset: TranscriptOffset.make(lastNewlineInPage),
+          }),
+        ),
+      )
+    }),
+  )
+
   live.effect('fails when the file shrinks under it', () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem
@@ -208,8 +291,8 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
       const file = yield* scratchFile(whole)
       const failure = yield* pipe(
         tail.follow(file, START),
-        Stream.tap((chunk) =>
-          chunk.nextOffset === whole.length
+        Stream.tap((event) =>
+          isChunk(event) && event.nextOffset === whole.length
             ? Effect.andThen(
                 fileSystem.truncate(file.path, 10),
                 append(file, encoder.encode('{}\n')),

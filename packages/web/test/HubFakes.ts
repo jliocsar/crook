@@ -8,6 +8,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
+import type * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
@@ -29,6 +30,8 @@ import type { CommandFailure } from '@crook/protocol/Commands'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
+import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
+import type { StoredKey, TranscriptStore } from '@crook/web/cache/TranscriptCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
 import type {
   ForgetMachineRefused,
@@ -82,6 +85,11 @@ export interface SentCommand {
   readonly machine: MachineId
   readonly key: IdempotencyKey
   readonly command: Command
+}
+
+export interface StoredEntry {
+  readonly key: StoredKey
+  readonly stored: Schema.Json
 }
 
 export interface SeenCall {
@@ -239,6 +247,27 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   }
 })
 
+export const makeMemoryTranscriptStore = Effect.fn('makeMemoryTranscriptStore')(function* () {
+  const entries = yield* Ref.make<ReadonlyMap<string, StoredEntry>>(new Map())
+  const idOf = (key: StoredKey) => JSON.stringify(key)
+
+  const store: TranscriptStore = {
+    keys: Effect.map(Ref.get(entries), (current) =>
+      Array.from(current.values(), (entry) => entry.key),
+    ),
+    read: (key) => Effect.map(Ref.get(entries), (current) => current.get(idOf(key))?.stored),
+    write: (key, stored) =>
+      Ref.update(entries, (current) => new Map([...current, [idOf(key), { key, stored }]])),
+    remove: (stale) =>
+      Ref.update(
+        entries,
+        (current) => new Map([...current].filter(([id]) => !stale.some((key) => idOf(key) === id))),
+      ),
+  }
+
+  return { store, entries }
+})
+
 export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: HubLinkState) {
   const state = yield* SubscriptionRef.make(initial)
   const seen = yield* Ref.make<readonly SeenCall[]>([])
@@ -278,6 +307,8 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   const logOuts = yield* Ref.make(0)
   const logOutRefusal = yield* Ref.make(Option.none<LogOutFailed>())
   const logOutAnswers = yield* Latch.make(true)
+  const transcriptStore = yield* makeMemoryTranscriptStore()
+  const pageVisible = yield* SubscriptionRef.make(true)
 
   const answerWith = <Failure>(
     answers: Latch.Latch,
@@ -322,7 +353,18 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     yield* Queue.fail(ending, failure)
   })
 
-  const layer = Layer.succeed(
+  const transcriptCacheLayer = Layer.provide(
+    TranscriptCache.layerOver(transcriptStore.store),
+    Layer.succeed(
+      PageSignals,
+      PageSignals.of({
+        visible: SubscriptionRef.changes(pageVisible),
+        online: Stream.make(true),
+      }),
+    ),
+  )
+
+  const linkLayer = Layer.succeed(
     HubLink,
     HubLink.of({
       changes: SubscriptionRef.changes(state),
@@ -404,8 +446,12 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     }),
   )
 
+  const layer = Layer.mergeAll(linkLayer, transcriptCacheLayer)
+
   return {
     layer,
+    storedTranscripts: transcriptStore.entries,
+    pageVisible,
     state,
     seen,
     resyncs,

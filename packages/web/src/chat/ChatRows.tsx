@@ -10,7 +10,7 @@ import { ThreadItem } from '@crook/web/chat/ThreadItem'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
-import { Spinner } from '@crook/web/components/ui/spinner'
+import { Skeleton } from '@crook/web/components/ui/skeleton'
 import { ThinkingState } from '@crook/web/components/ui/thinking-state'
 
 const WORKING_KEY = 'working'
@@ -52,9 +52,12 @@ export const failureRows = (
 
 export function LoadingThread() {
   return (
-    <div className="text-muted-foreground flex items-center justify-center gap-2 py-10 text-sm">
-      <Spinner />
-      <span>Loading the conversation</span>
+    <div role="status" data-slot="thread-skeleton" className="grid grid-cols-1 gap-6 px-1 py-1">
+      <span className="sr-only">Loading the conversation</span>
+      <Skeleton className="ms-auto h-11 w-3/5 rounded-2xl rounded-tr-sm" />
+      <Skeleton lines={3} />
+      <Skeleton className="ms-auto h-11 w-2/5 rounded-2xl rounded-tr-sm" />
+      <Skeleton lines={4} />
     </div>
   )
 }

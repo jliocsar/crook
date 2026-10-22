@@ -41,7 +41,17 @@ export class SubagentsChanged extends Schema.TaggedClass<SubagentsChanged>()('Su
   subagents: Schema.Array(Subagent),
 }) {}
 
-export const TranscriptEvent = Schema.Union([TranscriptOpened, TranscriptChunk, SubagentsChanged])
+export class TranscriptCaughtUp extends Schema.TaggedClass<TranscriptCaughtUp>()(
+  'TranscriptCaughtUp',
+  { session: ClaudeSessionId, offset: TranscriptOffset },
+) {}
+
+export const TranscriptEvent = Schema.Union([
+  TranscriptOpened,
+  TranscriptChunk,
+  SubagentsChanged,
+  TranscriptCaughtUp,
+])
 export type TranscriptEvent = typeof TranscriptEvent.Type
 
 export const TRANSCRIPT_START = TranscriptOffset.make(0)
@@ -83,6 +93,7 @@ export const positionAfter = (
       TranscriptChunk: (chunk) =>
         Option.some(new TranscriptPosition({ session: chunk.session, offset: chunk.nextOffset })),
       SubagentsChanged: () => position,
+      TranscriptCaughtUp: () => position,
     }),
   )
 
@@ -147,5 +158,7 @@ export const remainderAfter = (
       TranscriptChunk: (chunk) => chunkRemainder(position, chunk),
       SubagentsChanged: (changed) =>
         Option.liftPredicate(changed, ({ session }) => inSession(position, session)),
+      TranscriptCaughtUp: (caughtUp) =>
+        Option.liftPredicate(caughtUp, ({ session }) => inSession(position, session)),
     }),
   )

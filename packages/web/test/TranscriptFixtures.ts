@@ -4,7 +4,7 @@ import type * as Schema from 'effect/Schema'
 
 import { ClaudeSessionId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
 import { Subagent } from '@crook/domain/Subagent'
-import { TranscriptChunk, TranscriptOpened } from '@crook/domain/Transcript'
+import { TranscriptCaughtUp, TranscriptChunk, TranscriptOpened } from '@crook/domain/Transcript'
 import {
   AssistantMessage,
   CompactBoundaryBlock,
@@ -155,6 +155,9 @@ export const subagent = (options: {
   })
 
 export const opened = (session = SESSION) => new TranscriptOpened({ session })
+
+export const caughtUp = (offset: number, session = SESSION) =>
+  new TranscriptCaughtUp({ session, offset: TranscriptOffset.make(offset) })
 
 export const chunk = (
   offset: number,
