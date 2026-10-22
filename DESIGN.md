@@ -388,8 +388,8 @@ screen" on the Ask.
   - Screen readers hear "Needs you" and the title once per ask. An Ask that closes while it
     holds focus hands it to the composer.
 - **The composer** is Prompt Input at 16px, reading "Message Claude".
-  - A `/` button (on an empty field) and typing `/` both show `/compact`, `/clear` and `/model`
-    as a Suggestions row.
+  - Typing `/` shows `/compact`, `/clear` and `/model` as a Suggestions row. There is no `/`
+    button: the keyboard has the key.
   - Send turns into Stop while the agent works and the field is empty. Stop is Esc.
   - While the Ask is open, the placeholder reads "Or tell Claude what to do instead" and Send
     becomes "Decline and send": sending declines the Ask with your message. Blocked before the

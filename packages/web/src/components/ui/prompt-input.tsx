@@ -22,7 +22,6 @@ export type PromptInputProps = Omit<
   sending?: boolean
   stopping?: boolean
   maxRows?: number
-  actions?: React.ReactNode
   fieldRef?: React.RefObject<HTMLTextAreaElement | null>
   submitLabel?: string
   stopLabel?: string
@@ -63,7 +62,6 @@ export function PromptInput({
   sending = false,
   stopping = false,
   maxRows = DEFAULT_MAX_ROWS,
-  actions,
   fieldRef,
   submitLabel = 'Send',
   stopLabel = 'Stop',
@@ -125,7 +123,6 @@ export function PromptInput({
         }}
       />
       <div data-slot="prompt-input-toolbar" className="flex items-center gap-2 px-2 pb-2">
-        {actions}
         {status === 'working' ? (
           <button
             key="stop"

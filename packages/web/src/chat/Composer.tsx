@@ -1,12 +1,10 @@
 import * as Arr from 'effect/Array'
 import type * as Option from 'effect/Option'
-import { Slash } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import * as React from 'react'
 
 import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { keepFocus } from '@crook/web/components/KeepFocus'
-import { Button } from '@crook/web/components/ui/button'
 import { PromptInput } from '@crook/web/components/ui/prompt-input'
 import { Suggestions } from '@crook/web/components/ui/suggestions'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
@@ -106,23 +104,6 @@ export function Composer({
         submitLabel={mode === 'decline' ? 'Decline and send' : 'Send'}
         stopLabel="Stop (Esc)"
         className="bg-background"
-        actions={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-touch"
-            className="text-muted-foreground rounded-full"
-            aria-label="Slash command"
-            disabled={disabled || mode === 'decline' || value.trim() !== ''}
-            onPointerDown={keepFocus}
-            onClick={() => {
-              onValueChange('/')
-              focusField()
-            }}
-          >
-            <Slash />
-          </Button>
-        }
       />
       <ActionFailure className="px-1" message={failure} />
     </div>

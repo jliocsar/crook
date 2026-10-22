@@ -618,22 +618,6 @@ describe('AgentChatScreen', () => {
     }),
   )
 
-  it.effect('keeps a typed draft when the slash button is in reach', () =>
-    Effect.gen(function* () {
-      yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
-
-      yield* Effect.promise(() => screen.findByRole('textbox'))
-      fireEvent.change(field(), { target: { value: 'first line\nsecond line' } })
-
-      const slash = screen.getByRole('button', { name: 'Slash command' })
-
-      yield* click(slash)
-
-      expect(slash).toHaveProperty('disabled', true)
-      expect(field()).toHaveProperty('value', 'first line\nsecond line')
-    }),
-  )
-
   it.effect('sends on Ctrl+Enter from a touch keyboard', () =>
     Effect.gen(function* () {
       stubMediaQueries(['(prefers-reduced-motion)', '(pointer: coarse)'])
