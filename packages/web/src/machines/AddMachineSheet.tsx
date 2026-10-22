@@ -5,7 +5,7 @@ import { Button } from '@crook/web/components/ui/button'
 import { CodeBlock } from '@crook/web/components/ui/code-block'
 import { agentSocketUrl } from '@crook/web/rpc/HubConnection'
 
-export const PLUGIN_INSTALL_COMMAND = 'herdr plugin install jliocsar/crook'
+export const PLUGIN_INSTALL_COMMAND = 'herdr plugin install jliocsar/crook/packages/agent/plugin'
 export const TOKEN_CONTEXT = '{ "machine": "<name>" }'
 
 const setupSteps = (hubUrl: string) => [

@@ -536,8 +536,8 @@ that adds one.
 - **Add a machine** is a bottom sheet opened by `+` (and by the Empty State on both tabs): three
   numbered steps, each with a Code Block, then "It shows up under Machines as soon as it
   connects."
-  1. "On the machine, install the crook plugin for Herdr." `herdr plugin install jliocsar/crook`.
-     Provisional: the plugin is JC-113's, not built yet.
+  1. "On the machine, install the crook plugin for Herdr."
+     `herdr plugin install jliocsar/crook/packages/agent/plugin`.
   2. "In Herdr, run the plugin's "Connect to hub" action and give it this hub." The agent endpoint
      on the page's own origin (`wss://<hub>/rpc/agent`), which is what `CROOK_HUB_URL` takes today.
   3. "Paste an exe.dev token for the hub VM, minted with the machine's name as its context."

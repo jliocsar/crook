@@ -179,10 +179,10 @@ Responsibilities
 
 The Herdr plugin (`herdr-plugin.toml`)
 
-- `[[startup]]`: ensure the user service is running (`systemctl --user start …` / `launchctl` on macOS), then exit.
-- `[[actions]]`: "Connect to hub" (asks for hub URL + token, writes config + service unit), "Crook status", "Restart crook agent". Writing them is `crook-agent install-service` with `CROOK_HUB_URL`, `CROOK_HUB_TOKEN` and `CROOK_MACHINE_ID` in its environment: it writes the token to an owner-only `$XDG_CONFIG_HOME/crook/agent.env` the unit reads, never into the unit, enables and starts the service, and prints the Claude hooks block for the user to merge. `crook-agent uninstall-service` stops it and removes both files.
-- `[[panes]]`: small status TUI (overlay/popup).
-- Install path: `herdr plugin install <github-repo>` → run "Connect to hub".
+- `[[startup]]`: ensure the user service is running (`crook-agent start`: `systemctl --user start …` / `launchctl` on macOS, unless an agent already answers), then exit.
+- `[[actions]]`: "Connect to hub" (asks for hub URL + token, writes config + service unit), "Status", "Restart", and "Update" (runs the checked installer for the version the user picks; nothing updates on its own). Writing them is `crook-agent install-service` with `CROOK_HUB_URL`, `CROOK_HUB_TOKEN` and `CROOK_MACHINE_ID` in its environment: it writes the token to an owner-only `$XDG_CONFIG_HOME/crook/agent.env` the unit reads, never into the unit, enables and starts the service, and prints the Claude hooks block for the user to merge. `crook-agent uninstall-service` stops it and removes both files.
+- `[[panes]]`: one popup per action, since an action's own output only reaches herdr's plugin log.
+- Install path: `herdr plugin install jliocsar/crook/packages/agent/plugin` → run "Connect to hub".
 - Open question: whether to skip the plugin entirely and ship a one-liner installer. Plugin wins on discoverability inside the TUI; costs little.
 
 ### 5.3 PWA (iPhone)
