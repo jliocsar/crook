@@ -775,6 +775,14 @@ Bun, measured on 1.4.3:
   `~/.bun/install/cache/bun-<os>-<arch>-v<version>`.
 :::
 
+:::warning
+Bun's `fetch` verifies TLS against the root store bundled into Bun, not the system's, so a
+compiled binary trusts what the Bun that built it trusted. In the eMudhra intermediate compromise
+Bun 1.4.3 accepted the compromised chains and 1.4.4 rejected them as `CERT_REVOKED`, on a machine
+whose system store still trusted them (measured). A CA distrust reaches the shipped hub and agent
+only through a Bun bump in the release workflow and a new release.
+:::
+
 :::tip
 `effect/cli`'s `Flag.Boolean` is a required flag until it gets `Flag.withDefault(false)` (measured:
 "Missing required flag").
