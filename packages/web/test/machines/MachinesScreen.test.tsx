@@ -34,6 +34,12 @@ const desk = machine(DESK, [], {
   herdrVersion: '0.9.5',
 })
 
+const codeShownIn = (container: HTMLElement) =>
+  Arr.map(
+    Array.from(container.querySelectorAll('[data-slot="code-block-code"]')),
+    (block) => block.textContent,
+  )
+
 const cardOf = (label: string): HTMLElement =>
   Option.getOrThrowWith(
     Arr.findFirst(screen.getAllByText(label), (element) =>
@@ -161,13 +167,11 @@ describe('MachinesScreen', () => {
       const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
 
       expect(within(sheet).getByText('Add a machine')).toBeDefined()
-      expect(within(sheet).getByText(PLUGIN_INSTALL_COMMAND)).toBeDefined()
-      expect(within(sheet).getByText(TOKEN_CONTEXT)).toBeDefined()
-      expect(
-        within(sheet).getByText(
-          new URL('/rpc/agent', window.location.href).href.replace(/^http/u, 'ws'),
-        ),
-      ).toBeDefined()
+      expect(codeShownIn(sheet)).toEqual([
+        PLUGIN_INSTALL_COMMAND,
+        new URL('/rpc/agent', window.location.href).href.replace(/^http/u, 'ws'),
+        TOKEN_CONTEXT,
+      ])
       expect(
         within(sheet).getByText('It shows up under Machines as soon as it connects.'),
       ).toBeDefined()
@@ -180,11 +184,9 @@ describe('MachinesScreen', () => {
 
       yield* click(yield* findByRole('button', 'Add a machine'))
 
-      expect(
-        within(yield* Effect.promise(() => screen.findByRole('dialog'))).getByText(
-          PLUGIN_INSTALL_COMMAND,
-        ),
-      ).toBeDefined()
+      expect(codeShownIn(yield* Effect.promise(() => screen.findByRole('dialog')))).toContain(
+        PLUGIN_INSTALL_COMMAND,
+      )
     }),
   )
 
@@ -194,11 +196,9 @@ describe('MachinesScreen', () => {
 
       yield* click(yield* findByRole('button', 'Add a machine'))
 
-      expect(
-        within(yield* Effect.promise(() => screen.findByRole('dialog'))).getByText(
-          PLUGIN_INSTALL_COMMAND,
-        ),
-      ).toBeDefined()
+      expect(codeShownIn(yield* Effect.promise(() => screen.findByRole('dialog')))).toContain(
+        PLUGIN_INSTALL_COMMAND,
+      )
     }),
   )
 
