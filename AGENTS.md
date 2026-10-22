@@ -642,8 +642,15 @@ Checking the web app against real data, measured:
   link or install a plugin into the default config.
 - A named session's socket must fit in a Unix socket path (108 bytes): under a deep
   `XDG_CONFIG_HOME` the server exited at once with "local socket name length exceeds capacity".
+  The longest name is `herdr/sessions/<name>/herdr-client.sock`, so keep the probe's
+  `XDG_CONFIG_HOME` one short directory under `tmp/`.
 - A fresh herdr config opens an onboarding dialog in the first client, and its second screen
-  installs agent integrations on Enter. Close it with Escape.
+  installs agent integrations on Enter. `onboarding = false` in the probe's `herdr/config.toml`
+  keeps it from opening; Escape does not close it while a popup holds the focus (measured).
+- `herdr plugin install` takes GitHub shorthand only, but it clones with the `git` it finds, so a
+  probe points `GIT_CONFIG_GLOBAL` at a file whose `url."file:///<bare copy>/".insteadOf` is
+  `https://github.com/`, and herdr installs from a local bare copy of a branch (measured). It needs
+  no running server.
 - A plugin action's output reaches only herdr's plugin log (`herdr plugin log list`). A plugin pane
   or popup opens only into an active workspace, so create one first, and a popup shows only in an
   attached client: attach one inside termctrl to read and drive it.

@@ -57,7 +57,7 @@ if [ "$1" = install-service ]; then
   printf '%s\\n' "\${HERDR_SOCKET_PATH-unset}" >> "$HERDR_SOCKETS"
 fi
 if [ "$1" = "\${FAKE_AGENT_FAILS:-}" ]; then
-  printf 'Unknown subcommand %s\\n' "$1" >&2
+  printf 'USAGE\\n  crook-agent <subcommand> [flags]\\n' >&2
   exit 1
 fi
 printf 'fake crook-agent %s\\n' "$*"
@@ -270,9 +270,8 @@ layer(BunServices.layer, { excludeTestServices: true })('herdr plugin', (live) =
       const result = yield* runPlugin(['startup'], { failing: 'start' })
 
       expect(result.exitCode).toBe(1)
-      expect(result.output).toContain('Unknown subcommand start')
       expect(result.output).toContain(
-        'is older than the start, status and restart commands this plugin runs',
+        'crook-agent start failed. If it printed USAGE, fake crook-agent --version is older than the start, status and restart commands this plugin runs',
       )
     }),
   )

@@ -37,7 +37,7 @@ run_agent() {
   else
     failed=$?
   fi
-  say "crook-agent $1 failed. If what it printed is a usage error, this crook-agent ($("$agent" --version 2>/dev/null || say 'unknown version')) is older than the start, status and restart commands this plugin runs; install a newer release with \"crook: update agent\"."
+  say "crook-agent $1 failed. If it printed USAGE, $("$agent" --version 2>/dev/null || say 'this crook-agent') is older than the start, status and restart commands this plugin runs; install a newer release with \"crook: update agent\"."
   return "$failed"
 }
 
