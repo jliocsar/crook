@@ -13,7 +13,7 @@ export type SendCommandFailure = CommandFailure | HubCallFailed | HubNotConnecte
 export const UNEXPECTED_FAILURE_MESSAGE =
   'Something inside crook failed without saying why. Reload crook and try again.'
 
-export const settledFailure = <Success, Failure>(
+const settledFailure = <Success, Failure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
 ): Option.Option<Cause.Cause<Failure>> =>
   pipe(

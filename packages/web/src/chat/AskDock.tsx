@@ -23,12 +23,13 @@ import {
 } from '@crook/web/chat/AskModel'
 import type { AskButton } from '@crook/web/chat/AskModel'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
+import { OutputText } from '@crook/web/components/OutputText'
 import { Button } from '@crook/web/components/ui/button'
 import { CodeBlock } from '@crook/web/components/ui/code-block'
 import { DiffView } from '@crook/web/components/ui/diff-view'
 import { Questionnaire } from '@crook/web/components/ui/questionnaire'
 import { Spinner } from '@crook/web/components/ui/spinner'
-import { languageOfPath } from '@crook/web/highlight/Highlighter'
+import { languageOfPath, SHELL_LANGUAGE } from '@crook/web/highlight/Highlighter'
 import { SectionLabel } from '@crook/web/machines/SectionLabel'
 
 export interface AskDockProps {
@@ -43,7 +44,6 @@ export interface AskDockProps {
 type AnswerControls = Pick<AskDockProps, 'state' | 'disabled' | 'onAnswer'>
 
 const DETAIL_CAP = 'max-h-40 overflow-y-auto'
-const SHELL_LANGUAGE = 'shellscript'
 const DECLINE_LABEL = 'Decline'
 const ANSWER_LABEL = 'Answer'
 const ANSWERED_NOTE = 'Answered. Waiting for Claude to move on.'
@@ -58,20 +58,20 @@ const DECLINE_BUTTONS: readonly AskButton[] = [{ label: DECLINE_LABEL, answer: P
 const locked = (controls: AnswerControls): boolean =>
   controls.disabled || isAnswerUnderway(controls.state)
 
+function AnswerNote({ children }: { children: string }) {
+  return (
+    <p role="status" className="text-muted-foreground text-sm leading-5">
+      {children}
+    </p>
+  )
+}
+
 function AnswerStatus({ state }: { state: AskAnswerState }) {
   return AskAnswerState.$match(state, {
     Open: () => null,
     Answering: () => null,
-    Answered: () => (
-      <p role="status" className="text-muted-foreground text-sm leading-5">
-        {ANSWERED_NOTE}
-      </p>
-    ),
-    AlreadyAnswered: () => (
-      <p role="status" className="text-muted-foreground text-sm leading-5">
-        {ALREADY_ANSWERED_NOTE}
-      </p>
-    ),
+    Answered: () => <AnswerNote>{ANSWERED_NOTE}</AnswerNote>,
+    AlreadyAnswered: () => <AnswerNote>{ALREADY_ANSWERED_NOTE}</AnswerNote>,
     Refused: ({ message }) => <ActionFailure message={Option.some(message)} />,
   })
 }
@@ -92,23 +92,9 @@ function DetailView({ detail }: { detail: AskDetail }) {
         className={DETAIL_CAP}
       />
     ),
-    Text: ({ text }) => <ScreenText text={text} />,
+    Text: ({ text }) => <OutputText text={text} className={DETAIL_CAP} />,
     Summary: ({ text }) => <p className="truncate font-mono text-sm">{text}</p>,
   })
-}
-
-function ScreenText({ text }: { text: string }) {
-  return (
-    <pre
-      data-slot="ask-screen"
-      className={cn(
-        'bg-muted/60 rounded-[calc(var(--radius)-0.25rem)] p-2.5 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap',
-        DETAIL_CAP,
-      )}
-    >
-      {text}
-    </pre>
-  )
 }
 
 function AnswerButtons({
@@ -234,7 +220,7 @@ function UnknownDock({ ask, controls }: { ask: UnknownAsk; controls: AnswerContr
   return (
     <>
       <p className="text-base leading-6 font-semibold">{askTitle(ask)}</p>
-      <ScreenText text={ask.screen} />
+      <OutputText text={ask.screen} className={DETAIL_CAP} />
       <p className="text-muted-foreground text-sm leading-5">{UNREADABLE_HINT}</p>
       <AnswerButtons buttons={DECLINE_BUTTONS} controls={controls} />
     </>

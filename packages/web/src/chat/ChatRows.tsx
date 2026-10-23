@@ -1,7 +1,7 @@
 import * as Arr from 'effect/Array'
+import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
-import type * as React from 'react'
 
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { RowAction } from '@crook/web/chat/RowAction'
@@ -12,12 +12,12 @@ import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Skeleton } from '@crook/web/components/ui/skeleton'
 import { ThinkingState } from '@crook/web/components/ui/thinking-state'
+import { useNow } from '@crook/web/time/Now'
 
 const WORKING_KEY = 'working'
 const FAILURE_KEY = 'transcript failure'
 const WORKING_LABEL = 'Working'
-
-export const NO_MESSAGES = 'No messages yet'
+const NO_MESSAGES = 'No messages yet'
 
 export const itemRows = (
   items: readonly ChatItem[],
@@ -28,9 +28,9 @@ export const itemRows = (
     content: <ThreadItem item={item} environment={environment} />,
   }))
 
-export const workingRow = (elapsed: string): ThreadRow => ({
+export const workingRow = (elapsed: (now: DateTime.Utc) => string): ThreadRow => ({
   key: WORKING_KEY,
-  content: <ThinkingState label={WORKING_LABEL} elapsed={elapsed} />,
+  content: <WorkingThought elapsed={elapsed} />,
 })
 
 export const failureRows = (
@@ -50,7 +50,13 @@ export const failureRows = (
     Option.toArray,
   )
 
-export function LoadingThread() {
+function WorkingThought({ elapsed }: { elapsed: (now: DateTime.Utc) => string }) {
+  const now = useNow()
+
+  return <ThinkingState label={WORKING_LABEL} elapsed={elapsed(now)} />
+}
+
+function LoadingThread() {
   return (
     <div role="status" data-slot="thread-skeleton" className="grid grid-cols-1 gap-6 px-1 py-1">
       <span className="sr-only">Loading the conversation</span>
@@ -62,6 +68,10 @@ export function LoadingThread() {
   )
 }
 
-export function QuietThread({ children }: { children: React.ReactNode }) {
-  return <p className="text-muted-foreground py-10 text-center text-sm">{children}</p>
+export function TranscriptEmpty({ view }: { view: Option.Option<TranscriptView> }) {
+  return Option.isNone(view) ? (
+    <LoadingThread />
+  ) : (
+    <p className="text-muted-foreground py-10 text-center text-sm">{NO_MESSAGES}</p>
+  )
 }

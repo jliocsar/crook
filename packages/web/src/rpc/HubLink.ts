@@ -251,36 +251,13 @@ const make = Effect.gen(function* () {
     )
   }).pipe(Effect.withSpan('HubLink.resync'))
 
-  const markSeen = Effect.fn('HubLink.markSeen')(function* (machine: MachineId, pane: PaneId) {
-    return yield* whenConnected(connected, (calls) => calls.markSeen(machine, pane))
-  })
-
-  const forgetMachine = Effect.fn('HubLink.forgetMachine')(function* (machine: MachineId) {
-    return yield* whenConnected(connected, (calls) => calls.forgetMachine(machine))
-  })
-
-  const setPinned = Effect.fn('HubLink.setPinned')(function* (
-    machine: MachineId,
-    pane: PaneId,
-    pinned: boolean,
-  ) {
-    return yield* whenConnected(connected, (calls) => calls.setPinned(machine, pane, pinned))
-  })
-
-  const sendCommand = Effect.fn('HubLink.sendCommand')(function* (
-    machine: MachineId,
-    key: IdempotencyKey,
-    command: Command,
-  ) {
-    return yield* whenConnected(connected, (calls) => calls.sendCommand(machine, key, command))
-  })
-
-  const setNotificationPref = Effect.fn('HubLink.setNotificationPref')(function* (
-    event: NotificationEvent,
-    enabled: boolean,
-  ) {
-    return yield* whenConnected(connected, (calls) => calls.setNotificationPref(event, enabled))
-  })
+  const connectedCall = <Args extends readonly unknown[], Success, Failure>(
+    name: string,
+    pick: (calls: HubCalls) => (...args: Args) => Effect.Effect<Success, Failure>,
+  ): ((...args: Args) => Effect.Effect<Success, Failure | HubNotConnected>) =>
+    Effect.fn(name)(function* (...args: Args) {
+      return yield* whenConnected(connected, (calls) => pick(calls)(...args))
+    })
 
   const sendTestNotification = whenConnected(connected, (calls) => calls.sendTestNotification).pipe(
     Effect.withSpan('HubLink.sendTestNotification'),
@@ -319,13 +296,16 @@ const make = Effect.gen(function* () {
       Stream.fromEffectDrain(Fiber.join(follower)),
     ),
     resync,
-    markSeen,
-    forgetMachine,
-    setPinned,
-    sendCommand,
+    markSeen: connectedCall('HubLink.markSeen', (calls) => calls.markSeen),
+    forgetMachine: connectedCall('HubLink.forgetMachine', (calls) => calls.forgetMachine),
+    setPinned: connectedCall('HubLink.setPinned', (calls) => calls.setPinned),
+    sendCommand: connectedCall('HubLink.sendCommand', (calls) => calls.sendCommand),
     notificationSettings: whileConnected(connected, (calls) => calls.watchNotificationSettings),
     account: whileConnected(connected, (calls) => Stream.fromEffect(calls.account)),
-    setNotificationPref,
+    setNotificationPref: connectedCall(
+      'HubLink.setNotificationPref',
+      (calls) => calls.setNotificationPref,
+    ),
     sendTestNotification,
     logOut,
     watchTranscript,

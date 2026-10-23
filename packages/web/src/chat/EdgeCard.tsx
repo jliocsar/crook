@@ -8,6 +8,7 @@ import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Button } from '@crook/web/components/ui/button'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { shortElapsed } from '@crook/web/time/Elapsed'
+import { useNow } from '@crook/web/time/Now'
 
 export interface Restart {
   readonly start: () => void
@@ -16,11 +17,10 @@ export interface Restart {
   readonly failure: Option.Option<string>
 }
 
-export interface EdgeCardProps {
+interface EdgeCardProps {
   readonly kind: EdgeKind
   readonly machineLabel: string
   readonly since: Option.Option<DateTime.Utc>
-  readonly now: DateTime.Utc
   readonly restart: Option.Option<Restart>
   readonly onBack: () => void
   readonly backLabel: string
@@ -40,7 +40,7 @@ const edgeTitle = (kind: EdgeKind, machineLabel: string): string =>
 const agoLine = (since: Option.Option<DateTime.Utc>, now: DateTime.Utc): Option.Option<string> =>
   Option.map(since, (at) => `${shortElapsed(now, at)} ago`)
 
-const detailOf = ({ kind, since, now }: EdgeCardProps): Option.Option<string> =>
+const detailOf = ({ kind, since }: EdgeCardProps, now: DateTime.Utc): Option.Option<string> =>
   kind === 'away'
     ? Option.some(
         Option.match(agoLine(since, now), {
@@ -66,6 +66,7 @@ export function EdgeCard(props: EdgeCardProps) {
   const { kind, machineLabel, restart, onBack, backLabel, takeFocus } = props
   const firstButton = React.useRef<HTMLButtonElement>(null)
   const title = edgeTitle(kind, machineLabel)
+  const now = useNow()
 
   React.useEffect(() => {
     if (takeFocus) {
@@ -88,7 +89,7 @@ export function EdgeCard(props: EdgeCardProps) {
           <p role="status" className="text-foreground text-sm leading-5 font-semibold">
             {title}
           </p>
-          {Option.match(detailOf(props), {
+          {Option.match(detailOf(props, now), {
             onNone: () => null,
             onSome: (detail) => <p className="text-muted-foreground text-sm leading-5">{detail}</p>,
           })}

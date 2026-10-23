@@ -4,7 +4,7 @@ import { MachineBadge } from '@crook/web/components/MachineBadge'
 import { StatusPill } from '@crook/web/components/ui/status-pill'
 import type { MachineCardModel } from '@crook/web/machines/MachineLayout'
 
-export function UpdatePill({ behindHub }: { behindHub: boolean }) {
+function UpdatePill({ behindHub }: { behindHub: boolean }) {
   if (!behindHub) {
     return null
   }

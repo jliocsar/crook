@@ -21,7 +21,7 @@ const STEP_ICON_SIZE = 36
 const APP_ICON_SOURCE = '/apple-touch-icon-180x180.png'
 const ADD_TO_HOME_SCREEN: Step = { text: 'Choose Add to Home Screen', hint: null, Icon: SquarePlus }
 
-export const INSTALL_STEPS = {
+const INSTALL_STEPS = {
   safari: [
     { text: 'Tap Share in the toolbar', hint: "Can't see it? Tap ⋯ first.", Icon: Share },
     ADD_TO_HOME_SCREEN,

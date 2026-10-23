@@ -21,6 +21,10 @@ export const herdAtom = Atom.make((get) =>
   Option.flatMap(AsyncResult.value(get(linkStateAtom)), (state) => state.herd),
 )
 
+export const herdViewAtom = Atom.make((get) =>
+  Option.map(get(herdAtom), (snapshot) => snapshot.view),
+)
+
 export const herdLayoutAtom = Atom.make((get) =>
   Option.map(get(herdAtom), (snapshot) => herdLayout(snapshot.view)),
 )
@@ -32,13 +36,7 @@ export const needsYouAtom = Atom.make((get) =>
   }),
 )
 
-export const resyncAtom = hubRuntime.fn(() =>
-  Effect.gen(function* () {
-    const link = yield* HubLink
-
-    yield* link.resync
-  }),
-)
+export const resyncAtom = hubRuntime.fn(() => HubLink.use((link) => link.resync))
 
 const unseenWhileLive = (opened: OpenedAgent, get: Atom.AtomContext) =>
   pipe(

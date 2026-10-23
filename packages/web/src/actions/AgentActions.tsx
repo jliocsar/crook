@@ -42,9 +42,7 @@ import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { restoreFocus } from '@crook/web/navigation/Focus'
 import { leaveForHerd } from '@crook/web/navigation/LeaveForHerd'
 
-export type OpenCardActions = (machine: MachineId, pane: PaneId) => void
-
-type OpenAgentActions = (machine: MachineId, pane: PaneId, origin: ActionsOrigin) => void
+export type OpenAgentActions = (machine: MachineId, pane: PaneId, origin: ActionsOrigin) => void
 
 interface ShownAgent {
   readonly view: AgentActionsView
@@ -86,14 +84,6 @@ export const useClosedFromChat = (machine: MachineId, pane: PaneId): boolean => 
   }
 
   return closed || closingNow
-}
-
-export const useOpenCardActions = (): OpenCardActions => {
-  const open = useOpenAgentActions()
-
-  return (machine, pane) => {
-    open(machine, pane, 'card')
-  }
 }
 
 const shownAfter = (

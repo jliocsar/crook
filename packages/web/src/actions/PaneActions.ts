@@ -14,7 +14,14 @@ import { panePresence } from '@crook/domain/MachineState'
 import type { PanePresence } from '@crook/domain/MachineState'
 import { remembersOutcome, settledError } from '@crook/web/atoms/ActionFailure'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
-import { ActionProgress, isDone, isIdle, progressOf } from '@crook/web/atoms/ActionProgress'
+import {
+  ActionProgress,
+  failureMessageOf,
+  isDone,
+  isFailed,
+  isIdle,
+  progressOf,
+} from '@crook/web/atoms/ActionProgress'
 import type { HubCallFailed, SetPinnedRefused } from '@crook/web/rpc/HubConnection'
 import type { HubNotConnected } from '@crook/web/rpc/HubLink'
 
@@ -57,24 +64,11 @@ export const isInFlightOrDone = ActionProgress.$match({
 const isSettled = (progress: ActionProgress<unknown>): boolean =>
   isIdle(progress) || isDone(progress)
 
-export const failureOf = (progress: ActionProgress<unknown>): Option.Option<string> =>
-  ActionProgress.$match(progress, {
-    Idle: () => Option.none(),
-    Sending: () => Option.none(),
-    Sent: () => Option.none(),
-    Done: () => Option.none(),
-    Failed: ({ message, asksConfirmation: confirming }) =>
-      confirming ? Option.none() : Option.some(message),
-  })
-
 export const isConfirmationAsked = (progress: ActionProgress<unknown>): boolean =>
-  ActionProgress.$match(progress, {
-    Idle: () => false,
-    Sending: () => false,
-    Sent: () => false,
-    Done: () => false,
-    Failed: ({ asksConfirmation: confirming }) => confirming,
-  })
+  Option.exists(Option.liftPredicate(progress, isFailed), (failed) => failed.asksConfirmation)
+
+export const failureOf = (progress: ActionProgress<unknown>): Option.Option<string> =>
+  Option.filter(failureMessageOf(progress), () => !isConfirmationAsked(progress))
 
 export const closeNeedsConfirmation = (
   row: AgentRow,

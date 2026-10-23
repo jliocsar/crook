@@ -575,6 +575,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Every atom that talks to the hub runs on one `Atom.runtime`. A component test seeds the registry
   with `Atom.initialValue(runtime.layer, fake)` and renders the real route tree; a test that
   renders a route without it dials a real WebSocket and fails with `ECONNREFUSED` (measured).
+  Seeding a derived atom such as the connection or the needs-you count does not stand in for
+  it: the registry still builds the atom, keeping the seeded value, so its reads reach the
+  runtime and dial all the same (measured). Seed the runtime's layer.
 - An effect atom re-runs whenever anything it reads changes, and the re-run interrupts the effect
   still in flight. One that reads the whole herd re-ran its hub call on every herd change from
   any machine (measured: five calls where one was due). It reads a derived atom that holds only
@@ -602,6 +605,27 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
 :::
 
+- Shiki's JavaScript regex engine compiles a grammar's patterns the first time it meets them, so
+  the first blocks of each language cost far more than the rest: over one real transcript's 204
+  code blocks the first pass took 1507 ms and the second 219 ms, and a nine-line TypeScript block
+  took 434 ms on its own (measured in Bun on a desktop). In a browser that froze scrolling for over
+  half a second at 4x CPU throttling. Highlighting therefore runs in a Web Worker, and the main
+  thread only renders the tokens it sends back.
+- A worker that awaits its own setup before it listens for messages loses every message posted
+  in the meantime: the highlighter answered nothing until it listened first and loaded lazily
+  (measured).
+- A clock read at the top of a screen re-renders the whole screen every second. In the chat that
+  re-rendered every visible row; moving the clock into the leaves that show an elapsed time, each
+  ticking only while its span is running, halved the idle render time (measured at 4x
+  throttling, about 60 ms to about 28 ms per five seconds).
+- A virtualized thread unmounts rows as they scroll away, and a remount parses its markdown again.
+  react-markdown's `Markdown` export is a plain function without hooks, so the thread keeps one
+  render cache for its lifetime, keyed by the text, and a remounted row reuses the element tree.
+  The cache lives and dies with the thread rather than with the page, so it needs no size cap.
+- An atom update renders synchronously, so a transcript that arrives while a chat slides in
+  blocked the slide's frames. Reading it through `useDeferredValue` lets React render the rows in
+  yielding slices: the worst frame of the slide went from about 255 ms to about 175 ms at 4x
+  throttling (measured).
 - Base UI's Dialog returns focus on close to the element focused before it opened only while that
   element is still connected; once it is gone, focus lands on the body (measured on 1.9.0, after a
   close removed the card that opened the sheet). The shared sheet hands Base UI its own return

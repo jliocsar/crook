@@ -20,15 +20,15 @@ import {
 import type { AskAnswer, Command, CommandReceipt } from '@crook/domain/Command'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import {
-  ActionProgress,
   failureMessageOf,
   isDone,
   isFailed,
   isSending,
   isSent,
 } from '@crook/web/atoms/ActionProgress'
+import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { alwaysNotesAtom } from '@crook/web/atoms/Chat'
-import { OpenedAgent } from '@crook/web/atoms/Herd'
+import type { OpenedAgent } from '@crook/web/atoms/Herd'
 import {
   alwaysNoteFor,
   answerState,
@@ -61,9 +61,8 @@ export interface ChatCommands {
   readonly pendingPrompt: Option.Option<string>
 }
 
-export interface ChatCommandsInput {
-  readonly machine: MachineId
-  readonly pane: PaneId
+interface ChatCommandsInput {
+  readonly opened: OpenedAgent
   readonly model: ChatScreenModel
   readonly connection: ConnectionView
   readonly items: readonly ChatItem[]
@@ -76,7 +75,7 @@ export interface PromptWait {
   readonly awaited: number
 }
 
-export interface PromptSend {
+interface PromptSend {
   readonly replacesFailed: boolean
   readonly awaitsPrompt: boolean
 }
@@ -88,7 +87,7 @@ export const STOP_SETTLE = Duration.millis(512)
 
 const decodeFolder = Schema.decodeUnknownOption(FolderPath)
 
-export const isInFlight = (action: CommandAction): boolean =>
+const isInFlight = (action: CommandAction): boolean =>
   isSending(action.state) || isSent(action.state)
 
 const textOf = (command: Command): Option.Option<string> =>
@@ -104,18 +103,19 @@ const textOf = (command: Command): Option.Option<string> =>
     Match.orElse(() => Option.none<string>()),
   )
 
-const isAcknowledged = (action: CommandAction): boolean =>
-  isSent(action.state) || isDone(action.state)
+const isAcknowledged = (state: CommandProgress): boolean => isSent(state) || isDone(state)
 
-export const sentText = (action: CommandAction): Option.Option<string> =>
+const lastTextWhen = (
+  action: CommandAction,
+  holds: (state: CommandProgress) => boolean,
+): Option.Option<string> =>
   pipe(
-    Option.liftPredicate(action, isAcknowledged),
-    Option.flatMap((acknowledged) => acknowledged.last),
+    Option.liftPredicate(action, (candidate) => holds(candidate.state)),
+    Option.flatMap((kept) => kept.last),
     Option.flatMap(textOf),
   )
 
-export const promptCount = (items: readonly ChatItem[]): number =>
-  Arr.filter(items, isUserPrompt).length
+const promptCount = (items: readonly ChatItem[]): number => Arr.filter(items, isUserPrompt).length
 
 const hasArrived = (wait: PromptWait, items: readonly ChatItem[]): boolean =>
   wait.awaited === 0 || promptCount(items) >= wait.promptsAtSend + wait.awaited
@@ -138,13 +138,13 @@ export const waitAfterSend = (
   return { promptsAtSend: carried === 0 ? promptCount(items) : wait.promptsAtSend, awaited }
 }
 
-export const pendingPromptText = (
+const pendingPromptText = (
   action: CommandAction,
   wait: PromptWait,
   items: readonly ChatItem[],
 ): Option.Option<string> =>
   pipe(
-    sentText(action),
+    lastTextWhen(action, isAcknowledged),
     Option.filter((text) => !text.startsWith(SLASH)),
     Option.filter(() => !hasArrived(wait, items)),
   )
@@ -155,7 +155,7 @@ const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
     Match.orElse(() => Option.none<PaneId>()),
   )
 
-export const placeholderOf = (
+const placeholderOf = (
   connection: ConnectionView,
   mode: ComposerMode,
   blocked: boolean,
@@ -171,19 +171,12 @@ export const placeholderOf = (
   return blocked ? "Waiting for Claude's question" : 'Message Claude'
 }
 
-const undeliveredText = (action: CommandAction): Option.Option<string> =>
-  pipe(
-    Option.liftPredicate(action, (failed) => isFailed(failed.state)),
-    Option.flatMap((failed) => failed.last),
-    Option.flatMap(textOf),
-  )
-
 const useRestoreUndeliveredDraft = (
   action: CommandAction,
   draft: string,
   setDraft: (draft: string) => void,
 ) => {
-  const undelivered = Option.getOrElse(undeliveredText(action), () => '')
+  const undelivered = Option.getOrElse(lastTextWhen(action, isFailed), () => '')
 
   React.useEffect(() => {
     if (undelivered !== '' && draft.trim() === '') {
@@ -197,7 +190,7 @@ const useClearSentDraft = (
   draft: string,
   setDraft: (draft: string) => void,
 ) => {
-  const sent = Option.getOrElse(sentText(action), () => '')
+  const sent = Option.getOrElse(lastTextWhen(action, isAcknowledged), () => '')
 
   React.useEffect(() => {
     if (sent !== '' && draft.trim() === sent) {
@@ -271,14 +264,11 @@ const useAlwaysNotes = (opened: OpenedAgent, answer: CommandAction) => {
 
 const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
   const navigate = useNavigate()
-  const started = ActionProgress.$match(action.state, {
-    Done: (done) => startedPane(done.receipt),
-    Idle: () => Option.none<PaneId>(),
-    Sending: () => Option.none<PaneId>(),
-    Sent: () => Option.none<PaneId>(),
-    Failed: () => Option.none<PaneId>(),
-  })
-  const target = Option.getOrUndefined(started)
+  const target = pipe(
+    Option.liftPredicate(action.state, (state) => isDone(state)),
+    Option.flatMap((done) => startedPane(done.receipt)),
+    Option.getOrUndefined,
+  )
 
   React.useEffect(() => {
     if (target !== undefined) {
@@ -293,14 +283,14 @@ const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
 }
 
 export const useChatCommands = ({
-  machine,
-  pane,
+  opened,
   model,
   connection,
   items,
   draft,
   setDraft,
 }: ChatCommandsInput): ChatCommands => {
+  const { machine, pane } = opened
   const prompt = useCommandAction(machine)
   const stop = useCommandAction(machine)
   const restart = useCommandAction(machine)
@@ -309,7 +299,7 @@ export const useChatCommands = ({
   const activity = activityOf(model)
   const blocked = activity === 'blocked'
   const stopping = useStopLock(stop)
-  const always = useAlwaysNotes(new OpenedAgent({ machine, pane }), answer)
+  const always = useAlwaysNotes(opened, answer)
   const openAsk = Option.flatMap(
     Option.filter(model.row, () => blocked && model.presence === 'live'),
     (row) => row.ask,

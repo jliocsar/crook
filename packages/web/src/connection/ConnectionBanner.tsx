@@ -1,3 +1,4 @@
+import { useAtomValue } from '@effect/atom-react/Hooks'
 import { cn } from 'cn'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
@@ -5,10 +6,10 @@ import * as Option from 'effect/Option'
 import { Check, ServerOff, WifiOff } from 'lucide-react'
 import type * as React from 'react'
 
+import { connectionAtom } from '@crook/web/atoms/Connection'
 import { Collapse } from '@crook/web/components/Collapse'
 import { Swap } from '@crook/web/components/Swap'
 import { Spinner } from '@crook/web/components/ui/spinner'
-import { useConnectionView } from '@crook/web/connection/ConnectionContext'
 import { failedNotice } from '@crook/web/connection/ConnectionView'
 import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
 import { shortElapsed } from '@crook/web/time/Elapsed'
@@ -63,13 +64,9 @@ function LastSynced({ at }: { at: DateTime.Utc }) {
   return <>{recent ? 'Updated just now' : `Updated ${shortElapsed(now, at)} ago`}</>
 }
 
-export function ConnectionBanner({
-  notice,
-  syncedAt,
-}: {
-  notice: Option.Option<ConnectionNotice>
-  syncedAt: Option.Option<DateTime.Utc>
-}) {
+export function HeaderBanner() {
+  const { notice, syncedAt } = useAtomValue(connectionAtom)
+
   return (
     <Collapse open={Option.isSome(notice)}>
       {Option.match(notice, {
@@ -100,12 +97,6 @@ export function ConnectionBanner({
       })}
     </Collapse>
   )
-}
-
-export function HeaderBanner() {
-  const { notice, syncedAt } = useConnectionView()
-
-  return <ConnectionBanner notice={notice} syncedAt={syncedAt} />
 }
 
 export function ConnectionLiveRegion({ notice }: { notice: Option.Option<ConnectionNotice> }) {

@@ -13,12 +13,8 @@ export type AgentRun = {
   selectable: boolean
 }
 
-export type SubagentTreeProps = Omit<
-  React.HTMLAttributes<HTMLDivElement>,
-  'children' | 'onSelect'
-> & {
+type SubagentTreeProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children' | 'onSelect'> & {
   runs: readonly AgentRun[]
-  label?: string
   onSelectRun: (run: AgentRun) => void
 }
 
@@ -74,13 +70,7 @@ function RunLine({ run }: { run: AgentRun }) {
   )
 }
 
-export function SubagentTree({
-  runs,
-  label = 'Subagents',
-  onSelectRun,
-  className,
-  ...rootProps
-}: SubagentTreeProps) {
+export function SubagentTree({ runs, onSelectRun, className, ...rootProps }: SubagentTreeProps) {
   const done = runs.filter((run) => run.status === 'done').length
   const failed = runs.filter((run) => run.status === 'failed').length
 
@@ -95,7 +85,7 @@ export function SubagentTree({
       {...rootProps}
     >
       <p className="text-muted-foreground mb-1 flex items-baseline gap-2 text-xs">
-        <span className="font-medium">{label}</span>
+        <span className="font-medium">Subagents</span>
         <span className="ms-auto tabular-nums">
           {done}/{runs.length} done
           {failed > 0 ? <span className="text-destructive ms-2">{failed} failed</span> : null}

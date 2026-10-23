@@ -2,7 +2,7 @@ import { cn } from 'cn'
 import { Loader } from 'lucide-react'
 import type * as React from 'react'
 
-export type ThinkingStateProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
+type ThinkingStateProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   label: React.ReactNode
   elapsed?: string | undefined
 }

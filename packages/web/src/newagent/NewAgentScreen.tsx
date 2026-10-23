@@ -5,11 +5,12 @@ import * as React from 'react'
 
 import type { HerdView } from '@crook/domain/HerdView'
 import { connectionAtom } from '@crook/web/atoms/Connection'
-import { herdAtom } from '@crook/web/atoms/Herd'
+import { herdViewAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { Sheet } from '@crook/web/components/Sheet'
 import { Button } from '@crook/web/components/ui/button'
 import { Spinner } from '@crook/web/components/ui/spinner'
+import { isOnlineMachine } from '@crook/web/herd/HerdLayout'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
 import { useLaunch } from '@crook/web/newagent/Launch'
 import { LaunchSummary } from '@crook/web/newagent/LaunchSummary'
@@ -18,14 +19,12 @@ import {
   currentSelection,
   FolderChoice,
   folderOf,
-  isOnlineMachine,
   launchCommand,
   newAgentBody,
   newAgentChips,
   placesOn,
   selectionOn,
   typedFolder,
-  withCheckout,
   withFolder,
   withWorktree,
   withWorktreeBranch,
@@ -136,7 +135,7 @@ function PickerContent({
             checkout={checkoutLabel(choice)}
             worktree={worktree}
             onCheckout={() => {
-              onChange(withCheckout(selection), true)
+              onChange(withFolder(selection, selection.folder), true)
             }}
             onWorktree={() => {
               onChange(withWorktree(selection), false)
@@ -155,14 +154,13 @@ function PickerContent({
 
 function NewAgentFlow() {
   const connection = useAtomValue(connectionAtom)
-  const herd = useAtomValue(herdAtom)
+  const view = useAtomValue(herdViewAtom)
   const [chosen, setChosen] = React.useState(Option.none<Selection>())
   const [task, setTask] = React.useState('')
   const [picker, setPicker] = React.useState<Picker>('machine')
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [editedSinceStart, setEditedSinceStart] = React.useState(false)
 
-  const view = Option.map(herd, (snapshot) => snapshot.view)
   const launch = useLaunch(view)
   const selection = Option.flatMap(view, (herdView) => currentSelection(herdView, chosen))
   const shown = Option.all({ herdView: view, current: selection })

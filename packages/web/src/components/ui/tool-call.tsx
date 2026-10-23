@@ -1,19 +1,18 @@
 import { cn } from 'cn'
-import { Check, ChevronRight, Circle, CircleDot, Loader, TriangleAlert, Wrench } from 'lucide-react'
+import { Check, ChevronRight, Circle, CircleDot, Loader, TriangleAlert } from 'lucide-react'
 import * as React from 'react'
 
 import { useRowFlag } from '@crook/web/components/RowMemory'
 
 export type ToolCallStatus = 'running' | 'waiting' | 'success' | 'error' | 'stopped'
 
-export type ToolCallProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
+type ToolCallProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   name: string
   status: ToolCallStatus
-  icon?: React.ReactNode
+  icon: React.ReactNode
   duration?: string | undefined
-  panel?: React.ReactNode
-  footer?: React.ReactNode
-  defaultOpen?: boolean
+  panel: React.ReactNode
+  footer: React.ReactNode
 }
 
 const STATUS_TEXT = {
@@ -53,58 +52,6 @@ function StatusIcon({ status }: { status: ToolCallStatus }) {
   return <Circle aria-hidden="true" size={ICON_SIZE} className="text-muted-foreground" />
 }
 
-function HeaderContent({
-  name,
-  status,
-  icon,
-  duration,
-  expandable,
-  open,
-}: {
-  name: string
-  status: ToolCallStatus
-  icon: React.ReactNode
-  duration: string | undefined
-  expandable: boolean
-  open: boolean
-}) {
-  return (
-    <>
-      <span aria-hidden="true" className="text-muted-foreground shrink-0">
-        {icon ?? <Wrench size={ICON_SIZE} />}
-      </span>
-      <span
-        data-slot="tool-call-name"
-        className="min-w-0 truncate font-[family-name:var(--font-mono),monospace] text-sm font-medium"
-      >
-        {name}
-      </span>
-      <span className="ml-auto flex shrink-0 items-center gap-2">
-        {duration === undefined ? null : (
-          <span
-            data-slot="tool-call-duration"
-            className="text-muted-foreground font-[family-name:var(--font-mono),monospace] text-xs tabular-nums"
-          >
-            {duration}
-          </span>
-        )}
-        <StatusIcon status={status} />
-        <span className="sr-only">{STATUS_TEXT[status]}</span>
-        {expandable ? (
-          <ChevronRight
-            aria-hidden="true"
-            size={CHEVRON_SIZE}
-            className={cn(
-              'text-muted-foreground transition-transform duration-200 motion-reduce:transition-none',
-              open && 'rotate-90',
-            )}
-          />
-        ) : null}
-      </span>
-    </>
-  )
-}
-
 export function ToolCall({
   name,
   status,
@@ -112,23 +59,11 @@ export function ToolCall({
   duration,
   panel,
   footer,
-  defaultOpen = false,
   className,
   ...rootProps
 }: ToolCallProps) {
   const panelId = `${React.useId()}-panel`
-  const [open, setOpen] = useRowFlag('tool-call', defaultOpen)
-  const expandable = panel !== undefined && panel !== null
-  const content = (
-    <HeaderContent
-      name={name}
-      status={status}
-      icon={icon}
-      duration={duration}
-      expandable={expandable}
-      open={open}
-    />
-  )
+  const [open, setOpen] = useRowFlag('tool-call', false)
 
   return (
     <div
@@ -140,33 +75,50 @@ export function ToolCall({
       )}
       {...rootProps}
     >
-      {expandable ? (
-        <button
-          type="button"
-          data-slot="tool-call-header"
-          aria-expanded={open}
-          aria-controls={panelId}
-          className="focus-visible:ring-ring flex min-h-11 w-full min-w-0 items-center gap-2.5 rounded-[inherit] px-3.5 text-left focus-visible:ring-2 focus-visible:outline-none"
-          onClick={() => {
-            setOpen(!open)
-          }}
+      <button
+        type="button"
+        data-slot="tool-call-header"
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="focus-visible:ring-ring flex min-h-11 w-full min-w-0 items-center gap-2.5 rounded-[inherit] px-3.5 text-left focus-visible:ring-2 focus-visible:outline-none"
+        onClick={() => {
+          setOpen(!open)
+        }}
+      >
+        <span aria-hidden="true" className="text-muted-foreground shrink-0">
+          {icon}
+        </span>
+        <span
+          data-slot="tool-call-name"
+          className="min-w-0 truncate font-[family-name:var(--font-mono),monospace] text-sm font-medium"
         >
-          {content}
-        </button>
-      ) : (
-        <div
-          data-slot="tool-call-header"
-          className="flex min-h-11 min-w-0 items-center gap-2.5 px-3.5"
-        >
-          {content}
-        </div>
-      )}
-      {footer === undefined || footer === null ? null : (
-        <div data-slot="tool-call-footer" className="px-3.5 pb-3">
-          {footer}
-        </div>
-      )}
-      {expandable && open ? (
+          {name}
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {duration === undefined ? null : (
+            <span
+              data-slot="tool-call-duration"
+              className="text-muted-foreground font-[family-name:var(--font-mono),monospace] text-xs tabular-nums"
+            >
+              {duration}
+            </span>
+          )}
+          <StatusIcon status={status} />
+          <span className="sr-only">{STATUS_TEXT[status]}</span>
+          <ChevronRight
+            aria-hidden="true"
+            size={CHEVRON_SIZE}
+            className={cn(
+              'text-muted-foreground transition-transform duration-200 motion-reduce:transition-none',
+              open && 'rotate-90',
+            )}
+          />
+        </span>
+      </button>
+      <div data-slot="tool-call-footer" className="px-3.5 pb-3">
+        {footer}
+      </div>
+      {open ? (
         <div
           id={panelId}
           data-slot="tool-call-panel"

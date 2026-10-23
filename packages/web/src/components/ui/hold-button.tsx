@@ -6,14 +6,13 @@ import * as React from 'react'
 
 type HoldState = 'idle' | 'holding' | 'complete'
 
-export type HoldButtonProps = React.ComponentProps<'button'> & {
+type HoldButtonProps = React.ComponentProps<'button'> & {
+  disabled: boolean
   onComplete: () => void
-  duration?: number
-  completeLabel?: React.ReactNode
+  completeLabel: React.ReactNode
 }
 
-const DEFAULT_HOLD_MS = 900
-const MINIMUM_HOLD_MS = 500
+const HOLD_MS = 900
 const COMPLETE_LABEL_MS = 1200
 const PRIMARY_BUTTON = 0
 const KEYBOARD_CLICK_DETAIL = 0
@@ -35,18 +34,11 @@ const cancelPending = (pending: React.RefObject<Option.Option<() => void>>): voi
 }
 
 export function HoldButton({
-  children = 'Hold to confirm',
-  completeLabel = 'Done',
+  children,
+  completeLabel,
   onComplete,
-  duration = DEFAULT_HOLD_MS,
-  disabled = false,
+  disabled,
   className,
-  onClick,
-  onLostPointerCapture,
-  onPointerCancel,
-  onPointerDown,
-  onPointerUp,
-  type = 'button',
   ...props
 }: HoldButtonProps) {
   const [progress, setProgress] = React.useState(0)
@@ -102,18 +94,23 @@ export function HoldButton({
     moveTo('idle', 0)
   }
 
+  const cancelUnlessPrevented = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!event.defaultPrevented) {
+      cancel()
+    }
+  }
+
   const begin = () => {
     if (disabled || stateRef.current !== 'idle') {
       return
     }
 
-    const safeDuration = Math.max(duration, MINIMUM_HOLD_MS)
     const startedAt = performance.now()
 
     moveTo('holding', 0)
 
     const tick = (now: number) => {
-      const nextProgress = Math.min((now - startedAt) / safeDuration, 1)
+      const nextProgress = Math.min((now - startedAt) / HOLD_MS, 1)
 
       setProgress(nextProgress)
 
@@ -142,11 +139,9 @@ export function HoldButton({
       {...props}
       data-slot="hold-button"
       data-state={state}
-      type={type}
+      type="button"
       disabled={disabled}
       onPointerDown={(event) => {
-        onPointerDown?.(event)
-
         if (event.defaultPrevented || event.button !== PRIMARY_BUTTON) {
           return
         }
@@ -154,30 +149,10 @@ export function HoldButton({
         event.currentTarget.setPointerCapture(event.pointerId)
         begin()
       }}
-      onPointerUp={(event) => {
-        onPointerUp?.(event)
-
-        if (!event.defaultPrevented) {
-          cancel()
-        }
-      }}
-      onPointerCancel={(event) => {
-        onPointerCancel?.(event)
-
-        if (!event.defaultPrevented) {
-          cancel()
-        }
-      }}
-      onLostPointerCapture={(event) => {
-        onLostPointerCapture?.(event)
-
-        if (!event.defaultPrevented) {
-          cancel()
-        }
-      }}
+      onPointerUp={cancelUnlessPrevented}
+      onPointerCancel={cancelUnlessPrevented}
+      onLostPointerCapture={cancelUnlessPrevented}
       onClick={(event) => {
-        onClick?.(event)
-
         if (
           !event.defaultPrevented &&
           event.detail === KEYBOARD_CLICK_DETAIL &&

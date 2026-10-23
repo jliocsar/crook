@@ -1,6 +1,6 @@
 import { cn } from 'cn'
 import * as Arr from 'effect/Array'
-import type * as DateTime from 'effect/DateTime'
+import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import {
   ChevronDown,
@@ -15,7 +15,7 @@ import {
   SquareTerminal,
   Wrench,
 } from 'lucide-react'
-import type * as React from 'react'
+import * as React from 'react'
 
 import { relativeToFolder } from '@crook/domain/Ask'
 import type { ChatItem, PlanStep, SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
@@ -29,11 +29,13 @@ import {
   pathOf,
   picturesOf,
   resultText,
+  runStatusShown,
   toolDuration,
   treeRun,
   withoutLineNumbers,
 } from '@crook/web/chat/ToolView'
 import { Collapse } from '@crook/web/components/Collapse'
+import { OutputText } from '@crook/web/components/OutputText'
 import { useRowFlag } from '@crook/web/components/RowMemory'
 import { CodeBlock } from '@crook/web/components/ui/code-block'
 import { DiffView } from '@crook/web/components/ui/diff-view'
@@ -41,10 +43,14 @@ import { Message } from '@crook/web/components/ui/message'
 import { Response } from '@crook/web/components/ui/response'
 import { SubagentTree } from '@crook/web/components/ui/subagent-tree'
 import { ToolCall } from '@crook/web/components/ui/tool-call'
-import { HIGHLIGHT_LINE_LIMIT, languageOfPath } from '@crook/web/highlight/Highlighter'
+import {
+  HIGHLIGHT_LINE_LIMIT,
+  languageOfPath,
+  SHELL_LANGUAGE,
+} from '@crook/web/highlight/Highlighter'
+import { useNow } from '@crook/web/time/Now'
 
 export interface ThreadEnvironment {
-  readonly now: DateTime.Utc
   readonly cwd: string
   readonly paneClosed: boolean
   readonly onShowEarlier: () => void
@@ -53,7 +59,6 @@ export interface ThreadEnvironment {
 
 const INLINE_ICON_SIZE = 15
 const OUTPUT_CLASS = 'max-h-56 overflow-y-auto'
-const SHELL_LANGUAGE = 'shellscript'
 
 const TOOL_ICON = new Map([
   ['Read', FileText],
@@ -74,23 +79,18 @@ const STEP_ICON = {
   completed: CircleCheck,
 } satisfies Record<PlanStep['status'], typeof Circle>
 
+const sameItem = (
+  previous: { readonly item: ChatItem; readonly environment: ThreadEnvironment },
+  next: { readonly item: ChatItem; readonly environment: ThreadEnvironment },
+): boolean => previous.environment === next.environment && Equal.equals(previous.item, next.item)
+
 const renderCode = (code: string, language: Option.Option<string>) => (
   <CodeBlock code={code} language={Option.getOrUndefined(language)} />
 )
 
-function OutputText({ text, failed }: { text: string; failed: boolean }) {
-  return (
-    <pre
-      className={cn(
-        'bg-muted/60 overflow-x-auto rounded-[calc(var(--radius)-0.25rem)] p-2.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words',
-        OUTPUT_CLASS,
-        failed && 'text-destructive',
-      )}
-    >
-      {text}
-    </pre>
-  )
-}
+const ToolPanelMemo = React.memo(ToolPanel)
+
+export const ThreadItem = React.memo(ThreadItemView, sameItem)
 
 function ResultOutput({
   call,
@@ -111,7 +111,10 @@ function ResultOutput({
       }
 
       return result.isError || Option.isNone(language) ? (
-        <OutputText text={text} failed={result.isError} />
+        <OutputText
+          text={text}
+          className={cn(OUTPUT_CLASS, result.isError && 'text-destructive')}
+        />
       ) : (
         <CodeBlock
           code={text}
@@ -178,7 +181,7 @@ function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
 
   return (
     <>
-      <OutputText text={JSON.stringify(call.input, null, 2)} failed={false} />
+      <OutputText text={JSON.stringify(call.input, null, 2)} className={OUTPUT_CLASS} />
       <ResultOutput call={call} language={Option.none()} />
     </>
   )
@@ -186,14 +189,15 @@ function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
 
 function ToolCard({ call, environment }: { call: ToolCallModel; environment: ThreadEnvironment }) {
   const Icon = TOOL_ICON.get(call.name) ?? Wrench
+  const now = useNow(call.status === 'running')
 
   return (
     <ToolCall
       name={toolTitle(call)}
       status={call.status}
       icon={<Icon size={INLINE_ICON_SIZE} />}
-      duration={toolDuration(call, environment.now)}
-      panel={<ToolPanel call={call} cwd={environment.cwd} />}
+      duration={toolDuration(call, now)}
+      panel={<ToolPanelMemo call={call} cwd={environment.cwd} />}
       footer={<Thumbs pictures={picturesOf(call)} place="tool" />}
     />
   )
@@ -206,11 +210,13 @@ function SubagentRuns({
   runs: readonly SubagentRun[]
   environment: ThreadEnvironment
 }) {
+  const now = useNow(runs.some((run) => runStatusShown(run, environment.paneClosed) === 'running'))
+
   return (
     <SubagentTree
       runs={runs.map((run) =>
         treeRun(run, {
-          now: environment.now,
+          now,
           paneClosed: environment.paneClosed,
           opensRuns: Option.isSome(environment.onOpenRun),
         }),
@@ -337,16 +343,10 @@ function CompactedDivider({ summary }: { summary: Option.Option<string> }) {
   )
 }
 
-export function ThreadItem({
-  item,
-  environment,
-}: {
-  item: ChatItem
-  environment: ThreadEnvironment
-}) {
+function ThreadItemView({ item, environment }: { item: ChatItem; environment: ThreadEnvironment }) {
   return ChatItems.$match(item, {
     UserPrompt: (prompt) => (
-      <Message role="user" meta={prompt.queued ? 'Queued' : undefined}>
+      <Message meta={prompt.queued ? 'Queued' : undefined}>
         <Thumbs
           pictures={prompt.images.map((image) => ({ image, name: 'Pasted image' }))}
           place="message"

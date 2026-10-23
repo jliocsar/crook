@@ -96,7 +96,7 @@ describe('askDetail', () => {
     )
     expect(askDetail(permission(edit(Option.some([]))), CWD)).toEqual(
       AskDetail.Diff({
-        hunks: [{ oldStart: 1, newStart: 1, lines: ['-a', '+b'] }],
+        hunks: [{ lines: ['-a', '+b'] }],
         filename: 'src/Herd.ts',
       }),
     )

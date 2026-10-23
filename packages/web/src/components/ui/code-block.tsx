@@ -2,7 +2,7 @@ import { cn } from 'cn'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
-import { Check, ChevronDown, Clipboard, WrapText } from 'lucide-react'
+import { Check, ChevronDown, Clipboard } from 'lucide-react'
 import * as React from 'react'
 
 import { useRowFlag } from '@crook/web/components/RowMemory'
@@ -10,17 +10,12 @@ import { useHighlightedLines } from '@crook/web/highlight/Highlighter'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
-export type CodeBlockProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
+type CodeBlockProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   code: string
   filename?: string | undefined
   language?: string | undefined
-  showLineNumbers?: boolean
-  highlightLines?: readonly number[]
   maxLines?: number
   wrap?: boolean
-  wrappable?: boolean
-  copyable?: boolean
-  actions?: React.ReactNode
 }
 
 const COPY_FEEDBACK_MS = 1400
@@ -90,37 +85,14 @@ const useCopy = (code: string) => {
 function CodeLine({
   line,
   content,
-  number,
-  marked,
-  gutter,
-  showLineNumbers,
   wrapped,
 }: {
   line: string
   content: Option.Option<React.ReactNode>
-  number: number
-  marked: boolean
-  gutter: number
-  showLineNumbers: boolean
   wrapped: boolean
 }) {
   return (
-    <span
-      data-highlighted={marked || undefined}
-      className={cn(
-        'flex px-3',
-        marked && 'bg-primary/10 border-primary border-l-2 pl-[calc(0.75rem-2px)]',
-      )}
-    >
-      {showLineNumbers ? (
-        <span
-          aria-hidden="true"
-          className="text-muted-foreground/60 mr-3 shrink-0 text-right tabular-nums select-none"
-          style={{ width: `${gutter}ch` }}
-        >
-          {number}
-        </span>
-      ) : null}
+    <span className="flex px-3">
       <span
         className={cn('min-w-0', wrapped ? 'break-words whitespace-pre-wrap' : 'whitespace-pre')}
       >
@@ -132,27 +104,13 @@ function CodeLine({
 
 function CodeBlockBar({
   label,
-  actions,
-  wrappable,
-  wrapped,
-  onWrap,
-  copyable,
   copyState,
   onCopy,
 }: {
   label: string | undefined
-  actions: React.ReactNode
-  wrappable: boolean
-  wrapped: boolean
-  onWrap: () => void
-  copyable: boolean
   copyState: CopyState
   onCopy: () => void
 }) {
-  if (label === undefined && !copyable && !wrappable && actions === undefined) {
-    return null
-  }
-
   return (
     <div
       data-slot="code-block-bar"
@@ -165,35 +123,19 @@ function CodeBlockBar({
       )}
 
       <div className="ml-auto flex shrink-0 items-center gap-3">
-        {actions}
-
-        {wrappable ? (
-          <button
-            type="button"
-            aria-pressed={wrapped}
-            aria-label="Wrap long lines"
-            className={cn(BAR_BUTTON, 'aria-pressed:bg-card aria-pressed:text-foreground')}
-            onClick={onWrap}
-          >
-            <WrapText aria-hidden="true" size={BAR_ICON_SIZE} />
-          </button>
-        ) : null}
-
-        {copyable ? (
-          <button
-            type="button"
-            data-slot="code-block-copy"
-            aria-label={COPY_LABEL[copyState]}
-            className={BAR_BUTTON}
-            onClick={onCopy}
-          >
-            {copyState === 'copied' ? (
-              <Check aria-hidden="true" size={BAR_ICON_SIZE} />
-            ) : (
-              <Clipboard aria-hidden="true" size={BAR_ICON_SIZE} />
-            )}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          data-slot="code-block-copy"
+          aria-label={COPY_LABEL[copyState]}
+          className={BAR_BUTTON}
+          onClick={onCopy}
+        >
+          {copyState === 'copied' ? (
+            <Check aria-hidden="true" size={BAR_ICON_SIZE} />
+          ) : (
+            <Clipboard aria-hidden="true" size={BAR_ICON_SIZE} />
+          )}
+        </button>
       </div>
     </div>
   )
@@ -232,22 +174,14 @@ export function CodeBlock({
   code,
   filename,
   language,
-  showLineNumbers = false,
-  highlightLines,
   maxLines,
   wrap = false,
-  wrappable = false,
-  copyable = true,
-  actions,
   className,
   ...rootProps
 }: CodeBlockProps) {
   const { copyState, copy } = useCopy(code)
   const [expanded, setExpanded] = useRowFlag('code', false)
-  const [override, setOverride] = React.useState<Option.Option<boolean>>(Option.none())
-  const wrapped = Option.getOrElse(override, () => wrap)
   const lines = React.useMemo(() => code.replace(/\n$/u, '').split('\n'), [code])
-  const marked = React.useMemo(() => new Set(highlightLines ?? []), [highlightLines])
   const collapsible = maxLines !== undefined && lines.length > maxLines
   const clipped = collapsible && !expanded
   const shown = clipped ? lines.slice(0, maxLines) : lines
@@ -263,18 +197,7 @@ export function CodeBlock({
       )}
       {...rootProps}
     >
-      <CodeBlockBar
-        label={label}
-        actions={actions}
-        wrappable={wrappable}
-        wrapped={wrapped}
-        onWrap={() => {
-          setOverride(Option.some(!wrapped))
-        }}
-        copyable={copyable}
-        copyState={copyState}
-        onCopy={copy}
-      />
+      <CodeBlockBar label={label} copyState={copyState} onCopy={copy} />
 
       <div className="relative">
         <pre
@@ -283,7 +206,7 @@ export function CodeBlock({
           tabIndex={0}
           className={cn(
             'text-foreground m-0 overflow-x-auto rounded-none bg-transparent px-0 py-2.5 font-[family-name:var(--font-mono),monospace] text-xs leading-relaxed',
-            wrapped && 'overflow-x-visible',
+            wrap && 'overflow-x-visible',
           )}
         >
           <code className="block">
@@ -292,11 +215,7 @@ export function CodeBlock({
                 key={index + 1}
                 line={line}
                 content={Option.flatMap(highlighted, (rows) => Option.fromUndefinedOr(rows[index]))}
-                number={index + 1}
-                marked={marked.has(index + 1)}
-                gutter={String(lines.length).length}
-                showLineNumbers={showLineNumbers}
-                wrapped={wrapped}
+                wrapped={wrap}
               />
             ))}
           </code>

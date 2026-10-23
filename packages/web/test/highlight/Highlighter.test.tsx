@@ -3,14 +3,17 @@ import { render } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 
-import { highlightLines, languageOfPath } from '@crook/web/highlight/Highlighter'
+import { highlightedLines } from '@crook/web/highlight/HighlightedCode'
+import { languageOfPath, renderLines } from '@crook/web/highlight/Highlighter'
 import { createCodeHighlighter } from '@crook/web/highlight/Shiki'
 
-describe('highlightLines', () => {
+describe('highlightedLines', () => {
   it.effect('gives one coloured row per line of a known language, by name or alias', () =>
     Effect.gen(function* () {
       const highlighter = yield* Effect.promise(() => createCodeHighlighter())
-      const rows = Option.getOrThrow(highlightLines(highlighter, 'const a = 1\nlet b = 2', 'ts'))
+      const rows = renderLines(
+        Option.getOrThrow(highlightedLines(highlighter, 'const a = 1\nlet b = 2', 'ts')),
+      )
       const { container } = render(
         <code>
           {rows.map((row, index) => (
@@ -37,7 +40,7 @@ describe('highlightLines', () => {
     Effect.gen(function* () {
       const highlighter = yield* Effect.promise(() => createCodeHighlighter())
 
-      expect(highlightLines(highlighter, 'fn main() {}', 'rust')).toEqual(Option.none())
+      expect(highlightedLines(highlighter, 'fn main() {}', 'rust')).toEqual(Option.none())
     }),
   )
 })

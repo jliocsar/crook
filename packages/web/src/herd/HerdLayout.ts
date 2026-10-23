@@ -5,7 +5,7 @@ import * as Option from 'effect/Option'
 
 import { isPinned, needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
 import { type AgentRow, pendingAskSummary } from '@crook/domain/AgentRow'
-import { findMachine } from '@crook/domain/HerdView'
+import { findMachine, isOnline } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
@@ -113,6 +113,9 @@ export const herdLayout = (view: HerdView): HerdLayout => {
     })),
   }
 }
+
+export const isOnlineMachine = (view: HerdView, machine: MachineId): boolean =>
+  Option.exists(findMachine(view, machine), isOnline)
 
 export const findAgent = (
   view: HerdView,

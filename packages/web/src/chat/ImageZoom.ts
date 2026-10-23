@@ -17,7 +17,7 @@ export type View = {
 
 export type Point = { readonly left: number; readonly top: number }
 
-export type Sample = { readonly top: number; readonly at: number }
+type Sample = { readonly top: number; readonly at: number }
 
 export type Pan = {
   readonly kind: 'pan'

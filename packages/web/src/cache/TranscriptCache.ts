@@ -122,7 +122,7 @@ const viewOf = (stored: StoredTranscript): TranscriptView =>
     failure: Option.none(),
   })
 
-export const isKept = (herd: HerdView, key: StoredKey): boolean =>
+const isKept = (herd: HerdView, key: StoredKey): boolean =>
   Option.exists(findMachine(herd, key[0]), (entry) =>
     Option.match(entry.state, {
       onNone: () => true,

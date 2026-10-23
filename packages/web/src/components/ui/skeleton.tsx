@@ -2,7 +2,7 @@ import * as React from 'react'
 
 import { cn } from 'cn'
 
-export type SkeletonProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
+type SkeletonProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   lines?: number
 }
 

@@ -2,7 +2,7 @@ import * as React from 'react'
 
 import { cn } from 'cn'
 
-export type SpinnerProps = Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> & {
+type SpinnerProps = Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> & {
   size?: number
   label?: string
 }

@@ -22,7 +22,6 @@ import {
   StartsOn,
   typedFolder,
   validBranch,
-  withCheckout,
   withFolder,
   withWorktree,
   withWorktreeBranch,
@@ -118,7 +117,7 @@ describe('selection changes', () => {
       branch: BranchChoice.Worktree({ typed: Option.some('fix-x') }),
     })
     expect(withWorktree(named)).toEqual(named)
-    expect(withCheckout(named)).toEqual(inCrook)
+    expect(withFolder(named, named.folder)).toEqual(inCrook)
   })
 })
 

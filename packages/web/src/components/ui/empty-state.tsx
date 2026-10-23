@@ -2,12 +2,11 @@ import * as React from 'react'
 
 import { cn } from 'cn'
 
-export type EmptyStateProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> & {
+type EmptyStateProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> & {
   title: React.ReactNode
   description?: React.ReactNode
   icon?: React.ReactNode
   actions?: React.ReactNode
-  size?: 'sm' | 'md'
 }
 
 export function EmptyStateIcon({ children }: { children: React.ReactNode }) {
@@ -26,7 +25,6 @@ export function EmptyState({
   description,
   icon,
   actions,
-  size = 'md',
   children,
   className,
   ...rootProps
@@ -35,8 +33,7 @@ export function EmptyState({
     <div
       data-slot="empty-state"
       className={cn(
-        'border-border/70 flex flex-col items-center justify-center rounded-[calc(var(--radius)+0.15rem)] border border-dashed text-center',
-        size === 'sm' ? 'gap-2 px-4 py-8' : 'gap-3 px-6 py-14',
+        'border-border/70 flex flex-col items-center justify-center gap-3 rounded-[calc(var(--radius)+0.15rem)] border border-dashed px-6 py-14 text-center',
         className,
       )}
       {...rootProps}

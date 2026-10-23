@@ -3,8 +3,13 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 
 import * as React from 'react'
 
 import { Pressable } from '@crook/web/components/press/Pressable'
-import { settlesOpen } from '@crook/web/components/swipe/Gestures'
 import { GLIDE } from '@crook/web/motion/Springs'
+
+type SwipeRelease = {
+  readonly offset: number
+  readonly velocity: number
+  readonly actionsWidth: number
+}
 
 export type SwipeTone = 'secondary' | 'destructive' | 'accent' | 'primary'
 
@@ -16,10 +21,11 @@ export type SwipeAction = {
   readonly disabled?: boolean
 }
 
-export const ACTION_WIDTH = 64
-export const ACTION_GAP = 8
-export const ELASTIC_PAST_OPEN = 0.15
-export const ELASTIC_PAST_CLOSED = 0.05
+const OPEN_VELOCITY = 500
+const ACTION_WIDTH = 64
+const ACTION_GAP = 8
+const ELASTIC_PAST_OPEN = 0.15
+const ELASTIC_PAST_CLOSED = 0.05
 
 const TONE = {
   secondary: 'bg-secondary text-secondary-foreground',
@@ -27,6 +33,18 @@ const TONE = {
   accent: 'bg-accent text-accent-foreground',
   primary: 'bg-primary text-primary-foreground',
 } satisfies Record<SwipeTone, string>
+
+export const settlesOpen = ({ offset, velocity, actionsWidth }: SwipeRelease): boolean => {
+  if (velocity < -OPEN_VELOCITY) {
+    return true
+  }
+
+  if (velocity > OPEN_VELOCITY) {
+    return false
+  }
+
+  return offset < -actionsWidth / 2
+}
 
 export const useOpenRow = () => {
   const [openId, setOpenId] = React.useState<string | null>(null)

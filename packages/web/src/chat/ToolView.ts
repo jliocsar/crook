@@ -14,7 +14,7 @@ import type { AgentRun } from '@crook/web/components/ui/subagent-tree'
 import { LINE_BREAK } from '@crook/web/text/Lines'
 import { runningSpan } from '@crook/web/time/Elapsed'
 
-export interface RunView {
+interface RunView {
   readonly now: DateTime.Utc
   readonly paneClosed: boolean
   readonly opensRuns: boolean
@@ -63,8 +63,6 @@ export const picturesOf = (call: ToolCallModel): readonly Picture[] => {
 
 export const editHunks = (oldString: string, newString: string): readonly DiffHunk[] => [
   {
-    oldStart: 1,
-    newStart: 1,
     lines: [
       ...oldString.split(LINE_BREAK).map((line) => `-${line}`),
       ...newString.split(LINE_BREAK).map((line) => `+${line}`),
@@ -105,7 +103,7 @@ export const treeRun = (run: SubagentRun, view: RunView): AgentRun => {
     id: run.toolUseId,
     label: run.description,
     status,
-    meta: status === 'failed' && run.status === 'running' ? PANE_CLOSED_NOTE : runMeta(run),
+    meta: view.paneClosed && run.status === 'running' ? PANE_CLOSED_NOTE : runMeta(run),
     duration: Option.getOrUndefined(
       runningSpan(run.startedAt, run.finishedAt, status === 'running', view.now),
     ),

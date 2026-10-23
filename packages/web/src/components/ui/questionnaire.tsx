@@ -13,7 +13,7 @@ export interface QuestionChoice {
   readonly description?: React.ReactNode
 }
 
-export interface QuestionnaireProps {
+interface QuestionnaireProps {
   readonly prompt: React.ReactNode
   readonly choices: readonly QuestionChoice[]
   readonly submitLabel: string

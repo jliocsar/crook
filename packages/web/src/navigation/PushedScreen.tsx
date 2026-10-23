@@ -11,7 +11,6 @@ import * as React from 'react'
 import { Button } from '@crook/web/components/ui/button'
 import { HeaderBanner } from '@crook/web/connection/ConnectionBanner'
 import { GLIDE } from '@crook/web/motion/Springs'
-import { commitsBack } from '@crook/web/navigation/BackGesture'
 import { COLUMN_STYLE, useColumnWidth } from '@crook/web/navigation/Column'
 import { focusScreenTitle, restoreFocus } from '@crook/web/navigation/Focus'
 import { findOpener } from '@crook/web/navigation/Opener'
@@ -25,14 +24,25 @@ type EdgeHandlers = Pick<
 
 type HistoryEntry = { readonly state: ParsedHistoryState }
 
+type BackGesture = {
+  readonly offset: number
+  readonly velocity: number
+  readonly width: number
+}
+
 type PushedScreenControls = {
   readonly back: () => void
   readonly edge: EdgeHandlers
 }
 
 const ROOT_PATHNAME = '/'
+const BACK_DISTANCE_SHARE = 1 / 3
+const BACK_VELOCITY = 500
 
 const PushedScreenContext = React.createContext<Option.Option<PushedScreenControls>>(Option.none())
+
+export const commitsBack = ({ offset, velocity, width }: BackGesture): boolean =>
+  offset > width * BACK_DISTANCE_SHARE || velocity > BACK_VELOCITY
 
 const useParentPathname = (): string =>
   useParentMatches({

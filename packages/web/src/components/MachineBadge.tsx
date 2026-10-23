@@ -10,7 +10,7 @@ import { shortElapsed } from '@crook/web/time/Elapsed'
 
 const RECONNECTING_SPINNER_SIZE = 11
 
-export const MACHINE_CONNECTION_TONE = {
+const MACHINE_CONNECTION_TONE = {
   online: 'ok',
   reconnecting: 'warn',
   offline: 'idle',

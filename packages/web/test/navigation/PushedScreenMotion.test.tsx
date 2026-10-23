@@ -1,3 +1,4 @@
+import { RegistryProvider } from '@effect/atom-react/RegistryContext'
 import { describe, expect, it } from '@effect/vitest'
 import {
   createMemoryHistory,
@@ -11,19 +12,24 @@ import {
 } from '@tanstack/react-router'
 import { fireEvent, render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
+import * as Atom from 'effect/reactivity/Atom'
 import { beforeEach } from 'vitest'
 
+import { hubRuntime } from '@crook/web/atoms/Hub'
 import { openedFrom } from '@crook/web/navigation/Opener'
 import { remountWhenParamsChange } from '@crook/web/navigation/Pushed'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
 import { Shell } from '@crook/web/navigation/Shell'
 import { TabScreen } from '@crook/web/navigation/TabScreen'
 
+import { liveWith } from '../AppRender.tsx'
 import { afterSpring, click, eventually, findByRole, springSettles } from '../Dom.ts'
+import { herd } from '../HerdFixtures.ts'
+import { makeFakeHubLink } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 
 const makeRouter = (initialEntries: string[]) => {
-  const root = createRootRoute({ component: () => <Shell needsYou={0} /> })
+  const root = createRootRoute({ component: () => <Shell /> })
   const agents = createRoute({ getParentRoute: () => root, id: 'agents', component: Agents })
   const agentsIndex = createRoute({ getParentRoute: () => agents, path: '/' })
   const detail = createRoute({
@@ -64,7 +70,13 @@ const makeRouter = (initialEntries: string[]) => {
 const renderAt = Effect.fn('renderAt')(function* (initialEntries: string[]) {
   const router = makeRouter(initialEntries)
 
-  render(<RouterProvider router={router} />)
+  const link = yield* makeFakeHubLink(liveWith(herd([])))
+
+  render(
+    <RegistryProvider initialValues={[Atom.initialValue(hubRuntime.layer, link.layer)]}>
+      <RouterProvider router={router} />
+    </RegistryProvider>,
+  )
   yield* Effect.promise(() => router.load())
 
   return router

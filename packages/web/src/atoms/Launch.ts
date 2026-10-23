@@ -29,11 +29,9 @@ export class LaunchAnsweredWithoutPane extends Schema.TaggedError<LaunchAnswered
 const isAgentStarted = Schema.is(AgentStarted)
 
 export const launchAtom = hubRuntime.fn((attempt: LaunchAttempt) =>
-  Effect.gen(function* () {
-    const link = yield* HubLink
-
-    return yield* link
+  HubLink.use((link) =>
+    link
       .sendCommand(attempt.machine, attempt.key, attempt.command)
-      .pipe(Effect.filterOrFail(isAgentStarted, () => new LaunchAnsweredWithoutPane()))
-  }),
+      .pipe(Effect.filterOrFail(isAgentStarted, () => new LaunchAnsweredWithoutPane())),
+  ),
 )

@@ -17,16 +17,17 @@ import type {
   SystemMessage,
   ToolResultBlock,
   ToolUseBlock,
-  TranscriptMessage,
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
 import { TranscriptLine } from '@crook/web/chat/TranscriptState'
+import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
+import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
 import { LINE_BREAK, PARAGRAPH_BREAK } from '@crook/web/text/Lines'
 
-export type ToolStatus = 'running' | 'waiting' | 'success' | 'error' | 'stopped'
+type ToolStatus = ToolCallStatus
 
-export type RunStatus = 'running' | 'done' | 'failed'
+type RunStatus = AgentRunStatus
 
 export type AgentActivity = 'working' | 'blocked' | 'still'
 
@@ -228,27 +229,23 @@ const keyOf = (line: TranscriptLine, index: number): string =>
     Message: ({ session, message }) => `${session} ${message.offset} ${index}`,
   })
 
-const isBoundary = (line: TranscriptLine): boolean =>
+const boundaryOf = (line: TranscriptLine): Option.Option<string> =>
   TranscriptLine.$match(line, {
-    SessionCleared: () => false,
-    Message: ({ message }) =>
+    SessionCleared: () => Option.none(),
+    Message: ({ session, message }) =>
       Match.value(message).pipe(
         Match.tag('System', (system) =>
-          system.blocks.some((block) =>
-            Match.value(block).pipe(
-              Match.tag('CompactBoundary', () => true),
-              Match.orElse(() => false),
+          Option.liftPredicate(`compact ${session} ${message.offset}`, () =>
+            system.blocks.some((block) =>
+              Match.value(block).pipe(
+                Match.tag('CompactBoundary', () => true),
+                Match.orElse(() => false),
+              ),
             ),
           ),
         ),
-        Match.orElse(() => false),
+        Match.orElse(() => Option.none<string>()),
       ),
-  })
-
-const boundaryKey = (line: TranscriptLine): string =>
-  TranscriptLine.$match(line, {
-    SessionCleared: ({ session }) => `${session} cleared`,
-    Message: ({ session, message }) => `compact ${session} ${message.offset}`,
   })
 
 const place = (lines: readonly TranscriptLine[]) =>
@@ -257,7 +254,7 @@ const place = (lines: readonly TranscriptLine[]) =>
     { turn: 0, boundary: Option.none<string>() },
     (state, line): readonly [{ turn: number; boundary: Option.Option<string> }, Placed] => {
       const turn = startsTurn(line) ? state.turn + 1 : state.turn
-      const boundary = isBoundary(line) ? Option.some(boundaryKey(line)) : state.boundary
+      const boundary = Option.orElse(boundaryOf(line), () => state.boundary)
 
       return [
         { turn, boundary },
@@ -266,19 +263,15 @@ const place = (lines: readonly TranscriptLine[]) =>
     },
   )
 
-const messageOf = (line: TranscriptLine): Option.Option<TranscriptMessage> =>
+const userMessageOf = (line: TranscriptLine): Option.Option<UserMessage> =>
   TranscriptLine.$match(line, {
     SessionCleared: () => Option.none(),
-    Message: ({ message }) => Option.some(message),
+    Message: ({ message }) =>
+      Match.value(message).pipe(
+        Match.tag('User', (user) => Option.some(user)),
+        Match.orElse(() => Option.none<UserMessage>()),
+      ),
   })
-
-const userMessageOf = (line: TranscriptLine): Option.Option<UserMessage> =>
-  Option.flatMap(messageOf(line), (message) =>
-    Match.value(message).pipe(
-      Match.tag('User', (user) => Option.some(user)),
-      Match.orElse(() => Option.none()),
-    ),
-  )
 
 const stampedBlocks = <Value>(
   lines: readonly TranscriptLine[],
@@ -330,6 +323,12 @@ const draft = (item: ChatItem): Draft => ({ item, group: Option.none() })
 
 const grouped = (item: ChatItem, group: string): Draft => ({ item, group: Option.some(group) })
 
+const outputNote = (text: string, key: string): readonly Draft[] =>
+  Str.isNonEmpty(text.trim()) ? [draft(ChatItem.Note({ key, text: text.trim() }))] : []
+
+const turnOver = (turn: number, evidence: Evidence): boolean =>
+  turn < evidence.lastTurn || evidence.context.activity === 'still'
+
 const toolStatus = (
   result: Option.Option<ToolResultBlock>,
   turn: number,
@@ -338,7 +337,7 @@ const toolStatus = (
   Option.match(result, {
     onSome: (found): ToolStatus => (found.isError ? 'error' : 'success'),
     onNone: (): ToolStatus => {
-      if (turn < evidence.lastTurn || evidence.context.activity === 'still') {
+      if (turnOver(turn, evidence)) {
         return 'stopped'
       }
 
@@ -398,7 +397,8 @@ const subagentRun = (
   evidence: Evidence,
 ): SubagentRun => {
   const input = decodeAgentInput(use.input)
-  const result = stampedValue(Option.fromUndefinedOr(evidence.results.get(use.id)))
+  const stampedResult = Option.fromUndefinedOr(evidence.results.get(use.id))
+  const result = stampedValue(stampedResult)
   const roster = Arr.findFirst(evidence.context.subagents, (subagent) =>
     Option.contains(subagent.toolUseId, use.id),
   )
@@ -413,7 +413,7 @@ const subagentRun = (
     roster,
     result,
     background,
-    turnOver: turn < evidence.lastTurn || evidence.context.activity === 'still',
+    turnOver: turnOver(turn, evidence),
   })
 
   return new SubagentRun({
@@ -448,9 +448,7 @@ const subagentRun = (
       status === 'running'
         ? Option.none()
         : Option.orElse(stampedAt(notice), () =>
-            background
-              ? Option.none()
-              : stampedAt(Option.fromUndefinedOr(evidence.results.get(use.id))),
+            background ? Option.none() : stampedAt(stampedResult),
           ),
   })
 }
@@ -564,10 +562,7 @@ const userNoteDrafts = (
             ChatItem.Note({ key: keyAt(index), text: `${command.name} ${command.args}`.trim() }),
           ),
         ],
-        LocalCommandOutput: (output) =>
-          Str.isNonEmpty(output.text.trim())
-            ? [draft(ChatItem.Note({ key: keyAt(index), text: output.text.trim() }))]
-            : [],
+        LocalCommandOutput: (output) => outputNote(output.text, keyAt(index)),
         Interruption: () => [draft(ChatItem.Note({ key: keyAt(index), text: INTERRUPTED_NOTE }))],
       }),
     ),
@@ -585,7 +580,7 @@ const userDrafts = (
 const systemDrafts = (
   message: SystemMessage,
   keyAt: (index: number) => string,
-  boundary: string,
+  boundary: Option.Option<string>,
 ): readonly Draft[] =>
   Arr.flatMap(message.blocks, (block, index) =>
     Match.value(block).pipe(
@@ -597,14 +592,11 @@ const systemDrafts = (
               trigger: compact.trigger,
               summary: Option.none(),
             }),
-            boundary,
+            Option.getOrElse(boundary, () => keyAt(index)),
           ),
         ],
         TurnDuration: () => [],
-        LocalCommandOutput: (output) =>
-          Str.isNonEmpty(output.text.trim())
-            ? [draft(ChatItem.Note({ key: keyAt(index), text: output.text.trim() }))]
-            : [],
+        LocalCommandOutput: (output) => outputNote(output.text, keyAt(index)),
         Notice: (notice) => [draft(ChatItem.Note({ key: keyAt(index), text: notice.text }))],
         Unrecognized: () => [],
       }),
@@ -622,7 +614,7 @@ const draftsOf = (placed: Placed, evidence: Evidence): readonly Draft[] => {
           User: (user) => userDrafts(user, keyAt, placed.boundary),
           Assistant: (assistant) =>
             assistantDrafts(session, assistant, keyAt, placed.turn, evidence),
-          System: (system) => systemDrafts(system, keyAt, boundaryKey(placed.line)),
+          System: (system) => systemDrafts(system, keyAt, placed.boundary),
           UnrecognizedEntry: () => [],
           Malformed: (malformed) => [
             draft(ChatItem.Unreadable({ key: keyAt(0), byteLength: malformed.byteLength })),
@@ -707,7 +699,7 @@ export const chatItems = (
 export const runsIn = (items: readonly ChatItem[]): readonly SubagentRun[] =>
   Arr.flatMap(items, (item) => (isSubagents(item) ? item.runs : []))
 
-export const isRunning = (run: SubagentRun): boolean => run.status === 'running'
+const isRunning = (run: SubagentRun): boolean => run.status === 'running'
 
 export const runningCount = (items: readonly ChatItem[]): number =>
   Arr.filter(runsIn(items), isRunning).length

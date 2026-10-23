@@ -4,10 +4,14 @@ import * as React from 'react'
 
 const LABEL_RESOLUTION = Duration.seconds(1)
 
-export const useNow = (): DateTime.Utc => {
+export const useNow = (ticking = true): DateTime.Utc => {
   const [now, setNow] = React.useState(DateTime.nowUnsafe)
 
   React.useEffect(() => {
+    if (!ticking) {
+      return undefined
+    }
+
     const timer = window.setInterval(() => {
       setNow(DateTime.nowUnsafe())
     }, Duration.toMillis(LABEL_RESOLUTION))
@@ -15,7 +19,7 @@ export const useNow = (): DateTime.Utc => {
     return () => {
       window.clearInterval(timer)
     }
-  }, [])
+  }, [ticking])
 
   return now
 }

@@ -24,7 +24,6 @@ export interface MachineCardModel {
 }
 
 export interface MachinesLayout {
-  readonly hubVersion: CrookVersion
   readonly machines: readonly MachineCardModel[]
 }
 
@@ -58,7 +57,6 @@ const machineCard = (herdMachine: HerdMachine, hubVersion: CrookVersion): Machin
 })
 
 export const machinesLayout = (view: HerdView): MachinesLayout => ({
-  hubVersion: view.hubVersion,
   machines: Arr.map(view.machines, (herdMachine) => machineCard(herdMachine, view.hubVersion)),
 })
 

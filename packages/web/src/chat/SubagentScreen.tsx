@@ -1,33 +1,23 @@
-import { useAtomMount, useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
+import { useAtomValue } from '@effect/atom-react/Hooks'
 import * as Arr from 'effect/Array'
+import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
 import type { ClaudeSessionId, MachineId, PaneId, SubagentId } from '@crook/domain/Ids'
-import { chatScreenAtom } from '@crook/web/atoms/Chat'
-import { connectionAtom } from '@crook/web/atoms/Connection'
-import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import {
   PaneTranscriptKey,
   SubagentTranscriptKey,
   transcriptAtom,
-  transcriptRetryAtom,
-  transcriptWholeAtom,
 } from '@crook/web/atoms/Transcript'
 import { chatItems, hasToolRunning, isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import { activityOf, cwdOf, titleOf } from '@crook/web/chat/ChatModel'
-import {
-  failureRows,
-  itemRows,
-  LoadingThread,
-  NO_MESSAGES,
-  QuietThread,
-  workingRow,
-} from '@crook/web/chat/ChatRows'
+import { failureRows, itemRows, TranscriptEmpty, workingRow } from '@crook/web/chat/ChatRows'
 import { ImageViewer } from '@crook/web/chat/Images'
+import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -49,24 +39,14 @@ export interface SubagentScreenProps {
 const ASKED_KEY = 'claude asked'
 const SUBAGENT_TITLE = 'Subagent'
 
-const runWord = { running: 'running', done: 'done', failed: 'failed' } satisfies Record<
-  SubagentRun['status'],
-  string
->
-
 const findRun = (runs: readonly SubagentRun[], subagent: SubagentId): Option.Option<SubagentRun> =>
   Arr.findFirst(runs, (run) => Option.contains(run.subagent, subagent))
 
-const runLine = (run: SubagentRun, paneClosed: boolean, now: ThreadEnvironment['now']): string =>
+const runLine = (run: SubagentRun, status: SubagentRun['status'], now: DateTime.Utc): string =>
   pipe(
     [
-      Option.some(runWord[runStatusShown(run, paneClosed)]),
-      runningSpan(
-        run.startedAt,
-        run.finishedAt,
-        runStatusShown(run, paneClosed) === 'running',
-        now,
-      ),
+      Option.some(status),
+      runningSpan(run.startedAt, run.finishedAt, status === 'running', now),
       Option.liftPredicate(run.agentType, (type) => type !== ''),
       run.model,
     ],
@@ -87,20 +67,23 @@ const askedRow = (prompt: string): ThreadRow => ({
   ),
 })
 
+function RunLine({ run, paneClosed }: { run: SubagentRun; paneClosed: boolean }) {
+  const status = runStatusShown(run, paneClosed)
+  const now = useNow(status === 'running')
+
+  return <span className="truncate font-mono">{runLine(run, status, now)}</span>
+}
+
 export function SubagentScreen({ machine, pane, session, subagent }: SubagentScreenProps) {
-  const opened = React.useMemo(() => new OpenedAgent({ machine, pane }), [machine, pane])
+  const { model, dimmed } = useOpenedChat(machine, pane)
   const parentKey = React.useMemo(() => new PaneTranscriptKey({ machine, pane }), [machine, pane])
   const key = React.useMemo(
     () => new SubagentTranscriptKey({ machine, session, subagent }),
     [machine, session, subagent],
   )
-  const model = useAtomValue(chatScreenAtom(opened))
-  const connection = useAtomValue(connectionAtom)
   const parent = AsyncResult.value(useAtomValue(transcriptAtom(parentKey)))
-  const view = AsyncResult.value(useAtomValue(transcriptAtom(key)))
-  const showWhole = useAtomSet(transcriptWholeAtom(key))
-  const retry = useAtomSet(transcriptRetryAtom(key))
-  const now = useNow()
+  const transcript = useTranscriptThread(key)
+  const view = AsyncResult.value(transcript.result)
   const cwd = cwdOf(model)
   const paneClosed = model.presence === 'closed'
   const parentLines = linesOf(parent)
@@ -130,17 +113,15 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   )
   const parentTitle = titleOf(model, pane)
 
-  useAtomMount(seenWhileOpenAtom(opened))
-
-  const environment: ThreadEnvironment = {
-    now,
-    cwd,
-    paneClosed,
-    onShowEarlier: () => {
-      showWhole(true)
-    },
-    onOpenRun: Option.none(),
-  }
+  const environment = React.useMemo<ThreadEnvironment>(
+    () => ({
+      cwd,
+      paneClosed,
+      onShowEarlier: transcript.onShowEarlier,
+      onOpenRun: Option.none(),
+    }),
+    [cwd, paneClosed, transcript.onShowEarlier],
+  )
 
   const rows: readonly ThreadRow[] = [
     ...Option.toArray(Option.map(prompt, askedRow)),
@@ -149,13 +130,11 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
       ? Option.toArray(
           Option.map(
             Option.flatMap(run, (found) => found.startedAt),
-            (from) => workingRow(spanDuration(from, now)),
+            (from) => workingRow((now) => spanDuration(from, now)),
           ),
         )
       : []),
-    ...failureRows(view, () => {
-      retry((count) => count + 1)
-    }),
+    ...failureRows(view, transcript.onRetry),
   ]
 
   return (
@@ -171,20 +150,14 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
             onSome: (found) => (
               <>
                 <RunDot status={runStatusShown(found, paneClosed)} />
-                <span className="truncate font-mono">{runLine(found, paneClosed, now)}</span>
+                <RunLine run={found} paneClosed={paneClosed} />
               </>
             ),
           })}
           backLabel={`Back to ${parentTitle}`}
         />
         <div className="min-h-0 flex-1">
-          <Thread
-            rows={rows}
-            dimmed={model.presence === 'away' || connection.stale}
-            empty={
-              Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>
-            }
-          />
+          <Thread rows={rows} dimmed={dimmed} empty={<TranscriptEmpty view={view} />} />
         </div>
         <div
           data-slot="chat-dock"

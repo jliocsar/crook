@@ -7,10 +7,7 @@ import { isSendKey } from '@crook/web/components/SendKey'
 
 export type PromptInputStatus = 'ready' | 'working'
 
-export type PromptInputProps = Omit<
-  React.HTMLAttributes<HTMLFormElement>,
-  'onSubmit' | 'children'
-> & {
+type PromptInputProps = Omit<React.HTMLAttributes<HTMLFormElement>, 'onSubmit' | 'children'> & {
   value: string
   onValueChange: (value: string) => void
   onSubmit: (value: string) => void
@@ -21,24 +18,23 @@ export type PromptInputProps = Omit<
   disabled?: boolean
   sending?: boolean
   stopping?: boolean
-  maxRows?: number
-  fieldRef?: React.RefObject<HTMLTextAreaElement | null>
+  fieldRef: React.RefObject<HTMLTextAreaElement | null>
   submitLabel?: string
   stopLabel?: string
 }
 
-const DEFAULT_MAX_ROWS = 6
+const MAX_ROWS = 6
 const STOP_ICON_SIZE = 13
 const SEND_ICON_SIZE = 16
 
 export const ROUND_BUTTON =
   'bg-foreground text-background focus-visible:ring-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-opacity duration-150 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none'
 
-const fitToContent = (field: HTMLTextAreaElement, maxRows: number) => {
+const fitToContent = (field: HTMLTextAreaElement) => {
   const styles = window.getComputedStyle(field)
   const lineHeight = Number.parseFloat(styles.lineHeight)
   const padding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom)
-  const max = lineHeight * maxRows + padding
+  const max = lineHeight * MAX_ROWS + padding
 
   field.style.height = 'auto'
 
@@ -61,7 +57,6 @@ export function PromptInput({
   disabled = false,
   sending = false,
   stopping = false,
-  maxRows = DEFAULT_MAX_ROWS,
   fieldRef,
   submitLabel = 'Send',
   stopLabel = 'Stop',
@@ -69,15 +64,13 @@ export function PromptInput({
   ...formProps
 }: PromptInputProps) {
   const fieldId = React.useId()
-  const ownField = React.useRef<HTMLTextAreaElement>(null)
-  const field = fieldRef ?? ownField
   const canSend = value.trim().length > 0 && !disabled && !sending
 
   React.useLayoutEffect(() => {
-    if (field.current !== null) {
-      fitToContent(field.current, maxRows)
+    if (fieldRef.current !== null) {
+      fitToContent(fieldRef.current)
     }
-  }, [field, value, maxRows])
+  }, [fieldRef, value])
 
   const submit = () => {
     if (canSend) {
@@ -103,7 +96,7 @@ export function PromptInput({
         {label}
       </label>
       <textarea
-        ref={field}
+        ref={fieldRef}
         id={fieldId}
         data-slot="prompt-input-field"
         rows={1}

@@ -1,3 +1,4 @@
+import { RegistryProvider } from '@effect/atom-react/RegistryContext'
 import { describe, expect, it } from '@effect/vitest'
 import {
   createMemoryHistory,
@@ -9,17 +10,23 @@ import {
 } from '@tanstack/react-router'
 import { render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
+import * as Atom from 'effect/reactivity/Atom'
 
+import type { HerdView } from '@crook/domain/HerdView'
+import { hubRuntime } from '@crook/web/atoms/Hub'
 import { TabBar } from '@crook/web/navigation/TabBar'
 
+import { liveWith } from '../AppRender.tsx'
 import { click, findByRole } from '../Dom.ts'
+import { agent, herd, LAPTOP, machine } from '../HerdFixtures.ts'
+import { makeFakeHubLink } from '../HubFakes.ts'
 
-const renderTabBar = Effect.fn('renderTabBar')(function* (needsYou: number) {
+const renderTabBar = Effect.fn('renderTabBar')(function* (view: HerdView) {
   const root = createRootRoute({
     component: () => (
       <>
         <Outlet />
-        <TabBar needsYou={needsYou} />
+        <TabBar />
       </>
     ),
   })
@@ -31,7 +38,13 @@ const renderTabBar = Effect.fn('renderTabBar')(function* (needsYou: number) {
     history: createMemoryHistory({ initialEntries: ['/'] }),
   })
 
-  render(<RouterProvider router={router} />)
+  const link = yield* makeFakeHubLink(liveWith(view))
+
+  render(
+    <RegistryProvider initialValues={[Atom.initialValue(hubRuntime.layer, link.layer)]}>
+      <RouterProvider router={router} />
+    </RegistryProvider>,
+  )
   yield* Effect.promise(() => router.load())
 
   return router
@@ -40,7 +53,7 @@ const renderTabBar = Effect.fn('renderTabBar')(function* (needsYou: number) {
 describe('TabBar', () => {
   it.effect('marks the current tab and switches without adding history', () =>
     Effect.gen(function* () {
-      const router = yield* renderTabBar(0)
+      const router = yield* renderTabBar(herd([]))
 
       yield* click(yield* findByRole('link', 'Machines'))
 
@@ -54,7 +67,9 @@ describe('TabBar', () => {
 
   it.effect('shows the needs-you count and says it to screen readers', () =>
     Effect.gen(function* () {
-      yield* renderTabBar(2)
+      yield* renderTabBar(
+        herd([machine(LAPTOP, [agent('w1:p1', 'blocked'), agent('w1:p2', 'blocked')])]),
+      )
       const agents = yield* findByRole('link', 'Agents , 2 need you')
 
       expect(agents.querySelector('[aria-hidden="true"].bg-primary')?.textContent).toBe('2')
@@ -63,7 +78,7 @@ describe('TabBar', () => {
 
   it.effect('shows no count when nothing needs you', () =>
     Effect.gen(function* () {
-      yield* renderTabBar(0)
+      yield* renderTabBar(herd([]))
       const agents = yield* findByRole('link', 'Agents')
 
       expect(agents.querySelector('.bg-primary')).toBeNull()

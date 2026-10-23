@@ -1,6 +1,4 @@
-import { useAtomMount, useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
-import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import { Ellipsis } from 'lucide-react'
@@ -8,15 +6,7 @@ import * as React from 'react'
 
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
-import { chatScreenAtom } from '@crook/web/atoms/Chat'
-import { connectionAtom } from '@crook/web/atoms/Connection'
-import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
-import {
-  PaneTranscriptKey,
-  transcriptAtom,
-  transcriptRetryAtom,
-  transcriptWholeAtom,
-} from '@crook/web/atoms/Transcript'
+import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
@@ -41,19 +31,13 @@ import {
   titleOf,
 } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
-import {
-  failureRows,
-  itemRows,
-  LoadingThread,
-  NO_MESSAGES,
-  QuietThread,
-  workingRow,
-} from '@crook/web/chat/ChatRows'
+import { failureRows, itemRows, TranscriptEmpty, workingRow } from '@crook/web/chat/ChatRows'
 import { Composer } from '@crook/web/chat/Composer'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
 import type { Restart } from '@crook/web/chat/EdgeCard'
 import { ImageViewer } from '@crook/web/chat/Images'
 import { useKeyboardInset } from '@crook/web/chat/KeyboardInset'
+import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -66,7 +50,6 @@ import { Message } from '@crook/web/components/ui/message'
 import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
 import { shortElapsed } from '@crook/web/time/Elapsed'
-import { useNow } from '@crook/web/time/Now'
 
 interface DockProps {
   readonly model: ChatScreenModel
@@ -76,7 +59,6 @@ interface DockProps {
   readonly restart: Option.Option<Restart>
   readonly draft: string
   readonly onDraftChange: (draft: string) => void
-  readonly now: DateTime.Utc
   readonly onBack: () => void
   readonly backLabel: string
 }
@@ -89,11 +71,7 @@ const pendingPromptRows = (text: Option.Option<string>): readonly ThreadRow[] =>
   Option.toArray(
     Option.map(text, (sent) => ({
       key: PENDING_PROMPT_KEY,
-      content: (
-        <Message role="user" meta="Sent">
-          {sent}
-        </Message>
-      ),
+      content: <Message meta="Sent">{sent}</Message>,
     })),
   )
 
@@ -106,7 +84,7 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
     return null
   }
 
-  return Option.isNone(view) ? <LoadingThread /> : <QuietThread>{NO_MESSAGES}</QuietThread>
+  return <TranscriptEmpty view={view} />
 }
 
 const hasActions = (model: ChatScreenModel): boolean =>
@@ -120,7 +98,6 @@ function ChatDock({
   restart,
   draft,
   onDraftChange,
-  now,
   onBack,
   backLabel,
 }: DockProps) {
@@ -153,7 +130,6 @@ function ChatDock({
                 ? Option.map(model.machine, (entry) => entry.machine.lastSeenAt)
                 : model.endedAt
             }
-            now={now}
             restart={kind === 'away' ? Option.none() : restart}
             onBack={onBack}
             backLabel={backLabel}
@@ -196,18 +172,14 @@ function ChatDock({
 function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const navigate = useNavigate()
   const { back } = usePushedScreen()
-  const opened = React.useMemo(() => new OpenedAgent({ machine, pane }), [machine, pane])
+  const { opened, model, connection, dimmed } = useOpenedChat(machine, pane)
   const transcriptKey = React.useMemo(
     () => new PaneTranscriptKey({ machine, pane }),
     [machine, pane],
   )
-  const model = useAtomValue(chatScreenAtom(opened))
-  const connection = useAtomValue(connectionAtom)
-  const view = AsyncResult.value(useAtomValue(transcriptAtom(transcriptKey)))
-  const showWhole = useAtomSet(transcriptWholeAtom(transcriptKey))
-  const retry = useAtomSet(transcriptRetryAtom(transcriptKey))
+  const transcript = useTranscriptThread(transcriptKey)
+  const view = AsyncResult.value(React.useDeferredValue(transcript.result))
   const fromMachine = useOpenedFromMachine()
-  const now = useNow()
   const thread = React.useRef<ThreadHandle>(null)
   const [draft, setDraft] = React.useState('')
   const activity = activityOf(model)
@@ -218,32 +190,45 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     () => chatItems(lines, { cwd, activity, subagents }),
     [lines, cwd, activity, subagents],
   )
-  const commands = useChatCommands({ machine, pane, model, connection, items, draft, setDraft })
+  const commands = useChatCommands({ opened, model, connection, items, draft, setDraft })
   const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS
   const openActions = useOpenAgentActions()
   const closedHere = useClosedFromChat(machine, pane)
   const title = titleOf(model, pane)
 
-  useAtomMount(seenWhileOpenAtom(opened))
-
-  const openRun = (run: SubagentRun) => {
-    if (Option.isSome(run.subagent)) {
-      void navigate({
-        to: '/m/$machine/p/$pane/sub/$session/$subagent',
-        params: { machine, pane, session: run.session, subagent: run.subagent.value },
-      })
-    }
-  }
-
-  const environment: ThreadEnvironment = {
-    now,
-    cwd,
-    paneClosed: model.presence === 'closed',
-    onShowEarlier: () => {
-      showWhole(true)
+  const paneClosed = model.presence === 'closed'
+  const askedCall = Option.getOrUndefined(Option.map(commands.ask, (dock) => dock.ask.id))
+  const openRun = React.useCallback(
+    (run: SubagentRun) => {
+      if (Option.isSome(run.subagent)) {
+        void navigate({
+          to: '/m/$machine/p/$pane/sub/$session/$subagent',
+          params: { machine, pane, session: run.session, subagent: run.subagent.value },
+        })
+      }
     },
-    onOpenRun: Option.some(openRun),
-  }
+    [navigate, machine, pane],
+  )
+  const environment = React.useMemo<ThreadEnvironment>(
+    () => ({
+      cwd,
+      paneClosed,
+      onShowEarlier: transcript.onShowEarlier,
+      onOpenRun: Option.some(openRun),
+    }),
+    [cwd, paneClosed, transcript.onShowEarlier, openRun],
+  )
+  const conversationRows = React.useMemo(
+    () =>
+      itemRows(
+        withoutAskedCall(
+          withAlwaysNotes(items, commands.alwaysNotes),
+          Option.fromUndefinedOr(askedCall),
+        ),
+        environment,
+      ),
+    [items, commands.alwaysNotes, askedCall, environment],
+  )
 
   const working = Option.filter(
     model.row,
@@ -253,22 +238,14 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     model.presence === 'notClaude'
       ? []
       : [
-          ...itemRows(
-            withoutAskedCall(
-              withAlwaysNotes(items, commands.alwaysNotes),
-              Option.map(commands.ask, (dock) => dock.ask.id),
-            ),
-            environment,
-          ),
+          ...conversationRows,
           ...pendingPromptRows(commands.pendingPrompt),
           ...Option.toArray(
-            Option.map(working, (row) => workingRow(shortElapsed(now, row.statusChangedAt))),
+            Option.map(working, (row) =>
+              workingRow((now) => shortElapsed(now, row.statusChangedAt)),
+            ),
           ),
-          ...(isWatching(model)
-            ? failureRows(view, () => {
-                retry((count) => count + 1)
-              })
-            : []),
+          ...(isWatching(model) ? failureRows(view, transcript.onRetry) : []),
         ]
 
   return (
@@ -307,12 +284,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         }
       />
       <div className="min-h-0 flex-1">
-        <Thread
-          handle={thread}
-          rows={rows}
-          dimmed={model.presence === 'away' || connection.stale}
-          empty={emptyThread(model, view)}
-        />
+        <Thread handle={thread} rows={rows} dimmed={dimmed} empty={emptyThread(model, view)} />
       </div>
       <ChatDock
         model={model}
@@ -322,7 +294,6 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         restart={commands.restart}
         draft={draft}
         onDraftChange={setDraft}
-        now={now}
         onBack={back}
         backLabel={backLabel}
       />

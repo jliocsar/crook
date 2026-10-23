@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from 'motion/react'
 import * as React from 'react'
 
 import { Dimmed } from '@crook/web/components/Dimmed'
+import { RenderCacheScope } from '@crook/web/components/RenderCache'
 import { RowMemoryScope } from '@crook/web/components/RowMemory'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { translate, useTransformString } from '@crook/web/motion/TransformString'
@@ -27,6 +28,8 @@ const EDGE_PADDING = 16
 const FOLLOW_THRESHOLD = 48
 const RISE = 8
 const JUMP_ICON_SIZE = 13
+
+const ThreadRowBody = React.memo(RowBody)
 
 const isAtBottom = (viewport: HTMLElement): boolean =>
   viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= FOLLOW_THRESHOLD
@@ -87,6 +90,28 @@ function Appear({
   )
 }
 
+function RowBody({
+  rowKey,
+  rise,
+  memory,
+  onShown,
+  children,
+}: {
+  rowKey: string
+  rise: boolean
+  memory: Map<string, boolean>
+  onShown: (rowKey: string) => void
+  children: React.ReactNode
+}) {
+  return (
+    <RowMemoryScope store={memory} rowKey={rowKey}>
+      <Appear rowKey={rowKey} rise={rise} onShown={onShown}>
+        {children}
+      </Appear>
+    </RowMemoryScope>
+  )
+}
+
 export function Thread({
   rows,
   dimmed,
@@ -114,6 +139,7 @@ export function Thread({
     gap: ROW_GAP,
     paddingStart: EDGE_PADDING,
     paddingEnd: EDGE_PADDING,
+    useFlushSync: false,
   })
   const totalSize = virtualizer.getTotalSize()
 
@@ -190,67 +216,72 @@ export function Thread({
   )
 
   return (
-    <Dimmed dimmed={dimmed} className="relative h-full min-h-0">
-      <div
-        ref={viewport}
-        data-slot="conversation-viewport"
-        data-following={following || undefined}
-        className="h-full overflow-y-auto overscroll-contain"
-        onScroll={(event) => {
-          const next = isAtBottom(event.currentTarget)
+    <RenderCacheScope>
+      <Dimmed dimmed={dimmed} className="relative h-full min-h-0">
+        <div
+          ref={viewport}
+          data-slot="conversation-viewport"
+          data-following={following || undefined}
+          className="h-full overflow-y-auto overscroll-contain"
+          onScroll={(event) => {
+            const next = isAtBottom(event.currentTarget)
 
-          if (next !== followingRef.current) {
-            follow(next)
-          }
-        }}
-      >
-        {rows.length === 0 ? (
-          <div className="px-4 pt-4">{empty}</div>
-        ) : (
-          <div className="relative w-full" style={{ height: totalSize }}>
-            {virtualizer.getVirtualItems().map((virtual) => {
-              const row = rows[virtual.index]
+            if (next !== followingRef.current) {
+              follow(next)
+            }
+          }}
+        >
+          {rows.length === 0 ? (
+            <div className="px-4 pt-4">{empty}</div>
+          ) : (
+            <div className="relative w-full" style={{ height: totalSize }}>
+              {virtualizer.getVirtualItems().map((virtual) => {
+                const row = rows[virtual.index]
 
-              return row === undefined ? null : (
-                <div
-                  key={virtual.key}
-                  ref={virtualizer.measureElement}
-                  data-index={virtual.index}
-                  data-row={row.key}
-                  className="absolute inset-x-0 top-0 px-4"
-                  style={{ transform: translate('Y', virtual.start) }}
-                >
-                  <RowMemoryScope store={memory} rowKey={row.key}>
-                    <Appear rowKey={row.key} rise={risesFirstTime(row.key)} onShown={shown}>
+                return row === undefined ? null : (
+                  <div
+                    key={virtual.key}
+                    ref={virtualizer.measureElement}
+                    data-index={virtual.index}
+                    data-row={row.key}
+                    className="absolute inset-x-0 top-0 px-4"
+                    style={{ transform: translate('Y', virtual.start) }}
+                  >
+                    <ThreadRowBody
+                      rowKey={row.key}
+                      rise={risesFirstTime(row.key)}
+                      memory={memory}
+                      onShown={shown}
+                    >
                       {row.content}
-                    </Appear>
-                  </RowMemoryScope>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-      <button
-        type="button"
-        data-slot="conversation-jump"
-        aria-hidden={following || undefined}
-        tabIndex={following ? -1 : undefined}
-        className={cn(
-          'bg-foreground text-background focus-visible:ring-ring absolute bottom-3 left-1/2 inline-flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-md transition-[opacity,transform] duration-200 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none',
-          following ? 'pointer-events-none translate-y-1 opacity-0' : 'opacity-100',
-        )}
-        onClick={() => {
-          follow(true)
-          viewport.current?.scrollTo({
-            top: viewport.current.scrollHeight,
-            behavior: reduce ? 'auto' : 'smooth',
-          })
-        }}
-      >
-        <ArrowDown aria-hidden="true" size={JUMP_ICON_SIZE} />
-        Latest
-      </button>
-    </Dimmed>
+                    </ThreadRowBody>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          data-slot="conversation-jump"
+          aria-hidden={following || undefined}
+          tabIndex={following ? -1 : undefined}
+          className={cn(
+            'bg-foreground text-background focus-visible:ring-ring absolute bottom-3 left-1/2 inline-flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-md transition-[opacity,transform] duration-200 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none',
+            following ? 'pointer-events-none translate-y-1 opacity-0' : 'opacity-100',
+          )}
+          onClick={() => {
+            follow(true)
+            viewport.current?.scrollTo({
+              top: viewport.current.scrollHeight,
+              behavior: reduce ? 'auto' : 'smooth',
+            })
+          }}
+        >
+          <ArrowDown aria-hidden="true" size={JUMP_ICON_SIZE} />
+          Latest
+        </button>
+      </Dimmed>
+    </RenderCacheScope>
   )
 }

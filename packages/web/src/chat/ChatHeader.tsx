@@ -1,7 +1,8 @@
 import * as Option from 'effect/Option'
 import { AnimatePresence, motion } from 'motion/react'
 
-import { ChatStatus, STATUS_WORD } from '@crook/web/chat/ChatModel'
+import type { AgentStatus } from '@crook/domain/AgentStatus'
+import { ChatStatus } from '@crook/web/chat/ChatModel'
 import { RunDot } from '@crook/web/components/ui/subagent-tree'
 import { StatusDot } from '@crook/web/components/StatusDot'
 import { Swap } from '@crook/web/components/Swap'
@@ -9,6 +10,14 @@ import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { translate, useTransformString } from '@crook/web/motion/TransformString'
 
 const PILL_RISE = 8
+
+const STATUS_WORD = {
+  idle: 'idle',
+  working: 'working',
+  blocked: 'needs you',
+  done: 'done',
+  unknown: 'unknown',
+} satisfies Record<AgentStatus, string>
 
 function HollowDot() {
   return (

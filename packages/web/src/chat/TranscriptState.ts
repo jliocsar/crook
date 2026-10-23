@@ -107,9 +107,10 @@ export const applyTranscriptEvent = (
 export const failedWith = (view: TranscriptView, failure: TranscriptWatchFailure): TranscriptView =>
   new TranscriptView(Struct.evolve(view, { failure: () => Option.some(failure) }))
 
-export const resumeOf =
-  (tail: Option.Option<TranscriptTailBytes>) =>
-  (view: TranscriptView): TranscriptResume => ({ from: view.position, tail })
+export const resumeOf = (
+  view: TranscriptView,
+  tail: Option.Option<TranscriptTailBytes>,
+): TranscriptResume => ({ from: view.position, tail })
 
 export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.lines })

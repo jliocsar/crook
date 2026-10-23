@@ -17,7 +17,7 @@ import {
   type TranscriptEvent,
   type TranscriptSource,
 } from '@crook/domain/Transcript'
-import { herdAtom } from '@crook/web/atoms/Herd'
+import { herdAtom, herdViewAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import {
@@ -30,7 +30,7 @@ import {
   resumeOf,
 } from '@crook/web/chat/TranscriptState'
 import type { TranscriptWatchFailure } from '@crook/web/chat/TranscriptState'
-import { findAgent } from '@crook/web/herd/HerdLayout'
+import { findAgent, isOnlineMachine } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
 export interface Followed<Value> {
@@ -47,7 +47,7 @@ export interface WatchSignals {
 
 export type TranscriptKey = PaneTranscriptKey | SubagentTranscriptKey
 
-export const CHAT_OPEN_TAIL = TranscriptTailBytes.make(512 * 1024)
+const CHAT_OPEN_TAIL = TranscriptTailBytes.make(512 * 1024)
 
 export class PaneTranscriptKey extends Data.TaggedClass('PaneTranscriptKey')<{
   readonly machine: MachineId
@@ -148,7 +148,7 @@ const transcriptViews = (
 
       const resume = Effect.flatMap(Ref.get(awaitsCaughtUp), (awaits) =>
         SubscriptionRef.modify(view, (current) => [
-          resumeOf(tailFor(whole))(current),
+          resumeOf(current, tailFor(whole)),
           catchingUpFrom(current, awaits),
         ]),
       )
@@ -196,8 +196,6 @@ const paneWatchableAtom = Atom.family((key: PaneTranscriptKey) =>
   ),
 )
 
-const herdViewAtom = Atom.make((get) => Option.map(get(herdAtom), (snapshot) => snapshot.view))
-
 const awaitsCaughtUpAtom = Atom.family((machine: MachineId) =>
   Atom.make((get) =>
     Option.exists(get(herdAtom), (snapshot) =>
@@ -212,11 +210,7 @@ const awaitsCaughtUpAtom = Atom.family((machine: MachineId) =>
 )
 
 const machineWatchableAtom = Atom.family((machine: MachineId) =>
-  Atom.make((get) =>
-    Option.exists(get(herdAtom), (snapshot) =>
-      Option.exists(findMachine(snapshot.view, machine), isOnline),
-    ),
-  ),
+  Atom.make((get) => Option.exists(get(herdViewAtom), (view) => isOnlineMachine(view, machine))),
 )
 
 export const transcriptRetryAtom = Atom.family((key: TranscriptKey) =>

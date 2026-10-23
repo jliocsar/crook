@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { settlesOpen } from '@crook/web/components/swipe/Gestures'
+import { settlesOpen } from '@crook/web/components/swipe/SwipeRow'
 
 describe('settlesOpen', () => {
   it('opens past half the actions width', () => {

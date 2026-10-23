@@ -25,7 +25,7 @@ const ENTER_SCALE = 0.96
 const CLOSE_ICON_CLASS = 'size-6'
 const THUMB_HEIGHT = { tool: 96, message: 160 } satisfies Record<ThumbPlace, number>
 
-const ImageViewerContext = React.createContext<Option.Option<OpenPicture>>(Option.none())
+const ImageViewerContext = React.createContext<OpenPicture>(() => undefined)
 
 const objectUrlOf = (image: ImageBlock): Option.Option<string> =>
   Result.match(Base64.decode(image.data), {
@@ -145,13 +145,9 @@ function ViewerLayer({ opened, onClose }: { opened: Opened; onClose: () => void 
 export function ImageViewer({ children }: { children: React.ReactNode }) {
   const [opened, setOpened] = React.useState<Option.Option<Opened>>(Option.none())
   const serial = React.useRef(0)
-  const open = React.useMemo(() => {
-    const openPicture: OpenPicture = (picture, opener) => {
-      serial.current += 1
-      setOpened(Option.some({ picture, opener, serial: serial.current }))
-    }
-
-    return Option.some(openPicture)
+  const open = React.useCallback<OpenPicture>((picture, opener) => {
+    serial.current += 1
+    setOpened(Option.some({ picture, opener, serial: serial.current }))
   }, [])
 
   const close = () => {
@@ -184,12 +180,19 @@ export function ImageViewer({ children }: { children: React.ReactNode }) {
 
 function Thumb({ picture, height }: { picture: Picture; height: number }) {
   const url = useObjectUrl(picture.image)
-  const viewer = React.useContext(ImageViewerContext)
+  const openPicture = React.useContext(ImageViewerContext)
 
   return Option.match(url, {
     onNone: () => null,
-    onSome: (href) => {
-      const image = (
+    onSome: (href) => (
+      <button
+        type="button"
+        aria-label={`View ${picture.name}`}
+        className="border-border bg-muted focus-visible:ring-ring shrink-0 touch-manipulation overflow-hidden rounded-lg border focus-visible:ring-2 focus-visible:outline-none"
+        onClick={(event) => {
+          openPicture(picture, event.currentTarget)
+        }}
+      >
         <img
           src={href}
           alt={picture.name}
@@ -197,28 +200,8 @@ function Thumb({ picture, height }: { picture: Picture; height: number }) {
           className="block w-auto max-w-[16rem] object-cover"
           style={{ height }}
         />
-      )
-
-      return Option.match(viewer, {
-        onNone: () => (
-          <span className="border-border bg-muted shrink-0 overflow-hidden rounded-lg border">
-            {image}
-          </span>
-        ),
-        onSome: (openPicture) => (
-          <button
-            type="button"
-            aria-label={`View ${picture.name}`}
-            className="border-border bg-muted focus-visible:ring-ring shrink-0 touch-manipulation overflow-hidden rounded-lg border focus-visible:ring-2 focus-visible:outline-none"
-            onClick={(event) => {
-              openPicture(picture, event.currentTarget)
-            }}
-          >
-            {image}
-          </button>
-        ),
-      })
-    },
+      </button>
+    ),
   })
 }
 

@@ -15,7 +15,7 @@ import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import type { AgentActivity } from '@crook/web/chat/ChatItems'
 import { findAgent } from '@crook/web/herd/HerdLayout'
 
-export type ChatPresence = 'loading' | 'live' | 'away' | 'exited' | 'closed' | 'notClaude'
+type ChatPresence = 'loading' | 'live' | 'away' | 'exited' | 'closed' | 'notClaude'
 
 export type EdgeKind = Extract<ChatPresence, 'away' | 'exited' | 'closed'>
 
@@ -132,14 +132,6 @@ export const chatStatus = (model: ChatScreenModel): ChatStatus => {
   })
 }
 
-export const STATUS_WORD = {
-  idle: 'idle',
-  working: 'working',
-  blocked: 'needs you',
-  done: 'done',
-  unknown: 'unknown',
-} satisfies Record<AgentStatus, string>
-
 export const activityOf = (model: ChatScreenModel): AgentActivity => {
   if (model.presence !== 'live' && model.presence !== 'away') {
     return 'still'
@@ -184,10 +176,11 @@ export const isWatching = (model: ChatScreenModel): boolean =>
   model.presence === 'live' || model.presence === 'loading'
 
 export const placeOf = (model: ChatScreenModel): Option.Option<string> =>
-  pipe(
-    [Option.some(machineLabelOf(model)), workspaceLabelOf(model)],
-    Arr.getSomes,
-    Arr.join(' · '),
-    Option.liftPredicate((text) => text !== ''),
-    Option.filter(() => Option.isSome(model.machine)),
+  Option.flatMap(model.machine, (entry) =>
+    pipe(
+      [Option.some(entry.machine.label), workspaceLabelOf(model)],
+      Arr.getSomes,
+      Arr.join(' · '),
+      Option.liftPredicate((text) => text !== ''),
+    ),
   )

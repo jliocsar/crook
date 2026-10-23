@@ -220,11 +220,6 @@ export const withFolder = (
   branch: BranchChoice.Checkout(),
 })
 
-export const withCheckout = (selection: Selection): Selection => ({
-  ...selection,
-  branch: BranchChoice.Checkout(),
-})
-
 export const withWorktree = (selection: Selection): Selection =>
   BranchChoice.$match(selection.branch, {
     Checkout: () => ({ ...selection, branch: BranchChoice.Worktree({ typed: Option.none() }) }),
@@ -235,9 +230,6 @@ export const withWorktreeBranch = (selection: Selection, branch: string): Select
   ...selection,
   branch: BranchChoice.Worktree({ typed: Option.some(branch) }),
 })
-
-export const isOnlineMachine = (view: HerdView, machine: MachineId): boolean =>
-  Option.exists(findMachine(view, machine), isOnline)
 
 const taskOf = (task: string): Option.Option<string> =>
   Option.liftPredicate(task.trim(), Str.isNonEmpty)

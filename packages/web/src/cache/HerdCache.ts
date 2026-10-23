@@ -33,20 +33,13 @@ export class HerdCacheUnavailable extends Schema.TaggedError<HerdCacheUnavailabl
 const decodeSnapshot = Schema.decodeUnknownEffect(HerdSnapshot)
 const encodeSnapshot = Schema.encodeEffect(HerdSnapshot)
 
+const attempt = <Answer>(run: () => Promise<Answer>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new HerdCacheUnavailable({ cause }) })
+
 const indexedDbStore: HerdStore = {
-  read: Effect.tryPromise({
-    try: () => get<unknown>(HERD_SNAPSHOT_KEY),
-    catch: (cause) => new HerdCacheUnavailable({ cause }),
-  }),
-  write: (stored) =>
-    Effect.tryPromise({
-      try: () => set(HERD_SNAPSHOT_KEY, stored),
-      catch: (cause) => new HerdCacheUnavailable({ cause }),
-    }),
-  remove: Effect.tryPromise({
-    try: () => del(HERD_SNAPSHOT_KEY),
-    catch: (cause) => new HerdCacheUnavailable({ cause }),
-  }),
+  read: attempt(() => get<unknown>(HERD_SNAPSHOT_KEY)),
+  write: (stored) => attempt(() => set(HERD_SNAPSHOT_KEY, stored)),
+  remove: attempt(() => del(HERD_SNAPSHOT_KEY)),
 }
 
 const loadFrom = (store: HerdStore) =>

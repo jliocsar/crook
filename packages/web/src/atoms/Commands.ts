@@ -1,5 +1,4 @@
 import * as Data from 'effect/Data'
-import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import type * as AsyncResult from 'effect/reactivity/AsyncResult'
@@ -12,7 +11,7 @@ import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
 import { commandProgress, progressOf } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
-import { herdAtom } from '@crook/web/atoms/Herd'
+import { herdViewAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
@@ -29,11 +28,7 @@ export class PendingActionKey extends Data.Class<{
 export const sendCommandAtom = Atom.family((key: IdempotencyKey) =>
   hubRuntime
     .fn((request: CommandRequest) =>
-      Effect.gen(function* () {
-        const link = yield* HubLink
-
-        return yield* link.sendCommand(request.machine, key, request.command)
-      }),
+      HubLink.use((link) => link.sendCommand(request.machine, key, request.command)),
     )
     .pipe(Atom.keepAlive),
 )
@@ -56,11 +51,5 @@ export const pendingAction = (
   })
 
 export const pendingActionAtom = Atom.family((key: PendingActionKey) =>
-  Atom.make((get) =>
-    pendingAction(
-      get(sendCommandAtom(key.key)),
-      Option.map(get(herdAtom), (snapshot) => snapshot.view),
-      key.machine,
-    ),
-  ),
+  Atom.make((get) => pendingAction(get(sendCommandAtom(key.key)), get(herdViewAtom), key.machine)),
 )

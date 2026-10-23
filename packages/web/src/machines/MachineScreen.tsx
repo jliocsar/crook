@@ -6,8 +6,8 @@ import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
-import { useOpenCardActions } from '@crook/web/actions/AgentActions'
-import type { OpenCardActions } from '@crook/web/actions/AgentActions'
+import { useOpenAgentActions } from '@crook/web/actions/AgentActions'
+import type { OpenAgentActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { machineScreenAtom } from '@crook/web/atoms/Machines'
@@ -44,7 +44,7 @@ function MachineAgents({
   stale: boolean
   controlsEnabled: boolean
   onOpenAgent: OpenAgent
-  onOpenActions: OpenCardActions
+  onOpenActions: OpenAgentActions
 }) {
   const { card, body } = model.detail
   const row = useOpenRow()
@@ -108,7 +108,7 @@ function MachineDetail({
   model: MachineScreenModel
   connection: ConnectionView
   onOpenAgent: OpenAgent
-  onOpenActions: OpenCardActions
+  onOpenActions: OpenAgentActions
 }) {
   const now = useNow()
   const { back } = usePushedScreen()
@@ -165,7 +165,7 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
   const herd = useAtomValue(herdAtom)
   const model = useAtomValue(machineScreenAtom(machine))
   const navigate = useNavigate()
-  const openCardActions = useOpenCardActions()
+  const openActions = useOpenAgentActions()
 
   const openAgent: OpenAgent = (agentMachine, card, opener) => {
     void navigate({
@@ -184,7 +184,7 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
             model={found}
             connection={connection}
             onOpenAgent={openAgent}
-            onOpenActions={openCardActions}
+            onOpenActions={openActions}
           />
         ),
       })}

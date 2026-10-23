@@ -6,7 +6,7 @@ export type Suggestion = {
   label: React.ReactNode
 }
 
-export type SuggestionsProps = Omit<React.HTMLAttributes<HTMLElement>, 'children' | 'onSelect'> & {
+type SuggestionsProps = Omit<React.HTMLAttributes<HTMLElement>, 'children' | 'onSelect'> & {
   suggestions: readonly Suggestion[]
   onSelect: (suggestion: Suggestion) => void
   label?: string

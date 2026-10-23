@@ -1,6 +1,8 @@
+import { useAtomValue } from '@effect/atom-react/Hooks'
 import { Link } from '@tanstack/react-router'
 import { Bot, Server, Settings } from 'lucide-react'
 
+import { needsYouAtom } from '@crook/web/atoms/Herd'
 import { COLUMN_STYLE } from '@crook/web/navigation/Column'
 import { SECTIONS_LABEL } from '@crook/web/navigation/Focus'
 import { useAnyScreenPushed } from '@crook/web/navigation/Pushed'
@@ -30,8 +32,9 @@ function NeedsYouBadge({ count }: { count: number }) {
   )
 }
 
-export function TabBar({ needsYou = 0 }: { needsYou?: number }) {
+export function TabBar() {
   const covered = useAnyScreenPushed()
+  const needsYou = useAtomValue(needsYouAtom)
 
   return (
     <nav

@@ -29,7 +29,7 @@ import { hubRuntime } from '@crook/web/atoms/Hub'
 import { cardFor } from '@crook/web/herd/HerdLayout'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
-import { mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
+import { keyToRetry, mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
 
 export type ActionsOrigin = 'card' | 'chat'
 
@@ -89,13 +89,7 @@ export const ActionsIntent = Data.taggedEnum<ActionsIntent>()
 export const setPinnedAtom = Atom.family((agent: PaneAddress) =>
   hubRuntime
     .fn((pinned: boolean) =>
-      Effect.gen(function* () {
-        const link = yield* HubLink
-
-        yield* link.setPinned(agent.machine, agent.pane, pinned)
-
-        return pinned
-      }),
+      HubLink.use((link) => Effect.as(link.setPinned(agent.machine, agent.pane, pinned), pinned)),
     )
     .pipe(Atom.keepAlive),
 )
@@ -141,14 +135,12 @@ const keyFor = <Attempt extends { readonly key: IdempotencyKey }>(
   previous: Option.Option<Attempt>,
   sameRequest: (attempt: Attempt) => boolean,
 ): IdempotencyKey =>
-  pipe(
-    previous,
-    Option.filter(sameRequest),
-    Option.filter((attempt) => isRetriableFailure(resultOf(attempt.key))),
-    Option.match({
-      onNone: mintIdempotencyKey,
-      onSome: (attempt) => attempt.key,
-    }),
+  Option.getOrElse(
+    keyToRetry(
+      previous,
+      (attempt) => sameRequest(attempt) && isRetriableFailure(resultOf(attempt.key)),
+    ),
+    mintIdempotencyKey,
   )
 
 const sameLabel = (label: Option.Option<string>) => (attempt: RenameAttempt) =>
@@ -156,6 +148,24 @@ const sameLabel = (label: Option.Option<string>) => (attempt: RenameAttempt) =>
 
 const sameConfirmation = (confirmed: boolean) => (attempt: CloseAttempt) =>
   attempt.confirmed === confirmed
+
+const shownWith = (
+  context: SessionsContext,
+  sessions: readonly ActionsSession[],
+  session: ActionsSession,
+  change: Partial<Pick<ActionsSession, 'rename' | 'close' | 'pin'>>,
+): void => {
+  context.set(
+    sessionsAtom,
+    replaced(
+      sessions,
+      session.agent,
+      Option.some(
+        new ActionsSession({ ...Struct.evolve(session, { visible: () => true }), ...change }),
+      ),
+    ),
+  )
+}
 
 const withShownSession = (
   context: SessionsContext,
@@ -227,21 +237,9 @@ export const agentActionsAtom = Atom.writable(
         withShownSession(context, (session, sessions) => {
           const key = keyFor(commandResultsIn(context), session.rename, sameLabel(label))
 
-          context.set(
-            sessionsAtom,
-            replaced(
-              sessions,
-              session.agent,
-              Option.some(
-                new ActionsSession(
-                  Struct.evolve(session, {
-                    visible: () => true,
-                    rename: () => Option.some(new RenameAttempt({ key, label })),
-                  }),
-                ),
-              ),
-            ),
-          )
+          shownWith(context, sessions, session, {
+            rename: Option.some(new RenameAttempt({ key, label })),
+          })
           context.set(
             sendCommandAtom(key),
             new CommandRequest({
@@ -255,21 +253,9 @@ export const agentActionsAtom = Atom.writable(
         withShownSession(context, (session, sessions) => {
           const key = keyFor(commandResultsIn(context), session.close, sameConfirmation(confirmed))
 
-          context.set(
-            sessionsAtom,
-            replaced(
-              sessions,
-              session.agent,
-              Option.some(
-                new ActionsSession(
-                  Struct.evolve(session, {
-                    visible: () => true,
-                    close: () => Option.some(new CloseAttempt({ key, confirmed })),
-                  }),
-                ),
-              ),
-            ),
-          )
+          shownWith(context, sessions, session, {
+            close: Option.some(new CloseAttempt({ key, confirmed })),
+          })
           context.set(
             sendCommandAtom(key),
             new CommandRequest({
@@ -281,18 +267,7 @@ export const agentActionsAtom = Atom.writable(
       },
       Pin: ({ pinned }) => {
         withShownSession(context, (session, sessions) => {
-          context.set(
-            sessionsAtom,
-            replaced(
-              sessions,
-              session.agent,
-              Option.some(
-                new ActionsSession(
-                  Struct.evolve(session, { visible: () => true, pin: () => Option.some(pinned) }),
-                ),
-              ),
-            ),
-          )
+          shownWith(context, sessions, session, { pin: Option.some(pinned) })
           context.set(setPinnedAtom(session.agent), pinned)
         })
       },

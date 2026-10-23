@@ -9,7 +9,7 @@ import { GLIDE } from '@crook/web/motion/Springs'
 import { COLUMN_STYLE } from '@crook/web/navigation/Column'
 import { focusTarget } from '@crook/web/navigation/Focus'
 
-export const SHEET_ELASTIC_ABOVE = 0.05
+const SHEET_ELASTIC_ABOVE = 0.05
 
 function SheetLayer({
   onClose,

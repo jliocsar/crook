@@ -6,15 +6,24 @@ import Markdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
-export type ResponseProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
+import {
+  recallNode,
+  remember,
+  RenderedNode,
+  useRenderCache,
+  type CodeRenderer,
+} from '@crook/web/components/RenderCache'
+
+type ResponseProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   children: string
-  renderCode?: (code: string, language: Option.Option<string>) => React.ReactNode
+  renderCode?: CodeRenderer
 }
 
 const FENCE_LANGUAGE = /language-([\w+-]+)/u
 const TRAILING_NEWLINE = /\n$/u
 const REMARK_PLUGINS = [remarkGfm]
 const DISALLOWED_ELEMENTS = ['img']
+const MARKDOWN_SLOT = 'markdown'
 
 const decodeText = Schema.decodeUnknownOption(Schema.String)
 
@@ -59,7 +68,25 @@ const markdownComponents = (renderCode: ResponseProps['renderCode']): Components
 export const Response = React.memo(MarkdownResponse)
 
 function MarkdownResponse({ children, renderCode, className, ...rootProps }: ResponseProps) {
+  const cache = useRenderCache()
   const components = React.useMemo(() => markdownComponents(renderCode), [renderCode])
+  const cacheKey = `${MARKDOWN_SLOT} ${children}`
+  const rendered = React.useMemo(
+    () =>
+      Option.getOrElse(recallNode(cache, cacheKey, renderCode), () =>
+        Markdown({
+          remarkPlugins: REMARK_PLUGINS,
+          disallowedElements: DISALLOWED_ELEMENTS,
+          components,
+          children,
+        }),
+      ),
+    [cache, cacheKey, components, children],
+  )
+
+  React.useEffect(() => {
+    remember(cache, cacheKey, new RenderedNode(rendered, renderCode))
+  }, [cache, cacheKey, rendered, renderCode])
 
   return (
     <div
@@ -70,13 +97,7 @@ function MarkdownResponse({ children, renderCode, className, ...rootProps }: Res
       )}
       {...rootProps}
     >
-      <Markdown
-        remarkPlugins={REMARK_PLUGINS}
-        disallowedElements={DISALLOWED_ELEMENTS}
-        components={components}
-      >
-        {children}
-      </Markdown>
+      {rendered}
     </div>
   )
 }

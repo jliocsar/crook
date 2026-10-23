@@ -33,7 +33,7 @@ export type AskAnswerState = Data.TaggedEnum<{
   Refused: { readonly message: string }
 }>
 
-export type AnswerProgress = Pick<CommandAction, 'state' | 'refusal' | 'last'>
+type AnswerProgress = Pick<CommandAction, 'state' | 'refusal' | 'last'>
 
 export interface AskButton {
   readonly label: string
@@ -51,10 +51,10 @@ const SESSION_NOTE_SCOPE = 'for the rest of the session'
 const LASTING_NOTE_SCOPE = 'without asking again'
 const ANSWER_PREFIXES = ['Yes, and always ', 'Yes, and ', 'Yes, ']
 const KEY_HINT = /\s+\([a-z+]+\)$/u
+const RUN_COMMAND_TITLE = 'Run this command?'
+const UNKNOWN_ASK_TITLE = "Claude is waiting on something crook can't read"
 
 export const NEEDS_YOU = 'Needs you'
-export const RUN_COMMAND_TITLE = 'Run this command?'
-export const UNKNOWN_ASK_TITLE = "Claude is waiting on something crook can't read"
 export const PLAIN_DECLINE = new Decline({ message: Option.none() })
 
 const NO_BUTTON: AskButton = { label: NO_LABEL, answer: PLAIN_DECLINE }

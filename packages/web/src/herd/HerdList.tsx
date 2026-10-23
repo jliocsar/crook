@@ -6,7 +6,7 @@ import type * as React from 'react'
 
 import { toGlobalPaneId } from '@crook/domain/Ids'
 import type { MachineId } from '@crook/domain/Ids'
-import type { OpenCardActions } from '@crook/web/actions/AgentActions'
+import type { OpenAgentActions } from '@crook/web/actions/AgentActions'
 import { usePinAgent } from '@crook/web/actions/PinAgent'
 import { PaneAddress } from '@crook/web/atoms/AgentActions'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
@@ -73,7 +73,7 @@ function AgentCardRow({
   row: OpenRow
   controlsEnabled: boolean
   onOpenAgent: OpenAgent
-  onOpenActions: OpenCardActions
+  onOpenActions: OpenAgentActions
 }) {
   const { pane } = card.row
   const pin = usePinAgent(new PaneAddress({ machine, pane }), {
@@ -82,7 +82,7 @@ function AgentCardRow({
   })
 
   const openActions = () => {
-    onOpenActions(machine, pane)
+    onOpenActions(machine, pane, 'card')
   }
 
   return (
@@ -126,7 +126,7 @@ export function AgentCards({
   row: OpenRow
   controlsEnabled: boolean
   onOpenAgent: OpenAgent
-  onOpenActions: OpenCardActions
+  onOpenActions: OpenAgentActions
 }) {
   const ordered = useHeldOrder(agents, row.holding)
 
@@ -167,7 +167,7 @@ export function HerdList({
   isOpen: (machine: MachineId) => boolean
   onToggle: (machine: MachineId) => void
   onOpenAgent: OpenAgent
-  onOpenActions: OpenCardActions
+  onOpenActions: OpenAgentActions
   onNewAgent: (opener: HTMLElement) => void
   onAddMachine: () => void
 }) {

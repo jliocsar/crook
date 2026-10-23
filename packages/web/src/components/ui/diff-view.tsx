@@ -12,12 +12,10 @@ import { languageOfPath, useHighlightedLines } from '@crook/web/highlight/Highli
 export type DiffLineKind = 'context' | 'add' | 'remove'
 
 export type DiffHunk = {
-  oldStart: number
-  newStart: number
   lines: readonly string[]
 }
 
-export type DiffViewProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
+type DiffViewProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   hunks: readonly DiffHunk[]
   filename?: string | undefined
   maxLines?: number
