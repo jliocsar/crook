@@ -23,12 +23,12 @@ import {
 import { LiveActivityRecord } from '@crook/hub/ActivityPlan'
 import { SentNotification } from '@crook/hub/NotificationPlan'
 
-export class NotificationPrefRecord extends Schema.Class<NotificationPrefRecord>(
-  'NotificationPrefRecord',
-)({
-  event: NotificationEvent,
-  enabled: Schema.BooleanFromBit,
-}) {}
+class NotificationPrefRecord extends Schema.Class<NotificationPrefRecord>('NotificationPrefRecord')(
+  {
+    event: NotificationEvent,
+    enabled: Schema.BooleanFromBit,
+  },
+) {}
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient

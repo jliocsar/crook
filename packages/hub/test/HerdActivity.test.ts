@@ -8,31 +8,30 @@ import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
-import type * as HttpClient from 'effect/http/HttpClient'
-import type * as SqlClient from 'effect/sql/SqlClient'
 import * as TestClock from 'effect/testing/TestClock'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
-import { HerdrLink } from '@crook/domain/HerdrLink'
-import { HerdrConnectionId, MachineId, PaneId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
-import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
-import { Workspace } from '@crook/domain/Workspace'
+import { MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import {
   ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW,
   ACTIVITY_START_SPACING,
   ALL_DONE_LINGER,
 } from '@crook/hub/ActivityPlan'
-import { AuditTrail } from '@crook/hub/AuditTrail'
-import { CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
-import { HARK_ACTIVITY_LIFETIME, HarkClient } from '@crook/hub/HarkClient'
+import { HARK_ACTIVITY_LIFETIME } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import * as HerdActivity from '@crook/hub/HerdActivity'
 import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
-import { NotificationStore } from '@crook/hub/NotificationStore'
-import { SeenTracker } from '@crook/hub/SeenTracker'
 
-import { agentRow, bashAsk, hello } from './Fixtures'
+import {
+  agentRow,
+  bashAsk,
+  crookWorkspace,
+  harkServicesUnder,
+  hello,
+  herdrLinkOf,
+  machineStateWith,
+} from './Fixtures'
 import {
   HARK_TOKEN,
   type HarkCall,
@@ -49,7 +48,6 @@ import {
   isAskCreation,
   isWait,
   nextCallWhere,
-  tokenConfig,
 } from './HarkFakes'
 
 const IN_MEMORY = ':memory:'
@@ -64,16 +62,9 @@ const stateWith = (
   connection = 1,
   lostAt = Option.none<DateTime.Utc>(),
 ) =>
-  new MachineState({
-    machine: LAPTOP,
-    version: MachineStateVersion.make(version),
-    herdrVersion: '0.9.5',
-    herdr: new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt }),
-    workspaces: [new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })],
-    tabs: [],
-    panes: [],
-    agents,
-    places: [],
+  machineStateWith(LAPTOP, version, agents, {
+    workspaces: [crookWorkspace],
+    herdr: herdrLinkOf(connection, lostAt),
   })
 
 const stateAt = (version: number, status: AgentRow['status'], stateChangeSeq: number) =>
@@ -124,36 +115,29 @@ const failingOnce = (isFailing: (call: HarkCall) => boolean, failure: HarkReply)
 
 const endpointOf = (call: HarkCall) => [call.method, call.url]
 
-const activityOver = (
-  http: Layer.Layer<HttpClient.HttpClient>,
-  token: Option.Option<string>,
-  database: Context.Context<SqlClient.SqlClient>,
-) =>
-  Layer.provideMerge(
-    Layer.provideMerge(
-      HerdActivity.layerWithoutDependencies,
-      HarkNotifier.layerWithoutDependencies,
-    ),
-    Layer.mergeAll(
-      Herd.layer,
-      HarkClient.layerWithoutDependencies,
-      NotificationStore.layer,
-      SeenTracker.layer,
-      CommandRouter.layer,
-      AuditTrail.layer,
-    ),
-  ).pipe(Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]))
-
 const withActivity = Effect.fn('withActivity')(function* (
   script: HarkScript,
   token: Option.Option<string> = Option.some(HARK_TOKEN),
 ) {
   const hark = yield* fakeHark(script)
   const database = yield* Layer.build(Database.layerAt(IN_MEMORY))
-  const start = Effect.map(Layer.build(activityOver(hark.layer, token, database)), (context) => ({
-    herd: Context.get(context, Herd),
-    notifier: Context.get(context, HarkNotifier),
-  }))
+  const start = Effect.map(
+    Layer.build(
+      harkServicesUnder(
+        Layer.provideMerge(
+          HerdActivity.layerWithoutDependencies,
+          HarkNotifier.layerWithoutDependencies,
+        ),
+        hark.layer,
+        token,
+        database,
+      ),
+    ),
+    (context) => ({
+      herd: Context.get(context, Herd),
+      notifier: Context.get(context, HarkNotifier),
+    }),
+  )
 
   return { calls: hark.calls, start }
 })

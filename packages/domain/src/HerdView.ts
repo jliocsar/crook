@@ -10,7 +10,7 @@ import { Machine } from '@crook/domain/Machine'
 import { MachineState } from '@crook/domain/MachineState'
 import { type Place, byMostRecentUse } from '@crook/domain/Place'
 
-export interface MachinePlace {
+interface MachinePlace {
   readonly machine: MachineId
   readonly place: Place
 }
@@ -36,7 +36,7 @@ export const isOnline = (entry: HerdMachine): boolean => entry.machine.connectio
 export const findMachine = (view: HerdView, machine: MachineId): Option.Option<HerdMachine> =>
   Arr.findFirst(view.machines, (entry) => entry.machine.id === machine)
 
-export const placesOf = (entry: HerdMachine): readonly MachinePlace[] =>
+const placesOf = (entry: HerdMachine): readonly MachinePlace[] =>
   Option.match(entry.state, {
     onNone: () => [],
     onSome: (state) => state.places.map((place) => ({ machine: entry.machine.id, place })),

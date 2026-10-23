@@ -132,14 +132,14 @@ export const AssistantBlock = Schema.Union([
 ])
 export type AssistantBlock = typeof AssistantBlock.Type
 
-export const SystemBlock = Schema.Union([
+const SystemBlock = Schema.Union([
   CompactBoundaryBlock,
   TurnDurationBlock,
   LocalCommandOutputBlock,
   NoticeBlock,
   UnrecognizedBlock,
 ])
-export type SystemBlock = typeof SystemBlock.Type
+type SystemBlock = typeof SystemBlock.Type
 
 const entryFields = {
   offset: TranscriptOffset,

@@ -15,18 +15,18 @@ export interface AuditedOperation {
   readonly arguments: AuditArguments
 }
 
-export interface AuditedExit {
+interface AuditedExit {
   readonly outcome: AuditOutcome
   readonly failure: Option.Option<string>
 }
 
-export interface AuditPolicyVariables {
+interface AuditPolicyVariables {
   readonly limitVariable: string
   readonly redactVariable: string
   readonly redactedByDefault: readonly AuditArgumentName[]
 }
 
-export const AuditArgumentName = Schema.Literals([
+const AuditArgumentName = Schema.Literals([
   'pane',
   'text',
   'keys',
@@ -40,15 +40,15 @@ export const AuditArgumentName = Schema.Literals([
   'folder',
   'branch',
 ])
-export type AuditArgumentName = typeof AuditArgumentName.Type
+type AuditArgumentName = typeof AuditArgumentName.Type
 
-export const AuditValue = Schema.Union([
+const AuditValue = Schema.Union([
   Schema.String,
   Schema.Boolean,
   Schema.Array(Schema.String),
   Schema.Null,
 ])
-export type AuditValue = typeof AuditValue.Type
+type AuditValue = typeof AuditValue.Type
 
 export const AuditArguments = Schema.Record(AuditArgumentName, Schema.optionalKey(AuditValue))
 export type AuditArguments = typeof AuditArguments.Type

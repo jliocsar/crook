@@ -5,7 +5,7 @@ import * as Layer from 'effect/Layer'
 import * as SqlClient from 'effect/sql/SqlClient'
 
 import * as Database from '@crook/hub/Database'
-import { SeenTracker } from '@crook/hub/SeenTracker'
+import { HerdStore } from '@crook/hub/HerdStore'
 
 const IN_MEMORY = ':memory:'
 
@@ -27,11 +27,11 @@ it.effect('upgrades a database whose seen marks carry no terminal, dropping thos
     }).pipe(Effect.provide(client))
     const upgraded = yield* Layer.build(
       Layer.provideMerge(
-        SeenTracker.layer,
+        HerdStore.layer,
         Layer.provideMerge(Database.migratorLayer, Layer.succeedContext(client)),
       ),
     )
-    const marksAfter = yield* Effect.flatMap(SeenTracker, (seenTracker) => seenTracker.all).pipe(
+    const marksAfter = yield* Effect.flatMap(HerdStore, (store) => store.seenMarks).pipe(
       Effect.provide(upgraded),
     )
 

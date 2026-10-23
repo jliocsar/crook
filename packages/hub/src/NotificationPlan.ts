@@ -30,6 +30,7 @@ import { type MachineState, isHerdrLost, isResync } from '@crook/domain/MachineS
 import { NotificationEvent, type NotificationPrefs } from '@crook/domain/Notifications'
 
 import { HARK_IDEMPOTENCY_KEY_LIMIT, HARK_TITLE_LIMIT, HarkId } from '@crook/hub/HarkClient'
+import type { PublishedMachine } from '@crook/hub/Herd'
 
 interface RaisedEvent {
   readonly event: AgentNotificationEvent
@@ -45,8 +46,8 @@ export type NotificationStep = Data.TaggedEnum<{
   Drop: { readonly wanted: WantedNotification }
 }>
 
-export const AgentNotificationEvent = NotificationEvent.pick(['approvals', 'questions', 'finished'])
-export type AgentNotificationEvent = typeof AgentNotificationEvent.Type
+const AgentNotificationEvent = NotificationEvent.pick(['approvals', 'questions', 'finished'])
+type AgentNotificationEvent = typeof AgentNotificationEvent.Type
 
 export class WantedNotification extends Schema.Class<WantedNotification>('WantedNotification')({
   machine: MachineId,
@@ -89,7 +90,7 @@ const blockedEvent = (row: AgentRow): RaisedEvent =>
     }),
   })
 
-export const raisedEventOf = (row: AgentRow): Option.Option<RaisedEvent> =>
+const raisedEventOf = (row: AgentRow): Option.Option<RaisedEvent> =>
   Match.value(row.status).pipe(
     Match.when('done', () => Option.some(FINISHED)),
     Match.when('blocked', () => Option.some(blockedEvent(row))),
@@ -237,12 +238,7 @@ export const isStillWanted = (
 
 export const afterPublish = (
   wanted: NotificationsByPane<WantedNotification>,
-  change: {
-    readonly machineLabel: string
-    readonly previous: Option.Option<MachineState>
-    readonly next: MachineState
-    readonly seen: HashSet.HashSet<PaneId>
-  },
+  change: PublishedMachine,
 ): NotificationsByPane<WantedNotification> => {
   const kept = HashMap.filter(
     wanted,

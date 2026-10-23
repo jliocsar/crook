@@ -33,7 +33,7 @@ const CONDITIONAL_REQUEST_HEADERS: readonly string[] = [
   'if-range',
 ]
 
-export const CrookWebRoot = Config.option(Config.String('CROOK_WEB_ROOT'))
+const CrookWebRoot = Config.option(Config.String('CROOK_WEB_ROOT'))
 
 export const thisBundle: HubBundle = {
   embedsFiles: Bun.embeddedFiles.length > 0,
@@ -63,7 +63,7 @@ const cachingOf = (pathname: string): Record<string, string> =>
     Match.orElse(() => ({})),
   )
 
-export const shellHeaders = (pathname: string) => ({
+const shellHeaders = (pathname: string) => ({
   'Content-Security-Policy': CONTENT_SECURITY_POLICY,
   ...cachingOf(pathname),
 })

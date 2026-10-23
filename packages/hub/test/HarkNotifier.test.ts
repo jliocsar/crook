@@ -9,38 +9,36 @@ import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 import * as Stream from 'effect/Stream'
-import type * as HttpClient from 'effect/http/HttpClient'
-import type * as SqlClient from 'effect/sql/SqlClient'
 import * as TestClock from 'effect/testing/TestClock'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
-import { HerdrLink } from '@crook/domain/HerdrLink'
 import { AnswerAsk, Approve, Decline } from '@crook/domain/Command'
-import {
-  AskId,
-  HerdrConnectionId,
-  MachineId,
-  PaneId,
-  TerminalId,
-  WorkspaceId,
-} from '@crook/domain/Ids'
-import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { AskId, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import { defaultNotificationPrefs } from '@crook/domain/Notifications'
-import { Workspace } from '@crook/domain/Workspace'
-import { AuditTrail } from '@crook/hub/AuditTrail'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
-import { HARK_REQUEST_SPACING, HarkClient, HarkId } from '@crook/hub/HarkClient'
+import { HARK_REQUEST_SPACING, HarkId } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
+import { HerdStore, SeenRecord } from '@crook/hub/HerdStore'
 import { SentNotification } from '@crook/hub/NotificationPlan'
 import { NotificationStore } from '@crook/hub/NotificationStore'
-import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 import { AskNotPending, type RoutedCommand } from '@crook/protocol/Commands'
 import { HarkNotConfigured, HarkReachedNoDevice } from '@crook/protocol/Hark'
 
-import { BASH_COMMAND, PANE, agentRow, bashAsk, encodeJson, hello } from './Fixtures'
+import {
+  BASH_COMMAND,
+  PANE,
+  agentRow,
+  bashAsk,
+  crookWorkspace,
+  encodeJson,
+  harkServicesUnder,
+  hello,
+  herdrLinkOf,
+  machineStateWith,
+} from './Fixtures'
 import {
   HARK_TOKEN,
   type HarkCall,
@@ -58,7 +56,6 @@ import {
   isWait,
   isWithdrawal,
   nextCallWhere,
-  tokenConfig,
 } from './HarkFakes'
 
 const IN_MEMORY = ':memory:'
@@ -68,6 +65,12 @@ const SECOND_PANE = PaneId.make('w1:p2')
 const SECOND_TITLE = 'Port the herd'
 const WITHDRAW_URL = `https://hark.ryan.ceo/api/agent/notifications/${harkIdFor(TITLE)}/withdraw`
 
+const laptopStateWith = (version: number, agents: readonly AgentRow[], connection = 1) =>
+  machineStateWith(LAPTOP, version, agents, {
+    workspaces: [crookWorkspace],
+    herdr: herdrLinkOf(connection),
+  })
+
 const twoAgentsAt = (
   version: number,
   first: AgentRow,
@@ -75,15 +78,9 @@ const twoAgentsAt = (
   secondStateChangeSeq: number,
   connection = 1,
 ) =>
-  new MachineState({
-    machine: LAPTOP,
-    version: MachineStateVersion.make(version),
-    herdrVersion: '0.9.5',
-    herdr: new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt: Option.none() }),
-    workspaces: [new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })],
-    tabs: [],
-    panes: [],
-    agents: [
+  laptopStateWith(
+    version,
+    [
       first,
       agentRow({
         pane: SECOND_PANE,
@@ -93,38 +90,11 @@ const twoAgentsAt = (
         stateChangeSeq: secondStateChangeSeq,
       }),
     ],
-    places: [],
-  })
+    connection,
+  )
 
-const stateAt = (version: number, status: AgentStatus, stateChangeSeq: number, connection = 1) =>
-  new MachineState({
-    machine: LAPTOP,
-    version: MachineStateVersion.make(version),
-    herdrVersion: '0.9.5',
-    herdr: new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt: Option.none() }),
-    workspaces: [new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })],
-    tabs: [],
-    panes: [],
-    agents: [agentRow({ status, stateChangeSeq })],
-    places: [],
-  })
-
-const notifierOver = (
-  http: Layer.Layer<HttpClient.HttpClient>,
-  token: Option.Option<string>,
-  database: Context.Context<SqlClient.SqlClient>,
-) =>
-  Layer.provideMerge(
-    HarkNotifier.layerWithoutDependencies,
-    Layer.mergeAll(
-      Herd.layer,
-      HarkClient.layerWithoutDependencies,
-      NotificationStore.layer,
-      SeenTracker.layer,
-      CommandRouter.layer,
-      AuditTrail.layer,
-    ),
-  ).pipe(Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]))
+const stateAt = (version: number, status: AgentStatus, stateChangeSeq: number) =>
+  laptopStateWith(version, [agentRow({ status, stateChangeSeq })])
 
 const withNotifier = Effect.fn('withNotifier')(function* (
   script: HarkScript,
@@ -132,13 +102,18 @@ const withNotifier = Effect.fn('withNotifier')(function* (
 ) {
   const hark = yield* fakeHark(script)
   const database = yield* Layer.build(Database.layerAt(IN_MEMORY))
-  const start = Effect.map(Layer.build(notifierOver(hark.layer, token, database)), (context) => ({
-    herd: Context.get(context, Herd),
-    notifier: Context.get(context, HarkNotifier),
-    store: Context.get(context, NotificationStore),
-    seenTracker: Context.get(context, SeenTracker),
-    router: Context.get(context, CommandRouter),
-  }))
+  const start = Effect.map(
+    Layer.build(
+      harkServicesUnder(HarkNotifier.layerWithoutDependencies, hark.layer, token, database),
+    ),
+    (context) => ({
+      herd: Context.get(context, Herd),
+      notifier: Context.get(context, HarkNotifier),
+      store: Context.get(context, NotificationStore),
+      herdStore: Context.get(context, HerdStore),
+      router: Context.get(context, CommandRouter),
+    }),
+  )
 
   return { calls: hark.calls, start }
 })
@@ -410,11 +385,11 @@ it.effect('withdraws at startup what was seen in crook before the hub could with
 
     yield* Effect.scoped(
       Effect.gen(function* () {
-        const { herd, store, seenTracker } = yield* start
+        const { herd, store, herdStore } = yield* start
 
         yield* herd.publish(LAPTOP, stateAt(1, 'done', 7))
         yield* store.rememberSent(seenBeforeRestart)
-        yield* seenTracker.mark(
+        yield* herdStore.markSeen(
           new SeenRecord({
             machine: LAPTOP,
             pane: PANE,
@@ -487,19 +462,9 @@ it.effect('starts without a token, sends nothing and says it is not configured',
 const INTERACTION_ID = 'int_7MFuml'
 
 const blockedOnBashAt = (version: number) =>
-  new MachineState({
-    machine: LAPTOP,
-    version: MachineStateVersion.make(version),
-    herdrVersion: '0.9.5',
-    herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
-    workspaces: [new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })],
-    tabs: [],
-    panes: [],
-    agents: [
-      agentRow({ status: 'blocked', stateChangeSeq: 7, ask: Option.some(bashAsk('toolu_1')) }),
-    ],
-    places: [],
-  })
+  laptopStateWith(version, [
+    agentRow({ status: 'blocked', stateChangeSeq: 7, ask: Option.some(bashAsk('toolu_1')) }),
+  ])
 
 const approvingHark =
   (answer: string): HarkScript =>

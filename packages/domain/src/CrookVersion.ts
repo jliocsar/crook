@@ -9,7 +9,7 @@ export type CrookVersion = typeof CrookVersion.Type
 
 const releaseNumbers = (version: CrookVersion) => version.split('.').map(Number)
 
-export const CrookVersionOrder: Order.Order<CrookVersion> = Order.mapInput(
+const CrookVersionOrder: Order.Order<CrookVersion> = Order.mapInput(
   Arr.makeOrder(Order.Number),
   releaseNumbers,
 )

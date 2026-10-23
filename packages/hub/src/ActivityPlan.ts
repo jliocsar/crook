@@ -23,12 +23,12 @@ import {
   HARK_RATE_WINDOW,
   HarkActivityContent,
 } from '@crook/hub/HarkClient'
-import { RECONNECT_GRACE } from '@crook/hub/Herd'
+import { type PublishedMachine, RECONNECT_GRACE } from '@crook/hub/Herd'
 import { cutForHark, permissionOf } from '@crook/hub/NotificationPlan'
 
 export type MachineAgents = HashMap.HashMap<PaneId, ActivityAgent>
 
-export type ActivityHerd = HashMap.HashMap<MachineId, MachineAgents>
+type ActivityHerd = HashMap.HashMap<MachineId, MachineAgents>
 
 export type ActivityStep = Data.TaggedEnum<{
   Start: { readonly content: HarkActivityContent }
@@ -41,7 +41,7 @@ export type ActivityAttempt = 'start' | 'update' | 'end'
 
 type FollowedFields = Pick<FollowedHerd, 'agents' | 'awayFrom' | 'endsFrom'>
 
-export class ActivityAgent extends Data.Class<{
+class ActivityAgent extends Data.Class<{
   readonly machineLabel: string
   readonly title: string
   readonly status: AgentStatus
@@ -63,10 +63,11 @@ export class LiveActivityRecord extends Schema.Class<LiveActivityRecord>('LiveAc
 
 export const ActivityStep = Data.taggedEnum<ActivityStep>()
 
+const ACTIVITY_START_KEY_PREFIX = 'crook/herd'
+
 export const ACTIVITY_START_SPACING = Duration.minutes(1)
 export const ALL_DONE_LINGER = Duration.seconds(45)
 export const ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW = HARK_RATE_WINDOW
-export const ACTIVITY_START_KEY_PREFIX = 'crook/herd'
 export const WAIT_FOR_A_CHANGE = ActivityStep.Wait({ atMost: Option.none() })
 
 export const ALL_DONE = new HarkActivityContent({
@@ -75,7 +76,7 @@ export const ALL_DONE = new HarkActivityContent({
   symbol: 'success',
 })
 
-export const isSameContent = Schema.toEquivalence(HarkActivityContent)
+const isSameContent = Schema.toEquivalence(HarkActivityContent)
 
 const encodeContent = Schema.encodeSync(Schema.fromJsonString(HarkActivityContent))
 
@@ -144,7 +145,7 @@ const hasTurnedBusy = (before: MachineAgents, after: MachineAgents) =>
 const allAgents = (herd: ActivityHerd) =>
   Arr.flatMap(HashMap.toValues(herd), (agents) => HashMap.toValues(agents))
 
-export const isBusy = (herd: ActivityHerd): boolean => Arr.some(allAgents(herd), isBusyAgent)
+const isBusy = (herd: ActivityHerd): boolean => Arr.some(allAgents(herd), isBusyAgent)
 
 const isAwayAt = (
   awayFrom: FollowedHerd['awayFrom'],
@@ -190,11 +191,7 @@ export const followedHerdFrom = (hubStartedAt: DateTime.Utc) =>
 
 export const activityAfterPublish = (
   followed: FollowedHerd,
-  change: {
-    readonly machineLabel: string
-    readonly previous: Option.Option<MachineState>
-    readonly next: MachineState
-  },
+  change: Omit<PublishedMachine, 'seen'>,
   now: DateTime.Utc,
 ): FollowedHerd => {
   const machine = change.next.machine
@@ -389,7 +386,7 @@ const endWhenAllowed = (now: DateTime.Utc, endsFrom: DateTime.Utc): ActivityStep
     ? ActivityStep.End({ content: ALL_DONE, linger: ALL_DONE_LINGER })
     : waitAtMost(untilThen(now, endsFrom))
 
-export const shownIn = (record: Option.Option<LiveActivityRecord>) =>
+const shownIn = (record: Option.Option<LiveActivityRecord>) =>
   Option.flatMap(record, (live) => live.shown)
 
 export const nextActivityStep = (input: {

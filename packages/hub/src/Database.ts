@@ -8,7 +8,7 @@ import * as SqlClient from 'effect/sql/SqlClient'
 import type { SqlError } from 'effect/sql/SqlError'
 import * as Str from 'effect/String'
 
-export const CrookHubDatabasePath = Config.String('CROOK_HUB_DATABASE_PATH')
+const CrookHubDatabasePath = Config.String('CROOK_HUB_DATABASE_PATH')
 
 export class StoredRowInvalid extends Schema.TaggedError<StoredRowInvalid>()('StoredRowInvalid', {
   table: Schema.String,

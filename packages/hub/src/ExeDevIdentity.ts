@@ -16,8 +16,8 @@ const ORIGIN_HEADER = 'origin'
 const SECURE_PROTOCOL = 'https:'
 const FORBIDDEN = 403
 
-export const CrookOwnerEmail = Config.String('CROOK_OWNER_EMAIL')
-export const CrookHubOrigin = Config.URL('CROOK_HUB_ORIGIN')
+const CrookOwnerEmail = Config.String('CROOK_OWNER_EMAIL')
+const CrookHubOrigin = Config.URL('CROOK_HUB_ORIGIN')
 
 const TokenContext = Schema.fromJsonString(Schema.Struct({ machine: MachineId }))
 

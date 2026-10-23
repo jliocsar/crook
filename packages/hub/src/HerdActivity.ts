@@ -28,6 +28,7 @@ import {
 } from '@crook/hub/ActivityPlan'
 import { logStorageFailure } from '@crook/hub/Database'
 import {
+  type AfterHarkFailure,
   type HarkActivityGone,
   HarkClient,
   PAUSE_AFTER_HUB_BUG,
@@ -39,7 +40,7 @@ import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import { type HerdChange, Herd } from '@crook/hub/Herd'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 
-type ActivityOutcome = 'done' | 'gone' | 'retry' | 'abandoned'
+type ActivityOutcome = 'done' | 'gone' | AfterHarkFailure
 
 const make = Effect.gen(function* () {
   const hark = yield* HarkClient
@@ -96,35 +97,31 @@ const make = Effect.gen(function* () {
       Effect.catchTag('HarkActivityGone', (gone) =>
         Effect.logInfo(gone.message).pipe(Effect.as<ActivityOutcome>('gone')),
       ),
-      Effect.catch((failure) =>
-        Effect.map(pauseOrGiveUp(what, failure), (after): ActivityOutcome =>
-          after === 'retry' ? 'retry' : 'abandoned',
-        ),
-      ),
+      Effect.catch((failure) => pauseOrGiveUp(what, failure)),
     )
   })
 
-  const act = (
-    step: ActivityStep,
-    attempt: ActivityAttempt,
-    call: Effect.Effect<void, HarkFailure | HarkActivityGone>,
-  ) =>
-    Effect.gen(function* () {
-      const now = yield* DateTime.now
-      const outcome = yield* outcomeOf(`the herd's Live Activity (${attempt})`, call)
-      const current = yield* Ref.get(record)
+  const act = (step: ActivityStep, call: Effect.Effect<void, HarkFailure | HarkActivityGone>) =>
+    Option.match(attemptOf(step), {
+      onNone: () => Effect.void,
+      onSome: (attempt) =>
+        Effect.gen(function* () {
+          const now = yield* DateTime.now
+          const outcome = yield* outcomeOf(`the herd's Live Activity (${attempt})`, call)
+          const current = yield* Ref.get(record)
 
-      yield* Match.value(outcome).pipe(
-        Match.when('done', () =>
-          Ref.set(abandonedAttempt, Option.none()).pipe(
-            Effect.andThen(remember(recordAfter(step, current, now))),
-          ),
-        ),
-        Match.when('gone', () => remember(recordWithoutActivity(current))),
-        Match.when('retry', () => Effect.void),
-        Match.when('abandoned', () => Ref.set(abandonedAttempt, Option.some(attempt))),
-        Match.exhaustive,
-      )
+          yield* Match.value(outcome).pipe(
+            Match.when('done', () =>
+              Ref.set(abandonedAttempt, Option.none()).pipe(
+                Effect.andThen(remember(recordAfter(step, current, now))),
+              ),
+            ),
+            Match.when('gone', () => remember(recordWithoutActivity(current))),
+            Match.when('retry', () => Effect.void),
+            Match.when('gaveUp', () => Ref.set(abandonedAttempt, Option.some(attempt))),
+            Match.exhaustive,
+          )
+        }),
     })
 
   const awaitWake = (atMost: Option.Option<Duration.Duration>) =>
@@ -142,13 +139,9 @@ const make = Effect.gen(function* () {
     Match.value(step).pipe(
       Match.tagsExhaustive({
         Start: (start) =>
-          act(
-            step,
-            'start',
-            hark.startActivity(start.content, activityStartKey(current, start.content)),
-          ),
-        Update: (update) => act(step, 'update', hark.updateActivity(update.content)),
-        End: (end) => act(step, 'end', hark.endActivity(end.content, end.linger)),
+          act(step, hark.startActivity(start.content, activityStartKey(current, start.content))),
+        Update: (update) => act(step, hark.updateActivity(update.content)),
+        End: (end) => act(step, hark.endActivity(end.content, end.linger)),
         Wait: (wait) =>
           Option.match(wait.atMost, {
             onNone: () => Ref.set(abandonedAttempt, Option.none()),

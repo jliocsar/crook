@@ -53,6 +53,10 @@ const HARK_REQUESTS_PER_WINDOW = 60
 const HARK_ACTIVITY_KEY = 'crook-herd'
 const HARK_ACTIVITY_TITLE = 'crook'
 const HARK_ACTIVITY_ACCENT = '#EEEBE4'
+const HARK_WAIT_LIMIT = Duration.seconds(25)
+const HARK_APPROVAL_EXPIRY = Duration.days(1)
+const HARK_ACTIVITY_STALE_WINDOW = Duration.hours(8)
+const HARK_OUTAGE_PAUSE = Duration.seconds(60)
 
 export const HARK_TITLE_LIMIT = 80
 export const HARK_PROMPT_LIMIT = 2000
@@ -61,25 +65,22 @@ export const HARK_ACTIVITY_DETAIL_LIMIT = 240
 export const HARK_IDEMPOTENCY_KEY_LIMIT = 200
 export const HARK_RATE_WINDOW = Duration.minutes(1)
 export const HARK_REQUEST_TIMEOUT = Duration.seconds(10)
-export const HARK_WAIT_LIMIT = Duration.seconds(25)
-export const HARK_APPROVAL_EXPIRY = Duration.days(1)
 export const HARK_ACTIVITY_LIFETIME = Duration.hours(8)
-export const HARK_ACTIVITY_STALE_WINDOW = Duration.hours(8)
 
 export const HARK_REQUEST_SPACING = Duration.divideUnsafe(
   HARK_RATE_WINDOW,
   HARK_REQUESTS_PER_WINDOW,
 )
 
-export const HARK_WAIT_REQUEST_TIMEOUT = Duration.sum(HARK_WAIT_LIMIT, HARK_REQUEST_TIMEOUT)
-export const HARK_OUTAGE_PAUSE = Duration.seconds(60)
+const HARK_WAIT_REQUEST_TIMEOUT = Duration.sum(HARK_WAIT_LIMIT, HARK_REQUEST_TIMEOUT)
+
 export const PAUSE_AFTER_HUB_BUG = HARK_REQUEST_SPACING
 
 export const HarkId = Schema.NonEmptyString.pipe(Schema.brand('HarkId'))
 export type HarkId = typeof HarkId.Type
 
-export const HarkActivitySymbol = Schema.Literals(['warning', 'terminal', 'success'])
-export type HarkActivitySymbol = typeof HarkActivitySymbol.Type
+const HarkActivitySymbol = Schema.Literals(['warning', 'terminal', 'success'])
+type HarkActivitySymbol = typeof HarkActivitySymbol.Type
 
 export class HarkNotification extends Data.Class<{
   readonly title: string
@@ -93,7 +94,7 @@ export class HarkApproval extends Data.Class<{
   readonly idempotencyKey: Option.Option<string>
 }> {}
 
-export class HarkSent extends Data.Class<{
+class HarkSent extends Data.Class<{
   readonly id: HarkId
   readonly accepted: number
 }> {}

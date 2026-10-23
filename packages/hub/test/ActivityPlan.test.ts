@@ -6,9 +6,8 @@ import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
-import { HerdrLink } from '@crook/domain/HerdrLink'
-import { HerdrConnectionId, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
-import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
+import type { MachineState } from '@crook/domain/MachineState'
 import {
   ACTIVITY_RESTART_LEAD_OF_ONE_RATE_WINDOW,
   ACTIVITY_START_SPACING,
@@ -33,7 +32,7 @@ import {
 } from '@crook/hub/HarkClient'
 import { RECONNECT_GRACE } from '@crook/hub/Herd'
 
-import { agentRow, bashAsk } from './Fixtures'
+import { agentRow, bashAsk, herdrLinkOf, machineStateWith } from './Fixtures'
 
 const LAPTOP = MachineId.make('laptop')
 const DESK = MachineId.make('desk')
@@ -44,19 +43,11 @@ const stateOf = (
   agents: readonly AgentRow[],
   herdr: { readonly connection?: number; readonly lost?: boolean } = {},
 ) =>
-  new MachineState({
-    machine,
-    version: MachineStateVersion.make(1),
-    herdrVersion: '0.9.5',
-    herdr: new HerdrLink({
-      connection: HerdrConnectionId.make(herdr.connection ?? 1),
-      lostAt: herdr.lost === true ? Option.some(DateTime.makeUnsafe(0)) : Option.none(),
-    }),
-    workspaces: [],
-    tabs: [],
-    panes: [],
-    agents,
-    places: [],
+  machineStateWith(machine, 1, agents, {
+    herdr: herdrLinkOf(
+      herdr.connection ?? 1,
+      herdr.lost === true ? Option.some(DateTime.makeUnsafe(0)) : Option.none(),
+    ),
   })
 
 const agentAt = (

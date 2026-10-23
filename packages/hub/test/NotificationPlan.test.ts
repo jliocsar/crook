@@ -6,18 +6,8 @@ import * as Option from 'effect/Option'
 
 import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
-import { HerdrLink } from '@crook/domain/HerdrLink'
-import {
-  HerdrConnectionId,
-  MachineId,
-  PaneId,
-  TabId,
-  TerminalId,
-  WorkspaceId,
-} from '@crook/domain/Ids'
-import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 import { defaultNotificationPrefs } from '@crook/domain/Notifications'
-import { Workspace } from '@crook/domain/Workspace'
 import { AskId } from '@crook/domain/Ids'
 import { HarkId } from '@crook/hub/HarkClient'
 import {
@@ -35,7 +25,7 @@ import {
   raisedBetween,
 } from '@crook/hub/NotificationPlan'
 
-import { bashAsk } from './Fixtures'
+import { bashAsk, crookWorkspace, herdrLinkOf, machineStateWith } from './Fixtures'
 
 const LAPTOP = MachineId.make('laptop')
 const PANE = PaneId.make('w1:p1')
@@ -85,19 +75,12 @@ const stateWith = (
   agents: readonly AgentRow[],
   herdr: { readonly connection?: number; readonly lost?: boolean } = {},
 ) =>
-  new MachineState({
-    machine: LAPTOP,
-    version: MachineStateVersion.make(1),
-    herdrVersion: '0.9.5',
-    herdr: new HerdrLink({
-      connection: HerdrConnectionId.make(herdr.connection ?? 1),
-      lostAt: herdr.lost === true ? Option.some(DateTime.makeUnsafe(0)) : Option.none(),
-    }),
-    workspaces: [new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })],
-    tabs: [],
-    panes: [],
-    agents,
-    places: [],
+  machineStateWith(LAPTOP, 1, agents, {
+    workspaces: [crookWorkspace],
+    herdr: herdrLinkOf(
+      herdr.connection ?? 1,
+      herdr.lost === true ? Option.some(DateTime.makeUnsafe(0)) : Option.none(),
+    ),
   })
 
 const FINISHED_FIELDS: ConstructorParameters<typeof WantedNotification>[0] = {

@@ -9,6 +9,7 @@ import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import type { SqlError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
+import * as Struct from 'effect/Struct'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { isSameSeenMark } from '@crook/domain/AgentRow'
@@ -33,6 +34,7 @@ import {
   pausedOnBug,
 } from '@crook/hub/HarkClient'
 import { type HerdChange, Herd } from '@crook/hub/Herd'
+import { HerdStore, type SeenRecord } from '@crook/hub/HerdStore'
 import {
   type NotificationStep,
   type NotificationsByPane,
@@ -50,7 +52,6 @@ import {
   notificationKey,
 } from '@crook/hub/NotificationPlan'
 import { NotificationStore } from '@crook/hub/NotificationStore'
-import { type SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
 
 const TEST_NOTIFICATION = new HarkNotification({
   title: 'crook',
@@ -93,10 +94,10 @@ const make = Effect.gen(function* () {
   const hark = yield* HarkClient
   const store = yield* NotificationStore
   const herd = yield* Herd
-  const seenTracker = yield* SeenTracker
+  const herdStore = yield* HerdStore
   const prefs = yield* SubscriptionRef.make(yield* store.prefs)
   const sentAtStart = yield* store.sent
-  const isSeenAtStart = isSeenIn(yield* seenTracker.all)
+  const isSeenAtStart = isSeenIn(yield* herdStore.seenMarks)
   const stillWantedAtStart = yield* Effect.filter(sentAtStart, (notification) =>
     isSeenAtStart(notification)
       ? Effect.succeed(false)
@@ -129,17 +130,7 @@ const make = Effect.gen(function* () {
     )
 
   const rememberSent = (notification: WantedNotification, harkId: HarkId) => {
-    const record = new SentNotification({
-      machine: notification.machine,
-      pane: notification.pane,
-      event: notification.event,
-      terminal: notification.terminal,
-      stateChangeSeq: notification.stateChangeSeq,
-      ask: notification.ask,
-      title: notification.title,
-      body: notification.body,
-      harkId,
-    })
+    const record = new SentNotification({ ...Struct.evolve(notification, {}), harkId })
 
     return Ref.update(sent, HashMap.set(notificationKey(record), record)).pipe(
       Effect.andThen(store.rememberSent(record)),
@@ -196,11 +187,11 @@ const make = Effect.gen(function* () {
 
   const drop = (dropped: WantedNotification) =>
     SubscriptionRef.update(wanted, (notifications) =>
-      Option.exists(HashMap.get(notifications, notificationKey(dropped)), (current) =>
-        isSameNotification(current, dropped),
-      )
-        ? HashMap.remove(notifications, notificationKey(dropped))
-        : notifications,
+      HashMap.modifyAt(
+        notifications,
+        notificationKey(dropped),
+        Option.filter((current) => !isSameNotification(current, dropped)),
+      ),
     )
 
   const take = (step: NotificationStep) =>
@@ -296,8 +287,4 @@ export class HarkNotifier extends Context.Service<
   }
 >()('@crook/hub/HarkNotifier') {
   static readonly layerWithoutDependencies = Layer.effect(this, make)
-
-  static readonly layer = this.layerWithoutDependencies.pipe(
-    Layer.provide([HarkClient.layer, NotificationStore.layer, SeenTracker.layer]),
-  )
 }

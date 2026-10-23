@@ -2,6 +2,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import * as BunHttpServer from '@effect/platform-bun/BunHttpServer'
 import * as BunSocket from '@effect/platform-bun/BunSocket'
 import * as ConfigProvider from 'effect/ConfigProvider'
+import type * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -14,11 +15,13 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import type * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+import type * as HttpClient from 'effect/http/HttpClient'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServer from 'effect/http/HttpServer'
 import * as RpcClient from 'effect/rpc/RpcClient'
 import type * as RpcGroup from 'effect/rpc/RpcGroup'
 import type * as Rpc from 'effect/rpc/Rpc'
+import type * as SqlClient from 'effect/sql/SqlClient'
 
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
@@ -45,13 +48,22 @@ import {
 } from '@crook/domain/Ids'
 import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { Workspace } from '@crook/domain/Workspace'
 import type { HerdrClient } from '@crook/herdr/HerdrClient'
+import { AuditTrail } from '@crook/hub/AuditTrail'
+import { CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
+import { HarkClient } from '@crook/hub/HarkClient'
+import { Herd } from '@crook/hub/Herd'
+import { HerdStore } from '@crook/hub/HerdStore'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
+import { NotificationStore } from '@crook/hub/NotificationStore'
 import { AGENT_PING_INTERVAL, AgentLink, Hello } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
+
+import { tokenConfig } from './HarkFakes'
 
 export type AgentFoundation =
   | MachineStateSync
@@ -114,22 +126,47 @@ export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[
     ...fields,
   })
 
+export const crookWorkspace = new Workspace({ id: WorkspaceId.make('w1'), label: 'crook' })
+
+export const herdrLinkOf = (connection: number, lostAt = Option.none<DateTime.Utc>()) =>
+  new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt })
+
 export const machineStateWith = (
   machine: MachineId,
   version: number,
   agents: readonly AgentRow[],
+  fields: Partial<Pick<ConstructorParameters<typeof MachineState>[0], 'workspaces' | 'herdr'>> = {},
 ) =>
   new MachineState({
     machine,
     version: MachineStateVersion.make(version),
     herdrVersion: '0.9.1',
-    herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
+    herdr: herdrLinkOf(1),
     workspaces: [],
     tabs: [],
     panes: [],
     agents,
     places: [],
+    ...fields,
   })
+
+export const harkServicesUnder = <Services, Failure, Needs>(
+  services: Layer.Layer<Services, Failure, Needs>,
+  http: Layer.Layer<HttpClient.HttpClient>,
+  token: Option.Option<string>,
+  database: Context.Context<SqlClient.SqlClient>,
+) =>
+  Layer.provideMerge(
+    services,
+    Layer.mergeAll(
+      Herd.layer,
+      HarkClient.layerWithoutDependencies,
+      NotificationStore.layer,
+      HerdStore.layer,
+      CommandRouter.layer,
+      AuditTrail.layer,
+    ),
+  ).pipe(Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]))
 
 export const configFor = (origin: string) =>
   ConfigProvider.layer(

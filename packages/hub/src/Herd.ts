@@ -33,16 +33,16 @@ import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/p
 import packageJson from '../package.json' with { type: 'json' }
 
 import { logStorageFailure } from '@crook/hub/Database'
-import { MachineRecord, MachineRegistry } from '@crook/hub/MachineRegistry'
-import { PinRecord, PinnedAgents } from '@crook/hub/PinnedAgents'
-import { SeenRecord, SeenTracker } from '@crook/hub/SeenTracker'
+import { HerdStore, MachineRecord, PinRecord, SeenRecord } from '@crook/hub/HerdStore'
 
-export class MachinePublished extends Data.TaggedClass('MachinePublished')<{
+export interface PublishedMachine {
   readonly machineLabel: string
   readonly previous: Option.Option<MachineState>
   readonly next: MachineState
   readonly seen: HashSet.HashSet<PaneId>
-}> {}
+}
+
+export class MachinePublished extends Data.TaggedClass('MachinePublished')<PublishedMachine> {}
 
 export class PaneSeen extends Data.TaggedClass('PaneSeen')<{
   readonly machine: MachineId
@@ -222,14 +222,12 @@ const logSeenDropFailure = (id: MachineId) => (error: SqlError) =>
   )
 
 const make = Effect.gen(function* () {
-  const registry = yield* MachineRegistry
-  const seenTracker = yield* SeenTracker
-  const pinnedAgents = yield* PinnedAgents
+  const store = yield* HerdStore
   const scope = yield* Effect.scope
   const changes = yield* PubSub.unbounded<HerdChange>()
-  const records = yield* registry.all
-  const marks = yield* seenTracker.all
-  const pins = yield* pinnedAgents.all
+  const records = yield* store.machines
+  const marks = yield* store.seenMarks
+  const pins = yield* store.pins
   const entries = yield* SubscriptionRef.make(
     HashMap.fromIterable(
       Arr.map(records, (record): [MachineId, MachineEntry] => [
@@ -263,8 +261,8 @@ const make = Effect.gen(function* () {
       const previous = Option.getOrElse(entry, () => firstSighting(id, now))
       const next = update(previous, now)
 
-      return registry
-        .save(toRecord(next))
+      return store
+        .saveMachine(toRecord(next))
         .pipe(
           Effect.catchTag('SqlError', logStorageFailure(`machine ${id}`)),
           Effect.andThen(afterwards(previous, next)),
@@ -335,9 +333,7 @@ const make = Effect.gen(function* () {
       Arr.match(droppedSeenPanes(previous, next), {
         onEmpty: () => Effect.void,
         onNonEmpty: (panes) =>
-          seenTracker
-            .dropPanes(id, panes)
-            .pipe(Effect.catchTag('SqlError', logSeenDropFailure(id))),
+          store.dropSeenPanes(id, panes).pipe(Effect.catchTag('SqlError', logSeenDropFailure(id))),
       }).pipe(
         Effect.andThen(
           PubSub.publish(
@@ -365,7 +361,7 @@ const make = Effect.gen(function* () {
 
         const next: MachineEntry = { ...found, forgotten: true }
 
-        yield* registry.save(toRecord(next))
+        yield* store.saveMachine(toRecord(next))
         yield* PubSub.publish(changes, new MachineForgotten({ machine: id }))
 
         return Option.some(next)
@@ -385,7 +381,7 @@ const make = Effect.gen(function* () {
 
         const mark = seenMarkOf(row)
 
-        yield* seenTracker.mark(new SeenRecord({ machine: id, pane, ...mark }))
+        yield* store.markSeen(new SeenRecord({ machine: id, pane, ...mark }))
         yield* PubSub.publish(changes, new PaneSeen({ machine: id, pane }))
 
         return Option.some({ ...found, seen: HashMap.set(found.seen, pane, mark) })
@@ -409,13 +405,13 @@ const make = Effect.gen(function* () {
         const record = new PinRecord({ machine: id, pane })
 
         if (!pinned) {
-          yield* pinnedAgents.unpin(record)
+          yield* store.unpin(record)
 
           return Option.some({ ...found, pinned: HashSet.remove(found.pinned, pane) })
         }
 
         yield* agentIn(id, found, pane)
-        yield* pinnedAgents.pin(record)
+        yield* store.pin(record)
 
         return Option.some({ ...found, pinned: HashSet.add(found.pinned, pane) })
       }),
@@ -474,7 +470,5 @@ export class Herd extends Context.Service<
 >()('@crook/hub/Herd') {
   static readonly layerWithoutDependencies = Layer.effect(this, make)
 
-  static readonly layer = this.layerWithoutDependencies.pipe(
-    Layer.provide([MachineRegistry.layer, SeenTracker.layer, PinnedAgents.layer]),
-  )
+  static readonly layer = this.layerWithoutDependencies.pipe(Layer.provide(HerdStore.layer))
 }

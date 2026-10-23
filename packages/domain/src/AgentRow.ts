@@ -10,7 +10,7 @@ import { ClaudeSessionId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/
 
 export type SeenMark = Pick<AgentRow, 'terminal' | 'stateChangeSeq'>
 
-export type SettledStatus = Pick<AgentRow, 'status' | 'statusChangedAt'>
+type SettledStatus = Pick<AgentRow, 'status' | 'statusChangedAt'>
 
 export const StateChangeSeq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 

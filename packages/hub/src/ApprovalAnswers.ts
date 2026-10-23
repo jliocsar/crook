@@ -31,7 +31,7 @@ const isWorthRetrying = (failure: CommandFailure) =>
     Match.orElse(() => false),
   )
 
-const answerOf = (state: HarkApprovalState): Option.Option<AskAnswer> =>
+const answerOf = (state: WaitedApproval): Option.Option<AskAnswer> =>
   Match.value(state).pipe(
     Match.when('approved', () => Option.some<AskAnswer>(new Approve())),
     Match.when('denied', () => Option.some<AskAnswer>(new Decline({ message: Option.none() }))),
@@ -105,10 +105,6 @@ export const makeApprovalAnswers = Effect.gen(function* () {
     const state = yield* pollApproval(approval).pipe(
       Effect.repeat({ while: (waited) => waited === 'pending' }),
     )
-
-    if (state === 'abandoned') {
-      return
-    }
 
     yield* Option.match(Option.all({ answer: answerOf(state), ask: approval.ask }), {
       onNone: () => Effect.void,

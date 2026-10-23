@@ -19,14 +19,8 @@ interface RankedAgent {
   readonly tier: PriorityTier
 }
 
-export const PriorityTier = Schema.Literals([
-  'blocked',
-  'unseenDone',
-  'working',
-  'settled',
-  'unknown',
-])
-export type PriorityTier = typeof PriorityTier.Type
+const PriorityTier = Schema.Literals(['blocked', 'unseenDone', 'working', 'settled', 'unknown'])
+type PriorityTier = typeof PriorityTier.Type
 
 const NEEDS_YOU_TIERS: readonly PriorityTier[] = ['blocked', 'unseenDone']
 
@@ -68,7 +62,7 @@ export const isSeen = (machine: HerdMachine) => paneIn(machine.seen)
 
 export const isPinned = (machine: HerdMachine) => paneIn(machine.pinned)
 
-export const priorityTier = (machine: HerdMachine) => {
+const priorityTier = (machine: HerdMachine) => {
   const seen = isSeen(machine)
 
   return (row: AgentRow): PriorityTier =>

@@ -1,3 +1,4 @@
+import type * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
@@ -6,6 +7,8 @@ import * as Match from 'effect/Match'
 import * as Stream from 'effect/Stream'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
+import type * as Rpc from 'effect/rpc/Rpc'
+import type * as RpcGroup from 'effect/rpc/RpcGroup'
 import * as RpcSerialization from 'effect/rpc/RpcSerialization'
 import * as RpcServer from 'effect/rpc/RpcServer'
 import type { SqlError } from 'effect/sql/SqlError'
@@ -20,8 +23,8 @@ import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
 import { HarkClient } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import * as HerdActivity from '@crook/hub/HerdActivity'
+import { HerdStore } from '@crook/hub/HerdStore'
 import { NotificationStore } from '@crook/hub/NotificationStore'
-import { SeenTracker } from '@crook/hub/SeenTracker'
 import * as StaticWeb from '@crook/hub/StaticWeb'
 import { Herd } from '@crook/hub/Herd'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
@@ -58,76 +61,85 @@ const routes = Effect.gen(function* () {
       }),
     )
 
-  const serveClientAs = (actor: string) =>
-    ClientApi.toHandlers({
-      WatchHerd: () => herdUpdates(herd.view),
-      ForgetMachine: ({ machine }) =>
-        herd.forget(machine).pipe(
-          Effect.catchTag('SqlError', storageFailureToWire),
-          audit.audited({
-            actor,
-            machine,
-            idempotencyKey: Option.none(),
-            operation: 'ForgetMachine',
-            arguments: {},
-          }),
-        ),
-      MarkSeen: ({ machine, pane }) =>
-        herd.markSeen(machine, pane).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
-      SetPinned: ({ machine, pane, pinned }) =>
-        herd.setPinned(machine, pane, pinned).pipe(
-          Effect.catchTag('SqlError', storageFailureToWire),
-          audit.audited({
-            actor,
-            machine,
-            idempotencyKey: Option.none(),
-            operation: 'SetPinned',
-            arguments: { pane, pinned },
-          }),
-        ),
-      SendCommand: ({ machine, key, command }) =>
-        router.send(machine, key, command).pipe(
-          audit.audited({
-            actor,
-            machine,
-            idempotencyKey: Option.some(key),
-            ...commandAudit(command),
-          }),
-        ),
-      WatchTranscript: ({ machine, source, from, tail }) =>
-        Stream.unwrap(
-          Effect.as(
-            admitTranscript(machine, source),
-            transcripts.watch(machine, source, from, tail),
-          ),
-        ),
-      WatchNotificationSettings: () => notifier.settings,
-      SetNotificationPref: ({ event, enabled }) =>
-        notifier.setPref(event, enabled).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
-      SendTestNotification: () => notifier.sendTest,
-      GetAccount: () => Effect.succeed(new HubAccount({ email: actor })),
-    }).pipe(
-      Effect.flatMap((handlers) =>
-        RpcServer.toHttpEffectWebsocket(ClientApi).pipe(Effect.flatten, Effect.provide(handlers)),
+  const serveGroup = <Rpcs extends Rpc.Any, Failure, Needs>(
+    group: RpcGroup.RpcGroup<Rpcs>,
+    logAnnotations: Record<string, string>,
+    handlers: Effect.Effect<Context.Context<Rpc.ToHandler<Rpcs>>, Failure, Needs>,
+  ) =>
+    handlers.pipe(
+      Effect.flatMap((context) =>
+        RpcServer.toHttpEffectWebsocket(group).pipe(Effect.flatten, Effect.provide(context)),
       ),
       Effect.provideService(RpcSerialization.RpcSerialization, serialization),
-      Effect.annotateLogs('actor', actor),
+      Effect.annotateLogs(logAnnotations),
+    )
+
+  const serveClientAs = (actor: string) =>
+    serveGroup(
+      ClientApi,
+      { actor },
+      ClientApi.toHandlers({
+        WatchHerd: () => herdUpdates(herd.view),
+        ForgetMachine: ({ machine }) =>
+          herd.forget(machine).pipe(
+            Effect.catchTag('SqlError', storageFailureToWire),
+            audit.audited({
+              actor,
+              machine,
+              idempotencyKey: Option.none(),
+              operation: 'ForgetMachine',
+              arguments: {},
+            }),
+          ),
+        MarkSeen: ({ machine, pane }) =>
+          herd.markSeen(machine, pane).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
+        SetPinned: ({ machine, pane, pinned }) =>
+          herd.setPinned(machine, pane, pinned).pipe(
+            Effect.catchTag('SqlError', storageFailureToWire),
+            audit.audited({
+              actor,
+              machine,
+              idempotencyKey: Option.none(),
+              operation: 'SetPinned',
+              arguments: { pane, pinned },
+            }),
+          ),
+        SendCommand: ({ machine, key, command }) =>
+          router.send(machine, key, command).pipe(
+            audit.audited({
+              actor,
+              machine,
+              idempotencyKey: Option.some(key),
+              ...commandAudit(command),
+            }),
+          ),
+        WatchTranscript: ({ machine, source, from, tail }) =>
+          Stream.unwrap(
+            Effect.as(
+              admitTranscript(machine, source),
+              transcripts.watch(machine, source, from, tail),
+            ),
+          ),
+        WatchNotificationSettings: () => notifier.settings,
+        SetNotificationPref: ({ event, enabled }) =>
+          notifier.setPref(event, enabled).pipe(Effect.catchTag('SqlError', storageFailureToWire)),
+        SendTestNotification: () => notifier.sendTest,
+        GetAccount: () => Effect.succeed(new HubAccount({ email: actor })),
+      }),
     )
 
   const serveAgentAs = (machine: MachineId) =>
-    AgentLink.toHandlers({
-      Attach: ({ hello }) =>
-        Stream.merge(Stream.fromEffectDrain(herd.hold(machine, hello)), router.attach(machine)),
-      PublishState: ({ state }) => herd.publish(machine, state),
-      CompleteCommand: ({ id, result }) => router.complete(machine, id, result),
-      TranscriptDemands: () => transcripts.demands(machine),
-      PublishTranscript: ({ watch, update }) => transcripts.publish(machine, watch, update),
-    }).pipe(
-      Effect.flatMap((handlers) =>
-        RpcServer.toHttpEffectWebsocket(AgentLink).pipe(Effect.flatten, Effect.provide(handlers)),
-      ),
-      Effect.provideService(RpcSerialization.RpcSerialization, serialization),
-      Effect.annotateLogs('machine', machine),
+    serveGroup(
+      AgentLink,
+      { machine },
+      AgentLink.toHandlers({
+        Attach: ({ hello }) =>
+          Stream.merge(Stream.fromEffectDrain(herd.hold(machine, hello)), router.attach(machine)),
+        PublishState: ({ state }) => herd.publish(machine, state),
+        CompleteCommand: ({ id, result }) => router.complete(machine, id, result),
+        TranscriptDemands: () => transcripts.demands(machine),
+        PublishTranscript: ({ watch, update }) => transcripts.publish(machine, watch, update),
+      }),
     )
 
   return [
@@ -147,7 +159,7 @@ const routes = Effect.gen(function* () {
 const notifications = Layer.provideMerge(
   HerdActivity.layerWithoutDependencies,
   HarkNotifier.layerWithoutDependencies,
-).pipe(Layer.provide([HarkClient.layer, NotificationStore.layer, SeenTracker.layer]))
+).pipe(Layer.provide([HarkClient.layer, NotificationStore.layer, HerdStore.layer]))
 
 const herdServices = Layer.mergeAll(Herd.layer, CommandRouter.layer, AuditTrail.layer)
 

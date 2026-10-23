@@ -20,7 +20,7 @@ import {
 import { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import { dieOnUnencodableRecord } from '@crook/hub/Database'
 
-export interface AuditRequest extends AuditedOperation {
+interface AuditRequest extends AuditedOperation {
   readonly actor: string
   readonly machine: MachineId
   readonly idempotencyKey: Option.Option<IdempotencyKey>

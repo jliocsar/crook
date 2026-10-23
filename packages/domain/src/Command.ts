@@ -10,8 +10,7 @@ import { AskId, PaneId } from '@crook/domain/Ids'
 
 const WITHOUT_CONTROL_CHARACTERS = /^\P{Cc}*$/u
 const WITHOUT_WHITESPACE_OR_CONTROL_CHARACTERS = /^[^\s\p{Cc}]+$/u
-
-export const INTERRUPT_KEY = 'esc'
+const INTERRUPT_KEY = 'esc'
 
 export const PaneLabel = Schema.Trimmed.check(
   Schema.isNonEmpty(),

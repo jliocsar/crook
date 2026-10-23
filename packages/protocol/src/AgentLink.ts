@@ -17,11 +17,12 @@ import {
   TranscriptWatchId,
 } from '@crook/protocol/Transcripts'
 
+const PROMPT_START_WINDOW = Duration.seconds(5)
+
 export const AGENT_PING_INTERVAL = Duration.seconds(5)
 export const AGENT_SOCKET_OPEN_TIMEOUT = Duration.seconds(10)
 export const COMMAND_TIMEOUT = AGENT_PING_INTERVAL
 export const AGENT_READY_TIMEOUT = Duration.seconds(30)
-export const PROMPT_START_WINDOW = Duration.seconds(5)
 export const HUB_RECONNECT_BASE = Duration.millis(77)
 export const RECONNECT_CAP = AGENT_PING_INTERVAL
 export const LAUNCH_HERDR_WAIT = Duration.sum(AGENT_READY_TIMEOUT, PROMPT_START_WINDOW)

@@ -7,7 +7,7 @@ const STATUS_FORBIDDEN = 403
 
 export const STATUS_NO_DEVICE_ACCEPTED = 502
 
-export const HARK_REQUIRED_SCOPES =
+const HARK_REQUIRED_SCOPES =
   'notifications:send, interactions:create, interactions:read and activities:write'
 
 const refusalHint = (status: number) =>

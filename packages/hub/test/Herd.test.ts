@@ -13,25 +13,16 @@ import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { findMachine } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
-import { HerdrLink } from '@crook/domain/HerdrLink'
-import {
-  HerdrConnectionId,
-  MachineId,
-  PaneId,
-  TabId,
-  TerminalId,
-  WorkspaceId,
-} from '@crook/domain/Ids'
-import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
+import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 import * as Database from '@crook/hub/Database'
 import { Herd, RECONNECT_GRACE, hubVersion } from '@crook/hub/Herd'
-import { MachineRegistry } from '@crook/hub/MachineRegistry'
-import { PinnedAgents } from '@crook/hub/PinnedAgents'
-import { SeenTracker } from '@crook/hub/SeenTracker'
+import { HerdStore } from '@crook/hub/HerdStore'
 import { Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
 
 import packageJson from '../package.json' with { type: 'json' }
+
+import { herdrLinkOf, machineStateWith } from './Fixtures'
 
 const IN_MEMORY = ':memory:'
 const LAPTOP = MachineId.make('laptop')
@@ -96,18 +87,7 @@ const stateOf = (
   version: number,
   agents: readonly AgentRow[] = [],
   connection = 1,
-) =>
-  new MachineState({
-    machine,
-    version: MachineStateVersion.make(version),
-    herdrVersion: '0.9.1',
-    herdr: new HerdrLink({ connection: HerdrConnectionId.make(connection), lostAt: Option.none() }),
-    workspaces: [],
-    tabs: [],
-    panes: [],
-    agents,
-    places: [],
-  })
+) => machineStateWith(machine, version, agents, { herdr: herdrLinkOf(connection) })
 
 const connectionOf = (view: HerdView, id: MachineId) =>
   Option.map(findMachine(view, id), (entry) => entry.machine.connection)
@@ -150,32 +130,31 @@ const storageRefused = new SqlError({
   reason: new UnknownError({ cause: DISK_FULL, message: DISK_FULL }),
 })
 
-const refusingRegistry = Layer.succeed(
-  MachineRegistry,
-  MachineRegistry.of({ all: Effect.succeed([]), save: () => Effect.fail(storageRefused) }),
-)
-
-const refusingStorage = Layer.mergeAll(
-  refusingRegistry,
-  Layer.succeed(
-    SeenTracker,
-    SeenTracker.of({
-      all: Effect.succeed([]),
-      mark: () => Effect.fail(storageRefused),
-      dropPanes: () => Effect.fail(storageRefused),
+const refusingMachineSaves = Layer.effect(
+  HerdStore,
+  Effect.map(HerdStore, (store) =>
+    HerdStore.of({
+      ...store,
+      saveMachine: () => Effect.fail(storageRefused),
     }),
   ),
-  Layer.succeed(
-    PinnedAgents,
-    PinnedAgents.of({
-      all: Effect.succeed([]),
-      pin: () => Effect.fail(storageRefused),
-      unpin: () => Effect.fail(storageRefused),
-    }),
-  ),
+).pipe(Layer.provide(HerdStore.layer))
+
+const refusingStorage = Layer.succeed(
+  HerdStore,
+  HerdStore.of({
+    machines: Effect.succeed([]),
+    saveMachine: () => Effect.fail(storageRefused),
+    seenMarks: Effect.succeed([]),
+    markSeen: () => Effect.fail(storageRefused),
+    dropSeenPanes: () => Effect.fail(storageRefused),
+    pins: Effect.succeed([]),
+    pin: () => Effect.fail(storageRefused),
+    unpin: () => Effect.fail(storageRefused),
+  }),
 )
 
-const withRefusingRegistry = <Success, Failure, Requirements>(
+const withRefusingMachineSaves = <Success, Failure, Requirements>(
   test: Effect.Effect<Success, Failure, Requirements>,
 ) =>
   Effect.scoped(
@@ -183,10 +162,7 @@ const withRefusingRegistry = <Success, Failure, Requirements>(
       Layer.build(
         Layer.provideMerge(
           Herd.layerWithoutDependencies,
-          Layer.provide(
-            Layer.mergeAll(refusingRegistry, SeenTracker.layer, PinnedAgents.layer),
-            Database.layerAt(IN_MEMORY),
-          ),
+          Layer.provide(refusingMachineSaves, Database.layerAt(IN_MEMORY)),
         ),
       ),
       (context) => Effect.provide(test, context),
@@ -532,9 +508,9 @@ it.effect(
         }),
       )
       const tracker = yield* Layer.build(
-        Layer.provide(SeenTracker.layer, Layer.succeedContext(hub.database)),
+        Layer.provide(HerdStore.layer, Layer.succeedContext(hub.database)),
       )
-      const stored = yield* Effect.flatMap(SeenTracker, (seenTracker) => seenTracker.all).pipe(
+      const stored = yield* Effect.flatMap(HerdStore, (store) => store.seenMarks).pipe(
         Effect.provide(tracker),
       )
 
@@ -600,9 +576,9 @@ it.effect('keeps seen across a hub restart and drops it once the pane is gone', 
       }),
     )
     const tracker = yield* Layer.build(
-      Layer.provide(SeenTracker.layer, Layer.succeedContext(hub.database)),
+      Layer.provide(HerdStore.layer, Layer.succeedContext(hub.database)),
     )
-    const stored = yield* Effect.flatMap(SeenTracker, (seenTracker) => seenTracker.all).pipe(
+    const stored = yield* Effect.flatMap(HerdStore, (store) => store.seenMarks).pipe(
       Effect.provide(tracker),
     )
 
@@ -637,18 +613,18 @@ it.effect('follows the agent link from memory when the database refuses its writ
 it.effect('deletes dropped seen marks even when storing the machine fails', () =>
   Effect.gen(function* () {
     const herd = yield* Herd
-    const seenTracker = yield* SeenTracker
+    const store = yield* HerdStore
 
     yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
     yield* herd.markSeen(LAPTOP, PANE)
-    const marked = yield* seenTracker.all
+    const marked = yield* store.seenMarks
 
     yield* herd.publish(LAPTOP, stateOf(LAPTOP, 2, [agentAt(PANE, 8)]))
-    const stored = yield* seenTracker.all
+    const stored = yield* store.seenMarks
 
     expect(marked.map((record) => record.pane)).toEqual([PANE])
     expect(stored).toEqual([])
-  }).pipe(withRefusingRegistry),
+  }).pipe(withRefusingMachineSaves),
 )
 
 it.effect('refuses forget and mark seen with nothing changed when the database refuses', () =>
