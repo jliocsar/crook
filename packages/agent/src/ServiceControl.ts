@@ -17,8 +17,8 @@ import {
   type Launchd,
   type ServiceTarget,
   launchdLoaded,
+  runStartCalls,
   servicePaths,
-  startCalls,
   stopLaunchdAgent,
 } from '@crook/agent/ServiceInstaller'
 import { ServiceManager, systemctl } from '@crook/agent/ServiceManager'
@@ -144,6 +144,19 @@ const installedDefinition = Effect.fn('ServiceControl.installedDefinition')(func
     : Result.fail(new ServiceAbsent({ definitionFile }))
 })
 
+const whenInstalled = <Success, Failure, Requirements>(
+  target: ServiceTarget,
+  onInstalled: (definitionFile: string) => Effect.Effect<Success, Failure, Requirements>,
+) =>
+  Effect.flatMap(
+    installedDefinition(target),
+    (installed): Effect.Effect<Result.Result<Success, ServiceAbsent>, Failure, Requirements> =>
+      Result.match(installed, {
+        onFailure: (absent) => Effect.succeed(Result.fail(absent)),
+        onSuccess: (definitionFile) => Effect.map(onInstalled(definitionFile), Result.succeed),
+      }),
+  )
+
 const systemdUnitState = Effect.fn('ServiceControl.systemdUnitState')(function* () {
   const manager = yield* ServiceManager
   const shown = yield* manager.run(
@@ -162,15 +175,13 @@ const launchdAgentState = Effect.fn('ServiceControl.launchdAgentState')(function
 export const serviceState = Effect.fn('ServiceControl.serviceState')(function* (
   target: ServiceTarget,
 ) {
-  const installed = yield* installedDefinition(target)
-
-  if (Result.isFailure(installed)) {
-    return installed.failure
-  }
-
-  return yield* Match.value(target).pipe(
-    Match.tagsExhaustive({ Systemd: () => systemdUnitState(), Launchd: launchdAgentState }),
+  const state = yield* whenInstalled(target, () =>
+    Match.value(target).pipe(
+      Match.tagsExhaustive({ Systemd: () => systemdUnitState(), Launchd: launchdAgentState }),
+    ),
   )
+
+  return Result.merge(state)
 })
 
 export const agentServiceStatus = Effect.fn('ServiceControl.agentServiceStatus')(function* (
@@ -196,14 +207,13 @@ const startLaunchdAgent = Effect.fn('ServiceControl.startLaunchdAgent')(function
   launchd: Launchd,
   definitionFile: string,
 ) {
-  const manager = yield* ServiceManager
   const loaded = yield* launchdLoaded(launchd)
 
   if (loaded) {
     return new ServiceAlreadyLoaded()
   }
 
-  yield* Effect.forEach(startCalls(launchd, definitionFile), manager.run, { discard: true })
+  yield* runStartCalls(launchd, definitionFile)
 
   return new ServiceStarted()
 })
@@ -211,18 +221,16 @@ const startLaunchdAgent = Effect.fn('ServiceControl.startLaunchdAgent')(function
 const startInstalledService = Effect.fn('ServiceControl.startInstalledService')(function* (
   target: ServiceTarget,
 ) {
-  const installed = yield* installedDefinition(target)
-
-  if (Result.isFailure(installed)) {
-    return installed.failure
-  }
-
-  return yield* Match.value(target).pipe(
-    Match.tagsExhaustive({
-      Systemd: () => startSystemdUnit(),
-      Launchd: (launchd) => startLaunchdAgent(launchd, installed.success),
-    }),
+  const outcome = yield* whenInstalled(target, (definitionFile) =>
+    Match.value(target).pipe(
+      Match.tagsExhaustive({
+        Systemd: () => startSystemdUnit(),
+        Launchd: (launchd) => startLaunchdAgent(launchd, definitionFile),
+      }),
+    ),
   )
+
+  return Result.merge(outcome)
 })
 
 export const startService = Effect.fn('ServiceControl.startService')(function* (
@@ -256,34 +264,43 @@ const restartLaunchdAgent = Effect.fn('ServiceControl.restartLaunchdAgent')(func
   launchd: Launchd,
   definitionFile: string,
 ) {
-  const manager = yield* ServiceManager
-
   yield* stopLaunchdAgent(launchd)
-  yield* Effect.forEach(startCalls(launchd, definitionFile), manager.run, { discard: true })
+  yield* runStartCalls(launchd, definitionFile)
 })
 
-export const restartService = Effect.fn('ServiceControl.restartService')(function* (
+const restartInstalledService = Effect.fn('ServiceControl.restartInstalledService')(function* (
+  socket: string,
   target: ServiceTarget,
+  definitionFile: string,
 ) {
-  const socket = yield* CrookStatusSocketPath
-  const installed = yield* installedDefinition(target)
-
-  if (Result.isFailure(installed)) {
-    return yield* new ServiceNotInstalled({ definitionFile: installed.failure.definitionFile })
-  }
-
   const previous = yield* Effect.option(askRunningAgent(socket))
 
   yield* Match.value(target).pipe(
     Match.tagsExhaustive({
       Systemd: () => restartSystemdUnit(),
-      Launchd: (launchd) => restartLaunchdAgent(launchd, installed.success),
+      Launchd: (launchd) => restartLaunchdAgent(launchd, definitionFile),
     }),
   )
 
   const answer: AgentAnswer = yield* Effect.result(awaitAgentOtherThan(socket, previous))
 
   return answer
+})
+
+export const restartService = Effect.fn('ServiceControl.restartService')(function* (
+  target: ServiceTarget,
+) {
+  const socket = yield* CrookStatusSocketPath
+  const restarted = yield* whenInstalled(target, (definitionFile) =>
+    restartInstalledService(socket, target, definitionFile),
+  )
+
+  return yield* Effect.fromResult(
+    Result.mapError(
+      restarted,
+      (absent) => new ServiceNotInstalled({ definitionFile: absent.definitionFile }),
+    ),
+  )
 })
 
 const serviceLine = (service: ServiceState) =>

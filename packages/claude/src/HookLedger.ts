@@ -10,6 +10,7 @@ import type {
   HookPayload,
   PermissionRequestPayload,
   PreToolUsePayload,
+  toolCallFields,
 } from '@crook/claude/HookPayload'
 import type { ClaudeSessionId } from '@crook/domain/Ids'
 
@@ -188,11 +189,7 @@ const resolveCalls = (
   )
 }
 
-const finishedCall = (payload: {
-  readonly tool_name: string
-  readonly tool_input: Schema.Json
-  readonly tool_use_id: string
-}): FinishedCall => ({
+const finishedCall = (payload: Schema.Struct.Type<typeof toolCallFields>): FinishedCall => ({
   toolName: payload.tool_name,
   toolInput: payload.tool_input,
   toolUseId: payload.tool_use_id,

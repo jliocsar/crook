@@ -6,7 +6,7 @@ import * as Str from 'effect/String'
 
 import { CrookVersion } from '@crook/domain/CrookVersion'
 
-export interface WorkspaceVersions {
+interface WorkspaceVersions {
   readonly agent: string
   readonly hub: string
 }
@@ -33,7 +33,7 @@ export class VersionMismatch extends Schema.TaggedError<VersionMismatch>()('Vers
   }
 }
 
-export const versionOfTag = (tag: string) =>
+const versionOfTag = (tag: string) =>
   Effect.fromOption(
     pipe(
       Option.liftPredicate(tag, Str.startsWith(TAG_PREFIX)),

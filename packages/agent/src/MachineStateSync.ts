@@ -21,6 +21,7 @@ import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import {
   type HerdReading,
+  type MachineStateContents,
   type ResolvedAgent,
   herdContents,
   herdrLostState,
@@ -32,6 +33,7 @@ import {
 import { PendingAsks } from '@crook/agent/PendingAsks'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
+import type { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import type { LifecycleEventKind, Subscription } from '@crook/herdr/Events'
@@ -109,13 +111,12 @@ const make = Effect.gen(function* () {
     Option.match(workingDirectoryOf(info), {
       onNone: () => Effect.succeedNone,
       onSome: (cwd) =>
-        gitBranches
-          .branchOf(cwd)
-          .pipe(
-            Effect.catchTag('GitMetadataUnreadable', (error) =>
-              Effect.as(Effect.logWarning(error.message), Option.none<string>()),
-            ),
+        gitBranches.checkoutOf(cwd).pipe(
+          Effect.map(Option.flatMap((checkout) => checkout.branch)),
+          Effect.catchTag('GitMetadataUnreadable', (error) =>
+            Effect.as(Effect.logWarning(error.message), Option.none<string>()),
           ),
+        ),
     })
 
   const sessionAndAskOf = (info: AgentInfo, mark: number) =>
@@ -153,15 +154,27 @@ const make = Effect.gen(function* () {
     } satisfies HerdReading
   })
 
+  const contentsOf = Effect.fn('MachineStateSync.contentsOf')(function* (
+    previousAgents: readonly AgentRow[],
+    connection: HerdrConnectionId,
+    reading: HerdReading,
+    observedAt: DateTime.Utc,
+    placesSince: DateTime.Utc,
+  ) {
+    const contents = herdContents(previousAgents, connection, reading, observedAt)
+    const places = yield* recentPlaces.observe(contents.agents, placesSince)
+
+    return { ...contents, places } satisfies MachineStateContents
+  })
+
   const firstConnection = yield* mintConnection
 
   const readInitial = Effect.fn('MachineStateSync.readInitial')(function* () {
     const reading = yield* read()
     const startedAt = yield* DateTime.now
-    const contents = herdContents([], firstConnection, reading, startedAt)
-    const places = yield* recentPlaces.observe(contents.agents, startedAt)
+    const contents = yield* contentsOf([], firstConnection, reading, startedAt, startedAt)
 
-    return { startedAt, initial: initialMachineState(machine, { ...contents, places }) }
+    return { startedAt, initial: initialMachineState(machine, contents) }
   })
 
   const { startedAt, initial } = yield* readInitial().pipe(
@@ -180,10 +193,15 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const reading = yield* read()
       const connection = yield* connectionAfter(previous)
-      const contents = herdContents(previous.agents, connection, reading, yield* DateTime.now)
-      const places = yield* recentPlaces.observe(contents.agents, startedAt)
+      const contents = yield* contentsOf(
+        previous.agents,
+        connection,
+        reading,
+        yield* DateTime.now,
+        startedAt,
+      )
 
-      return nextMachineState(previous, { ...contents, places })
+      return nextMachineState(previous, contents)
     }),
   )
 

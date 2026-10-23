@@ -61,6 +61,7 @@ const LINE_BREAK = '\n'
 const WRAPPED_LINE_JOIN = ' '
 const PATH_SEPARATOR = '/'
 const WHITESPACE = /\s+/gu
+const QUESTION_TOOL = 'AskUserQuestion'
 
 const ALWAYS_PREFIXES = [
   'Yes, and always allow',
@@ -74,8 +75,6 @@ const ALWAYS_PREFIXES = [
 ]
 
 const DIALOG_EXTRA_CHOICES = ['Type something.', 'Chat about this']
-
-export const QUESTION_TOOL = 'AskUserQuestion'
 
 const HEADER_TOOLS = new Map([
   ['Bash command', 'Bash'],
@@ -220,7 +219,7 @@ const askOfCall = (call: ToolCall, dialog: Option.Option<ScreenDialog>): Ask =>
     ? Option.getOrElse(questionAskOf(call, dialog), () => permissionAskOf(call, dialog))
     : permissionAskOf(call, dialog)
 
-export const toolOfHeader = (header: string): Option.Option<string> =>
+const toolOfHeader = (header: string): Option.Option<string> =>
   Option.fromUndefinedOr(HEADER_TOOLS.get(header))
 
 const withoutWhitespace = (text: string) => text.replace(WHITESPACE, '')

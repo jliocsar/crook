@@ -95,7 +95,10 @@ const make = Effect.gen(function* () {
   ) {
     const toolUse = Arr.isReadonlyArrayNonEmpty(pending)
       ? Option.none()
-      : yield* flatMapSome(transcriptToolUse)(Effect.succeed(session))
+      : yield* Option.match(session, {
+          onNone: () => Effect.succeedNone,
+          onSome: transcriptToolUse,
+        })
 
     return yield* withPatch(
       deriveAsk({

@@ -16,6 +16,21 @@ import { ServiceManager } from '@crook/agent/ServiceManager'
 
 import packageJson from '../package.json' with { type: 'json' }
 
+const serviceCommand = <Outcome, Failure, Requirements>(
+  name: string,
+  description: string,
+  action: (target: ServiceInstaller.ServiceTarget) => Effect.Effect<Outcome, Failure, Requirements>,
+  report: (outcome: Outcome) => string,
+) =>
+  Command.make(name, {}, () =>
+    Effect.gen(function* () {
+      const target = yield* ServiceInstaller.runningServiceTarget
+      const outcome = yield* action(target)
+
+      yield* Console.log(report(outcome))
+    }),
+  ).pipe(Command.withDescription(description))
+
 const hook = Command.make('hook', {}, () => forwardHook).pipe(
   Command.withDescription(
     'Forward the Claude hook payload on stdin to the running agent. Always exits 0 and prints nothing, so it can never answer for you or stall Claude.',
@@ -44,70 +59,40 @@ const run = Command.make('run', {}, () => Layer.launch(AgentDaemon.layer)).pipe(
   ),
 )
 
-const installService = Command.make('install-service', {}, () =>
-  Effect.gen(function* () {
-    const target = yield* ServiceInstaller.runningServiceTarget
-    const program = yield* runningProgram
-    const installed = yield* ServiceInstaller.installService(target, program)
-
-    yield* Console.log(ServiceInstaller.installReport(installed))
-  }),
-).pipe(
-  Command.withDescription(
-    'Write crook-agent.service as a systemd user unit (a launchd agent on macOS) that runs this program, enable it and start it. Reads CROOK_HUB_URL, CROOK_HUB_TOKEN and CROOK_MACHINE_ID from the environment into an owner-only settings file, and prints the Claude hooks block to merge yourself.',
-  ),
+const installService = serviceCommand(
+  'install-service',
+  'Write crook-agent.service as a systemd user unit (a launchd agent on macOS) that runs this program, enable it and start it. Reads CROOK_HUB_URL, CROOK_HUB_TOKEN and CROOK_MACHINE_ID from the environment into an owner-only settings file, and prints the Claude hooks block to merge yourself.',
+  (target) =>
+    Effect.flatMap(runningProgram, (program) => ServiceInstaller.installService(target, program)),
+  ServiceInstaller.installReport,
 )
 
-const uninstallService = Command.make('uninstall-service', {}, () =>
-  Effect.gen(function* () {
-    const target = yield* ServiceInstaller.runningServiceTarget
-    const uninstalled = yield* ServiceInstaller.uninstallService(target)
-
-    yield* Console.log(ServiceInstaller.uninstallReport(uninstalled))
-  }),
-).pipe(
-  Command.withDescription(
-    'Stop and disable the crook-agent service, and remove its unit and its settings file, hub token included.',
-  ),
+const uninstallService = serviceCommand(
+  'uninstall-service',
+  'Stop and disable the crook-agent service, and remove its unit and its settings file, hub token included.',
+  ServiceInstaller.uninstallService,
+  ServiceInstaller.uninstallReport,
 )
 
-const status = Command.make('status', {}, () =>
-  Effect.gen(function* () {
-    const target = yield* ServiceInstaller.runningServiceTarget
-    const current = yield* ServiceControl.agentServiceStatus(target)
-
-    yield* Console.log(ServiceControl.statusReport(current))
-  }),
-).pipe(
-  Command.withDescription(
-    "Show the service's state, the running agent's version and its link to the hub.",
-  ),
+const status = serviceCommand(
+  'status',
+  "Show the service's state, the running agent's version and its link to the hub.",
+  ServiceControl.agentServiceStatus,
+  ServiceControl.statusReport,
 )
 
-const start = Command.make('start', {}, () =>
-  Effect.gen(function* () {
-    const target = yield* ServiceInstaller.runningServiceTarget
-    const outcome = yield* ServiceControl.startService(target)
-
-    yield* Console.log(ServiceControl.startReport(outcome))
-  }),
-).pipe(
-  Command.withDescription(
-    'Start the installed crook-agent service, unless an agent already answers or no service is installed. The crook plugin for Herdr runs this when Herdr starts.',
-  ),
+const start = serviceCommand(
+  'start',
+  'Start the installed crook-agent service, unless an agent already answers or no service is installed. The crook plugin for Herdr runs this when Herdr starts.',
+  ServiceControl.startService,
+  ServiceControl.startReport,
 )
 
-const restart = Command.make('restart', {}, () =>
-  Effect.gen(function* () {
-    const target = yield* ServiceInstaller.runningServiceTarget
-    const answer = yield* ServiceControl.restartService(target)
-
-    yield* Console.log(ServiceControl.restartReport(answer))
-  }),
-).pipe(
-  Command.withDescription(
-    'Restart the installed crook-agent service, and wait until the new agent answers on the status socket.',
-  ),
+const restart = serviceCommand(
+  'restart',
+  'Restart the installed crook-agent service, and wait until the new agent answers on the status socket.',
+  ServiceControl.restartService,
+  ServiceControl.restartReport,
 )
 
 const crookAgent = Command.make('crook-agent').pipe(

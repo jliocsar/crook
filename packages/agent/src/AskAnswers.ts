@@ -55,7 +55,11 @@ const SLOWEST_MEASURED_UNBLOCK = Duration.millis(380)
 const isBlockedIn = (state: MachineState, pane: PaneId) =>
   Arr.some(state.agents, (agent) => agent.pane === pane && agent.status === 'blocked')
 
-const chosenLabel = (pane: PaneId, ask: Ask, chosen: Choose) =>
+const requireChoosable = (
+  pane: PaneId,
+  ask: Ask,
+  chosen: Choose,
+): Effect.Effect<void, AskOptionUnavailable | QuestionnaireUnsupported> =>
   Match.value(ask).pipe(
     Match.tag('QuestionAsk', (question) =>
       question.questions.length === 1 && Option.contains(question.questions[0].multiSelect, false)
@@ -65,7 +69,7 @@ const chosenLabel = (pane: PaneId, ask: Ask, chosen: Choose) =>
               (choice) => choice.label === chosen.answer,
             ),
             () => new AskOptionUnavailable({ pane, option: chosen.answer }),
-          ).pipe(Effect.map((choice) => choice.label))
+          )
         : Effect.fail(new QuestionnaireUnsupported({ pane })),
     ),
     Match.orElse(() => Effect.fail(new AskOptionUnavailable({ pane, option: chosen.answer }))),
@@ -114,10 +118,14 @@ const make = Effect.gen(function* () {
         : Effect.void,
     )
 
-  const refreshWhileBlocked = (pane: PaneId) =>
+  const unblocked = (pane: PaneId) =>
     sync.changes.pipe(
       Stream.filter((state) => !isBlockedIn(state, pane)),
       Stream.runHead,
+    )
+
+  const refreshWhileBlocked = (pane: PaneId) =>
+    unblocked(pane).pipe(
       Effect.timeoutOrElse({
         duration: SLOWEST_MEASURED_UNBLOCK,
         orElse: () => Effect.as(sync.invalidate, Option.none()),
@@ -185,11 +193,9 @@ const make = Effect.gen(function* () {
       row.ask,
       () => new AskNotPending({ pane: given.pane, ask: given.ask }),
     )
-    const chosen = yield* Match.value(given.answer).pipe(
-      Match.tag('Choose', (choose) =>
-        Effect.map(chosenLabel(given.pane, ask, choose), Option.some),
-      ),
-      Match.orElse(() => Effect.succeed(Option.none<string>())),
+    yield* Match.value(given.answer).pipe(
+      Match.tag('Choose', (choose) => requireChoosable(given.pane, ask, choose)),
+      Match.orElse(() => Effect.void),
     )
     const dialog = yield* shownDialog(given, ask)
 
@@ -199,8 +205,11 @@ const make = Effect.gen(function* () {
         ApproveAlways: () => selectChoice(given.pane, dialog, 'always'),
         Decline: () => pressKeys(given.pane, [DECLINE_KEY]),
         Choose: (choose) =>
-          selectOption(given.pane, dialog, choose.answer, (option) =>
-            Option.contains(chosen, option.label),
+          selectOption(
+            given.pane,
+            dialog,
+            choose.answer,
+            (option) => option.label === choose.answer,
           ),
       }),
     )
@@ -214,9 +223,7 @@ const make = Effect.gen(function* () {
     budget: Duration.Duration,
   ) {
     const undelivered = (reason: string) => new DeclineMessageUndelivered({ pane, reason })
-    const [waited] = yield* sync.changes.pipe(
-      Stream.filter((state) => !isBlockedIn(state, pane)),
-      Stream.runHead,
+    const [waited] = yield* unblocked(pane).pipe(
       Effect.timeoutOrElse({
         duration: budget,
         orElse: () => Effect.fail(undelivered('the agent still looked blocked after Esc')),

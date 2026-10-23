@@ -58,7 +58,10 @@ const make = Effect.gen(function* () {
     )
   }
 
-  return FileWatch.of({ watchReady, awaitPath })
+  const watchWhenPresent = (target: string): Stream.Stream<Option.Option<string>, PlatformError> =>
+    Stream.unwrap(awaitPath(target).pipe(Effect.as(watchReady(target))))
+
+  return FileWatch.of({ watchReady, awaitPath, watchWhenPresent })
 })
 
 export class FileWatch extends Context.Service<
@@ -66,6 +69,9 @@ export class FileWatch extends Context.Service<
   {
     readonly watchReady: (target: string) => Stream.Stream<Option.Option<string>, PlatformError>
     readonly awaitPath: (target: string) => Effect.Effect<void, PlatformError>
+    readonly watchWhenPresent: (
+      target: string,
+    ) => Stream.Stream<Option.Option<string>, PlatformError>
   }
 >()('@crook/claude/FileWatch') {
   static readonly layer = Layer.effect(this, make)

@@ -8,10 +8,9 @@ import * as Stream from 'effect/Stream'
 import { CrookHookSocketPath } from '@crook/agent/HookInbox'
 
 const SLOWEST_MEASURED_DELIVERY = Duration.millis(15.139)
+const HOOK_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_DELIVERY, 10)
 
-export const HOOK_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_DELIVERY, 10)
-
-export const deliverHook = Effect.fn('HookForwarder.deliverHook')(function* (
+const deliverHook = Effect.fn('HookForwarder.deliverHook')(function* (
   path: string,
   payload: readonly Uint8Array[],
 ) {

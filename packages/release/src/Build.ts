@@ -43,6 +43,9 @@ export class CompileFailed extends Schema.TaggedError<CompileFailed>()('CompileF
 
 const webBuildOf = (workspace: Workspace) => `${workspace.root}/packages/web/${WEB_BUILD_DIRECTORY}`
 
+const outfileOf = (artifact: Artifact, workspace: Workspace) =>
+  `${workspace.output}/${artifactName(artifact)}`
+
 const embeddedAssets = (artifact: Artifact, workspace: Workspace): readonly string[] =>
   Match.value(artifact.app).pipe(
     Match.when('hub', () => [`--asset=${webBuildOf(workspace)}`]),
@@ -56,7 +59,7 @@ export const compileArguments = (artifact: Artifact, workspace: Workspace): read
   '--no-compile-autoload-dotenv',
   '--no-compile-autoload-bunfig',
   `--target=${bunCompileTarget(artifact.target)}`,
-  `--outfile=${workspace.output}/${artifactName(artifact)}`,
+  `--outfile=${outfileOf(artifact, workspace)}`,
   ...embeddedAssets(artifact, workspace),
   `${workspace.root}/packages/${artifact.app}/src/main.ts`,
 ]
@@ -68,42 +71,34 @@ export const thisWorkspace = Effect.gen(function* () {
   return { root, output: path.join(root, OUTPUT_DIRECTORY) }
 })
 
-const exitCodeOf = Effect.fn('Build.exitCodeOf')(function* (command: ChildProcess.Command) {
+const runBun = Effect.fn('Build.runBun')(function* <Failure>(
+  args: readonly string[],
+  cwd: string,
+  onFailure: (exitCode: number) => Failure,
+) {
   const spawner = yield* ChildProcessSpawner
 
-  return yield* spawner.exitCode(command)
+  return yield* spawner
+    .exitCode(ChildProcess.make('bun', args, { cwd, stdout: 'inherit', stderr: 'inherit' }))
+    .pipe(Effect.filterOrFail((exitCode) => exitCode === SUCCESS, onFailure))
 })
 
 const buildWeb = (workspace: Workspace) =>
-  exitCodeOf(
-    ChildProcess.make('bun', ['run', 'build'], {
-      cwd: `${workspace.root}/packages/web`,
-      stdout: 'inherit',
-      stderr: 'inherit',
-    }),
-  ).pipe(
-    Effect.filterOrFail(
-      (exitCode) => exitCode === SUCCESS,
-      (exitCode) => new WebBuildFailed({ exitCode }),
-    ),
+  runBun(
+    ['run', 'build'],
+    `${workspace.root}/packages/web`,
+    (exitCode) => new WebBuildFailed({ exitCode }),
   )
 
 const compile = Effect.fn('Build.compile')(function* (artifact: Artifact, workspace: Workspace) {
   const fileSystem = yield* FileSystem.FileSystem
-  const outfile = `${workspace.output}/${artifactName(artifact)}`
+  const outfile = outfileOf(artifact, workspace)
 
   yield* fileSystem.remove(outfile, { force: true })
-  yield* exitCodeOf(
-    ChildProcess.make('bun', compileArguments(artifact, workspace), {
-      cwd: workspace.root,
-      stdout: 'inherit',
-      stderr: 'inherit',
-    }),
-  ).pipe(
-    Effect.filterOrFail(
-      (exitCode) => exitCode === SUCCESS,
-      (exitCode) => new CompileFailed({ artifact: artifactName(artifact), exitCode }),
-    ),
+  yield* runBun(
+    compileArguments(artifact, workspace),
+    workspace.root,
+    (exitCode) => new CompileFailed({ artifact: artifactName(artifact), exitCode }),
   )
   yield* Effect.logInfo(`Built ${outfile}`)
 })

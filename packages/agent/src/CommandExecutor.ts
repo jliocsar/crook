@@ -28,7 +28,11 @@ import {
   targetPane,
 } from '@crook/domain/Command'
 import type { IdempotencyKey } from '@crook/domain/Ids'
-import { HerdrClient } from '@crook/herdr/HerdrClient'
+import {
+  HerdrClient,
+  type HerdrPaneBusy,
+  type HerdrRequestRejected,
+} from '@crook/herdr/HerdrClient'
 import {
   AgentPromptMethod,
   AgentSendKeysMethod,
@@ -53,8 +57,8 @@ interface Execution {
 type DeliveryOutcome = Result.Result<CommandReceipt, CommandDeliveryUnknown>
 
 const SLOWEST_MEASURED_PROMPT = Duration.millis(403)
+const COMMAND_REPLAY_CAPACITY = 1024
 
-export const COMMAND_REPLAY_CAPACITY = 1024
 export const HERDR_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_PROMPT, 10)
 export const LAUNCH_DELIVERY_TIMEOUT = Duration.sum(LAUNCH_HERDR_WAIT, HERDR_DELIVERY_TIMEOUT)
 
@@ -64,9 +68,9 @@ const answerOf = (command: PaneCommand) =>
     Match.orElse(() => Option.none<AnswerAsk>()),
   )
 
-const declineMessageOf = (command: PaneCommand) =>
-  Option.flatMap(answerOf(command), (answer) =>
-    Match.value(answer.answer).pipe(
+const declineMessageOf = (answer: Option.Option<AnswerAsk>) =>
+  Option.flatMap(answer, (found) =>
+    Match.value(found.answer).pipe(
       Match.tag('Decline', (decline) => decline.message),
       Match.orElse(() => Option.none<string>()),
     ),
@@ -79,6 +83,9 @@ const inputDelivered = (row: AgentRow): CommandReceipt =>
     stateChangeSeq: row.stateChangeSeq,
   })
 
+const refusedCommand = (refused: HerdrPaneBusy | HerdrRequestRejected) =>
+  Effect.fail(new HerdrRefusedCommand({ code: refused.code, detail: refused.detail }))
+
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
   const policy = yield* CommandPolicy
@@ -90,13 +97,14 @@ const make = Effect.gen(function* () {
 
   const afterDelivery = (
     command: PaneCommand,
+    answer: Option.Option<AnswerAsk>,
     outcome: DeliveryOutcome,
     budget: Duration.Duration,
   ): Effect.Effect<
     Result.Result<CommandReceipt, CommandDeliveryUnknown | DeclineMessageUndelivered>
   > =>
     Option.match(
-      Option.filter(declineMessageOf(command), () => Result.isSuccess(outcome)),
+      Option.filter(declineMessageOf(answer), () => Result.isSuccess(outcome)),
       {
         onNone: () => Effect.succeed(outcome),
         onSome: (text) =>
@@ -187,31 +195,33 @@ const make = Effect.gen(function* () {
         HerdrUnreachable: () => Effect.fail(new HerdrUnavailable()),
         HerdrPaneNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
         HerdrAgentNotFound: () => Effect.fail(new PaneNotAgent({ pane: row.pane })),
-        HerdrPaneBusy: (busy) =>
-          Effect.fail(new HerdrRefusedCommand({ code: 'agent_pane_busy', detail: busy.detail })),
-        HerdrRequestRejected: (rejected) =>
-          Effect.fail(new HerdrRefusedCommand({ code: rejected.code, detail: rejected.detail })),
+        HerdrPaneBusy: refusedCommand,
+        HerdrRequestRejected: refusedCommand,
         HerdrRequestInvalid: (invalid) => Effect.die(invalid),
       }),
     )
 
-  const runAdmitted = Effect.fn('CommandExecutor.runAdmitted')(function* (command: PaneCommand) {
+  const runAdmitted = Effect.fn('CommandExecutor.runAdmitted')(function* (
+    command: PaneCommand,
+    answer: Option.Option<AnswerAsk>,
+  ) {
     const row = yield* policy.admit(command)
 
-    yield* Option.match(answerOf(command), {
+    yield* Option.match(answer, {
       onNone: () => Effect.void,
-      onSome: (answer) => answers.refuseAnswered(answer, row),
+      onSome: (found) => answers.refuseAnswered(found, row),
     })
 
     const [spent, outcome] = yield* Effect.timed(delivered(command, row))
 
-    yield* Option.match(answerOf(command), {
+    yield* Option.match(answer, {
       onNone: () => Effect.void,
-      onSome: (answer) => answers.remember(answer, row),
+      onSome: (found) => answers.remember(found, row),
     })
 
     return yield* afterDelivery(
       command,
+      answer,
       outcome,
       Duration.max(Duration.subtract(HERDR_DELIVERY_TIMEOUT, spent), Duration.zero),
     ).pipe(
@@ -222,9 +232,11 @@ const make = Effect.gen(function* () {
   })
 
   const runOnPane = Effect.fn('CommandExecutor.runOnPane')(function* (command: PaneCommand) {
-    return yield* Option.match(answerOf(command), {
-      onNone: () => runAdmitted(command),
-      onSome: (answer) => answers.exclusive(answer.pane, runAdmitted(command)),
+    const answer = answerOf(command)
+
+    return yield* Option.match(answer, {
+      onNone: () => runAdmitted(command, answer),
+      onSome: (found) => answers.exclusive(found.pane, runAdmitted(command, answer)),
     })
   })
 

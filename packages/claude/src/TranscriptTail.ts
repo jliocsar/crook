@@ -19,13 +19,14 @@ import {
   TranscriptChunk,
   type TranscriptTailBytes,
 } from '@crook/domain/Transcript'
+import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 interface TailState {
   readonly consumed: number
   readonly pending: Uint8Array
 }
 
-export interface CompleteLine {
+interface CompleteLine {
   readonly offset: number
   readonly bytes: Uint8Array
 }
@@ -87,7 +88,7 @@ const joined = (left: Uint8Array, right: Uint8Array) => {
   return both
 }
 
-export const completeLines = (complete: Uint8Array, start: number): readonly CompleteLine[] =>
+const completeLines = (complete: Uint8Array, start: number): readonly CompleteLine[] =>
   Arr.unfold(0, (from) =>
     Option.map(
       Option.liftPredicate(complete.indexOf(NEWLINE, from), (end) => end >= 0),
@@ -95,15 +96,32 @@ export const completeLines = (complete: Uint8Array, start: number): readonly Com
     ),
   )
 
+export const messagesIn = (complete: Uint8Array, start: number): readonly TranscriptMessage[] =>
+  Arr.flatMap(completeLines(complete, start), (line) =>
+    parseLine(line.bytes, TranscriptOffset.make(line.offset)),
+  )
+
 const chunkOf = (session: ClaudeSessionId, start: number, complete: Uint8Array): TranscriptChunk =>
   new TranscriptChunk({
     session,
     offset: TranscriptOffset.make(start),
     nextOffset: TranscriptOffset.make(start + complete.length),
-    messages: Arr.flatMap(completeLines(complete, start), (line) =>
-      parseLine(line.bytes, TranscriptOffset.make(line.offset)),
-    ),
+    messages: messagesIn(complete, start),
   })
+
+const unreadableFile = (file: TranscriptFile) => (cause: PlatformError) =>
+  new TranscriptUnreadable({ path: file.path, cause })
+
+export const openWithSize = Effect.fn('TranscriptTail.openWithSize')(function* (
+  fileSystem: FileSystem.FileSystem,
+  file: TranscriptFile,
+) {
+  const unreadable = unreadableFile(file)
+  const handle = yield* fileSystem.open(file.path, { flag: 'r' }).pipe(Effect.mapError(unreadable))
+  const info = yield* handle.stat.pipe(Effect.mapError(unreadable))
+
+  return { handle, size: Number(info.size) }
+})
 
 const afterRead = (
   state: TailState,
@@ -152,25 +170,12 @@ const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const fileWatch = yield* FileWatch
 
-  const unreadableFile = (file: TranscriptFile) => (cause: PlatformError) =>
-    new TranscriptUnreadable({ path: file.path, cause })
-
-  const openWithSize = Effect.fn('TranscriptTail.openWithSize')(function* (file: TranscriptFile) {
-    const unreadable = unreadableFile(file)
-    const handle = yield* fileSystem
-      .open(file.path, { flag: 'r' })
-      .pipe(Effect.mapError(unreadable))
-    const info = yield* handle.stat.pipe(Effect.mapError(unreadable))
-
-    return { handle, size: Number(info.size) }
-  })
-
   const open = Effect.fn('TranscriptTail.open')(function* (
     file: TranscriptFile,
     from: TranscriptOffset,
   ) {
     const unreadable = unreadableFile(file)
-    const { handle, size: sizeAtOpen } = yield* openWithSize(file)
+    const { handle, size: sizeAtOpen } = yield* openWithSize(fileSystem, file)
 
     if (from > sizeAtOpen) {
       return yield* new TranscriptOffsetBeyondEnd({
@@ -274,7 +279,7 @@ const make = Effect.gen(function* () {
     file: TranscriptFile,
     bytes: TranscriptTailBytes,
   ) {
-    const { handle, size } = yield* openWithSize(file)
+    const { handle, size } = yield* openWithSize(fileSystem, file)
     const start =
       size <= bytes
         ? 0

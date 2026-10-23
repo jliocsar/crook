@@ -1,5 +1,6 @@
 import * as Schema from 'effect/Schema'
 
+import { Subscription } from '@crook/herdr/Events'
 import {
   AgentInfo,
   AgentStatus,
@@ -17,14 +18,14 @@ export interface HerdrMethod<Params, Result> {
   readonly result: Schema.Codec<Result, unknown>
 }
 
-export const makeMethod = <Params, Result>(
+const makeMethod = <Params, Result>(
   name: string,
   schemas: Omit<HerdrMethod<Params, Result>, 'name'>,
 ): HerdrMethod<Params, Result> => ({ name, ...schemas })
 
-export const EmptyParams = Schema.Struct({})
+const EmptyParams = Schema.Struct({})
 
-export const PaneEnvironment = Schema.Record(Schema.String, Schema.String)
+const PaneEnvironment = Schema.Record(Schema.String, Schema.String)
 
 export const Ping = makeMethod('ping', {
   params: EmptyParams,
@@ -59,13 +60,7 @@ export const PaneCloseMethod = makeMethod('pane.close', {
   result: Schema.Struct({ type: Schema.Literal('ok') }),
 })
 
-export const PaneReadSource = Schema.Literals([
-  'visible',
-  'recent',
-  'recent_unwrapped',
-  'detection',
-])
-export type PaneReadSource = typeof PaneReadSource.Type
+const PaneReadSource = Schema.Literals(['visible', 'recent', 'recent_unwrapped', 'detection'])
 
 export const PaneReadMethod = makeMethod('pane.read', {
   params: Schema.Struct({ pane_id: Schema.String, source: PaneReadSource }),
@@ -150,4 +145,9 @@ export const SessionSnapshotMethod = makeMethod('session.snapshot', {
     type: Schema.Literal('session_snapshot'),
     snapshot: SessionSnapshot,
   }),
+})
+
+export const EventsSubscribeMethod = makeMethod('events.subscribe', {
+  params: Schema.Struct({ subscriptions: Schema.Array(Subscription) }),
+  result: Schema.Struct({ type: Schema.Literal('subscription_started') }),
 })

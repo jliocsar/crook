@@ -27,7 +27,7 @@ const checkout = Effect.fn('checkout')(function* (head: string) {
 const branchOf = Effect.fn('branchOf')(function* (cwd: string) {
   const gitBranches = yield* GitBranches
 
-  return yield* gitBranches.branchOf(cwd)
+  return Option.flatMap(yield* gitBranches.checkoutOf(cwd), (found) => found.branch)
 })
 
 const services = Layer.mergeAll(BunFileSystem.layer, Path.layer)

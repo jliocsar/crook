@@ -46,7 +46,7 @@ export class TranscriptDirectoryUnreadable extends Schema.TaggedError<Transcript
   }
 }
 
-export const sessionDirectoryOf = (path: Path.Path, file: TranscriptFile) =>
+const sessionDirectoryOf = (path: Path.Path, file: TranscriptFile) =>
   path.join(path.dirname(file.path), path.basename(file.path, TRANSCRIPT_EXTENSION))
 
 export const subagentsDirectoryOf = (path: Path.Path, file: TranscriptFile) =>
@@ -124,23 +124,14 @@ const make = (roots: readonly string[]) =>
     const rootTriggers = (root: string, session: ClaudeSessionId) => {
       const projects = path.join(root, PROJECTS_DIRECTORY)
 
-      return Stream.unwrap(
-        watch.awaitPath(projects).pipe(
-          Effect.mapError(unreadable(projects)),
-          Effect.as(
-            watch.watchReady(projects).pipe(
-              Stream.mapError(unreadable(projects)),
-              Stream.switchMap(() =>
-                Stream.unwrap(
-                  Effect.map(projectDirectories(root), (directories) =>
-                    Stream.mergeAll(
-                      Arr.map(directories, (directory) =>
-                        watchProjectDirectory(directory, session),
-                      ),
-                      { concurrency: 'unbounded' },
-                    ),
-                  ),
-                ),
+      return watch.watchWhenPresent(projects).pipe(
+        Stream.mapError(unreadable(projects)),
+        Stream.switchMap(() =>
+          Stream.unwrap(
+            Effect.map(projectDirectories(root), (directories) =>
+              Stream.mergeAll(
+                Arr.map(directories, (directory) => watchProjectDirectory(directory, session)),
+                { concurrency: 'unbounded' },
               ),
             ),
           ),

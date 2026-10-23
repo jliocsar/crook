@@ -16,8 +16,12 @@ import type * as Scope from 'effect/Scope'
 import * as Socket from 'effect/socket/Socket'
 import * as Stream from 'effect/Stream'
 
-import { HerdrEvent, Subscription } from '@crook/herdr/Events'
-import { type HerdrMethod, SessionSnapshotMethod } from '@crook/herdr/Methods'
+import { HerdrEvent, type Subscription } from '@crook/herdr/Events'
+import {
+  EventsSubscribeMethod,
+  type HerdrMethod,
+  SessionSnapshotMethod,
+} from '@crook/herdr/Methods'
 import type { SessionSnapshot } from '@crook/herdr/Records'
 
 export type HerdrRequestError =
@@ -38,10 +42,7 @@ export interface ScriptedResponse {
   readonly line: string
 }
 
-export interface SentRequest {
-  readonly method: string
-  readonly line: string
-}
+export type SentRequest = ScriptedResponse
 
 export interface TestScript {
   readonly responses: readonly ScriptedResponse[]
@@ -54,7 +55,6 @@ export interface SwitchingTestClient {
   readonly respondWith: (responses: readonly ScriptedResponse[]) => Effect.Effect<void>
 }
 
-const SUBSCRIBE_METHOD = 'events.subscribe'
 const EVENTS_LOST_CODE = 'events_lost'
 const PANE_NOT_FOUND_CODE = 'pane_not_found'
 const AGENT_NOT_FOUND_CODE = 'agent_not_found'
@@ -101,6 +101,10 @@ export class HerdrPaneNotFound extends Schema.TaggedError<HerdrPaneNotFound>()(
   'HerdrPaneNotFound',
   { method: Schema.String, detail: Schema.String },
 ) {
+  get code(): string {
+    return PANE_NOT_FOUND_CODE
+  }
+
   override get message(): string {
     return `Herdr reported pane_not_found for ${this.method}: ${this.detail}. The pane most likely closed in the meantime: re-read state with session.snapshot.`
   }
@@ -110,6 +114,10 @@ export class HerdrAgentNotFound extends Schema.TaggedError<HerdrAgentNotFound>()
   'HerdrAgentNotFound',
   { method: Schema.String, detail: Schema.String },
 ) {
+  get code(): string {
+    return AGENT_NOT_FOUND_CODE
+  }
+
   override get message(): string {
     return `Herdr reported agent_not_found for ${this.method}: ${this.detail}. The pane no longer hosts an agent herdr recognizes, most likely because the agent exited: re-read state with session.snapshot.`
   }
@@ -119,6 +127,10 @@ export class HerdrPaneBusy extends Schema.TaggedError<HerdrPaneBusy>()('HerdrPan
   method: Schema.String,
   detail: Schema.String,
 }) {
+  get code(): string {
+    return PANE_BUSY_CODE
+  }
+
   override get message(): string {
     return `Herdr reported agent_pane_busy for ${this.method}: ${this.detail}. The pane is not at an interactive shell yet, most likely because it was created a moment ago: try again shortly.`
   }
@@ -128,6 +140,10 @@ export class HerdrPromptStalled extends Schema.TaggedError<HerdrPromptStalled>()
   'HerdrPromptStalled',
   { method: Schema.String, detail: Schema.String },
 ) {
+  get code(): string {
+    return PROMPT_STALLED_CODE
+  }
+
   override get message(): string {
     return `Herdr reported agent_prompt_stalled for ${this.method}: ${this.detail}. Herdr typed the prompt and pressed Enter, but the agent did not start working within herdr's 5 s window: look at the agent before sending it again, since it has the text already.`
   }
@@ -148,26 +164,18 @@ export class HerdrEventsLost extends Schema.TaggedError<HerdrEventsLost>()('Herd
   }
 }
 
-export class HerdrErrorResponse extends Schema.Class<HerdrErrorResponse>('HerdrErrorResponse')({
+class HerdrErrorResponse extends Schema.Class<HerdrErrorResponse>('HerdrErrorResponse')({
   id: Schema.String,
   error: Schema.Struct({ code: Schema.String, message: Schema.String }),
 }) {}
 
-export class SubscriptionStarted extends Schema.Class<SubscriptionStarted>('SubscriptionStarted')({
+class SubscriptionStarted extends Schema.Class<SubscriptionStarted>('SubscriptionStarted')({
   id: Schema.String,
   result: Schema.Struct({ type: Schema.Literal('subscription_started') }),
 }) {}
 
 const SubscriptionLine = Schema.fromJsonString(
   Schema.Union([SubscriptionStarted, HerdrErrorResponse, HerdrEvent]),
-)
-
-const SubscribeRequestLine = Schema.fromJsonString(
-  Schema.Struct({
-    id: Schema.String,
-    method: Schema.Literal(SUBSCRIBE_METHOD),
-    params: Schema.Struct({ subscriptions: Schema.Array(Subscription) }),
-  }),
 )
 
 const RequestLine = Schema.fromJsonString(
@@ -260,7 +268,17 @@ const exchange = (socketPath: string, method: string, line: string) =>
 const subscriptionFailure = (response: HerdrErrorResponse): HerdrSubscriptionError =>
   response.error.code === EVENTS_LOST_CODE
     ? new HerdrEventsLost()
-    : rejection(SUBSCRIBE_METHOD, response)
+    : rejection(EventsSubscribeMethod.name, response)
+
+const clientOf = (
+  request: HerdrClient['Service']['request'],
+  subscribe: HerdrClient['Service']['subscribe'],
+) =>
+  HerdrClient.of({
+    request,
+    snapshot: Effect.map(request(SessionSnapshotMethod, {}), (result) => result.snapshot),
+    subscribe,
+  })
 
 const makeLive = (socketPath: string) => {
   const request = Effect.fn('HerdrClient.request')(function* <Params, Result>(
@@ -280,15 +298,8 @@ const makeLive = (socketPath: string) => {
   const subscribe = Effect.fn('HerdrClient.subscribe')(function* (
     subscriptions: NonEmptyArray.NonEmptyReadonlyArray<Subscription>,
   ) {
-    const line = yield* Schema.encodeEffect(SubscribeRequestLine)({
-      id: SUBSCRIBE_METHOD,
-      method: SUBSCRIBE_METHOD,
-      params: { subscriptions },
-    }).pipe(
-      Effect.mapError(
-        (error) => new HerdrRequestInvalid({ method: SUBSCRIBE_METHOD, issue: error.message }),
-      ),
-    )
+    const method = EventsSubscribeMethod.name
+    const line = yield* encodeRequest(EventsSubscribeMethod, { subscriptions })
     const started = yield* Deferred.make<void, HerdrSubscriptionError>()
     const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
 
@@ -304,16 +315,14 @@ const makeLive = (socketPath: string) => {
       return Queue.offer(events, decoded)
     }
 
-    yield* exchange(socketPath, SUBSCRIBE_METHOD, line).pipe(
+    yield* exchange(socketPath, method, line).pipe(
       Stream.mapEffect((text) =>
         Schema.decodeEffect(SubscriptionLine)(text).pipe(
-          Effect.mapError(
-            (error) => new HerdrResponseInvalid({ method: SUBSCRIBE_METHOD, issue: error.message }),
-          ),
+          Effect.mapError((error) => new HerdrResponseInvalid({ method, issue: error.message })),
         ),
       ),
       Stream.runForEach(handleLine),
-      Effect.andThen(Effect.fail(new HerdrConnectionClosed({ method: SUBSCRIBE_METHOD }))),
+      Effect.andThen(Effect.fail(new HerdrConnectionClosed({ method }))),
       Effect.catch((error: HerdrSubscriptionError) =>
         Effect.andThen(Deferred.fail(started, error), Queue.fail(events, error)),
       ),
@@ -325,11 +334,7 @@ const makeLive = (socketPath: string) => {
     return Stream.fromQueue(events)
   })
 
-  return HerdrClient.of({
-    request,
-    snapshot: Effect.map(request(SessionSnapshotMethod, {}), (result) => result.snapshot),
-    subscribe,
-  })
+  return clientOf(request, subscribe)
 }
 
 const makeTest = (script: TestScript) =>
@@ -366,11 +371,7 @@ const makeTest = (script: TestScript) =>
       return yield* decodeResponse(method, scripted.value.line)
     })
 
-    return HerdrClient.of({
-      request,
-      snapshot: Effect.map(request(SessionSnapshotMethod, {}), (result) => result.snapshot),
-      subscribe: () => Effect.succeed(Stream.fromQueue(script.events)),
-    })
+    return clientOf(request, () => Effect.succeed(Stream.fromQueue(script.events)))
   })
 
 export const scriptedResult = <Result>(

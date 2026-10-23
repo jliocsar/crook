@@ -69,7 +69,7 @@ export class TranscriptDemandsEnded extends Schema.TaggedError<TranscriptDemands
 
 const sameSession = Option.makeEquivalence(Equivalence.strictEqual<ClaudeSessionId>())
 
-export const toWireFailure = (error: FollowError): TranscriptFailure =>
+const toWireFailure = (error: FollowError): TranscriptFailure =>
   Match.value(error).pipe(
     Match.tagsExhaustive({
       TranscriptSessionInvalid: (invalid) =>

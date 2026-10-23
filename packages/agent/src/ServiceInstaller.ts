@@ -184,7 +184,7 @@ export const runningServiceTarget = Effect.suspend(() =>
 
 const launchdDomain = (target: Launchd) => `gui/${target.userId}`
 
-export const launchdService = (target: Launchd) => `${launchdDomain(target)}/${LAUNCHD_LABEL}`
+const launchdService = (target: Launchd) => `${launchdDomain(target)}/${LAUNCHD_LABEL}`
 
 export const servicePaths = Effect.fn('ServiceInstaller.servicePaths')(function* (
   target: ServiceTarget,
@@ -269,8 +269,12 @@ const makeFiles = Effect.gen(function* () {
   return { write, present, remove, removeIfPresent }
 })
 
-export const startCalls = (target: ServiceTarget, definitionFile: string) =>
-  Match.value(target).pipe(
+export const runStartCalls = Effect.fn('ServiceInstaller.runStartCalls')(function* (
+  target: ServiceTarget,
+  definitionFile: string,
+) {
+  const manager = yield* ServiceManager
+  const calls = Match.value(target).pipe(
     Match.tagsExhaustive({
       Systemd: () => [
         systemctl('daemon-reload'),
@@ -283,6 +287,9 @@ export const startCalls = (target: ServiceTarget, definitionFile: string) =>
       ],
     }),
   )
+
+  yield* Effect.forEach(calls, manager.run, { discard: true })
+})
 
 export const launchdLoaded = Effect.fn('ServiceInstaller.launchdLoaded')(function* (
   launchd: Launchd,
@@ -318,7 +325,6 @@ export const installService = Effect.fn('ServiceInstaller.installService')(funct
   target: ServiceTarget,
   program: readonly string[],
 ) {
-  const manager = yield* ServiceManager
   const path = yield* Path.Path
   const files = yield* makeFiles
   const settings = yield* AgentSettings.pipe(
@@ -335,7 +341,7 @@ export const installService = Effect.fn('ServiceInstaller.installService')(funct
     Match.tagsExhaustive({ Systemd: () => Effect.void, Launchd: stopLaunchdAgent }),
   )
   yield* files.write(paths.definitionFile, definition)
-  yield* Effect.forEach(startCalls(target, paths.definitionFile), manager.run, { discard: true })
+  yield* runStartCalls(target, paths.definitionFile)
 
   return new InstalledService({
     target,

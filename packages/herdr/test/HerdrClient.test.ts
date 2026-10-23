@@ -146,6 +146,9 @@ const PROMPT_STALLED_LINE =
 const INPUT_SENT_LINE = '{"id":"pane.send_input","result":{"type":"ok"}}'
 const STARTED_LINE = '{"id":"events.subscribe","result":{"type":"subscription_started"}}'
 
+const SUBSCRIBE_REQUEST_LINE =
+  '{"id":"events.subscribe","method":"events.subscribe","params":{"subscriptions":[{"type":"pane.closed"},{"type":"pane.agent_status_changed","pane_id":"w1:p1"}]}}'
+
 const PANE_CLOSED_LINE =
   '{"data":{"pane_id":"w1:p2","type":"pane_closed","workspace_id":"w1"},"event":"pane_closed"}'
 
@@ -157,10 +160,6 @@ const EVENTS_LOST_LINE =
 
 const SentRequest = Schema.fromJsonString(
   Schema.Struct({ id: Schema.String, method: Schema.String, params: Schema.Unknown }),
-)
-
-const SentSubscription = Schema.fromJsonString(
-  Schema.Struct({ params: Schema.Struct({ subscriptions: Schema.Array(Schema.Unknown) }) }),
 )
 
 const replyOnce = (...replies: readonly string[]): ConnectionScript => ({
@@ -511,15 +510,13 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
         { type: 'pane.agent_status_changed', pane_id: 'w1:p1' },
       ])
       const collected = yield* events.pipe(Stream.take(2), Stream.runCollect)
-      const request = yield* Queue.take(received).pipe(
-        Effect.flatMap(Schema.decodeEffect(SentSubscription)),
-      )
+      const request = yield* Queue.take(received)
 
       expect(collected.map((event) => event.event)).toEqual([
         'pane_closed',
         'pane.agent_status_changed',
       ])
-      expect(request.params.subscriptions).toHaveLength(2)
+      expect(request).toBe(SUBSCRIBE_REQUEST_LINE)
     }),
   )
 

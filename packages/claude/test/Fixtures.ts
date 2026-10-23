@@ -12,9 +12,8 @@ import { HookPayload } from '@crook/claude/HookPayload'
 import { LastTurn } from '@crook/claude/LastTurn'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
-import { TranscriptTail } from '@crook/claude/TranscriptTail'
+import { TranscriptTail, messagesIn } from '@crook/claude/TranscriptTail'
 import { ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
-import { parseLine } from '@crook/claude/TranscriptParser'
 import { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 export const FIXTURES = `${import.meta.dirname}/fixtures`
@@ -89,14 +88,7 @@ export const spikeTranscript = Effect.fn('spikeTranscript')(function* (
   name: string,
   lineCount: number,
 ) {
-  const encoder = new TextEncoder()
-  const lines = (yield* spikeTranscriptLines(name, lineCount)).split('\n').filter(Boolean)
-  const offsets = lines.reduce<readonly number[]>(
-    (starts, line) => [...starts, (starts.at(-1) ?? 0) + encoder.encode(`${line}\n`).length],
-    [0],
-  )
+  const text = yield* spikeTranscriptLines(name, lineCount)
 
-  return lines.flatMap((line, index) =>
-    parseLine(encoder.encode(`${line}\n`), TranscriptOffset.make(offsets[index] ?? 0)),
-  )
+  return messagesIn(new TextEncoder().encode(text), START)
 })

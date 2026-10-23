@@ -12,8 +12,7 @@ export interface FileEdit {
 }
 
 const NO_FILE_NAME = ''
-
-export const PATCH_CONTEXT_LINES = 3
+const PATCH_CONTEXT_LINES = 3
 
 const editedContent = (content: string, edit: FileEdit) =>
   edit.replaceAll

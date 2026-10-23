@@ -145,8 +145,11 @@ const statusChangedAt = (
     Option.filter(carried, (before) => before.status === status),
   ]).pipe(Option.match({ onNone: () => now, onSome: (since) => since.statusChangedAt }))
 
-export const workingDirectoryOf = (info: AgentInfo): Option.Option<string> =>
-  Option.orElse(info.foreground_cwd, () => info.cwd)
+export const workingDirectoryOf = ({
+  foreground_cwd,
+  cwd,
+}: Pick<PaneInfo, 'foreground_cwd' | 'cwd'>): Option.Option<string> =>
+  Option.orElse(foreground_cwd, () => cwd)
 
 export const paneLabel = (pane: PaneInfo): Option.Option<string> =>
   pane.label.pipe(Option.map(Str.trim), Option.filter(Str.isNonEmpty))
@@ -197,21 +200,16 @@ export const herdContents = (
   agents: reading.agents.map(toAgentRow(previousAgents, reading, now)),
 })
 
-const withChangedContents = (
+const bumpedIfChanged = (
   previous: MachineState,
-  contents: MachineStateContents,
+  candidate: MachineState,
 ): Option.Option<MachineState> =>
-  Option.liftPredicate(
-    new MachineState({ machine: previous.machine, version: previous.version, ...contents }),
-    (candidate) => !isSameMachineState(candidate, previous),
-  ).pipe(
+  Option.liftPredicate(candidate, (changed) => !isSameMachineState(changed, previous)).pipe(
     Option.map(
-      () =>
-        new MachineState({
-          machine: previous.machine,
-          version: MachineStateVersion.make(previous.version + 1),
-          ...contents,
-        }),
+      (changed) =>
+        new MachineState(
+          Struct.evolve(changed, { version: (version) => MachineStateVersion.make(version + 1) }),
+        ),
     ),
   )
 
@@ -223,44 +221,45 @@ export const initialMachineState = (
 export const nextMachineState = (
   previous: MachineState,
   contents: MachineStateContents,
-): Option.Option<MachineState> => withChangedContents(previous, contents)
+): Option.Option<MachineState> =>
+  bumpedIfChanged(
+    previous,
+    new MachineState({ machine: previous.machine, version: previous.version, ...contents }),
+  )
 
 export const withCreatedPanes = (
   previous: MachineState,
   createdPanes: HashSet.HashSet<PaneId>,
 ): Option.Option<MachineState> =>
-  withChangedContents(previous, {
-    herdrVersion: previous.herdrVersion,
-    herdr: previous.herdr,
-    workspaces: previous.workspaces,
-    tabs: previous.tabs,
-    panes: previous.panes,
-    agents: previous.agents.map(
-      (row) =>
-        new AgentRow(
-          Struct.evolve(row, { createdByCrook: () => HashSet.has(createdPanes, row.pane) }),
-        ),
+  bumpedIfChanged(
+    previous,
+    new MachineState(
+      Struct.evolve(previous, {
+        agents: (rows) =>
+          rows.map(
+            (row) =>
+              new AgentRow(
+                Struct.evolve(row, { createdByCrook: () => HashSet.has(createdPanes, row.pane) }),
+              ),
+          ),
+      }),
     ),
-    places: previous.places,
-  })
+  )
 
 export const herdrLostState = (
   previous: MachineState,
   now: DateTime.Utc,
 ): Option.Option<MachineState> =>
   Option.liftPredicate(previous, Predicate.not(isHerdrLost)).pipe(
-    Option.map(
-      (state) =>
-        new MachineState({
-          machine: state.machine,
-          version: MachineStateVersion.make(state.version + 1),
-          herdrVersion: state.herdrVersion,
-          herdr: new HerdrLink({ connection: state.herdr.connection, lostAt: Option.some(now) }),
-          workspaces: state.workspaces,
-          tabs: state.tabs,
-          panes: state.panes,
-          agents: state.agents,
-          places: state.places,
-        }),
+    Option.flatMap((state) =>
+      bumpedIfChanged(
+        state,
+        new MachineState(
+          Struct.evolve(state, {
+            herdr: (link) =>
+              new HerdrLink({ connection: link.connection, lostAt: Option.some(now) }),
+          }),
+        ),
+      ),
     ),
   )

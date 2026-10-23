@@ -123,19 +123,12 @@ const make = Effect.gen(function* () {
     const directory = subagentsDirectoryOf(path, file)
     const unreadable = (cause: PlatformError) => new SubagentsUnreadable({ path: directory, cause })
 
-    return Stream.unwrap(
-      fileWatch.awaitPath(directory).pipe(
-        Effect.mapError(unreadable),
-        Effect.as(
-          fileWatch.watchReady(directory).pipe(
-            Stream.mapError(unreadable),
-            Stream.filter(readyOr((name) => name.endsWith(META_SUFFIX))),
-            Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-            Stream.mapEffect(() => readRoster(directory)),
-            Stream.changesWith(isSameRoster),
-          ),
-        ),
-      ),
+    return fileWatch.watchWhenPresent(directory).pipe(
+      Stream.mapError(unreadable),
+      Stream.filter(readyOr((name) => name.endsWith(META_SUFFIX))),
+      Stream.buffer({ capacity: 1, strategy: 'sliding' }),
+      Stream.mapEffect(() => readRoster(directory)),
+      Stream.changesWith(isSameRoster),
     )
   }
 

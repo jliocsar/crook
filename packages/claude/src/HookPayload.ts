@@ -10,12 +10,16 @@ export const CLAUDE_HOOK_EVENTS = [
   'PostToolBatch',
 ] as const
 
-export class PreToolUsePayload extends Schema.Class<PreToolUsePayload>('PreToolUsePayload')({
-  hook_event_name: Schema.Literal('PreToolUse'),
-  session_id: ClaudeSessionId,
+export const toolCallFields = {
   tool_name: Schema.String,
   tool_input: Schema.Json,
   tool_use_id: Schema.String,
+}
+
+export class PreToolUsePayload extends Schema.Class<PreToolUsePayload>('PreToolUsePayload')({
+  hook_event_name: Schema.Literal('PreToolUse'),
+  session_id: ClaudeSessionId,
+  ...toolCallFields,
 }) {}
 
 export class PermissionRequestPayload extends Schema.Class<PermissionRequestPayload>(
@@ -30,9 +34,7 @@ export class PermissionRequestPayload extends Schema.Class<PermissionRequestPayl
 export class PostToolUsePayload extends Schema.Class<PostToolUsePayload>('PostToolUsePayload')({
   hook_event_name: Schema.Literal('PostToolUse'),
   session_id: ClaudeSessionId,
-  tool_name: Schema.String,
-  tool_input: Schema.Json,
-  tool_use_id: Schema.String,
+  ...toolCallFields,
 }) {}
 
 export class PostToolUseFailurePayload extends Schema.Class<PostToolUseFailurePayload>(
@@ -40,16 +42,12 @@ export class PostToolUseFailurePayload extends Schema.Class<PostToolUseFailurePa
 )({
   hook_event_name: Schema.Literal('PostToolUseFailure'),
   session_id: ClaudeSessionId,
-  tool_name: Schema.String,
-  tool_input: Schema.Json,
-  tool_use_id: Schema.String,
+  ...toolCallFields,
 }) {}
 
-export class FinishedToolCall extends Schema.Class<FinishedToolCall>('FinishedToolCall')({
-  tool_name: Schema.String,
-  tool_input: Schema.Json,
-  tool_use_id: Schema.String,
-}) {}
+export class FinishedToolCall extends Schema.Class<FinishedToolCall>('FinishedToolCall')(
+  toolCallFields,
+) {}
 
 export class PostToolBatchPayload extends Schema.Class<PostToolBatchPayload>(
   'PostToolBatchPayload',

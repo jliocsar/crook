@@ -146,10 +146,7 @@ const make = Effect.gen(function* () {
     )
   })
 
-  const branchOf = (cwd: string) =>
-    checkoutOf(cwd).pipe(Effect.map(Option.flatMap((checkout) => checkout.branch)))
-
-  return GitBranches.of({ checkoutOf, branchOf })
+  return GitBranches.of({ checkoutOf })
 })
 
 export class GitBranches extends Context.Service<
@@ -158,7 +155,6 @@ export class GitBranches extends Context.Service<
     readonly checkoutOf: (
       cwd: string,
     ) => Effect.Effect<Option.Option<GitCheckout>, GitMetadataUnreadable>
-    readonly branchOf: (cwd: string) => Effect.Effect<Option.Option<string>, GitMetadataUnreadable>
   }
 >()('@crook/agent/GitBranches') {
   static readonly layer = Layer.effect(this, make)
@@ -174,7 +170,6 @@ export class GitBranches extends Context.Service<
               branch: Option.some(branch),
             })),
           ),
-        branchOf: (cwd) => Effect.succeed(Option.fromNullishOr(branches.get(cwd))),
       }),
     )
 }

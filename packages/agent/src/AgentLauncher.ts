@@ -15,6 +15,7 @@ import * as Schedule from 'effect/Schedule'
 
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
+import { workingDirectoryOf } from '@crook/agent/MachineStateMapping'
 import { type AgentKind, AgentStarted, type LaunchCommand } from '@crook/domain/Command'
 import { PaneId } from '@crook/domain/Ids'
 import {
@@ -35,7 +36,7 @@ import {
   WorkspaceCreateMethod,
   WorktreeCreateMethod,
 } from '@crook/herdr/Methods'
-import type { PaneInfo, SessionSnapshot } from '@crook/herdr/Records'
+import type { SessionSnapshot } from '@crook/herdr/Records'
 import { AGENT_READY_TIMEOUT } from '@crook/protocol/AgentLink'
 import {
   AgentNotStarted,
@@ -79,9 +80,7 @@ const BRANCH_SEPARATOR = '/'
 const WORKTREE_NAME_SEPARATOR = '-'
 const SLOWEST_MEASURED_SHELL_SPAWN = Duration.millis(27)
 
-export const PANE_BUSY_RETRY_LIMIT = Duration.times(SLOWEST_MEASURED_SHELL_SPAWN, 10)
-
-export const CLAUDE_CHILD_VARIABLES = [
+const CLAUDE_CHILD_VARIABLES = [
   'AI_AGENT',
   'CLAUDECODE',
   'CLAUDE_CODE_BRIDGE_SESSION_ID',
@@ -96,6 +95,7 @@ export const CLAUDE_CHILD_VARIABLES = [
   'CLAUDE_PID',
 ] as const
 
+export const PANE_BUSY_RETRY_LIMIT = Duration.times(SLOWEST_MEASURED_SHELL_SPAWN, 10)
 export const UNSET_CLAUDE_CHILD_VARIABLES = ` unset ${CLAUDE_CHILD_VARIABLES.join(' ')}`
 
 export const SCRUBBED_ENVIRONMENT: Record.ReadonlyRecord<string, string> = Record.fromEntries(
@@ -138,9 +138,6 @@ export const mintAgentName = (takenNames: readonly string[]): string => {
 export const worktreePathBeside = (checkoutRoot: string, branch: string): string =>
   `${checkoutRoot}${WORKTREE_NAME_SEPARATOR}${branch.replaceAll(BRANCH_SEPARATOR, WORKTREE_NAME_SEPARATOR)}`
 
-const workingDirectoryOfPane = (pane: PaneInfo): Option.Option<string> =>
-  Option.orElse(pane.foreground_cwd, () => pane.cwd)
-
 const workspaceWithFolder = (snapshot: SessionSnapshot, folder: string) =>
   Arr.findFirst(
     snapshot.workspaces,
@@ -150,7 +147,7 @@ const workspaceWithFolder = (snapshot: SessionSnapshot, folder: string) =>
         snapshot.panes,
         (pane) =>
           pane.workspace_id === workspace.workspace_id &&
-          Option.contains(workingDirectoryOfPane(pane), folder),
+          Option.contains(workingDirectoryOf(pane), folder),
       ),
   )
 
@@ -161,16 +158,10 @@ const liveAgentNames = (snapshot: SessionSnapshot) =>
     Arr.getSomes,
   )
 
-const refusalOf = (error: HerdrRefusalError): Refusal =>
-  Match.value(error).pipe(
-    Match.tagsExhaustive({
-      HerdrRequestRejected: (rejected) => ({ code: rejected.code, detail: rejected.detail }),
-      HerdrPaneNotFound: (missing) => ({ code: 'pane_not_found', detail: missing.detail }),
-      HerdrAgentNotFound: (missing) => ({ code: 'agent_not_found', detail: missing.detail }),
-      HerdrPaneBusy: (busy) => ({ code: 'agent_pane_busy', detail: busy.detail }),
-      HerdrPromptStalled: (stalled) => ({ code: 'agent_prompt_stalled', detail: stalled.detail }),
-    }),
-  )
+const refusalOf = (error: HerdrRefusalError): Refusal => ({
+  code: error.code,
+  detail: error.detail,
+})
 
 const fromHerdr = <Success, Lost, Refused>(
   request: Effect.Effect<Success, HerdrRequestError>,
@@ -276,18 +267,19 @@ const make = Effect.gen(function* () {
 
   const releaseName = (name: string) => Ref.update(reservedNames, HashSet.remove(name))
 
-  const runClaude = (kind: AgentKind, launched: LaunchedPane, name: string) =>
-    fromHerdr(
+  const runClaude = (kind: AgentKind, launched: LaunchedPane, name: string) => {
+    const inLaunchedPane = <Success>(request: Effect.Effect<Success, HerdrRequestError>) =>
+      fromHerdr(request, PANE_OPENED, notStartedIn(launched))
+
+    return inLaunchedPane(
       herdr.request(PaneSendInputMethod, {
         pane_id: launched.pane,
         text: UNSET_CLAUDE_CHILD_VARIABLES,
         keys: [ENTER_KEY],
       }),
-      PANE_OPENED,
-      notStartedIn(launched),
     ).pipe(
       Effect.andThen(
-        fromHerdr(
+        inLaunchedPane(
           herdr.request(AgentStartMethod, { name, kind, pane_id: launched.pane }).pipe(
             Effect.retry({
               while: isPaneBusy,
@@ -296,22 +288,19 @@ const make = Effect.gen(function* () {
               ),
             }),
           ),
-          PANE_OPENED,
-          notStartedIn(launched),
         ),
       ),
       Effect.andThen(
-        fromHerdr(
+        inLaunchedPane(
           herdr.request(AgentWaitMethod, {
             target: launched.pane,
             until: ['idle', 'blocked'],
             timeout_ms: Duration.toMillis(AGENT_READY_TIMEOUT),
           }),
-          PANE_OPENED,
-          notStartedIn(launched),
         ),
       ),
     )
+  }
 
   const startClaude = (kind: AgentKind, launched: LaunchedPane) =>
     Effect.acquireUseRelease(

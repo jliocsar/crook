@@ -4,8 +4,7 @@ import * as Schema from 'effect/Schema'
 export const AgentStatus = Schema.Literals(['idle', 'working', 'blocked', 'done', 'unknown'])
 export type AgentStatus = typeof AgentStatus.Type
 
-export const AgentSessionRefKind = Schema.Literals(['id', 'path'])
-export type AgentSessionRefKind = typeof AgentSessionRefKind.Type
+const AgentSessionRefKind = Schema.Literals(['id', 'path'])
 
 export class AgentSessionInfo extends Schema.Class<AgentSessionInfo>('AgentSessionInfo')({
   agent: Schema.String,
