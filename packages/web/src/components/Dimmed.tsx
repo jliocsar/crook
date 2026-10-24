@@ -1,9 +1,5 @@
-import { motion } from 'motion/react'
+import { cn } from 'cn'
 import type * as React from 'react'
-
-import { motionTokens } from '@crook/web/motion/MotionTokens'
-
-const STALE_OPACITY = 0.6
 
 export function Dimmed({
   dimmed,
@@ -15,14 +11,15 @@ export function Dimmed({
   children: React.ReactNode
 }) {
   return (
-    <motion.div
+    <div
       data-dimmed={dimmed}
-      className={className}
-      initial={false}
-      animate={{ opacity: dimmed ? STALE_OPACITY : 1 }}
-      transition={motionTokens().fade}
+      className={cn(
+        'transition-opacity duration-(--motion) ease-(--ease-out)',
+        dimmed && 'opacity-60',
+        className,
+      )}
     >
       {children}
-    </motion.div>
+    </div>
   )
 }

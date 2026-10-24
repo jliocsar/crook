@@ -198,7 +198,12 @@ function ToolCard({ call, environment }: { call: ToolCallModel; environment: Thr
       icon={<Icon size={INLINE_ICON_SIZE} />}
       duration={toolDuration(call, now)}
       panel={<ToolPanelMemo call={call} cwd={environment.cwd} />}
-      footer={<Thumbs pictures={picturesOf(call)} place="tool" />}
+      footer={Option.map(
+        Option.liftPredicate(picturesOf(call), Arr.isReadonlyArrayNonEmpty),
+        (pictures) => (
+          <Thumbs pictures={pictures} place="tool" />
+        ),
+      )}
     />
   )
 }

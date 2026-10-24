@@ -1,4 +1,5 @@
 import { cn } from 'cn'
+import * as Option from 'effect/Option'
 import { Check, ChevronRight, Circle, CircleDot, Loader, TriangleAlert } from 'lucide-react'
 import * as React from 'react'
 
@@ -12,7 +13,7 @@ type ToolCallProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   icon: React.ReactNode
   duration?: string | undefined
   panel: React.ReactNode
-  footer: React.ReactNode
+  footer: Option.Option<React.ReactNode>
 }
 
 const STATUS_TEXT = {
@@ -115,9 +116,14 @@ export function ToolCall({
           />
         </span>
       </button>
-      <div data-slot="tool-call-footer" className="px-3.5 pb-3">
-        {footer}
-      </div>
+      {Option.match(footer, {
+        onNone: () => null,
+        onSome: (content) => (
+          <div data-slot="tool-call-footer" className="px-3.5 pb-3">
+            {content}
+          </div>
+        ),
+      })}
       {open ? (
         <div
           id={panelId}

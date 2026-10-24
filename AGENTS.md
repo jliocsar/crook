@@ -534,6 +534,13 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   an animation whose `motion` element has unmounted never completes, and its `onComplete` never
   runs (measured). `stop()` does not call `onComplete` either; a step that must happen on arrival
   is run by whatever stops the animation.
+- Motion can drop an opacity animation that is retargeted just as the previous one ends: a
+  fade to 0.6 that flipped back to 1 about 40 ms later, with the first fade within 0.003 of its
+  end, stayed at 0.6 with nothing running (measured on motion 14.4.0, 2 of 12 reloads of a chat
+  whose socket was cold for a moment). A state fade that can flip back quickly is a CSS
+  transition, which retargets from wherever it stands; with one, 15 of 15 reloads came back.
+- A blocked agent reads "needs you" wherever its status is put in words, the same words the tab
+  badge and the machine counts use; "blocked" is herdr's word, not the user's.
 - A one-shot Bun script keeps `Effect.provide` at its entry and disables
   `effecttsgo/strict-effect-provide` there, as the rule's own message allows at an entry point.
   The long-running members' `Layer.launch` form does not carry over: it never returns, and the
