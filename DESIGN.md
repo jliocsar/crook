@@ -345,13 +345,20 @@ screen" on the Ask.
   620, truncated), and one line under it: the status dot, the status word (blocked reads "needs
   you"), a `·`, then `machine · workspace` in mono 12px. The status word is a polite live
   region, so a screen reader hears the agent move on. On the right:
+  - "Catching up", a muted pill with a spinner, while the chat shows a cached transcript and a
+    fresher one is still on its way. It hides while the chat is dimmed or the pane no longer
+    runs Claude;
   - "2 running", a pill shown while any subagent runs. Tapping it scrolls to the running tree;
   - `…`, which opens the agent's action sheet (The herd), while the agent is live or its machine
     is offline.
 - **The transcript** follows the live tail. Scrolled up, a "Latest" pill (`bg-foreground`, 44px)
   shows above the dock and jumps back down.
-  - **Your messages** are Message bubbles at 16/24. One that Claude hasn't written down yet
-    reads "Sent", and one Claude has queued reads "Queued".
+  - **Show earlier** and **Try again** read "Loading earlier messages" and "Trying again" while
+    their request is out, so no refresh is silent.
+  - **Your messages** are Message bubbles at 16/24. One sent while Claude works, or behind one
+    Claude hasn't taken yet, reads "Queued" from the moment you send it; otherwise one Claude
+    hasn't written down yet reads "Sent". Each send keeps its own row until the transcript holds
+    it.
   - **Claude's text** is Response markdown at 16/24, with Code Block for fenced code.
   - **Tool calls** are one Tool Call card each, collapsed, titled like the terminal
     (`Read(Herd.ts)`, `Bash(bun run …)`). The whole header is the 44px trigger. Expanded, Edit
@@ -402,8 +409,11 @@ screen" on the Ask.
   - Screen readers hear "Needs you" and the title once per ask. An Ask that closes while it
     holds focus hands it to the composer.
 - **The composer** is Prompt Input at 16px, reading "Message Claude".
-  - Typing `/` shows `/compact`, `/clear` and `/model` as a Suggestions row. There is no `/`
-    button: the keyboard has the key.
+  - Typing `/` lists what the session can run, grouped under This project, Yours, Plugins and
+    Claude Code with sticky group headers: the name in mono, its argument hint beside it and a
+    two-line description, in a list capped at 256px that scrolls. The Claude Code group holds
+    only the built-ins that work over a PTY: `/compact`, `/clear`, `/model`, `/effort`, `/fast`,
+    `/rename` and `/cost`. There is no `/` button: the keyboard has the key.
   - Send turns into Stop while the agent works and the field is empty. Stop is Esc.
   - While the Ask is open, the placeholder reads "Or tell Claude what to do instead" and Send
     becomes "Decline and send": sending declines the Ask with your message. Blocked before the

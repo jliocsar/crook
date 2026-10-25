@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import { vi } from 'vitest'
 
@@ -42,16 +42,37 @@ export const liftOf = (): string =>
     'the thread content',
   ).style.transform
 
+export const following = (): boolean => viewport().hasAttribute('data-following')
+
 export const openedOn = (keys: readonly string[]) => {
   render(thread(keys.map(row)))
+}
+
+export const scrollsUnderLift = (added: number): void => {
+  const scrolling = viewport()
+  const lift = Number.parseFloat(liftOf().replace('translateY(', ''))
+
+  Object.defineProperty(scrolling, 'scrollHeight', {
+    configurable: true,
+    get: () => HISTORY_HEIGHT + added + lift,
+  })
+  fireEvent.scroll(scrolling)
 }
 
 export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
   const { rerender } = render(thread([row('prompt'), WORKING]))
   const scrolling = viewport()
   let height = HISTORY_HEIGHT
+  let top = 0
 
   Object.defineProperty(scrolling, 'scrollHeight', { configurable: true, get: () => height })
+  Object.defineProperty(scrolling, 'scrollTop', {
+    configurable: true,
+    get: () => top,
+    set: (next: number) => {
+      top = Math.max(0, Math.min(next, height - scrolling.clientHeight))
+    },
+  })
   scrolling.scrollTop = HISTORY_HEIGHT
   yield* wait(SETTLE_MS)
   height = HISTORY_HEIGHT + added

@@ -6,11 +6,13 @@ import { afterSpring, present } from '../Dom.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 import {
   answerGrows,
+  following,
   ghost,
   liftOf,
   openedOn,
   phoneViewport,
   revealOf,
+  scrollsUnderLift,
   VIEWPORT_HEIGHT,
 } from '../ThreadRender.tsx'
 
@@ -51,6 +53,15 @@ describe('Thread', () => {
       yield* afterSpring(() => {
         expect(liftOf()).toBe('translateY(0px)')
       })
+    }),
+  )
+
+  it.effect('keeps following the bottom while the slide inflates the scroll height', () =>
+    Effect.gen(function* () {
+      yield* answerGrows(ANSWER_HEIGHT)
+      scrollsUnderLift(ANSWER_HEIGHT)
+
+      expect(following()).toBe(true)
     }),
   )
 

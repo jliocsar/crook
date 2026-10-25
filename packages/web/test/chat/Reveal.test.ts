@@ -1,3 +1,4 @@
+import * as Duration from 'effect/Duration'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -5,9 +6,11 @@ import {
   liftFor,
   nextRevealPlan,
   revealOf,
+  revealWindow,
   STILL,
   staggerDelays,
   withoutReveal,
+  withoutReveals,
 } from '@crook/web/chat/Reveal'
 import type { RevealPlan, RevealRow } from '@crook/web/chat/Reveal'
 
@@ -98,6 +101,23 @@ describe('withoutReveal', () => {
 
     expect(revealOf(withoutReveal(plan, 'b'), 'b')).toStrictEqual(STILL)
     expect(withoutReveal(plan, 'a')).toBe(plan)
+  })
+})
+
+describe('withoutReveals', () => {
+  it('forgets every reveal still planned for rows that never mounted, and keeps a settled plan', () => {
+    const plan = nextRevealPlan(settledOn(rows('a')), rows('a', 'b', 'c'), ANIMATED)
+    const settled = withoutReveals(plan)
+
+    expect(settled.reveals.size).toBe(0)
+    expect(settled.keys).toBe(plan.keys)
+    expect(withoutReveals(settled)).toBe(settled)
+  })
+})
+
+describe('revealWindow', () => {
+  it('lasts the spread and one more fade after it', () => {
+    expect(Duration.toMillis(revealWindow(TIMING))).toBeCloseTo(360)
   })
 })
 

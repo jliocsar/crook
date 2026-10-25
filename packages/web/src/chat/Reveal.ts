@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
@@ -106,6 +107,12 @@ export const withoutReveal = (plan: RevealPlan, key: string): RevealPlan => {
     reveals: new Map(Arr.filter(Array.from(plan.reveals), ([planned]) => planned !== key)),
   }
 }
+
+export const withoutReveals = (plan: RevealPlan): RevealPlan =>
+  plan.reveals.size === 0 ? plan : { ...plan, reveals: new Map() }
+
+export const revealWindow = (timing: RevealTiming): Duration.Duration =>
+  Duration.seconds(timing.spread * 2)
 
 export const liftFor = (grown: number, current: number, ceiling: number): number =>
   Math.max(0, Math.min(current + grown, ceiling))

@@ -530,6 +530,8 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - The router's `navigate` commits no history entry when the target's href and user state equal
   the location it is already on, a pending one included; `router.history.push` always pushes
   (measured).
+- The router calls `window.scrollTo({ top: 0, left: 0 })` on a navigation, so a test that spies
+  on `scrollTo` asserts the arguments it expects, never that it was not called (measured).
 - Motion stops a motion value's animation by the next frame once nothing observes the value, so
   an animation whose `motion` element has unmounted never completes, and its `onComplete` never
   runs (measured). `stop()` does not call `onComplete` either; a step that must happen on arrival
@@ -625,12 +627,19 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   change subscribes through the `AtomRegistry` into a queue before it forks anything, and the
   forked fiber drains the queue.
 - Claude Code writes a session's jsonl one entry per content block, each carrying the API message
-  id, but only once the whole message has finished, never as a block streams (measured on Claude
-  Code 2.1.309 in a TUI pane, polling the file every 10 ms). A text block stamped 585 ms before
-  its tool call landed in the same write as that call, its line already holding the message's
-  final `stop_reason`; a 2202-character answer landed as one line about 9 s after its request,
-  118 ms after its stamp; no write ever left a partial line. Nothing can stream text to the
-  phone, so the chat reveals each landed batch instead of pretending to type it.
+  id, but only once the whole message has finished: over three messages of one session (Claude
+  Code 2.1.309 in a TUI pane, the file polled every 10 ms) every write held whole messages. A
+  text block and the tool_use after it landed in one write about 585 ms after the text's own
+  timestamp, the text's line already holding the message's final `stop_reason`; a 2202-character
+  answer landed as one line about 9 s after its request, 118 ms after its stamp; no write ever
+  left a partial line. Nothing can stream text to the phone, so the chat reveals each landed
+  batch instead of pretending to type it.
+- A `translateY` on the thread's content extends its scroll container's scrollable overflow by
+  the same amount: in Chromium 156 a 1000 px child lifted by 100 px gave the container a
+  `scrollHeight` of 1100 and a bottom `scrollTop` 100 px further down (measured). While the
+  reveal's lift is up, the thread subtracts it before it judges whether it sits at the bottom or
+  scrolls there; otherwise the slide read as the user scrolling away and the thread stopped
+  following on every batch taller than the follow threshold.
 - Motion reads `prefers-reduced-motion` once per module instance, so a test file that renders
   with it off and then on gets the first answer both times (measured: the reduced test saw the
   full animation). A component's reduced-motion tests live in a file of their own.
@@ -660,11 +669,14 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 
 :::warning
 A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
+
+A real Claude under a temporary `CLAUDE_CONFIG_DIR` has no login. The two spikes that needed one copied the `claudeAiOauth` entry of `~/.claude/.credentials.json` there and deleted the copy at teardown, in the same command that started the Claude (each run took about 40 s, with over an hour left on the access token). That entry also carries the refresh token, so a copy that outlives its run is a leaked login: drop `refreshToken` from the copy, check the access token has longer left than the run, and delete the copy in that same command.
 :::
 
 :::tip
-A prompt herdr types into a Claude that is working or compacting queues exactly as one typed
-at the keyboard does (measured on Claude Code 2.1.309 and herdr 0.9.5, one Claude): the pane lists
+A prompt herdr types into a Claude that is writing text or compacting queues exactly as one typed
+at the keyboard does (measured on Claude Code 2.1.309 and herdr 0.9.5, one Claude, three cases; a
+prompt typed during a tool call went unmeasured, see below): the pane lists
 it above the input with "ctrl+enter to send now", and Claude takes it when the turn or the
 compaction ends, as a user entry of its own whose `promptSource` is `queued`. Nothing was dropped or
 merged: two prompts typed 0.3 s apart became two turns in the order sent, the second queued behind
@@ -858,8 +870,6 @@ happy-dom, measured:
   code), so a test cannot tell keyboard focus from a tap through it.
 - It has no `window.visualViewport`. A keyboard test defines one, an `EventTarget` carrying
   `height`, `offsetTop` and `scale`, and dispatches `resize` or `scroll` on it.
-- The router calls `window.scrollTo({ top: 0, left: 0 })` on a navigation, so a test that spies
-  on `scrollTo` asserts the arguments it expects, never that it was not called (measured).
 :::
 
 :::tip

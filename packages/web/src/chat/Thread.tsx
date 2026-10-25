@@ -14,7 +14,9 @@ import {
   liftFor,
   nextRevealPlan,
   revealOf,
+  revealWindow,
   withoutReveal,
+  withoutReveals,
 } from '@crook/web/chat/Reveal'
 import type { RevealTiming, RowReveal } from '@crook/web/chat/Reveal'
 import { Dimmed } from '@crook/web/components/Dimmed'
@@ -51,8 +53,8 @@ const STAGGER_STEP_SECONDS = 0.05
 
 const ThreadRowBody = React.memo(RowBody)
 
-const isAtBottom = (viewport: HTMLElement): boolean =>
-  viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= FOLLOW_THRESHOLD
+const isAtBottom = (viewport: HTMLElement, lifted: number): boolean =>
+  viewport.scrollHeight - lifted - viewport.scrollTop - viewport.clientHeight <= FOLLOW_THRESHOLD
 
 const useSettled = (rowCount: number): boolean => {
   const [settled, setSettled] = React.useState(false)
@@ -103,6 +105,23 @@ const useRevealPlan = (rows: readonly ThreadRow[], animates: boolean) => {
   const shown = React.useCallback((key: string) => {
     setPlan((current) => withoutReveal(current, key))
   }, [])
+
+  React.useEffect(() => {
+    if (plan.reveals.size === 0) {
+      return undefined
+    }
+
+    const timer = window.setTimeout(
+      () => {
+        setPlan(withoutReveals)
+      },
+      Duration.toMillis(revealWindow(revealTiming())),
+    )
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [plan])
 
   return { plan, shown }
 }
@@ -156,6 +175,7 @@ const useLift = () => {
   const lift = useMotionValue(0)
   const transform = useTransform(lift, (value) => translate('Y', value))
   const liftedFrom = React.useRef<Option.Option<number>>(Option.none())
+  const current = React.useCallback(() => lift.get(), [lift])
 
   React.useEffect(
     () => () => {
@@ -195,7 +215,7 @@ const useLift = () => {
     [lift],
   )
 
-  return { transform, firstIndex, raise }
+  return { transform, firstIndex, raise, current }
 }
 
 const ghostsOf = (
@@ -333,11 +353,13 @@ export function Thread({
     setFollowing(next)
   }
 
+  const { raise, current: liftNow } = lift
+
   const toBottom = React.useCallback(() => {
     if (viewport.current !== null) {
-      viewport.current.scrollTop = viewport.current.scrollHeight
+      viewport.current.scrollTop = viewport.current.scrollHeight - liftNow()
     }
-  }, [])
+  }, [liftNow])
 
   React.useImperativeHandle(
     handle,
@@ -356,8 +378,6 @@ export function Thread({
     }),
     [rows, virtualizer, reduce],
   )
-
-  const { raise } = lift
 
   React.useLayoutEffect(() => {
     const element = viewport.current
@@ -415,7 +435,7 @@ export function Thread({
           data-following={following || undefined}
           className="h-full overflow-y-auto overscroll-contain"
           onScroll={(event) => {
-            const next = isAtBottom(event.currentTarget)
+            const next = isAtBottom(event.currentTarget, liftNow())
 
             if (next !== followingRef.current) {
               follow(next)
