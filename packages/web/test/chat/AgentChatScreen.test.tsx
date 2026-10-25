@@ -53,6 +53,11 @@ import {
   toolResult,
   toolUse,
 } from '../TranscriptFixtures.ts'
+import {
+  emulateVisualViewport,
+  forgetVisualViewport,
+  moveVisualViewport,
+} from '../VisualViewport.ts'
 
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
@@ -132,6 +137,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  forgetVisualViewport()
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -384,6 +390,36 @@ describe('AgentChatScreen', () => {
 
       expect(screen.queryByRole('button', { name: '/model' })).toBeNull()
       expect(field()).toHaveProperty('value', '/compact ')
+    }),
+  )
+
+  it.effect('keeps the header, the ask, the slash strip and the composer above the keyboard', () =>
+    Effect.gen(function* () {
+      const viewport = emulateVisualViewport()
+
+      yield* renderApp(CHAT, live([agent('w1:p1', 'blocked', { ask })]))
+      const composer = yield* Effect.promise(() =>
+        screen.findByPlaceholderText('Or tell Claude what to do instead'),
+      )
+
+      yield* Effect.promise(() => userEvent.type(composer, '/c'))
+      moveVisualViewport(viewport, { height: window.innerHeight / 2 })
+      const fitted = present(
+        document.querySelector<HTMLElement>('[data-keyboard="open"]'),
+        'The fitted chat',
+      )
+      const dock = present(
+        fitted.querySelector<HTMLElement>('[data-slot="chat-dock"]'),
+        'The chat dock',
+      )
+
+      expect(fitted.dataset['slot']).toBe('pushed-screen')
+      expect(fitted.style.height).toBe(`${window.innerHeight / 2}px`)
+      expect(within(fitted).getByRole('heading', { level: 1 })).toBeDefined()
+      expect(dock.querySelector('[data-slot="ask-dock"]')).not.toBeNull()
+      expect(within(dock).getByRole('button', { name: '/compact' })).toBeDefined()
+      expect(dock.contains(composer)).toBe(true)
+      expect(dock.style.paddingBottom).toBe('')
     }),
   )
 

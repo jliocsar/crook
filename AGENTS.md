@@ -647,6 +647,17 @@ A probe that starts a real Claude closes its pane, stops its named herdr session
   target, falling back to the current tab when the opener is gone or inert, and is told outright
   when its own action removed the opener, rather than trusting `isConnected` on an element that may
   still be animating out.
+- The phone keyboard shrinks the visual viewport and leaves `innerHeight` alone, so a fixed
+  screen keeps its full height under the keyboard and its dock ends up behind it. A pushed screen
+  therefore sizes itself to `visualViewport.height` and moves to its `offsetTop` whenever the
+  visual viewport is shorter than the window at scale 1, pins the page back to the top while
+  that holds, and marks itself as fitted so the docks drop the home-indicator padding. One inset
+  for the whole screen keeps the header at the top and every dock, the ask and the slash strip
+  included, on the keyboard; a pinch zoom also shrinks the visual viewport but changes `scale`,
+  and leaves the screen alone. Measured in Chromium at 375×812 with the keyboard emulated: the
+  header held at the top, the thread took the height that was left, and the dock sat on the
+  keyboard's edge, also with `offsetTop` panned. What iOS reports for `scrollY` and `offsetTop`
+  on focus is not measured yet.
 - A focus test compares `document.activeElement` with the element itself. Focus that fell to the
   body still passes a check on its `textContent`, which holds every label on the page (measured: a
   test asserting the tab's text passed with focus on the body).
@@ -775,6 +786,10 @@ happy-dom, measured:
   and Motion's window listeners see it.
 - Its `:focus-visible` matches any focused element, a clicked one included (read in its selector
   code), so a test cannot tell keyboard focus from a tap through it.
+- It has no `window.visualViewport`. A keyboard test defines one, an `EventTarget` carrying
+  `height`, `offsetTop` and `scale`, and dispatches `resize` or `scroll` on it.
+- The router calls `window.scrollTo({ top: 0, left: 0 })` on a navigation, so a test that spies
+  on `scrollTo` asserts the arguments it expects, never that it was not called (measured).
 :::
 
 :::tip

@@ -14,6 +14,7 @@ import { HeaderBanner } from '@crook/web/connection/ConnectionBanner'
 import { GLIDE } from '@crook/web/motion/Springs'
 import { COLUMN_STYLE, useColumnWidth } from '@crook/web/navigation/Column'
 import { focusScreenTitle, restoreFocus } from '@crook/web/navigation/Focus'
+import { keyboardFitStyle, useKeyboardFit } from '@crook/web/navigation/KeyboardFit'
 import { findOpener } from '@crook/web/navigation/Opener'
 import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 import { useShellReady } from '@crook/web/navigation/ShellReady'
@@ -100,6 +101,7 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
   const reduce = useReducedMotion() ?? false
   const shellReady = useShellReady()
   const landedIndex = useLandedIndex()
+  const keyboardFit = useKeyboardFit()
   const [slidesIn] = React.useState(() => shellReady.current && !reduce && arrivedByPush(router))
   const [leftFrom, setLeftFrom] = React.useState<Option.Option<number>>(Option.none())
   const offsetX = useMotionValue(slidesIn ? width : 0)
@@ -224,8 +226,9 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
       ref={screen}
       data-slot="pushed-screen"
       inert={covered || leaving}
+      data-keyboard={Option.isSome(keyboardFit) ? 'open' : undefined}
       className="bg-background fixed inset-y-0 z-30 flex flex-col shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.25)]"
-      style={{ ...COLUMN_STYLE, x: offsetX }}
+      style={{ ...COLUMN_STYLE, ...keyboardFitStyle(keyboardFit), x: offsetX }}
     >
       <PushedScreenContext value={Option.some({ back, edge })}>
         <EdgeBack />

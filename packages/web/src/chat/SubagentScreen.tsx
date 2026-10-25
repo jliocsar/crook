@@ -161,7 +161,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
         </div>
         <div
           data-slot="chat-dock"
-          className="border-border bg-card text-muted-foreground border-t px-4 pt-3 pb-[max(var(--safe-bottom),0.75rem)] text-center text-sm"
+          className="border-border bg-card text-muted-foreground border-t px-4 pt-3 pb-[max(var(--safe-bottom),0.75rem)] text-center in-data-[keyboard=open]:pb-3 text-sm"
         >
           Subagents take no messages. Reply to Claude in its chat.
         </div>

@@ -36,7 +36,6 @@ import { Composer } from '@crook/web/chat/Composer'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
 import type { Restart } from '@crook/web/chat/EdgeCard'
 import { ImageViewer } from '@crook/web/chat/Images'
-import { useKeyboardInset } from '@crook/web/chat/KeyboardInset'
 import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
@@ -101,7 +100,6 @@ function ChatDock({
   onBack,
   backLabel,
 }: DockProps) {
-  const inset = useKeyboardInset()
   const [composerFocused, setComposerFocused] = React.useState(false)
   const askFocus = useFocusAfterAsk(
     Option.match(ask, { onNone: () => '', onSome: (dock) => dock.ask.id }),
@@ -114,8 +112,7 @@ function ChatDock({
   return (
     <div
       data-slot="chat-dock"
-      className="border-border bg-card flex min-h-0 flex-col border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)]"
-      style={inset > 0 ? { paddingBottom: inset } : undefined}
+      className="border-border bg-card flex min-h-0 flex-col border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)] in-data-[keyboard=open]:pb-3"
     >
       <p role="status" className="sr-only">
         {Option.match(ask, { onNone: () => '', onSome: (dock) => askAnnouncement(dock.ask) })}

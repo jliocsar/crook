@@ -13,7 +13,7 @@ import {
 import { fireEvent, render, screen } from '@testing-library/react'
 import * as Effect from 'effect/Effect'
 import * as Atom from 'effect/reactivity/Atom'
-import { beforeEach } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
 
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import { openedFrom } from '@crook/web/navigation/Opener'
@@ -27,6 +27,11 @@ import { click, eventually, findByRole, wait } from '../Dom.ts'
 import { herd } from '../HerdFixtures.ts'
 import { makeFakeHubLink } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
+import {
+  emulateVisualViewport,
+  forgetVisualViewport,
+  moveVisualViewport,
+} from '../VisualViewport.ts'
 
 const makeRouter = (initialPath: string) => {
   const root = createRootRoute({ component: () => <Shell /> })
@@ -172,6 +177,12 @@ function Item() {
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
+})
+
+afterEach(() => {
+  forgetVisualViewport()
+  Reflect.deleteProperty(window, 'scrollY')
+  vi.restoreAllMocks()
 })
 
 describe('PushedScreen', () => {
@@ -398,6 +409,85 @@ describe('PushedScreen', () => {
       })
 
       expect(document.activeElement).toBe(rootOpener)
+    }),
+  )
+
+  it.effect(
+    'fits the visible part of the viewport while the keyboard is up, and lets go after',
+    () =>
+      Effect.gen(function* () {
+        const viewport = emulateVisualViewport()
+
+        yield* renderAt('/detail')
+        yield* findByRole('heading', 'Detail')
+        moveVisualViewport(viewport, {
+          height: window.innerHeight / 2,
+          offsetTop: window.innerHeight / 4,
+        })
+        yield* eventually(() => {
+          expect(pushedScreen()?.dataset['keyboard']).toBe('open')
+        })
+
+        expect(pushedScreen()?.style.top).toBe(`${window.innerHeight / 4}px`)
+        expect(pushedScreen()?.style.height).toBe(`${window.innerHeight / 2}px`)
+        expect(pushedScreen()?.style.bottom).toBe('auto')
+
+        moveVisualViewport(viewport, { height: window.innerHeight, offsetTop: 0 })
+        yield* eventually(() => {
+          expect(pushedScreen()?.dataset['keyboard']).toBeUndefined()
+        })
+
+        expect(pushedScreen()?.style.top).toBe('')
+        expect(pushedScreen()?.style.height).toBe('')
+      }),
+  )
+
+  it.effect('scrolls the page back to the top when the keyboard scrolls it', () =>
+    Effect.gen(function* () {
+      const viewport = emulateVisualViewport()
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+
+      yield* renderAt('/detail')
+      yield* findByRole('heading', 'Detail')
+      moveVisualViewport(viewport, { height: window.innerHeight / 2 })
+      Object.defineProperty(window, 'scrollY', {
+        configurable: true,
+        value: window.innerHeight / 4,
+      })
+      moveVisualViewport(viewport, { offsetTop: window.innerHeight / 4 }, 'scroll')
+
+      expect(scrollTo).toHaveBeenCalledWith(0, 0)
+    }),
+  )
+
+  it.effect('leaves the page where it is while no keyboard is up', () =>
+    Effect.gen(function* () {
+      const viewport = emulateVisualViewport()
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+
+      yield* renderAt('/detail')
+      yield* findByRole('heading', 'Detail')
+      Object.defineProperty(window, 'scrollY', {
+        configurable: true,
+        value: window.innerHeight / 4,
+      })
+      moveVisualViewport(viewport, {}, 'scroll')
+
+      expect(scrollTo).not.toHaveBeenCalledWith(0, 0)
+      expect(pushedScreen()?.dataset['keyboard']).toBeUndefined()
+    }),
+  )
+
+  it.effect('keeps its full height under a pinch zoom', () =>
+    Effect.gen(function* () {
+      const viewport = emulateVisualViewport()
+
+      yield* renderAt('/detail')
+      yield* findByRole('heading', 'Detail')
+      moveVisualViewport(viewport, { height: window.innerHeight / 2, scale: 2 })
+
+      expect(pushedScreen()?.dataset['keyboard']).toBeUndefined()
+      expect(pushedScreen()?.style.height).toBe('')
     }),
   )
 })

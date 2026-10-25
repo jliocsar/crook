@@ -210,7 +210,7 @@ function NewAgentFlow() {
       </div>
       <div
         data-slot="new-agent-dock"
-        className="border-border bg-card relative z-30 grid grid-cols-1 gap-2 border-t px-4 pt-3 pb-[max(0.75rem,var(--safe-bottom))]"
+        className="border-border bg-card relative z-30 grid grid-cols-1 gap-2 border-t px-4 pt-3 pb-[max(0.75rem,var(--safe-bottom))] in-data-[keyboard=open]:pb-3"
       >
         {Option.match(
           Option.flatMap(shown, ({ herdView, current }) => newAgentChips(herdView, current, task)),
