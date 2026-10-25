@@ -449,7 +449,17 @@ thumbnail, with a focus ring only when you closed it from the keyboard.
 
 Motion:
 
-- **New transcript items** fade in and rise 8px on `--motion` with `--ease-out`. The history
+- **New transcript items** land in batches, because Claude writes a message to disk only once it
+  has finished, so a long answer arrives whole after seconds of Working. The reveal says so
+  rather than faking a stream: the batch staggers in top-down, text before the tool card that
+  follows it, each item fading in and rising 8px on `--motion` with `--ease-out`. The stagger is
+  50ms, squeezed so the last item starts within `--motion`, so a 40-block answer takes no longer
+  than a short one (50ms is an unmeasured knob, like the install screen's).
+- **Working morphs into the answer:** it fades out where it stood while the first block fades in
+  in its place, without the rise.
+- **The thread grows instead of jumping:** while it follows the bottom, it slides up by what the
+  batch added, at most one screen, on the `bounce: 0` spring.
+- Under reduced motion a batch just appears: no stagger, fade, morph or slide. The history
   already there when you open the chat doesn't animate.
 - **The Ask** opens and closes as a height collapse on the `bounce: 0.2` spring.
 - **The status word** swaps the way it does on the herd.

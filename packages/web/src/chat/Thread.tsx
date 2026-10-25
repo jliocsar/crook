@@ -1,19 +1,38 @@
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
+import type { Range, VirtualItem } from '@tanstack/react-virtual'
 import { cn } from 'cn'
+import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import { ArrowDown } from 'lucide-react'
-import { motion, useReducedMotion } from 'motion/react'
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'motion/react'
 import * as React from 'react'
 
+import {
+  EMPTY_REVEAL_PLAN,
+  liftFor,
+  nextRevealPlan,
+  revealOf,
+  withoutReveal,
+} from '@crook/web/chat/Reveal'
+import type { RevealTiming, RowReveal } from '@crook/web/chat/Reveal'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { RenderCacheScope } from '@crook/web/components/RenderCache'
 import { RowMemoryScope } from '@crook/web/components/RowMemory'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
-import { translate, useTransformString } from '@crook/web/motion/TransformString'
+import { GLIDE } from '@crook/web/motion/Springs'
+import { translate } from '@crook/web/motion/TransformString'
 
 export interface ThreadRow {
   readonly key: string
+  readonly content: React.ReactNode
+  readonly placeholder?: boolean
+}
+
+interface Ghost {
+  readonly key: string
+  readonly start: number
   readonly content: React.ReactNode
 }
 
@@ -28,6 +47,7 @@ const EDGE_PADDING = 16
 const FOLLOW_THRESHOLD = 48
 const RISE = 8
 const JUMP_ICON_SIZE = 13
+const STAGGER_STEP_SECONDS = 0.05
 
 const ThreadRowBody = React.memo(RowBody)
 
@@ -61,18 +81,145 @@ const useSettled = (rowCount: number): boolean => {
   return settled
 }
 
+const revealTiming = (): RevealTiming => ({
+  step: STAGGER_STEP_SECONDS,
+  spread: Option.getOrElse(Option.fromUndefinedOr(motionTokens().fade.duration), () => 0),
+})
+
+const useRevealPlan = (rows: readonly ThreadRow[], animates: boolean) => {
+  const signature = pipe(
+    rows,
+    Arr.map((row) => row.key),
+    Arr.join('\n'),
+  )
+  const [planned, setPlanned] = React.useState<Option.Option<string>>(Option.none())
+  const [plan, setPlan] = React.useState(EMPTY_REVEAL_PLAN)
+
+  if (!Option.contains(planned, signature)) {
+    setPlanned(Option.some(signature))
+    setPlan(nextRevealPlan(plan, rows, { animate: animates, timing: revealTiming() }))
+  }
+
+  const shown = React.useCallback((key: string) => {
+    setPlan((current) => withoutReveal(current, key))
+  }, [])
+
+  return { plan, shown }
+}
+
+const placeholderFrames = (
+  rows: readonly ThreadRow[],
+  virtualItems: readonly VirtualItem[],
+): ReadonlyMap<string, Ghost> =>
+  new Map(
+    Arr.flatMap(virtualItems, (virtual) =>
+      pipe(
+        Option.fromUndefinedOr(rows[virtual.index]),
+        Option.filter((row) => row.placeholder === true),
+        Option.map((row): readonly [string, Ghost] => [
+          row.key,
+          { key: row.key, start: virtual.start, content: row.content },
+        ]),
+        Option.toArray,
+      ),
+    ),
+  )
+
+const useGhost = (
+  departed: readonly string[],
+  rows: readonly ThreadRow[],
+  virtualItems: readonly VirtualItem[],
+) => {
+  const frames = React.useRef<ReadonlyMap<string, Ghost>>(new Map())
+  const [ghost, setGhost] = React.useState<Option.Option<Ghost>>(Option.none())
+
+  React.useLayoutEffect(() => {
+    const left = ghostsOf(departed, frames.current)
+
+    if (Option.isSome(left)) {
+      setGhost(left)
+    }
+  }, [departed])
+
+  React.useLayoutEffect(() => {
+    frames.current = placeholderFrames(rows, virtualItems)
+  })
+
+  const gone = React.useCallback(() => {
+    setGhost(Option.none())
+  }, [])
+
+  return { ghost, gone }
+}
+
+const useLift = () => {
+  const lift = useMotionValue(0)
+  const transform = useTransform(lift, (value) => translate('Y', value))
+  const liftedFrom = React.useRef<Option.Option<number>>(Option.none())
+
+  React.useEffect(
+    () => () => {
+      lift.stop()
+    },
+    [lift],
+  )
+
+  const firstIndex = (range: Range): number =>
+    pipe(
+      liftedFrom.current,
+      Option.filter(() => lift.get() > 0),
+      Option.match({
+        onNone: () => range.startIndex,
+        onSome: (index) => Math.min(index, range.startIndex),
+      }),
+    )
+
+  const raise = React.useCallback(
+    (options: {
+      readonly grown: number
+      readonly ceiling: number
+      readonly content: HTMLElement | null
+      readonly indexAt: (lifted: number) => Option.Option<number>
+    }) => {
+      const next = liftFor(options.grown, lift.get(), options.ceiling)
+
+      liftedFrom.current = options.indexAt(next)
+      lift.jump(next)
+
+      if (options.content !== null) {
+        options.content.style.transform = translate('Y', next)
+      }
+
+      animate(lift, 0, GLIDE)
+    },
+    [lift],
+  )
+
+  return { transform, firstIndex, raise }
+}
+
+const ghostsOf = (
+  departed: readonly string[],
+  frames: ReadonlyMap<string, Ghost>,
+): Option.Option<Ghost> =>
+  pipe(
+    departed,
+    Arr.flatMap((key) => Option.toArray(Option.fromUndefinedOr(frames.get(key)))),
+    Arr.head,
+  )
+
 function Appear({
   rowKey,
-  rise,
+  reveal,
   onShown,
   children,
 }: {
   rowKey: string
-  rise: boolean
+  reveal: RowReveal
   onShown: (rowKey: string) => void
   children: React.ReactNode
 }) {
-  const transform = useTransformString()
+  const [entrance] = React.useState(reveal)
 
   React.useEffect(() => {
     onShown(rowKey)
@@ -81,9 +228,14 @@ function Appear({
   return (
     <motion.div
       className="min-w-0"
-      initial={rise ? { opacity: 0, transform: transform.translate('Y', RISE) } : false}
+      data-reveal={entrance.enters ? entrance.delay : undefined}
+      initial={
+        entrance.enters
+          ? { opacity: 0, transform: translate('Y', entrance.rise ? RISE : 0) }
+          : false
+      }
       animate={{ opacity: 1, transform: translate('Y', 0) }}
-      transition={motionTokens().fade}
+      transition={{ ...motionTokens().fade, delay: entrance.delay }}
     >
       {children}
     </motion.div>
@@ -92,23 +244,49 @@ function Appear({
 
 function RowBody({
   rowKey,
-  rise,
+  reveal,
   memory,
   onShown,
   children,
 }: {
   rowKey: string
-  rise: boolean
+  reveal: RowReveal
   memory: Map<string, boolean>
   onShown: (rowKey: string) => void
   children: React.ReactNode
 }) {
   return (
     <RowMemoryScope store={memory} rowKey={rowKey}>
-      <Appear rowKey={rowKey} rise={rise} onShown={onShown}>
+      <Appear rowKey={rowKey} reveal={reveal} onShown={onShown}>
         {children}
       </Appear>
     </RowMemoryScope>
+  )
+}
+
+function ThreadGhost({
+  start,
+  onGone,
+  children,
+}: {
+  start: number
+  onGone: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <motion.div
+      aria-hidden="true"
+      inert
+      data-slot="thread-ghost"
+      className="pointer-events-none absolute inset-x-0 top-0 px-4"
+      style={{ transform: translate('Y', start) }}
+      initial={{ opacity: 1 }}
+      animate={{ opacity: 0 }}
+      transition={motionTokens().fade}
+      onAnimationComplete={onGone}
+    >
+      {children}
+    </motion.div>
   )
 }
 
@@ -124,12 +302,15 @@ export function Thread({
   handle?: React.Ref<ThreadHandle>
 }) {
   const viewport = React.useRef<HTMLDivElement>(null)
-  const [rises] = React.useState(() => new Map<string, boolean>())
+  const content = React.useRef<HTMLDivElement>(null)
   const [memory] = React.useState(() => new Map<string, boolean>())
   const [following, setFollowing] = React.useState(true)
   const followingRef = React.useRef(true)
   const reduce = useReducedMotion() ?? false
   const settled = useSettled(rows.length)
+  const animates = settled && !reduce
+  const { plan, shown } = useRevealPlan(rows, animates)
+  const lift = useLift()
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => viewport.current,
@@ -140,8 +321,12 @@ export function Thread({
     paddingStart: EDGE_PADDING,
     paddingEnd: EDGE_PADDING,
     useFlushSync: false,
+    rangeExtractor: (range) =>
+      defaultRangeExtractor({ ...range, startIndex: lift.firstIndex(range) }),
   })
   const totalSize = virtualizer.getTotalSize()
+  const virtualItems = virtualizer.getVirtualItems()
+  const { ghost, gone } = useGhost(plan.departed, rows, virtualItems)
 
   const follow = (next: boolean) => {
     followingRef.current = next
@@ -172,19 +357,34 @@ export function Thread({
     [rows, virtualizer, reduce],
   )
 
-  React.useLayoutEffect(() => {
-    if (followingRef.current) {
-      toBottom()
-    }
-  }, [totalSize, rows.length, toBottom])
+  const { raise } = lift
 
   React.useLayoutEffect(() => {
-    if (!settled) {
-      for (const row of rows) {
-        rises.set(row.key, false)
-      }
+    const element = viewport.current
+
+    if (!followingRef.current || element === null) {
+      return
     }
-  }, [rows, settled, rises])
+
+    const before = element.scrollTop
+
+    toBottom()
+
+    const grown = element.scrollTop - before
+
+    if (animates && grown > 0) {
+      raise({
+        grown,
+        ceiling: element.clientHeight,
+        content: content.current,
+        indexAt: (lifted) =>
+          Option.map(
+            Option.fromUndefinedOr(virtualizer.getVirtualItemForOffset(element.scrollTop - lifted)),
+            (item) => item.index,
+          ),
+      })
+    }
+  }, [totalSize, rows.length, toBottom, animates, raise, virtualizer])
 
   React.useEffect(() => {
     const element = viewport.current
@@ -206,15 +406,6 @@ export function Thread({
     }
   }, [toBottom])
 
-  const risesFirstTime = (key: string): boolean => rises.get(key) ?? settled
-
-  const shown = React.useCallback(
-    (key: string) => {
-      rises.set(key, false)
-    },
-    [rises],
-  )
-
   return (
     <RenderCacheScope>
       <Dimmed dimmed={dimmed} className="relative h-full min-h-0">
@@ -234,8 +425,13 @@ export function Thread({
           {rows.length === 0 ? (
             <div className="px-4 pt-4">{empty}</div>
           ) : (
-            <div className="relative w-full" style={{ height: totalSize }}>
-              {virtualizer.getVirtualItems().map((virtual) => {
+            <motion.div
+              ref={content}
+              data-slot="conversation-content"
+              className="relative w-full"
+              style={{ height: totalSize, transform: lift.transform }}
+            >
+              {virtualItems.map((virtual) => {
                 const row = rows[virtual.index]
 
                 return row === undefined ? null : (
@@ -249,7 +445,7 @@ export function Thread({
                   >
                     <ThreadRowBody
                       rowKey={row.key}
-                      rise={risesFirstTime(row.key)}
+                      reveal={revealOf(plan, row.key)}
                       memory={memory}
                       onShown={shown}
                     >
@@ -258,7 +454,15 @@ export function Thread({
                   </div>
                 )
               })}
-            </div>
+              {Option.match(ghost, {
+                onNone: () => null,
+                onSome: (found) => (
+                  <ThreadGhost key={found.key} start={found.start} onGone={gone}>
+                    {found.content}
+                  </ThreadGhost>
+                ),
+              })}
+            </motion.div>
           )}
         </div>
         <button

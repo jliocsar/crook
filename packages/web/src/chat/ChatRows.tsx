@@ -32,6 +32,7 @@ export const itemRows = (
 export const workingRow = (elapsed: (now: DateTime.Utc) => string): ThreadRow => ({
   key: WORKING_KEY,
   content: <WorkingThought elapsed={elapsed} />,
+  placeholder: true,
 })
 
 export const failureRows = (

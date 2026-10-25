@@ -624,6 +624,16 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   sixteen busy loops beside them, passing every run once fixed). An effect that must not miss a
   change subscribes through the `AtomRegistry` into a queue before it forks anything, and the
   forked fiber drains the queue.
+- Claude Code writes a session's jsonl one entry per content block, each carrying the API message
+  id, but only once the whole message has finished, never as a block streams (measured on Claude
+  Code 2.1.309 in a TUI pane, polling the file every 10 ms). A text block stamped 585 ms before
+  its tool call landed in the same write as that call, its line already holding the message's
+  final `stop_reason`; a 2202-character answer landed as one line about 9 s after its request,
+  118 ms after its stamp; no write ever left a partial line. Nothing can stream text to the
+  phone, so the chat reveals each landed batch instead of pretending to type it.
+- Motion reads `prefers-reduced-motion` once per module instance, so a test file that renders
+  with it off and then on gets the first answer both times (measured: the reduced test saw the
+  full animation). A component's reduced-motion tests live in a file of their own.
 - Claude Code's Read tool result numbers its lines as `1	…` today and `     1→…` in older
   transcripts (measured in local transcripts). Strip either only when every line carries it.
 - An agent with a long transcript to look at in a probe needs no tokens: `herdr agent start …
