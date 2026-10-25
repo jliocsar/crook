@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
+import { SkillListing } from '@crook/domain/Skill'
 import { Subagent } from '@crook/domain/Subagent'
 import { OmittedLines, TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
@@ -41,6 +42,11 @@ export class SubagentsChanged extends Schema.TaggedClass<SubagentsChanged>()('Su
   subagents: Schema.Array(Subagent),
 }) {}
 
+export class SkillsChanged extends Schema.TaggedClass<SkillsChanged>()('SkillsChanged', {
+  session: ClaudeSessionId,
+  skills: Schema.Array(SkillListing),
+}) {}
+
 export class TranscriptCaughtUp extends Schema.TaggedClass<TranscriptCaughtUp>()(
   'TranscriptCaughtUp',
   { session: ClaudeSessionId, offset: TranscriptOffset },
@@ -50,6 +56,7 @@ export const TranscriptEvent = Schema.Union([
   TranscriptOpened,
   TranscriptChunk,
   SubagentsChanged,
+  SkillsChanged,
   TranscriptCaughtUp,
 ])
 export type TranscriptEvent = typeof TranscriptEvent.Type
@@ -93,6 +100,7 @@ export const positionAfter = (
       TranscriptChunk: (chunk) =>
         Option.some(new TranscriptPosition({ session: chunk.session, offset: chunk.nextOffset })),
       SubagentsChanged: () => position,
+      SkillsChanged: () => position,
       TranscriptCaughtUp: () => position,
     }),
   )
@@ -157,6 +165,8 @@ export const remainderAfter = (
         Option.liftPredicate(opened, ({ session }) => !inSession(position, session)),
       TranscriptChunk: (chunk) => chunkRemainder(position, chunk),
       SubagentsChanged: (changed) =>
+        Option.liftPredicate(changed, ({ session }) => inSession(position, session)),
+      SkillsChanged: (changed) =>
         Option.liftPredicate(changed, ({ session }) => inSession(position, session)),
       TranscriptCaughtUp: (caughtUp) =>
         Option.liftPredicate(caughtUp, ({ session }) => inSession(position, session)),

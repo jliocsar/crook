@@ -28,7 +28,13 @@ import { HerdMachine } from '@crook/domain/HerdView'
 import { AskId, PaneId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
-import { PaneTranscript, SubagentsChanged, SubagentTranscript } from '@crook/domain/Transcript'
+import { SkillListing } from '@crook/domain/Skill'
+import {
+  PaneTranscript,
+  SkillsChanged,
+  SubagentsChanged,
+  SubagentTranscript,
+} from '@crook/domain/Transcript'
 import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
 import { PaneNotInHerd } from '@crook/protocol/ClientApi'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
@@ -420,6 +426,49 @@ describe('AgentChatScreen', () => {
       expect(within(dock).getByRole('button', { name: '/compact' })).toBeDefined()
       expect(dock.contains(composer)).toBe(true)
       expect(dock.style.paddingBottom).toBe('')
+    }),
+  )
+
+  it.effect('lists the session skills under / by where they come from, with what they take', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        new SkillsChanged({
+          session: SESSION,
+          skills: [
+            new SkillListing({
+              name: 'handoff',
+              description: 'Compact the conversation into a handoff document',
+              argumentHint: Option.some('What will the next session be used for?'),
+              scope: 'project',
+            }),
+            new SkillListing({
+              name: 'adhd',
+              description: 'Restate the next steps',
+              argumentHint: Option.none(),
+              scope: 'personal',
+            }),
+          ],
+        }),
+      ])
+      yield* Effect.promise(() => screen.findByRole('textbox'))
+      yield* Effect.promise(() => userEvent.type(field(), '/'))
+
+      const project = yield* Effect.promise(() =>
+        screen.findByRole('region', { name: 'This project' }),
+      )
+      const handoff = within(project).getByRole('button', { name: '/handoff' })
+
+      expect(screen.getByRole('region', { name: 'Yours' }).textContent).toContain('/adhd')
+      expect(screen.getByRole('region', { name: 'Claude Code' }).textContent).toContain('/compact')
+      expect(project.textContent).toContain('What will the next session be used for?')
+
+      yield* click(handoff)
+
+      expect(field()).toHaveProperty('value', '/handoff ')
     }),
   )
 

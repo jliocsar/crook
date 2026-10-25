@@ -634,6 +634,19 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Motion reads `prefers-reduced-motion` once per module instance, so a test file that renders
   with it off and then on gets the first answer both times (measured: the reduced test saw the
   full animation). A component's reduced-motion tests live in a file of their own.
+- The composer's `/` list comes from the folders Claude Code documents, read by the agent, not from
+  the transcript. Claude writes a `skill_listing` attachment into a session's transcript, but only
+  together with the first prompt (6 of 7 crook sessions on the laptop had one, at lines 12 to 25;
+  the seventh had only run `/clear`), and it lists what the model may invoke: every skill marked
+  `disable-model-invocation`, which is what a user types `/` for, was missing, and it carries no
+  scope or argument hint (measured). The agent reads the managed folder, the personal folder of
+  the Claude root the session's transcript lives in, `.claude/skills` from the checkout root down
+  to the pane's folder (a worktree without one falls back to its main checkout's), the
+  `commands` folders and the enabled plugins, honours `user-invocable: false` and
+  `skillOverrides` `off`, and sends the list on the pane's transcript watch right after the
+  session opens, so only an open chat pays for it: crook's list read in about 13 ms (measured).
+  Claude Code's bundled skills and claude.ai synced ones are not on disk and stay out; the
+  composer adds only the built-ins that work over a PTY.
 - Claude Code's Read tool result numbers its lines as `1	…` today and `     1→…` in older
   transcripts (measured in local transcripts). Strip either only when every line carries it.
 - An agent with a long transcript to look at in a probe needs no tokens: `herdr agent start …

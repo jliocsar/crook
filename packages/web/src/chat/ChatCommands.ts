@@ -49,7 +49,7 @@ import type { Restart } from '@crook/web/chat/EdgeCard'
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
-export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'handle'>
+export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
 
 export type AskDockCommands = Omit<AskDockProps, 'cwd'>
 

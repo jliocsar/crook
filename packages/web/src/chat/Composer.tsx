@@ -1,12 +1,13 @@
-import * as Arr from 'effect/Array'
-import type * as Option from 'effect/Option'
+import * as Option from 'effect/Option'
 import { AnimatePresence, motion } from 'motion/react'
 import * as React from 'react'
 
+import type { SkillListing } from '@crook/domain/Skill'
+import { slashSuggestions } from '@crook/web/chat/SlashCommands'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { keepFocus } from '@crook/web/components/KeepFocus'
 import { PromptInput } from '@crook/web/components/ui/prompt-input'
-import { Suggestions } from '@crook/web/components/ui/suggestions'
+import { type SuggestionGroup, Suggestions } from '@crook/web/components/ui/suggestions'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { translate, useTransformString } from '@crook/web/motion/TransformString'
 
@@ -29,15 +30,23 @@ export interface ComposerProps {
   readonly placeholder: string
   readonly label: string
   readonly failure: Option.Option<string>
+  readonly skills: readonly SkillListing[]
   readonly handle?: React.Ref<ComposerHandle>
 }
 
-const SLASH_ONLY = /^\/\S*$/u
 const SUGGESTION_RISE = 6
-const SLASH_COMMANDS = ['/compact', '/clear', '/model']
 
-export const slashSuggestions = (text: string): readonly string[] =>
-  SLASH_ONLY.test(text) ? Arr.filter(SLASH_COMMANDS, (command) => command.startsWith(text)) : []
+const suggestionGroups = (text: string, skills: readonly SkillListing[]): SuggestionGroup[] =>
+  slashSuggestions(text, skills).map((group) => ({
+    id: group.scope,
+    label: group.label,
+    suggestions: group.commands.map((command) => ({
+      id: command.name,
+      label: `/${command.name}`,
+      hint: Option.getOrUndefined(command.argumentHint),
+      description: command.description === '' ? undefined : command.description,
+    })),
+  }))
 
 export function Composer({
   value,
@@ -52,11 +61,12 @@ export function Composer({
   placeholder,
   label,
   failure,
+  skills,
   handle,
 }: ComposerProps) {
   const field = React.useRef<HTMLTextAreaElement>(null)
   const transform = useTransformString()
-  const matches = slashSuggestions(value)
+  const groups = suggestionGroups(value, skills)
 
   const focusField = () => {
     field.current?.focus()
@@ -65,9 +75,9 @@ export function Composer({
   React.useImperativeHandle(handle, () => ({ focus: focusField }))
 
   return (
-    <div data-slot="composer" data-mode={mode} className="grid gap-2">
+    <div data-slot="composer" data-mode={mode} className="grid grid-cols-1 gap-2">
       <AnimatePresence initial={false}>
-        {matches.length > 0 ? (
+        {groups.length > 0 ? (
           <motion.div
             key="slash"
             initial={{ opacity: 0, transform: transform.translate('Y', SUGGESTION_RISE) }}
@@ -77,12 +87,11 @@ export function Composer({
           >
             <Suggestions
               label="Slash commands"
-              className="[&_button]:font-mono"
               disabled={disabled}
               onPointerDown={keepFocus}
-              suggestions={matches.map((command) => ({ id: command, label: command }))}
+              groups={groups}
               onSelect={(suggestion) => {
-                onValueChange(`${suggestion.id} `)
+                onValueChange(`/${suggestion.id} `)
                 focusField()
               }}
             />

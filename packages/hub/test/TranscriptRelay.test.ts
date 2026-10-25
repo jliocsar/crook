@@ -10,8 +10,10 @@ import * as Queue from 'effect/Queue'
 import * as Stream from 'effect/Stream'
 
 import { ClaudeSessionId, MachineId, PaneId, TranscriptOffset } from '@crook/domain/Ids'
+import { SkillListing } from '@crook/domain/Skill'
 import {
   PaneTranscript,
+  SkillsChanged,
   TranscriptCaughtUp,
   TranscriptChunk,
   type TranscriptEvent,
@@ -58,6 +60,7 @@ const describeEvent = (event: TranscriptEvent) =>
       TranscriptChunk: (chunk) =>
         `chunk ${chunk.offset}-${chunk.nextOffset} ${chunk.messages.length}`,
       SubagentsChanged: (changed) => `subagents ${changed.subagents.length}`,
+      SkillsChanged: (changed) => `skills ${changed.skills.length}`,
       TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.offset}`,
     }),
   )
@@ -182,6 +185,34 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
           Queue.take,
         ),
       ).toEqual([`opened ${SESSION}`, 'chunk 0-10 1', 'caught up 10', 'chunk 10-20 1'])
+    }),
+  )
+
+  it.effect('passes on the skills of the session it reads, and drops those of another', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* watching(transcripts, paneSource, Option.none())
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+      const skills = [
+        new SkillListing({
+          name: 'prototype',
+          description: 'Build several versions of a UI piece',
+          argumentHint: Option.none(),
+          scope: 'project',
+        }),
+      ]
+
+      yield* transcripts.publish(LAPTOP, id, new SkillsChanged({ session: SESSION, skills }))
+      yield* transcripts.publish(LAPTOP, id, opened)
+      yield* transcripts.publish(LAPTOP, id, new SkillsChanged({ session: SESSION, skills }))
+      yield* transcripts.publish(LAPTOP, id, chunkBetween(0, 10))
+
+      expect(
+        yield* Effect.forEach(
+          Arr.makeBy(3, () => events),
+          Queue.take,
+        ),
+      ).toEqual([`opened ${SESSION}`, 'skills 1', 'chunk 0-10 1'])
     }),
   )
 

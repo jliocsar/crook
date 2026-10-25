@@ -63,6 +63,7 @@ const describeEvent = (event: TranscriptEvent) =>
       TranscriptChunk: (chunk) =>
         `chunk ${chunk.session} ${chunk.offset}-${chunk.nextOffset} ${chunk.messages.length}`,
       SubagentsChanged: (changed) => `subagents ${changed.session} ${changed.subagents.length}`,
+      SkillsChanged: (changed) => `skills ${changed.session}`,
       TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.session} ${caughtUp.offset}`,
     }),
   )
@@ -163,8 +164,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       yield* startAgent(machine, root, state)
       const events = yield* watchOnPhone(machine, Option.none(), Option.none())
 
-      expect(yield* takeAll(events, 3)).toEqual([
+      expect(yield* takeAll(events, 4)).toEqual([
         `opened ${FIRST_SESSION}`,
+        `skills ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
         `caught up ${FIRST_SESSION} ${bytesOf(first)}`,
       ])
@@ -177,8 +179,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
 
       yield* SubscriptionRef.set(state, stateOn(machine, 2, CLEARED_SESSION))
 
-      expect(yield* takeAll(events, 2)).toEqual([
+      expect(yield* takeAll(events, 3)).toEqual([
         `opened ${CLEARED_SESSION}`,
+        `skills ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,
       ])
     }),
@@ -202,8 +205,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
         Option.some(TranscriptTailBytes.make(bytesOf(recent))),
       )
 
-      expect(yield* takeAll(events, 3)).toEqual([
+      expect(yield* takeAll(events, 4)).toEqual([
         `opened ${FIRST_SESSION}`,
+        `skills ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} 0-${bytesOf(skipped)} 1`,
         `chunk ${FIRST_SESSION} ${bytesOf(skipped)}-${bytesOf(skipped + recent)} 1`,
       ])
@@ -235,9 +239,10 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
         Option.none(),
       )
 
-      expect(yield* takeAll(events, 3)).toEqual([
+      expect(yield* takeAll(events, 4)).toEqual([
         `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
         `opened ${CLEARED_SESSION}`,
+        `skills ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,
       ])
     }),
@@ -256,8 +261,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       const agent = yield* startAgent(machine, root, state)
       const events = yield* watchOnPhone(machine, Option.none(), Option.none())
 
-      expect(yield* takeAll(events, 3)).toEqual([
+      expect(yield* takeAll(events, 4)).toEqual([
         `opened ${FIRST_SESSION}`,
+        `skills ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
         `caught up ${FIRST_SESSION} ${bytesOf(before)}`,
       ])
@@ -266,7 +272,8 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       yield* append(root, FIRST_SESSION, during)
       yield* startAgent(machine, root, state)
 
-      expect(yield* takeAll(events, 2)).toEqual([
+      expect(yield* takeAll(events, 3)).toEqual([
+        `skills ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} ${bytesOf(before)}-${bytesOf(before + during)} 1`,
         `caught up ${FIRST_SESSION} ${bytesOf(before + during)}`,
       ])

@@ -118,6 +118,7 @@ const viewOf = (stored: StoredTranscript): TranscriptView =>
     position: Option.some(stored.position),
     lines: Arr.map(stored.lines, lineOf),
     subagents: stored.subagents,
+    skills: [],
     catchingUp: false,
     failure: Option.none(),
   })

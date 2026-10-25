@@ -4,6 +4,7 @@ import * as Schema from 'effect/Schema'
 
 import { ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
 import {
+  SkillsChanged,
   SubagentsChanged,
   TranscriptCaughtUp,
   TranscriptChunk,
@@ -204,5 +205,17 @@ describe('remainderAfter', () => {
     expect(
       remainderAfter(position, new SubagentsChanged({ session: CLEARED, subagents: [] })),
     ).toEqual(Option.none())
+  })
+
+  it('passes on the skills of the session the position is in, without moving it', () => {
+    const position = Option.some(at(FIRST, 100))
+    const skills = new SkillsChanged({ session: FIRST, skills: [] })
+
+    expect(remainderAfter(position, skills)).toEqual(Option.some(skills))
+    expect(remainderAfter(position, new SkillsChanged({ session: CLEARED, skills: [] }))).toEqual(
+      Option.none(),
+    )
+    expect(remainderAfter(Option.none(), skills)).toEqual(Option.none())
+    expect(positionAfter(position, skills)).toEqual(position)
   })
 })

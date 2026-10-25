@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 
 import type { ClaudeSessionId } from '@crook/domain/Ids'
+import type { SkillListing } from '@crook/domain/Skill'
 import type { Subagent } from '@crook/domain/Subagent'
 import {
   positionAfter,
@@ -30,6 +31,7 @@ export class TranscriptView extends Data.Class<{
   readonly position: Option.Option<TranscriptPosition>
   readonly lines: readonly TranscriptLine[]
   readonly subagents: readonly Subagent[]
+  readonly skills: readonly SkillListing[]
   readonly catchingUp: boolean
   readonly failure: Option.Option<TranscriptWatchFailure>
 }> {}
@@ -38,6 +40,7 @@ export const EMPTY_TRANSCRIPT = new TranscriptView({
   position: Option.none(),
   lines: [],
   subagents: [],
+  skills: [],
   catchingUp: false,
   failure: Option.none(),
 })
@@ -79,6 +82,7 @@ const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly Tran
           TranscriptLine.Message({ session: chunk.session, message }),
         ),
       SubagentsChanged: () => [],
+      SkillsChanged: () => [],
       TranscriptCaughtUp: () => [],
     }),
   )
@@ -89,8 +93,15 @@ const subagentsAfter = (view: TranscriptView, event: TranscriptEvent): readonly 
       TranscriptOpened: () => [],
       TranscriptChunk: () => view.subagents,
       SubagentsChanged: (changed) => changed.subagents,
+      SkillsChanged: () => view.subagents,
       TranscriptCaughtUp: () => view.subagents,
     }),
+  )
+
+const skillsAfter = (view: TranscriptView, event: TranscriptEvent): readonly SkillListing[] =>
+  Match.value(event).pipe(
+    Match.tag('SkillsChanged', (changed) => changed.skills),
+    Match.orElse(() => view.skills),
   )
 
 const catchingUpAfter = (view: TranscriptView, event: TranscriptEvent): boolean =>
@@ -117,6 +128,7 @@ export const applyTranscriptEvent = (
           position: positionAfter(view.position, fresh),
           lines: [...view.lines, ...freshLines(view, fresh)],
           subagents: subagentsAfter(view, fresh),
+          skills: skillsAfter(view, fresh),
           catchingUp: catchingUpAfter(view, fresh),
           failure: Option.none(),
         }),
@@ -141,3 +153,6 @@ export const linesOf = (view: Option.Option<TranscriptView>): readonly Transcrip
 
 export const subagentsOf = (view: Option.Option<TranscriptView>): readonly Subagent[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.subagents })
+
+export const skillsOf = (view: Option.Option<TranscriptView>): readonly SkillListing[] =>
+  Option.match(view, { onNone: () => [], onSome: (found) => found.skills })

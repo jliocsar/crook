@@ -3,7 +3,8 @@ import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
-import { SubagentsChanged } from '@crook/domain/Transcript'
+import { SkillListing } from '@crook/domain/Skill'
+import { SkillsChanged, SubagentsChanged } from '@crook/domain/Transcript'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
 import { MachineNotInHerd } from '@crook/protocol/ClientApi'
 import { LAPTOP } from '../HerdFixtures.ts'
@@ -85,6 +86,27 @@ describe('applyTranscriptEvent', () => {
     ])
 
     expect(view.subagents).toEqual(roster)
+  })
+
+  it('keeps the skills of the pane across /clear until the agent lists new ones', () => {
+    const prototype = new SkillListing({
+      name: 'prototype',
+      description: 'Build several versions of a UI piece',
+      argumentHint: Option.none(),
+      scope: 'project',
+    })
+    const listed = fold([opened(), new SkillsChanged({ session: SESSION, skills: [prototype] })])
+    const cleared = applyTranscriptEvent(listed, opened(NEXT_SESSION))
+
+    expect(listed.skills).toEqual([prototype])
+    expect(cleared.skills).toEqual([prototype])
+    expect(
+      applyTranscriptEvent(cleared, new SkillsChanged({ session: NEXT_SESSION, skills: [] }))
+        .skills,
+    ).toEqual([])
+    expect(
+      applyTranscriptEvent(cleared, new SkillsChanged({ session: SESSION, skills: [] })).skills,
+    ).toEqual([prototype])
   })
 
   it('keeps the lines it holds when the watch fails', () => {

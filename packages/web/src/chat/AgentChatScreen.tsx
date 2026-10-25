@@ -5,6 +5,7 @@ import { Ellipsis } from 'lucide-react'
 import * as React from 'react'
 
 import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { SkillListing } from '@crook/domain/Skill'
 import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
@@ -44,7 +45,7 @@ import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
-import { isCatchingUp, linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
+import { isCatchingUp, linesOf, skillsOf, subagentsOf } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
@@ -58,6 +59,7 @@ interface DockProps {
   readonly model: ChatScreenModel
   readonly closedHere: boolean
   readonly composer: ComposerCommands
+  readonly skills: readonly SkillListing[]
   readonly ask: Option.Option<AskDockCommands>
   readonly restart: Option.Option<Restart>
   readonly draft: string
@@ -94,6 +96,7 @@ function ChatDock({
   model,
   closedHere,
   composer,
+  skills,
   ask,
   restart,
   draft,
@@ -158,6 +161,7 @@ function ChatDock({
               handle={askFocus.composer}
               value={draft}
               onValueChange={onDraftChange}
+              skills={skills}
               {...composer}
             />
           </div>
@@ -292,6 +296,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         model={model}
         closedHere={closedHere}
         composer={commands.composer}
+        skills={skillsOf(view)}
         ask={commands.ask}
         restart={commands.restart}
         draft={draft}

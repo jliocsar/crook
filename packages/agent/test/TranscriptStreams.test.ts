@@ -17,13 +17,16 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
+import { SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import { TranscriptTail } from '@crook/claude/TranscriptTail'
 import { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
+import { SkillListing } from '@crook/domain/Skill'
 import {
   PaneTranscript,
+  SkillsChanged,
   SubagentTranscript,
   type TranscriptEvent,
   TranscriptPosition,
@@ -42,6 +45,9 @@ import {
 } from '@crook/protocol/Transcripts'
 
 import { agentRow, machineStateWith } from './Fixtures'
+
+const skillFile = (name: string, description: string) =>
+  `---\nname: ${name}\ndescription: ${description}\n---\n\nDo the thing.\n`
 
 const FIRST_SESSION = ClaudeSessionId.make('309f44d5-235f-4550-a0c7-1691715aad75')
 const CLEARED_SESSION = ClaudeSessionId.make('5b1e7c2a-8d34-4f6e-9a0b-c7d2e1f3a4b5')
@@ -74,6 +80,7 @@ const describe = (event: TranscriptEvent) =>
         `chunk ${chunk.session} ${chunk.offset}-${chunk.nextOffset} ${chunk.messages.length}`,
       SubagentsChanged: (changed) =>
         `subagents ${changed.session} ${changed.subagents.map((subagent) => subagent.id).join(',')}`,
+      SkillsChanged: (changed) => `skills ${changed.session}`,
       TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.session} ${caughtUp.offset}`,
     }),
   )
@@ -129,6 +136,7 @@ const defectiveStreams = Effect.fn('defectiveStreams')(function* (
       brokenLocator,
       TranscriptTail.layer,
       SubagentRoster.layer,
+      SkillCatalog.layerAt([], []),
       MachineStateSync.layerTest(state),
     ]),
   )
@@ -182,6 +190,7 @@ const fakeHub = Effect.fn('fakeHub')(function* (
         TranscriptOpened: (opened) =>
           Effect.andThen(move(watch, opened), record(watch, describe(opened))),
         SubagentsChanged: (changed) => record(watch, describe(changed)),
+        SkillsChanged: (changed) => record(watch, describe(changed)),
         TranscriptCaughtUp: (caughtUp) => record(watch, describe(caughtUp)),
         TranscriptChunk: (chunk) =>
           Effect.flatMap(positionOf(watch), (at) =>
@@ -215,8 +224,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           streams.follow(new PaneTranscript({ pane: PANE }), Option.none(), Option.none()),
         )
 
-        expect(yield* takeAll(events, 2)).toEqual([
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `caught up ${FIRST_SESSION} 0`,
         ])
 
@@ -254,8 +264,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
 
         yield* SubscriptionRef.set(state, stateOn(Option.some(FIRST_SESSION)))
 
-        expect(yield* takeAll(events, 2)).toEqual([
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`,
         ])
       }),
@@ -276,16 +287,18 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           streams.follow(new PaneTranscript({ pane: PANE }), Option.none(), Option.none()),
         )
 
-        expect(yield* takeAll(events, 3)).toEqual([
+        expect(yield* takeAll(events, 4)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
           `caught up ${FIRST_SESSION} ${bytesOf(before)}`,
         ])
 
         yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
 
-        expect(yield* takeAll(events, 2)).toEqual([
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${CLEARED_SESSION}`,
+          `skills ${CLEARED_SESSION}`,
           `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
         ])
       }),
@@ -309,8 +322,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           ),
         )
 
-        expect(yield* takeAll(events, 2)).toEqual([
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
         ])
       }),
@@ -332,8 +346,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           streams.follow(new PaneTranscript({ pane: PANE }), Option.none(), tail),
         )
 
-        expect(yield* takeAll(fresh, 3)).toEqual([
+        expect(yield* takeAll(fresh, 4)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(older)} 1`,
           `chunk ${FIRST_SESSION} ${bytesOf(older)}-${bytesOf(older + recent)} 1`,
         ])
@@ -347,8 +362,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           ),
         )
 
-        expect(yield* takeAll(resumed, 2)).toEqual([
+        expect(yield* takeAll(resumed, 3)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} ${bytesOf(older + recent)}-${bytesOf(older + recent + later)} 1`,
         ])
       }),
@@ -374,16 +390,18 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           ),
         )
 
-        expect(yield* takeAll(events, 3)).toEqual([
+        expect(yield* takeAll(events, 4)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
           `caught up ${FIRST_SESSION} ${bytesOf(before)}`,
         ])
 
         yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
 
-        expect(yield* takeAll(events, 3)).toEqual([
+        expect(yield* takeAll(events, 4)).toEqual([
           `opened ${CLEARED_SESSION}`,
+          `skills ${CLEARED_SESSION}`,
           `chunk ${CLEARED_SESSION} 0-${bytesOf(skipped)} 1`,
           `chunk ${CLEARED_SESSION} ${bytesOf(skipped)}-${bytesOf(skipped + recent)} 1`,
         ])
@@ -437,8 +455,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           ),
         )
 
-        expect(yield* takeAll(events, 2)).toEqual([
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(whole)} 2`,
         ])
       }),
@@ -464,12 +483,67 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           ),
         )
 
-        expect(yield* takeAll(events, 3)).toEqual([
+        expect(yield* takeAll(events, 4)).toEqual([
           `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
           `opened ${CLEARED_SESSION}`,
+          `skills ${CLEARED_SESSION}`,
           `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
         ])
       }),
+    )
+
+    it.effect(
+      'lists the skills of the pane folder and of the Claude folder its session lives in',
+      () =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem
+          const root = yield* claudeRoot()
+          const project = yield* fileSystem.makeTempDirectoryScoped()
+
+          yield* fileSystem.makeDirectory(`${root}/skills/recap`, { recursive: true })
+          yield* fileSystem.writeFileString(
+            `${root}/skills/recap/SKILL.md`,
+            skillFile('recap', 'Restate the next steps'),
+          )
+          yield* fileSystem.makeDirectory(`${project}/.git`)
+          yield* fileSystem.makeDirectory(`${project}/.claude/skills/prototype`, {
+            recursive: true,
+          })
+          yield* fileSystem.writeFileString(
+            `${project}/.claude/skills/prototype/SKILL.md`,
+            skillFile('prototype', 'Build several versions of a UI piece'),
+          )
+
+          const state = yield* SubscriptionRef.make(
+            machineStateWith([
+              agentRow({ claudeSession: Option.some(FIRST_SESSION), cwd: project }),
+            ]),
+          )
+          const streams = yield* streamsAt(root, state)
+          const events = yield* streams
+            .follow(new PaneTranscript({ pane: PANE }), Option.none(), Option.none())
+            .pipe(Stream.take(2), Stream.runCollect)
+
+          expect(events[1]).toEqual(
+            new SkillsChanged({
+              session: FIRST_SESSION,
+              skills: [
+                new SkillListing({
+                  name: 'prototype',
+                  description: 'Build several versions of a UI piece',
+                  argumentHint: Option.none(),
+                  scope: 'project',
+                }),
+                new SkillListing({
+                  name: 'recap',
+                  description: 'Restate the next steps',
+                  argumentHint: Option.none(),
+                  scope: 'personal',
+                }),
+              ],
+            }),
+          )
+        }),
     )
 
     it.effect('lists the subagents of the pane session as their meta files appear', () =>
@@ -486,8 +560,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           streams.follow(new PaneTranscript({ pane: PANE }), Option.none(), Option.none()),
         )
 
-        expect(yield* takeAll(events, 3)).toEqual([
+        expect(yield* takeAll(events, 4)).toEqual([
           `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} 0-${bytesOf(line)} 1`,
           `caught up ${FIRST_SESSION} ${bytesOf(line)}`,
         ])
@@ -562,10 +637,12 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           }),
         )
 
-        expect(yield* takeAll(hub.accepted, 4)).toEqual([
+        expect(yield* takeAll(hub.accepted, 6)).toEqual([
           `0 opened ${FIRST_SESSION}`,
+          `0 skills ${FIRST_SESSION}`,
           `0 rejected chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
           `0 opened ${FIRST_SESSION}`,
+          `0 skills ${FIRST_SESSION}`,
           `0 chunk ${FIRST_SESSION} 0-${bytesOf(seen + missed)} 2`,
         ])
       }),
@@ -594,8 +671,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
         yield* Effect.forkScoped(streams.serve(hub.link))
         yield* Queue.offer(demands, new TranscriptDemand({ watches: [watchFor(WATCH)] }))
 
-        expect(yield* takeAll(hub.accepted, 3)).toEqual([
+        expect(yield* takeAll(hub.accepted, 4)).toEqual([
           `0 opened ${FIRST_SESSION}`,
+          `0 skills ${FIRST_SESSION}`,
           `0 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
           `0 caught up ${FIRST_SESSION} ${bytesOf(first)}`,
         ])
@@ -606,8 +684,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           new TranscriptDemand({ watches: [watchFor(REPLACEMENT_WATCH)] }),
         )
 
-        expect(yield* takeAll(hub.accepted, 3)).toEqual([
+        expect(yield* takeAll(hub.accepted, 4)).toEqual([
           `1 opened ${FIRST_SESSION}`,
+          `1 skills ${FIRST_SESSION}`,
           `1 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
           `1 caught up ${FIRST_SESSION} ${bytesOf(first)}`,
         ])

@@ -15,6 +15,7 @@ import * as Stream from 'effect/Stream'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { MANAGED_SKILL_HOMES, SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SubagentRoster, type SubagentsUnreadable } from '@crook/claude/SubagentRoster'
 import {
   type LocateError,
@@ -24,6 +25,7 @@ import {
 import { type TailError, TranscriptTail } from '@crook/claude/TranscriptTail'
 import type { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
 import {
+  SkillsChanged,
   SubagentsChanged,
   TRANSCRIPT_START,
   TranscriptCaughtUp,
@@ -50,6 +52,11 @@ import {
 
 export type FollowError = LocateError | TailError | SubagentsUnreadable
 
+interface PaneSession {
+  readonly session: ClaudeSessionId
+  readonly cwd: string
+}
+
 export interface TranscriptLink {
   readonly demands: Stream.Stream<TranscriptDemand, RpcClientError>
   readonly publish: (
@@ -67,7 +74,12 @@ export class TranscriptDemandsEnded extends Schema.TaggedError<TranscriptDemands
   }
 }
 
-const sameSession = Option.makeEquivalence(Equivalence.strictEqual<ClaudeSessionId>())
+const sameSession = Option.makeEquivalence(
+  Equivalence.mapInput(
+    Equivalence.strictEqual<ClaudeSessionId>(),
+    (paneSession: PaneSession) => paneSession.session,
+  ),
+)
 
 const toWireFailure = (error: FollowError): TranscriptFailure =>
   Match.value(error).pipe(
@@ -111,14 +123,28 @@ const startIn = (session: ClaudeSessionId, from: Option.Option<TranscriptPositio
     Option.match({ onNone: () => TRANSCRIPT_START, onSome: (position) => position.offset }),
   )
 
+const opened = (session: ClaudeSessionId) =>
+  Stream.succeed<TranscriptEvent>(new TranscriptOpened({ session }))
+
+const skillsIn = (
+  catalog: SkillCatalog['Service'],
+  session: ClaudeSessionId,
+  cwd: string,
+  file: Option.Option<TranscriptFile>,
+) =>
+  Stream.fromEffect(
+    Effect.map(
+      catalog.list(cwd, file),
+      (skills): TranscriptEvent => new SkillsChanged({ session, skills }),
+    ),
+  )
+
 const make = Effect.gen(function* () {
   const sync = yield* MachineStateSync
   const locator = yield* TranscriptLocator
   const tail = yield* TranscriptTail
   const roster = yield* SubagentRoster
-
-  const opened = (session: ClaudeSessionId) =>
-    Stream.succeed<TranscriptEvent>(new TranscriptOpened({ session }))
+  const catalog = yield* SkillCatalog
 
   const fromLineNearEnd = (
     file: TranscriptFile,
@@ -156,7 +182,7 @@ const make = Effect.gen(function* () {
     )
 
   const openSession = (
-    session: ClaudeSessionId,
+    { session, cwd }: PaneSession,
     offset: TranscriptOffset,
     tailBytes: Option.Option<TranscriptTailBytes>,
   ) => {
@@ -166,16 +192,18 @@ const make = Effect.gen(function* () {
     return Stream.concat(
       opened(session),
       Stream.unwrap(
-        Effect.map(
-          locator.locate(session),
-          Option.match({
-            onSome: following,
-            onNone: () =>
-              Stream.concat(
-                Stream.succeed<TranscriptEvent>(new TranscriptCaughtUp({ session, offset })),
-                Stream.unwrap(Effect.map(locator.await(session), following)),
-              ),
-          }),
+        Effect.map(locator.locate(session), (found) =>
+          Stream.concat(
+            skillsIn(catalog, session, cwd, found),
+            Option.match(found, {
+              onSome: following,
+              onNone: () =>
+                Stream.concat(
+                  Stream.succeed<TranscriptEvent>(new TranscriptCaughtUp({ session, offset })),
+                  Stream.unwrap(Effect.map(locator.await(session), following)),
+                ),
+            }),
+          ),
         ),
       ),
     )
@@ -197,18 +225,18 @@ const make = Effect.gen(function* () {
     )
 
   const fromSession = (
-    session: ClaudeSessionId,
+    paneSession: PaneSession,
     position: Option.Option<TranscriptPosition>,
     tailBytes: Option.Option<TranscriptTailBytes>,
   ) =>
     Option.match(position, {
-      onNone: () => openSession(session, TRANSCRIPT_START, tailBytes),
+      onNone: () => openSession(paneSession, TRANSCRIPT_START, tailBytes),
       onSome: (at) =>
-        at.session === session
-          ? openSession(session, at.offset, tailBytes)
+        at.session === paneSession.session
+          ? openSession(paneSession, at.offset, tailBytes)
           : Stream.concat(
               finishSession(at, tailBytes),
-              openSession(session, TRANSCRIPT_START, tailBytes),
+              openSession(paneSession, TRANSCRIPT_START, tailBytes),
             ),
     })
 
@@ -217,7 +245,9 @@ const make = Effect.gen(function* () {
       Stream.map((state) =>
         pipe(
           Arr.findFirst(state.agents, (row) => row.pane === pane),
-          Option.flatMap((row) => row.claudeSession),
+          Option.flatMap((row) =>
+            Option.map(row.claudeSession, (session): PaneSession => ({ session, cwd: row.cwd })),
+          ),
         ),
       ),
       Stream.changesWith(sameSession),
@@ -234,9 +264,9 @@ const make = Effect.gen(function* () {
           Stream.switchMap(
             Option.match({
               onNone: () => Stream.never,
-              onSome: (session) =>
+              onSome: (paneSession) =>
                 Stream.unwrap(
-                  Effect.map(Ref.get(position), (at) => fromSession(session, at, tailBytes)),
+                  Effect.map(Ref.get(position), (at) => fromSession(paneSession, at, tailBytes)),
                 ),
             }),
           ),
@@ -345,10 +375,20 @@ export class TranscriptStreams extends Context.Service<
 
   static readonly layerAt = (roots: readonly string[]) =>
     this.layerWithoutDependencies.pipe(
-      Layer.provide([TranscriptLocator.layerAt(roots), TranscriptTail.layer, SubagentRoster.layer]),
+      Layer.provide([
+        TranscriptLocator.layerAt(roots),
+        TranscriptTail.layer,
+        SubagentRoster.layer,
+        SkillCatalog.layerAt(roots, MANAGED_SKILL_HOMES),
+      ]),
     )
 
   static readonly layer = this.layerWithoutDependencies.pipe(
-    Layer.provide([TranscriptLocator.layer, TranscriptTail.layer, SubagentRoster.layer]),
+    Layer.provide([
+      TranscriptLocator.layer,
+      TranscriptTail.layer,
+      SubagentRoster.layer,
+      SkillCatalog.layer,
+    ]),
   )
 }
