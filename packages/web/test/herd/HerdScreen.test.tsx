@@ -251,14 +251,38 @@ describe('HerdScreen', () => {
       expect(zone).not.toBeNull()
 
       if (zone !== null) {
-        fireEvent.touchStart(zone, { touches: [{ clientY: 0 }] })
-        fireEvent.touchMove(zone, { touches: [{ clientY: 200 }] })
+        fireEvent.touchStart(zone, { touches: [{ clientX: 100, clientY: 0 }] })
+        fireEvent.touchMove(zone, { touches: [{ clientX: 100, clientY: 200 }] })
         fireEvent.touchEnd(zone, { touches: [] })
       }
 
       yield* eventually(() => {
         expect(Ref.getUnsafe(link.resyncs)).toBe(1)
       })
+    }),
+  )
+
+  it.effect('leaves the herd still when a drag at the top starts sideways', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([busyLaptop])))
+      const zone = document.querySelector('[data-slot="pull-to-resync"]')
+      const content = zone?.lastElementChild
+
+      expect(content).toBeInstanceOf(HTMLElement)
+
+      if (zone !== null && content instanceof HTMLElement) {
+        fireEvent.touchStart(zone, { touches: [{ clientX: 200, clientY: 0 }] })
+        fireEvent.touchMove(zone, { touches: [{ clientX: 170, clientY: 12 }] })
+        fireEvent.touchMove(zone, { touches: [{ clientX: 140, clientY: 200 }] })
+
+        expect(content.style.transform).toBe('')
+
+        fireEvent.touchEnd(zone, { touches: [] })
+      }
+
+      yield* wait(50)
+
+      expect(Ref.getUnsafe(link.resyncs)).toBe(0)
     }),
   )
 })

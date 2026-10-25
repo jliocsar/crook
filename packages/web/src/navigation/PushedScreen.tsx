@@ -8,6 +8,7 @@ import { ChevronLeft } from 'lucide-react'
 import { animate, motion, useMotionValue, useReducedMotion } from 'motion/react'
 import * as React from 'react'
 
+import { useAxisLock } from '@crook/web/components/swipe/AxisLock'
 import { Button } from '@crook/web/components/ui/button'
 import { HeaderBanner } from '@crook/web/connection/ConnectionBanner'
 import { GLIDE } from '@crook/web/motion/Springs'
@@ -105,6 +106,7 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
   const screen = React.useRef<HTMLDivElement>(null)
   const arrived = React.useRef(false)
   const dragOrigin = React.useRef<Option.Option<number>>(Option.none())
+  const edgeLock = useAxisLock()
   const landedOnAnotherEntry = Option.exists(
     leftFrom,
     (index) => landedIndex !== undefined && landedIndex < index,
@@ -179,8 +181,9 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
     }
 
     dragOrigin.current = Option.none()
+    const swiped = Option.contains(edgeLock.release(), 'x')
 
-    if (commitsBack({ offset: offsetX.get(), velocity: offsetX.getVelocity(), width })) {
+    if (swiped && commitsBack({ offset: offsetX.get(), velocity: offsetX.getVelocity(), width })) {
       back()
 
       return
@@ -205,9 +208,10 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
 
       event.currentTarget.setPointerCapture(event.pointerId)
       dragOrigin.current = Option.some(event.clientX - offsetX.get())
+      edgeLock.begin(event)
     },
     onPointerMove: (event) => {
-      if (Option.isSome(dragOrigin.current)) {
+      if (Option.isSome(dragOrigin.current) && Option.contains(edgeLock.follow(event), 'x')) {
         offsetX.set(Math.max(0, event.clientX - dragOrigin.current.value))
       }
     },

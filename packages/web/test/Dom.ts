@@ -5,6 +5,10 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 
+export type PathPoint = readonly [clientX: number, clientY: number]
+
+type Lift = 'pointerup' | 'pointercancel'
+
 const SPRING_SETTLED_MS = 2000
 
 export const click = (element: Element) => Effect.promise(() => userEvent.click(element))
@@ -20,7 +24,7 @@ export const present = <Value>(value: Value | null | undefined, what: string): N
 export const afterSpring = (assertion: () => void) =>
   Effect.promise(() => waitFor(assertion, { timeout: SPRING_SETTLED_MS }))
 
-export const pointer = (type: string, target: EventTarget, clientX: number): void => {
+export const pointer = (type: string, target: EventTarget, clientX: number, clientY = 0): void => {
   const event = new PointerEvent(type, {
     bubbles: true,
     cancelable: true,
@@ -30,11 +34,11 @@ export const pointer = (type: string, target: EventTarget, clientX: number): voi
     pointerId: 1,
     pointerType: 'touch',
     clientX,
-    clientY: 0,
+    clientY,
   })
 
   Object.defineProperty(event, 'pageX', { value: clientX })
-  Object.defineProperty(event, 'pageY', { value: 0 })
+  Object.defineProperty(event, 'pageY', { value: clientY })
   target.dispatchEvent(event)
 }
 
@@ -43,19 +47,45 @@ export const wait = (milliseconds: number) =>
 
 export const springSettles = wait(SPRING_SETTLED_MS)
 
-export const dragX = Effect.fn('dragX')(function* (target: Element, path: readonly number[]) {
-  const [start = 0, ...moves] = path
+export const press = Effect.fn('press')(function* (
+  target: Element,
+  path: readonly PathPoint[],
+  stepMs: number = DRAG_STEP_MS,
+) {
+  const [[startX, startY] = [0, 0], ...moves] = path
 
-  pointer('pointerdown', target, start)
+  pointer('pointerdown', target, startX, startY)
 
-  for (const clientX of moves) {
-    yield* wait(DRAG_STEP_MS)
-    pointer('pointermove', window, clientX)
+  for (const [clientX, clientY] of moves) {
+    yield* wait(stepMs)
+    pointer('pointermove', target, clientX, clientY)
   }
 
-  yield* wait(DRAG_STEP_MS)
-  pointer('pointerup', window, moves.at(-1) ?? start)
+  yield* wait(stepMs)
+})
+
+export const lift = Effect.fn('lift')(function* (
+  target: Element,
+  [clientX, clientY]: PathPoint,
+  how: Lift = 'pointerup',
+) {
+  pointer(how, target, clientX, clientY)
   yield* wait(DRAG_STEP_MS)
 })
+
+export const drag = Effect.fn('drag')(function* (
+  target: Element,
+  path: readonly PathPoint[],
+  { how = 'pointerup', stepMs = DRAG_STEP_MS }: { how?: Lift; stepMs?: number } = {},
+) {
+  yield* press(target, path, stepMs)
+  yield* lift(target, path.at(-1) ?? [0, 0], how)
+})
+
+export const dragX = (target: Element, path: readonly number[]) =>
+  drag(
+    target,
+    path.map((clientX) => [clientX, 0] as const),
+  )
 
 const DRAG_STEP_MS = 50

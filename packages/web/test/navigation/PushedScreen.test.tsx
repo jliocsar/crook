@@ -23,7 +23,7 @@ import { Shell } from '@crook/web/navigation/Shell'
 import { TabScreen } from '@crook/web/navigation/TabScreen'
 
 import { liveWith } from '../AppRender.tsx'
-import { click, eventually, findByRole } from '../Dom.ts'
+import { click, eventually, findByRole, wait } from '../Dom.ts'
 import { herd } from '../HerdFixtures.ts'
 import { makeFakeHubLink } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
@@ -264,6 +264,32 @@ describe('PushedScreen', () => {
       yield* eventually(() => {
         expect(router.state.location.pathname).toBe('/')
       })
+    }),
+  )
+
+  it.effect('stays when a drag in the edge gutter starts vertically', () =>
+    Effect.gen(function* () {
+      const router = yield* renderAt('/')
+
+      yield* click(yield* findByRole('button', 'Open detail'))
+      const edge = document.querySelector('[data-slot="edge-back"]')
+      const pushed = document.querySelector('[data-slot="pushed-screen"]')
+
+      expect(edge).not.toBeNull()
+
+      if (edge !== null) {
+        fireEvent.pointerDown(edge, { clientX: 0, clientY: 300, pointerId: 1 })
+        fireEvent.pointerMove(edge, { clientX: 4, clientY: 320, pointerId: 1 })
+        fireEvent.pointerMove(edge, { clientX: 200, clientY: 340, pointerId: 1 })
+
+        expect(pushed).toHaveProperty('style.transform', 'none')
+
+        fireEvent.pointerUp(edge, { clientX: 200, clientY: 340, pointerId: 1 })
+      }
+
+      yield* wait(50)
+
+      expect(router.state.location.pathname).not.toBe('/')
     }),
   )
 

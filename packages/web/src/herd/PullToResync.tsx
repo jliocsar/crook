@@ -4,6 +4,8 @@ import { animate, useReducedMotion } from 'motion/react'
 import type { AnimationPlaybackControls } from 'motion/react'
 import * as React from 'react'
 
+import type { Point } from '@crook/web/components/press/PressGesture'
+import { useAxisLock } from '@crook/web/components/swipe/AxisLock'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { SPRING } from '@crook/web/motion/Springs'
 import { translate } from '@crook/web/motion/TransformString'
@@ -17,8 +19,8 @@ const PULL_RESISTANCE = 0.5
 const pullOffset = (dragged: number): number =>
   dragged <= 0 ? 0 : Math.min(PULL_STOPS_AT, dragged * PULL_RESISTANCE)
 
-const firstTouchY = (event: React.TouchEvent): Option.Option<number> =>
-  Option.map(Option.fromUndefinedOr(event.touches[0]), (touch) => touch.clientY)
+const firstTouch = (event: React.TouchEvent): Option.Option<Point> =>
+  Option.fromUndefinedOr(event.touches[0])
 
 export function PullToResync({
   enabled,
@@ -33,6 +35,7 @@ export function PullToResync({
   const content = React.useRef<HTMLDivElement>(null)
   const spinner = React.useRef<HTMLDivElement>(null)
   const start = React.useRef<Option.Option<number>>(Option.none())
+  const pull = useAxisLock()
   const offset = React.useRef(0)
   const syncing = React.useRef(false)
   const settling = React.useRef<Option.Option<AnimationPlaybackControls>>(Option.none())
@@ -73,13 +76,15 @@ export function PullToResync({
   const atTop = () => (zone.current?.closest(TAB_SCROLLER_SELECTOR)?.scrollTop ?? 0) <= 0
 
   const release = () => {
+    const pulled = Option.contains(pull.release(), 'y')
+
     if (Option.isNone(start.current)) {
       return
     }
 
     start.current = Option.none()
 
-    if (offset.current < PULL_ARMS_AT) {
+    if (!pulled || offset.current < PULL_ARMS_AT) {
       settle(0)
 
       return
@@ -110,15 +115,21 @@ export function PullToResync({
         }
 
         stopSettling()
-        start.current = firstTouchY(event)
+        start.current = Option.map(firstTouch(event), (touch) => {
+          pull.begin(touch)
+
+          return touch.clientY
+        })
       }}
       onTouchMove={(event) => {
-        const pull = Option.all([start.current, firstTouchY(event)])
+        const pulling = Option.all([start.current, firstTouch(event)]).pipe(
+          Option.filter(([, touch]) => Option.contains(pull.follow(touch), 'y')),
+        )
 
-        if (Option.isSome(pull)) {
-          const [origin, touchY] = pull.value
+        if (Option.isSome(pulling)) {
+          const [origin, touch] = pulling.value
 
-          show(pullOffset(touchY - origin))
+          show(pullOffset(touch.clientY - origin))
         }
       }}
       onTouchEnd={release}

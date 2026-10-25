@@ -252,9 +252,23 @@ crook's motion, through Motion (`motion/react`):
 - **Swipe rows:** swiping a card left reveals its actions; only one card is open at a time, and
   tapping another card closes the open one and does nothing else. Long-press opens the card's
   action sheet. Swiping right isn't used.
+- **Every drag picks one axis and keeps it.** Nothing moves until the finger has gone 10px along
+  either axis; it then belongs to whichever axis it moved further on, vertical on a tie, until the
+  finger lifts. A swipe row moves only on a horizontal lock, and a vertical one is left to the
+  page's scroll. Pull to resync moves only on a vertical lock, so a drag that starts on a card at
+  the top of the herd drives one of the two, never both. The edge swipe uses the same lock, so a
+  vertical drag that starts in its gutter goes nowhere. The sheet's handle drags only vertically
+  and nothing else claims it, so it needs no lock.
+
+Measured with pointer sequences in tests, not yet with a thumb: twenty quick scrolls starting on a
+card, 15px per 16ms frame, drifting sideways by up to 43° from vertical and ending as the page
+takes them, open no row and move no card (before the lock, 18 of the 20 moved the card sideways);
+a quick swipe left that has drifted 11px down by the time it has gone 20px still opens the row in
+one motion.
 
 Unmeasured knobs, picked rather than measured; settle them on the phone:
 
+- the axis lock waits for 10px of movement, Motion's own direction-lock distance;
 - the edge swipe starts in a 16px gutter and commits past a third of the screen, or at 500px/s;
 - a swipe row opens past half its actions' width, or at 500px/s;
 - the actions are 64px wide with 8px gaps;

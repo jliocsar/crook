@@ -633,6 +633,14 @@ A probe that starts a real Claude closes its pane, stops its named herdr session
   blocked the slide's frames. Reading it through `useDeferredValue` lets React render the rows in
   yielding slices: the worst frame of the slide went from about 255 ms to about 175 ms at 4x
   throttling (measured).
+- Motion ends a drag on `pointercancel` exactly as on `pointerup`, and `onDragEnd` gets the
+  drag's velocity. On a `pan-y` card a quick scroll that drifted left therefore opened the row the
+  moment the scroll cancelled the pointer (measured in a test; that iOS cancels there is for the
+  phone). A drag that must lose to the page's scroll moves nothing until it has picked its axis.
+- Motion's `dragDirectionLock` picks the axis on the first frame either one has passed 10px, and
+  tries `y` first: a quick swipe left that had moved 20px across and 11px down by that frame
+  locked to `y` and never moved (measured on motion 14.4.0). The app's own axis lock compares
+  the two axes instead and starts the drag through `dragControls` once it has picked `x`.
 - Base UI's Dialog returns focus on close to the element focused before it opened only while that
   element is still connected; once it is gone, focus lands on the body (measured on 1.9.0, after a
   close removed the card that opened the sheet). The shared sheet hands Base UI its own return
@@ -762,6 +770,9 @@ happy-dom, measured:
   from `clientHeight` and its offset from `scrollTop` on a `scroll` event, so a test that needs
   rows to leave the range defines `scrollHeight` on the viewport, lets the thread follow the
   bottom, and dispatches `scroll` itself once `scrollTop` has moved.
+- An event dispatched on an element reaches listeners on `window` too, so a gesture test
+  dispatches every pointer event on the element it drags, and both the component's own handlers
+  and Motion's window listeners see it.
 - Its `:focus-visible` matches any focused element, a clicked one included (read in its selector
   code), so a test cannot tell keyboard focus from a tap through it.
 :::

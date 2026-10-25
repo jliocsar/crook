@@ -1,8 +1,17 @@
 import { cn } from 'cn'
-import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'motion/react'
+import * as Option from 'effect/Option'
+import {
+  animate,
+  motion,
+  useDragControls,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+} from 'motion/react'
 import * as React from 'react'
 
 import { Pressable } from '@crook/web/components/press/Pressable'
+import { useAxisLock } from '@crook/web/components/swipe/AxisLock'
 import { GLIDE } from '@crook/web/motion/Springs'
 
 type SwipeRelease = {
@@ -53,6 +62,18 @@ export const settlesOpen = ({ offset, velocity, actionsWidth }: SwipeRelease): b
   return offset < -actionsWidth / 2
 }
 
+const untilLifted = (release: () => void): void => {
+  const lifted = new AbortController()
+
+  const lift = () => {
+    release()
+    lifted.abort()
+  }
+
+  window.addEventListener('pointerup', lift, { signal: lifted.signal })
+  window.addEventListener('pointercancel', lift, { signal: lifted.signal })
+}
+
 export const useOpenRow = () => {
   const [openId, setOpenId] = React.useState<string | null>(null)
   const [dragging, setDragging] = React.useState(false)
@@ -82,6 +103,13 @@ export function SwipeRow({
   const reduce = useReducedMotion() ?? false
   const offsetX = useMotionValue(0)
   const swallowTap = React.useRef(false)
+  const pressedAt = React.useRef<Option.Option<PointerEvent>>(Option.none())
+  const dragControls = useDragControls()
+  const axis = useAxisLock((locked) => {
+    if (locked === 'x' && Option.isSome(pressedAt.current)) {
+      dragControls.start(pressedAt.current.value)
+    }
+  })
   const [dragging, setDragging] = React.useState(false)
   const actionsWidth = actions.length * (ACTION_WIDTH + ACTION_GAP)
   const isOpen = row.openId === id
@@ -152,12 +180,23 @@ export function SwipeRow({
         dragConstraints={{ left: -actionsWidth, right: 0 }}
         dragElastic={{ left: ELASTIC_PAST_OPEN, right: ELASTIC_PAST_CLOSED }}
         dragMomentum={false}
-        onPointerDownCapture={() => {
+        dragListener={false}
+        dragControls={dragControls}
+        onPointerDownCapture={(event) => {
+          pressedAt.current = Option.some(event.nativeEvent)
+          axis.begin(event)
+          untilLifted(() => {
+            pressedAt.current = Option.none()
+            axis.release()
+          })
           swallowTap.current = row.openId !== null && row.openId !== id
 
           if (swallowTap.current) {
             row.setOpenId(null)
           }
+        }}
+        onPointerMove={(event) => {
+          axis.follow(event)
         }}
         onDragStart={() => {
           swallowTap.current = true
