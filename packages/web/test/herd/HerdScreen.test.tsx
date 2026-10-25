@@ -52,7 +52,7 @@ describe('HerdScreen', () => {
     }),
   )
 
-  it.effect('shows what a blocked agent asks in place of where it runs', () =>
+  it.effect('shows what a blocked agent asks as a line of its own under where it runs', () =>
     Effect.gen(function* () {
       const ask = new PermissionAsk({
         id: AskId.make('toolu_01XXC3'),
@@ -72,8 +72,12 @@ describe('HerdScreen', () => {
       )
       const summary = yield* Effect.promise(() => screen.findByText('Bash bun run lint'))
 
+      const card = summary.closest('[data-slot="agent-card"]')
+
       expect(summary.getAttribute('data-slot')).toBe('ask-summary')
-      expect(summary.closest('[data-slot="agent-card"]')?.textContent).not.toContain('crook · web')
+      expect(summary.previousElementSibling?.textContent).toBe('claude asks')
+      expect(card?.querySelector('[data-slot="agent-place"]')?.textContent).toBe('crook›web')
+      expect(card?.textContent).not.toContain('·')
     }),
   )
 

@@ -90,11 +90,12 @@ function AgentCardRow({
       layout="position"
       transition={SPRING}
       exit={motionTokens().exit}
-      className="grid grid-cols-1 gap-2"
+      className="border-border/60 grid grid-cols-1 gap-2 [&+li]:border-t"
     >
       <SwipeRow
         id={toGlobalPaneId(machine, pane)}
         row={row}
+        surface="plain"
         actions={[
           pinAction(card.pinned, pin.toggle, !controlsEnabled || pin.pending),
           closeAction(openActions, !controlsEnabled),
@@ -131,7 +132,7 @@ export function AgentCards({
   const ordered = useHeldOrder(agents, row.holding)
 
   return (
-    <ul className="grid grid-cols-1 gap-2 px-4 pt-1">
+    <ul className="grid grid-cols-1 px-2">
       <AnimatePresence initial={false}>
         {ordered.map((card) => (
           <AgentCardRow
@@ -174,7 +175,7 @@ export function HerdList({
   const row = useOpenRow()
 
   return (
-    <div data-slot="herd-list" className="grid grid-cols-1 gap-5 pt-2">
+    <div data-slot="herd-list" className="grid grid-cols-1 gap-4 pt-2">
       {Option.match(layout.notice, {
         onNone: () => null,
         onSome: (notice) => HERD_NOTICE[notice]({ controlsEnabled, onNewAgent, onAddMachine }),

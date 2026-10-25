@@ -13,6 +13,8 @@ type SwipeRelease = {
 
 export type SwipeTone = 'secondary' | 'destructive' | 'accent' | 'primary'
 
+export type SwipeSurface = 'card' | 'plain'
+
 export type SwipeAction = {
   readonly label: string
   readonly icon: React.ReactNode
@@ -26,6 +28,11 @@ const ACTION_WIDTH = 64
 const ACTION_GAP = 8
 const ELASTIC_PAST_OPEN = 0.15
 const ELASTIC_PAST_CLOSED = 0.05
+
+const SURFACE = {
+  card: { frame: 'bg-card border-border border', padding: 'p-3' },
+  plain: { frame: 'bg-background', padding: 'px-2 py-3' },
+} satisfies Record<SwipeSurface, { frame: string; padding: string }>
 
 const TONE = {
   secondary: 'bg-secondary text-secondary-foreground',
@@ -59,6 +66,7 @@ export function SwipeRow({
   id,
   row,
   actions,
+  surface = 'card',
   onTap,
   onLongPress,
   children,
@@ -66,6 +74,7 @@ export function SwipeRow({
   id: string
   row: OpenRow
   actions: readonly SwipeAction[]
+  surface?: SwipeSurface
   onTap: (opener: HTMLElement) => void
   onLongPress?: () => void
   children: React.ReactNode
@@ -137,7 +146,7 @@ export function SwipeRow({
       </motion.div>
       <motion.div
         data-slot="swipe-card"
-        className="bg-card border-border relative rounded-xl border"
+        className={cn('relative rounded-xl', SURFACE[surface].frame)}
         style={{ x: offsetX, touchAction: 'pan-y' }}
         drag="x"
         dragConstraints={{ left: -actionsWidth, right: 0 }}
@@ -169,7 +178,7 @@ export function SwipeRow({
         <Pressable
           suppress={dragging || isOpen}
           frameClassName="rounded-xl"
-          className="p-3"
+          className={SURFACE[surface].padding}
           onTap={(opener) => {
             if (swallowTap.current) {
               swallowTap.current = false
