@@ -11,7 +11,11 @@ import { AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
-import type { AskDockCommands, ComposerCommands } from '@crook/web/chat/ChatCommands'
+import type {
+  AskDockCommands,
+  ComposerCommands,
+  PendingPromptRow,
+} from '@crook/web/chat/ChatCommands'
 import { CatchingUpPill, ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
 import {
   chatItems,
@@ -64,15 +68,12 @@ interface DockProps {
 
 const BACK_TO_AGENTS = 'Back to Agents'
 const NOT_CLAUDE = 'Not a Claude pane'
-const PENDING_PROMPT_KEY = 'pending prompt'
 
-const pendingPromptRows = (text: Option.Option<string>): readonly ThreadRow[] =>
-  Option.toArray(
-    Option.map(text, (sent) => ({
-      key: PENDING_PROMPT_KEY,
-      content: <Message meta="Sent">{sent}</Message>,
-    })),
-  )
+const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly ThreadRow[] =>
+  pending.map((prompt) => ({
+    key: prompt.key,
+    content: <Message meta={prompt.queued ? 'Queued' : 'Sent'}>{prompt.text}</Message>,
+  }))
 
 const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>) => {
   if (model.presence === 'notClaude') {
@@ -239,7 +240,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       ? []
       : [
           ...conversationRows,
-          ...pendingPromptRows(commands.pendingPrompt),
+          ...pendingPromptRows(commands.pendingPrompts),
           ...Option.toArray(
             Option.map(working, (row) =>
               workingRow((now) => shortElapsed(now, row.statusChangedAt)),

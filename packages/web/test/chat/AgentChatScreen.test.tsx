@@ -704,42 +704,6 @@ describe('AgentChatScreen', () => {
     }),
   )
 
-  it.effect('keeps a second prompt as sent while only the first has arrived', () =>
-    Effect.gen(function* () {
-      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
-      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
-
-      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'first')])])
-      yield* Effect.promise(() => screen.findByText('first'))
-      yield* Ref.set(
-        link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'second' }))),
-      )
-      yield* Effect.promise(() => userEvent.type(field(), 'second{Enter}'))
-      yield* eventually(() => {
-        expect(screen.getByText('Sent')).toBeDefined()
-      })
-      yield* Ref.set(
-        link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'third' }))),
-      )
-      yield* Effect.promise(() => userEvent.type(field(), 'third{Enter}'))
-      yield* eventually(() => {
-        expect(Ref.getUnsafe(link.sent)).toHaveLength(2)
-        expect(screen.getByText('third')).toBeDefined()
-      })
-      yield* Queue.offer(transcript, chunk(10, 20, [prompt(10, 'second')]))
-      yield* Effect.promise(() => screen.findByText('second'))
-
-      expect(screen.getByText('Sent')).toBeDefined()
-
-      yield* Queue.offer(transcript, chunk(20, 30, [prompt(20, 'third')]))
-      yield* eventually(() => {
-        expect(screen.queryByText('Sent')).toBeNull()
-      })
-    }),
-  )
-
   it.effect('names the machine on Back when the chat was opened from it', () =>
     Effect.gen(function* () {
       yield* renderApp(

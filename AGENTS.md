@@ -639,6 +639,26 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
 :::
 
+:::tip
+A prompt herdr types into a Claude that is working or compacting queues exactly as one typed
+at the keyboard does (measured on Claude Code 2.1.309 and herdr 0.9.5, one Claude): the pane lists
+it above the input with "ctrl+enter to send now", and Claude takes it when the turn or the
+compaction ends, as a user entry of its own whose `promptSource` is `queued`. Nothing was dropped or
+merged: two prompts typed 0.3 s apart became two turns in the order sent, the second queued behind
+the first. So the agent delivers a prompt the moment it is sent and holds nothing back, and the
+phone labels one sent while Claude works as queued, one row per send, until the transcript holds it.
+
+While a prompt waits in that queue the transcript holds only a `queue-operation` enqueue entry, and
+the one written during a compaction carries no text (measured), so nothing in the transcript names
+a queued prompt reliably before Claude takes it; the phone keeps its own row until then. Right
+after `/compact` was typed herdr still read the agent as idle, and as working 1.3 s later.
+
+The case of a prompt typed during a tool call went unmeasured: Claude Code refuses a standalone
+foreground `sleep` with a `Blocked: standalone sleep` tool error and reruns it in the background,
+so a probe cannot hold a tool call open with one. The background command's completion then starts
+a turn of its own, enqueued as a task notification.
+:::
+
 - Shiki's JavaScript regex engine compiles a grammar's patterns the first time it meets them, so
   the first blocks of each language cost far more than the rest: over one real transcript's 204
   code blocks the first pass took 1507 ms and the second 219 ms, and a nine-line TypeScript block

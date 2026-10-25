@@ -58,7 +58,7 @@ export interface ChatCommands {
   readonly ask: Option.Option<AskDockCommands>
   readonly alwaysNotes: readonly AlwaysNote[]
   readonly restart: Option.Option<Restart>
-  readonly pendingPrompt: Option.Option<string>
+  readonly pendingPrompts: readonly PendingPromptRow[]
 }
 
 interface ChatCommandsInput {
@@ -70,18 +70,29 @@ interface ChatCommandsInput {
   readonly setDraft: (draft: string) => void
 }
 
-export interface PromptWait {
-  readonly promptsAtSend: number
-  readonly awaited: number
+export interface PendingPrompt {
+  readonly text: string
+  readonly queued: boolean
 }
 
-interface PromptSend {
+export interface PendingPromptRow extends PendingPrompt {
+  readonly key: string
+}
+
+export interface PromptWait {
+  readonly promptsAtSend: number
+  readonly pending: readonly PendingPrompt[]
+}
+
+export interface PromptSend {
   readonly replacesFailed: boolean
-  readonly awaitsPrompt: boolean
+  readonly prompt: Option.Option<string>
+  readonly working: boolean
 }
 
 const SLASH = '/'
-const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, awaited: 0 }
+const PENDING_PROMPT_KEY = 'pending prompt'
+const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, pending: [] }
 
 export const STOP_SETTLE = Duration.millis(512)
 
@@ -117,37 +128,63 @@ const lastTextWhen = (
 
 const promptCount = (items: readonly ChatItem[]): number => Arr.filter(items, isUserPrompt).length
 
-const hasArrived = (wait: PromptWait, items: readonly ChatItem[]): boolean =>
-  wait.awaited === 0 || promptCount(items) >= wait.promptsAtSend + wait.awaited
+const arrivedSince = (wait: PromptWait, items: readonly ChatItem[]): number =>
+  Math.max(promptCount(items) - wait.promptsAtSend, 0)
 
-const awaitsPrompt = (command: Command): boolean =>
-  Option.exists(textOf(command), (text) => !text.startsWith(SLASH))
+const hasArrived = (wait: PromptWait, items: readonly ChatItem[]): boolean =>
+  arrivedSince(wait, items) >= wait.pending.length
+
+const promptTextOf = (command: Command): Option.Option<string> =>
+  Option.filter(textOf(command), (text) => !text.startsWith(SLASH))
+
+const awaitsPrompt = (command: Command): boolean => Option.isSome(promptTextOf(command))
+
+const carriedPrompts = (
+  wait: PromptWait,
+  items: readonly ChatItem[],
+  send: PromptSend,
+): readonly PendingPrompt[] => {
+  if (hasArrived(wait, items)) {
+    return []
+  }
+
+  return send.replacesFailed ? Arr.dropRight(wait.pending, 1) : wait.pending
+}
 
 export const waitAfterSend = (
   wait: PromptWait,
   items: readonly ChatItem[],
   send: PromptSend,
 ): PromptWait => {
-  const carried = hasArrived(wait, items) ? 0 : wait.awaited - (send.replacesFailed ? 1 : 0)
-  const awaited = carried + (send.awaitsPrompt ? 1 : 0)
+  const carried = carriedPrompts(wait, items, send)
+  const promptsAtSend = Arr.isReadonlyArrayNonEmpty(carried)
+    ? wait.promptsAtSend
+    : promptCount(items)
+  const aheadInLine = !hasArrived({ promptsAtSend, pending: carried }, items)
+  const pending = Option.match(send.prompt, {
+    onNone: () => carried,
+    onSome: (text) => Arr.append(carried, { text, queued: send.working || aheadInLine }),
+  })
 
-  if (awaited === 0) {
-    return NOTHING_AWAITED
-  }
-
-  return { promptsAtSend: carried === 0 ? promptCount(items) : wait.promptsAtSend, awaited }
+  return Arr.isReadonlyArrayNonEmpty(pending) ? { promptsAtSend, pending } : NOTHING_AWAITED
 }
 
-const pendingPromptText = (
-  action: CommandAction,
+export const pendingPromptRows = (
   wait: PromptWait,
   items: readonly ChatItem[],
-): Option.Option<string> =>
+  inFlight: boolean,
+): readonly PendingPromptRow[] =>
   pipe(
-    lastTextWhen(action, isAcknowledged),
-    Option.filter((text) => !text.startsWith(SLASH)),
-    Option.filter(() => !hasArrived(wait, items)),
+    Arr.map(wait.pending, (pending, index) => ({
+      ...pending,
+      key: `${PENDING_PROMPT_KEY} ${wait.promptsAtSend + index}`,
+    })),
+    Arr.dropRight(inFlight ? 1 : 0),
+    Arr.drop(arrivedSince(wait, items)),
   )
+
+const isPromptInFlight = (action: CommandAction): boolean =>
+  !isAcknowledged(action.state) && Option.exists(action.last, awaitsPrompt)
 
 const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
   Match.value(receipt).pipe(
@@ -204,7 +241,7 @@ const usePromptWait = (items: readonly ChatItem[]) => {
   const arrived = hasArrived(wait, items)
 
   React.useEffect(() => {
-    if (arrived && wait.awaited > 0) {
+    if (arrived && Arr.isReadonlyArrayNonEmpty(wait.pending)) {
       setWait(NOTHING_AWAITED)
     }
   }, [arrived, wait])
@@ -315,7 +352,8 @@ export const useChatCommands = ({
   const sendPrompt = (command: Command) => {
     prompted.afterSend({
       replacesFailed: isFailed(prompt.state) && Option.exists(prompt.last, awaitsPrompt),
-      awaitsPrompt: awaitsPrompt(command),
+      prompt: promptTextOf(command),
+      working: activity === 'working',
     })
     prompt.send(command)
   }
@@ -382,6 +420,6 @@ export const useChatCommands = ({
         failure: failureMessageOf(restart.state),
       }),
     ),
-    pendingPrompt: pendingPromptText(prompt, prompted.wait, items),
+    pendingPrompts: pendingPromptRows(prompted.wait, items, isPromptInFlight(prompt)),
   }
 }
