@@ -10,6 +10,7 @@ import * as Stream from 'effect/Stream'
 
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import {
+  CHUNK_READ_LIMIT,
   NEWLINE,
   TranscriptOffsetBeyondEnd,
   TranscriptOffsetMidLine,
@@ -108,6 +109,15 @@ const fixtureBytes = Effect.fn('fixtureBytes')(function* (name: string) {
 
   return yield* fileSystem.readFile(`${FIXTURES}/${name}`)
 })
+
+const repeatedPast = (turn: Uint8Array, minimum: number) => {
+  const copies = Math.ceil(minimum / turn.length) + 1
+  const repeated = new Uint8Array(turn.length * copies)
+
+  Arr.makeBy(copies, (copy) => repeated.set(turn, copy * turn.length))
+
+  return repeated
+}
 
 layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
   live.effect('holds back a line cut at a 4096-byte page and emits it once the rest lands', () =>
@@ -232,10 +242,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
     () =>
       Effect.gen(function* () {
         const turn = yield* fixtureBytes('tool-use-and-result.jsonl')
-        const copies = Math.ceil(LARGE_APPEND / turn.length) + 1
-        const backlog = new Uint8Array(turn.length * copies)
-
-        Arr.makeBy(copies, (copy) => backlog.set(turn, copy * turn.length))
+        const backlog = repeatedPast(turn, CHUNK_READ_LIMIT)
         const file = yield* scratchFile(backlog)
         const events = yield* followingAll(file, START)
         const throughCaughtUp = yield* takeThroughCaughtUp(events)
@@ -244,7 +251,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
         const afterCaughtUp = yield* Queue.take(events)
         const backlogChunks = Arr.filter(throughCaughtUp, isChunk)
 
-        expect(backlog.length).toBeGreaterThan(TAIL_READ_SIZE)
+        expect(backlog.length).toBeGreaterThan(CHUNK_READ_LIMIT)
         expect(backlogChunks.length).toBeGreaterThan(1)
         expect(Arr.last(throughCaughtUp)).toEqual(
           Option.some(
@@ -262,6 +269,32 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
           nextOffset: backlog.length + turn.length,
         })
       }),
+  )
+
+  live.effect('reads a backlog under the read limit as one chunk', () =>
+    Effect.gen(function* () {
+      const backlog = repeatedPast(yield* fixtureBytes('tool-use-and-result.jsonl'), LARGE_APPEND)
+      const file = yield* scratchFile(backlog)
+      const throughCaughtUp = yield* takeThroughCaughtUp(yield* followingAll(file, START))
+
+      expect(backlog.length).toBeGreaterThan(TAIL_READ_SIZE)
+      expect(backlog.length).toBeLessThan(CHUNK_READ_LIMIT)
+      expect(
+        pipe(
+          throughCaughtUp,
+          Arr.filter(isChunk),
+          Arr.map((chunk) => chunk.offset),
+        ),
+      ).toEqual([0])
+      expect(Arr.last(throughCaughtUp)).toEqual(
+        Option.some(
+          new TranscriptCaughtUp({
+            session: SESSION,
+            offset: TranscriptOffset.make(backlog.length),
+          }),
+        ),
+      )
+    }),
   )
 
   live.effect('reports a cut last line as not yet caught up to', () =>

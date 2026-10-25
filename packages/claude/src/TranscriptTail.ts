@@ -41,6 +41,7 @@ export type TailError =
 
 export const NEWLINE = 0x0a
 export const TAIL_READ_SIZE = 64 * 1024
+export const CHUNK_READ_LIMIT = 1024 * 1024
 
 export class TranscriptUnreadable extends Schema.TaggedError<TranscriptUnreadable>()(
   'TranscriptUnreadable',
@@ -212,17 +213,23 @@ const make = Effect.gen(function* () {
       Effect.flatMap(({ read, size }) =>
         size < read
           ? Effect.fail(new TranscriptShrank({ path: file.path, consumed: read, size }))
-          : Effect.void,
+          : Effect.succeed(size),
       ),
     )
 
-    const readOnce = Effect.gen(function* () {
+    const readUpTo = Effect.fn('TranscriptTail.readUpTo')(function* (size: number) {
       const current = yield* Ref.get(state)
-      const read = yield* handle
-        .readAlloc(TAIL_READ_SIZE, {
-          position: BigInt(current.consumed + current.pending.length),
-        })
-        .pipe(Effect.mapError(unreadable))
+      const position = current.consumed + current.pending.length
+      const read = yield* Option.match(
+        Option.liftPredicate(size - position, (unread) => unread > 0),
+        {
+          onNone: () => Effect.succeedNone,
+          onSome: (unread) =>
+            handle
+              .readAlloc(Math.min(unread, CHUNK_READ_LIMIT), { position: BigInt(position) })
+              .pipe(Effect.mapError(unreadable)),
+        },
+      )
 
       return yield* Option.match(read, {
         onNone: () => Effect.succeed([[], Option.none<void>()] as const),
@@ -243,9 +250,8 @@ const make = Effect.gen(function* () {
     })
 
     const available = Stream.unwrap(
-      Effect.as(
-        checkSize,
-        Stream.paginate<void, TranscriptChunk, TailError>(undefined, () => readOnce),
+      Effect.map(checkSize, (size) =>
+        Stream.paginate<void, TranscriptChunk, TailError>(undefined, () => readUpTo(size)),
       ),
     )
 
