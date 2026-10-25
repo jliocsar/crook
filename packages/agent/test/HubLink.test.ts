@@ -25,7 +25,6 @@ import * as RpcServer from 'effect/rpc/RpcServer'
 import * as RpcTest from 'effect/rpc/RpcTest'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { PANE_BUSY_RETRY_LIMIT } from '@crook/agent/AgentLauncher'
 import { HubConnectionStatus, HubOffline, HubOnline } from '@crook/agent/HubConnection'
 import * as HubLink from '@crook/agent/HubLink'
 import { InputDelivered, Prompt, SendKeys, StartAgent } from '@crook/domain/Command'
@@ -45,6 +44,7 @@ import {
   AgentSendKeysMethod,
   AgentStartMethod,
   PaneSendInputMethod,
+  PaneWaitForOutputMethod,
   SessionSnapshotMethod,
   WorkspaceCreateMethod,
 } from '@crook/herdr/Methods'
@@ -55,6 +55,7 @@ import {
   Hello,
   HUB_RECONNECT_BASE,
   MachineIdMismatch,
+  PANE_BUSY_RETRY_LIMIT,
 } from '@crook/protocol/AgentLink'
 import {
   CommandId,
@@ -140,6 +141,7 @@ const launchStuckAtABusyShell = [
     root_pane: paneInfo({ pane_id: 'w1:p9' }),
   }),
   scriptedResult(PaneSendInputMethod, { type: 'ok' }),
+  scriptedResult(PaneWaitForOutputMethod, { type: 'output_matched', pane_id: 'w1:p9' }),
   scriptedRejection(AgentStartMethod, 'agent_pane_busy', 'not an available shell'),
 ]
 
@@ -399,7 +401,7 @@ it.effect('starts a launch that arrives while a pane command is still being answ
       responses: [...inputResponses, ...launchStuckAtABusyShell],
     })
     const sentWhileHeld = yield* Queue.takeN(requests, 2)
-    const untilFirstStart = yield* Queue.takeN(requests, 4)
+    const untilFirstStart = yield* Queue.takeN(requests, 5)
 
     yield* Deferred.succeed(firstAnswerAccepted, undefined)
     yield* TestClock.adjust(Duration.times(PANE_BUSY_RETRY_LIMIT, 2))
@@ -411,6 +413,7 @@ it.effect('starts a launch that arrives while a pane command is still being answ
       'workspace.create',
       'session.snapshot',
       'pane.send_input',
+      'pane.wait_for_output',
       'agent.start',
     ])
   }),

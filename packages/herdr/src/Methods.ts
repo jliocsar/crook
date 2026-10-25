@@ -70,6 +70,21 @@ export const PaneReadMethod = makeMethod('pane.read', {
   }),
 })
 
+const OutputMatch = Schema.Struct({
+  type: Schema.Literals(['substring', 'regex']),
+  value: Schema.String,
+})
+
+export const PaneWaitForOutputMethod = makeMethod('pane.wait_for_output', {
+  params: Schema.Struct({
+    pane_id: Schema.String,
+    source: PaneReadSource,
+    match: OutputMatch,
+    timeout_ms: Schema.Int,
+  }),
+  result: Schema.Struct({ type: Schema.Literal('output_matched'), pane_id: Schema.String }),
+})
+
 export const TabCreateMethod = makeMethod('tab.create', {
   params: Schema.Struct({
     workspace_id: Schema.String,

@@ -32,12 +32,18 @@ import {
   AgentWaitMethod,
   PaneCloseMethod,
   PaneSendInputMethod,
+  PaneWaitForOutputMethod,
   TabCreateMethod,
   WorkspaceCreateMethod,
   WorktreeCreateMethod,
 } from '@crook/herdr/Methods'
 import type { SessionSnapshot } from '@crook/herdr/Records'
-import { AGENT_READY_TIMEOUT } from '@crook/protocol/AgentLink'
+import {
+  AGENT_READY_TIMEOUT,
+  PANE_BUSY_RETRY_LIMIT,
+  SHELL_READY_TIMEOUT,
+  SLOWEST_MEASURED_PROMPT_HOOKS,
+} from '@crook/protocol/AgentLink'
 import {
   AgentNotStarted,
   CommandDeliveryUnknown,
@@ -78,7 +84,8 @@ const FIRST_AGENT_NUMBER = 1
 const ENTER_KEY = 'enter'
 const BRANCH_SEPARATOR = '/'
 const WORKTREE_NAME_SEPARATOR = '-'
-const SLOWEST_MEASURED_SHELL_SPAWN = Duration.millis(27)
+const SHELL_READY_MARK_HEAD = 'crook-shell-'
+const SHELL_READY_MARK_TAIL = 'ready'
 
 const CLAUDE_CHILD_VARIABLES = [
   'AI_AGENT',
@@ -95,8 +102,8 @@ const CLAUDE_CHILD_VARIABLES = [
   'CLAUDE_PID',
 ] as const
 
-export const PANE_BUSY_RETRY_LIMIT = Duration.times(SLOWEST_MEASURED_SHELL_SPAWN, 10)
-export const UNSET_CLAUDE_CHILD_VARIABLES = ` unset ${CLAUDE_CHILD_VARIABLES.join(' ')}`
+export const SHELL_READY_MARK = `${SHELL_READY_MARK_HEAD}${SHELL_READY_MARK_TAIL}`
+export const PREPARE_SHELL_LINE = ` unset ${CLAUDE_CHILD_VARIABLES.join(' ')}; printf '${SHELL_READY_MARK_HEAD}%s\\n' ${SHELL_READY_MARK_TAIL}`
 
 export const SCRUBBED_ENVIRONMENT: Record.ReadonlyRecord<string, string> = Record.fromEntries(
   Arr.map(CLAUDE_CHILD_VARIABLES, (name) => [name, ''] as const),
@@ -200,6 +207,19 @@ const reserveNameBeside = (
     return [name, HashSet.add(reserved, name)] as const
   })
 
+const shellPreparation = (pane: PaneId): typeof PaneSendInputMethod.params.Type => ({
+  pane_id: pane,
+  text: PREPARE_SHELL_LINE,
+  keys: [ENTER_KEY],
+})
+
+const shellReadyWait = (pane: PaneId): typeof PaneWaitForOutputMethod.params.Type => ({
+  pane_id: pane,
+  source: 'recent_unwrapped',
+  match: { type: 'substring', value: SHELL_READY_MARK },
+  timeout_ms: Duration.toMillis(SHELL_READY_TIMEOUT),
+})
+
 const isPaneBusy = (error: HerdrRequestError) =>
   Match.value(error).pipe(
     Match.tag('HerdrPaneBusy', () => true),
@@ -271,19 +291,16 @@ const make = Effect.gen(function* () {
     const inLaunchedPane = <Success>(request: Effect.Effect<Success, HerdrRequestError>) =>
       fromHerdr(request, PANE_OPENED, notStartedIn(launched))
 
-    return inLaunchedPane(
-      herdr.request(PaneSendInputMethod, {
-        pane_id: launched.pane,
-        text: UNSET_CLAUDE_CHILD_VARIABLES,
-        keys: [ENTER_KEY],
-      }),
-    ).pipe(
+    return inLaunchedPane(herdr.request(PaneSendInputMethod, shellPreparation(launched.pane))).pipe(
+      Effect.andThen(
+        inLaunchedPane(herdr.request(PaneWaitForOutputMethod, shellReadyWait(launched.pane))),
+      ),
       Effect.andThen(
         inLaunchedPane(
           herdr.request(AgentStartMethod, { name, kind, pane_id: launched.pane }).pipe(
             Effect.retry({
               while: isPaneBusy,
-              schedule: Schedule.spaced(SLOWEST_MEASURED_SHELL_SPAWN).pipe(
+              schedule: Schedule.spaced(SLOWEST_MEASURED_PROMPT_HOOKS).pipe(
                 Schedule.upTo({ duration: PANE_BUSY_RETRY_LIMIT }),
               ),
             }),

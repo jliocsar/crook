@@ -18,14 +18,20 @@ import {
 } from '@crook/protocol/Transcripts'
 
 const PROMPT_START_WINDOW = Duration.seconds(5)
+const SLOWEST_MEASURED_SHELL_READY = Duration.millis(708)
 
 export const AGENT_PING_INTERVAL = Duration.seconds(5)
 export const AGENT_SOCKET_OPEN_TIMEOUT = Duration.seconds(10)
 export const COMMAND_TIMEOUT = AGENT_PING_INTERVAL
 export const AGENT_READY_TIMEOUT = Duration.seconds(30)
+export const SLOWEST_MEASURED_PROMPT_HOOKS = Duration.millis(58)
+export const SHELL_READY_TIMEOUT = Duration.times(SLOWEST_MEASURED_SHELL_READY, 10)
+export const PANE_BUSY_RETRY_LIMIT = Duration.times(SLOWEST_MEASURED_PROMPT_HOOKS, 10)
+export const SHELL_START_WAIT = Duration.sum(SHELL_READY_TIMEOUT, PANE_BUSY_RETRY_LIMIT)
+export const AGENT_START_WAIT = Duration.sum(SHELL_START_WAIT, AGENT_READY_TIMEOUT)
 export const HUB_RECONNECT_BASE = Duration.millis(77)
 export const RECONNECT_CAP = AGENT_PING_INTERVAL
-export const LAUNCH_HERDR_WAIT = Duration.sum(AGENT_READY_TIMEOUT, PROMPT_START_WINDOW)
+export const LAUNCH_HERDR_WAIT = Duration.sum(AGENT_START_WAIT, PROMPT_START_WINDOW)
 export const LAUNCH_COMMAND_TIMEOUT = Duration.sum(LAUNCH_HERDR_WAIT, COMMAND_TIMEOUT)
 
 export const reconnectBackoff = (base: Duration.Duration) =>

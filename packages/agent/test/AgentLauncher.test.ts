@@ -1,25 +1,30 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
+import * as BunServices from '@effect/platform-bun/BunServices'
 import { describe, expect, it, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as FileSystem from 'effect/FileSystem'
+import { identity } from 'effect/Function'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
+import * as ChildProcess from 'effect/process/ChildProcess'
 import * as Schema from 'effect/Schema'
+import * as Stream from 'effect/Stream'
 import * as Struct from 'effect/Struct'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import {
-  PANE_BUSY_RETRY_LIMIT,
+  PREPARE_SHELL_LINE,
   SCRUBBED_ENVIRONMENT,
-  UNSET_CLAUDE_CHILD_VARIABLES,
+  SHELL_READY_MARK,
   mintAgentName,
   worktreePathBeside,
 } from '@crook/agent/AgentLauncher'
@@ -42,6 +47,7 @@ import {
   AgentWaitMethod,
   PaneCloseMethod,
   PaneSendInputMethod,
+  PaneWaitForOutputMethod,
   SessionSnapshotMethod,
   TabCreateMethod,
   WorkspaceCreateMethod,
@@ -64,6 +70,8 @@ import {
   AGENT_READY_TIMEOUT,
   HUB_RECONNECT_BASE,
   LAUNCH_COMMAND_TIMEOUT,
+  PANE_BUSY_RETRY_LIMIT,
+  SHELL_READY_TIMEOUT,
 } from '@crook/protocol/AgentLink'
 import {
   AgentNotStarted,
@@ -165,6 +173,9 @@ const agentReady = (pane: string) =>
 
 const inputSent = scriptedResult(PaneSendInputMethod, { type: 'ok' })
 
+const shellReady = (pane: string) =>
+  scriptedResult(PaneWaitForOutputMethod, { type: 'output_matched', pane_id: pane })
+
 const prompted = scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })
 
 const closed = scriptedResult(PaneCloseMethod, { type: 'ok' })
@@ -172,18 +183,48 @@ const closed = scriptedResult(PaneCloseMethod, { type: 'ok' })
 const unsetSent = (pane: PaneId) => ({
   id: 'pane.send_input',
   method: 'pane.send_input',
-  params: { pane_id: pane, text: UNSET_CLAUDE_CHILD_VARIABLES, keys: ['enter'] },
+  params: { pane_id: pane, text: PREPARE_SHELL_LINE, keys: ['enter'] },
 })
+
+const shellReadyAwaited = (pane: PaneId) => ({
+  id: 'pane.wait_for_output',
+  method: 'pane.wait_for_output',
+  params: {
+    pane_id: pane,
+    source: 'recent_unwrapped',
+    match: { type: 'substring', value: SHELL_READY_MARK },
+    timeout_ms: Duration.toMillis(SHELL_READY_TIMEOUT),
+  },
+})
+
+const holdingShellReadyUntil =
+  (shellAtPrompt: Deferred.Deferred<void>) => (herdr: Layer.Layer<HerdrClient>) =>
+    Layer.effect(
+      HerdrClient,
+      Effect.gen(function* () {
+        const client = yield* HerdrClient
+
+        return HerdrClient.of({
+          request: (method, params) =>
+            method.name === PaneWaitForOutputMethod.name
+              ? client.request(method, params).pipe(Effect.tap(() => Deferred.await(shellAtPrompt)))
+              : client.request(method, params),
+          snapshot: client.snapshot,
+          subscribe: client.subscribe,
+        })
+      }),
+    ).pipe(Layer.provide(herdr))
 
 const startLauncher = Effect.fn('startLauncher')(function* (
   responses: readonly ScriptedResponse[],
+  aroundHerdr: (herdr: Layer.Layer<HerdrClient>) => Layer.Layer<HerdrClient> = identity,
 ) {
   const state = yield* SubscriptionRef.make(machineStateWith([agentRow()]))
   const sent = yield* Queue.unbounded<SentRequest>()
   const alreadyTaken = yield* Ref.make<readonly SentRequest[]>([])
   const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
   const context = yield* Layer.build(
-    executorWith(HerdrClient.layerTest({ responses, events, sent }), state),
+    executorWith(aroundHerdr(HerdrClient.layerTest({ responses, events, sent })), state),
   )
 
   return {
@@ -241,6 +282,21 @@ describe('worktreePathBeside', () => {
   })
 })
 
+layer(BunServices.layer, { excludeTestServices: true })(
+  'the line typed into a new shell',
+  (live) => {
+    live.effect('prints the ready mark only when a shell runs it, so its echo never matches', () =>
+      Effect.gen(function* () {
+        const handle = yield* ChildProcess.make('sh', ['-c', PREPARE_SHELL_LINE])
+        const output = yield* handle.stdout.pipe(Stream.decodeText(), Stream.mkString)
+
+        expect(output).toBe(`${SHELL_READY_MARK}\n`)
+        expect(PREPARE_SHELL_LINE).not.toContain(SHELL_READY_MARK)
+      }),
+    )
+  },
+)
+
 describe('launch bounds', () => {
   it('leaves the hub time to hear how a launch ended', () => {
     expect(
@@ -262,6 +318,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
           snapshotOf([workspaceAt(folder)], [agentInfo({ name: Option.some('crook-1') })]),
           tabCreated(NEW_PANE, 'w1', folder),
           inputSent,
+          shellReady(NEW_PANE),
           agentStarted(NEW_PANE),
           agentReady(NEW_PANE),
           prompted,
@@ -281,6 +338,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
           },
           { id: 'session.snapshot', method: 'session.snapshot', params: {} },
           unsetSent(NEW_PANE),
+          shellReadyAwaited(NEW_PANE),
           {
             id: 'agent.start',
             method: 'agent.start',
@@ -321,6 +379,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
             root_pane: newPane('w2:p1', 'w2', folder),
           }),
           inputSent,
+          shellReady('w2:p1'),
           agentStarted('w2:p1'),
           agentReady('w2:p1'),
         ])
@@ -336,6 +395,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
           'workspace.create',
           'session.snapshot',
           'pane.send_input',
+          'pane.wait_for_output',
           'agent.start',
           'agent.wait',
         ])
@@ -350,6 +410,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
         inputSent,
+        shellReady(NEW_PANE),
         agentStarted(NEW_PANE),
         agentReady(NEW_PANE),
       ])
@@ -397,6 +458,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
         inputSent,
+        shellReady(NEW_PANE),
         scriptedRejection(AgentStartMethod, 'agent_pane_busy', 'not an available shell'),
         agentStarted(NEW_PANE),
         agentReady(NEW_PANE),
@@ -415,6 +477,87 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
     }),
   )
 
+  onDisk.effect('waits however long the new shell takes to print its ready mark', () =>
+    Effect.gen(function* () {
+      const folder = yield* temporaryFolder
+      const shellAtPrompt = yield* Deferred.make<void>()
+      const { executor, sent, untilSent } = yield* startLauncher(
+        [
+          snapshotOf([workspaceAt(folder)]),
+          tabCreated(NEW_PANE, 'w1', folder),
+          inputSent,
+          shellReady(NEW_PANE),
+          agentStarted(NEW_PANE),
+          agentReady(NEW_PANE),
+        ],
+        holdingShellReadyUntil(shellAtPrompt),
+      )
+      const launching = yield* executor
+        .execute(FIRST_ACTION, new StartAgent({ kind: 'claude', folder, task: Option.none() }))
+        .pipe(Effect.forkChild)
+
+      yield* untilSent(PaneWaitForOutputMethod.name)
+      yield* TestClock.adjust(PANE_BUSY_RETRY_LIMIT)
+      const sentWhileShellStarting = yield* sent
+
+      yield* Deferred.succeed(shellAtPrompt, undefined)
+      const receipt = yield* Fiber.join(launching)
+      const sentOnceReady = yield* sent
+
+      expect(sentWhileShellStarting.map((request) => request.method)).toEqual([
+        'session.snapshot',
+        'tab.create',
+        'session.snapshot',
+        'pane.send_input',
+        'pane.wait_for_output',
+      ])
+      expect(sentWhileShellStarting[4]).toEqual(shellReadyAwaited(NEW_PANE))
+      expect(receipt).toEqual(new AgentStarted({ pane: NEW_PANE }))
+      expect(sentOnceReady.map((request) => request.method)).toEqual(['agent.start', 'agent.wait'])
+    }),
+  )
+
+  onDisk.effect(
+    'closes the tab and starts nothing when the shell never prints its ready mark',
+    () =>
+      Effect.gen(function* () {
+        const folder = yield* temporaryFolder
+        const { executor, createdPanes, sent } = yield* startLauncher([
+          snapshotOf([workspaceAt(folder)]),
+          tabCreated(NEW_PANE, 'w1', folder),
+          inputSent,
+          scriptedRejection(
+            PaneWaitForOutputMethod,
+            'timeout',
+            'timed out waiting for output match',
+          ),
+          closed,
+        ])
+        const failed = yield* executor
+          .execute(FIRST_ACTION, new StartAgent({ kind: 'claude', folder, task: Option.none() }))
+          .pipe(Effect.flip)
+        const requests = yield* sent
+
+        expect(failed).toEqual(
+          new AgentNotStarted({
+            folder,
+            worktree: Option.none(),
+            code: 'timeout',
+            detail: 'timed out waiting for output match',
+          }),
+        )
+        expect(requests.map((request) => request.method)).toEqual([
+          'session.snapshot',
+          'tab.create',
+          'session.snapshot',
+          'pane.send_input',
+          'pane.wait_for_output',
+          'pane.close',
+        ])
+        expect(HashSet.has(yield* createdPanes.current, NEW_PANE)).toBe(false)
+      }),
+  )
+
   onDisk.effect('gives two launches running at once different agent names', () =>
     Effect.gen(function* () {
       const folder = yield* temporaryFolder
@@ -423,6 +566,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         tabCreated(NEW_PANE, 'w1', folder),
         tabCreated(OTHER_NEW_PANE, 'w1', folder),
         inputSent,
+        shellReady(NEW_PANE),
         scriptedRejection(AgentStartMethod, 'agent_pane_busy', 'not an available shell'),
         agentStarted(NEW_PANE),
         agentReady(NEW_PANE),
@@ -494,6 +638,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
         inputSent,
+        shellReady(NEW_PANE),
         agentStarted(NEW_PANE),
         scriptedRejection(AgentWaitMethod, 'timeout', 'timed out waiting for agent'),
         closed,
@@ -516,6 +661,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         'tab.create',
         'session.snapshot',
         'pane.send_input',
+        'pane.wait_for_output',
         'agent.start',
         'agent.wait',
         'pane.close',
@@ -533,6 +679,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
         inputSent,
+        shellReady(NEW_PANE),
         agentStarted(NEW_PANE),
         agentReady(NEW_PANE),
         scriptedRejection(AgentPromptMethod, 'agent_blocked', 'agent is blocked'),
@@ -557,6 +704,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         snapshotOf([workspaceAt(folder)]),
         tabCreated(NEW_PANE, 'w1', folder),
         inputSent,
+        shellReady(NEW_PANE),
         agentStarted(NEW_PANE),
         agentReady(NEW_PANE),
         scriptedRejection(AgentPromptMethod, 'agent_prompt_stalled', 'did not start working'),
@@ -595,6 +743,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
           tabCreated(WORKTREE_CLAUDE_PANE, 'w3', checkout),
           snapshotOf([workspaceAt(folder)]),
           inputSent,
+          shellReady(WORKTREE_CLAUDE_PANE),
           agentStarted(WORKTREE_CLAUDE_PANE),
           agentReady(WORKTREE_CLAUDE_PANE),
           closed,
@@ -609,6 +758,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
           ['tab.create', { workspace_id: 'w3', cwd: checkout, env: SCRUBBED_ENVIRONMENT }],
           ['session.snapshot', {}],
           ['pane.send_input', unsetSent(WORKTREE_CLAUDE_PANE).params],
+          ['pane.wait_for_output', shellReadyAwaited(WORKTREE_CLAUDE_PANE).params],
           ['agent.start', { name: 'crook-1', kind: 'claude', pane_id: WORKTREE_CLAUDE_PANE }],
           [
             'agent.wait',
@@ -641,6 +791,7 @@ layer(BunFileSystem.layer)('AgentLauncher', (onDisk) => {
         tabCreated(WORKTREE_CLAUDE_PANE, 'w3', checkout),
         snapshotOf([workspaceAt(folder)]),
         inputSent,
+        shellReady(WORKTREE_CLAUDE_PANE),
         agentStarted(WORKTREE_CLAUDE_PANE),
         scriptedRejection(AgentWaitMethod, 'timeout', 'timed out waiting for agent'),
         closed,

@@ -707,6 +707,31 @@ Checking the web app against real data, measured:
 :::
 
 :::warning
+A new pane's shell is ready for `agent.start` only once its rc files have run, and nothing herdr
+returns says when that is. herdr 0.9.5 answers `agent_pane_busy` while any child of the shell holds
+the pane's foreground and accepts the moment the shell is alone there, mid-init included: with the
+user's zshrc, whose start-up runs `herdr`, `jq`, `mise`, `fzf` and `wt` one after another, an
+`agent.start` retried right after the setup line was first accepted 0 to 274 ms later across 20
+launches (measured). A fixed retry budget sized from a bare shell's 27 ms spawn loses that race
+whenever the rc work runs long. Here the one launch that lost it opened a new workspace, and every
+launch into an existing workspace was accepted within 25 ms, so which launch fails is timing, not
+the workspace being reused.
+
+So a launch types its setup line with a `printf` that prints a ready mark, and waits for that mark
+with `pane.wait_for_output` before it asks herdr to start the agent. The format splits the mark in
+two, so the echo of the typed line never contains it and only a shell that ran the line can match.
+The mark appeared 401 to 708 ms after the line was sent, over ten launches that opened a workspace
+and ten that added a tab to an existing one; the slowest of each was within 5 ms of the other
+(measured). After the mark the prompt hooks (`mise`'s precmd) still held the foreground for up to
+58 ms, so the start is still retried while busy, for ten times that.
+
+herdr checks `pane.wait_for_output` on a 100 ms grid: every wait ended within 8 ms after 400, 500,
+600 or 700 ms (measured). A timed-out wait answers the code `timeout`. The socket API has no
+`pane.run` (read in herdr's bundled API schema), so text and Enter stays `pane.send_input`, which
+answers once the keys are in, at least 300 ms before the line's own output appeared (measured).
+:::
+
+:::warning
 `shadcn add` writes a `utils` module even when `components.json` aliases `utils` to the `cn`
 package (measured on 4.22.0). That module only re-exports `cn`, which
 `no-reexport-only-modules` rejects. Delete it after every add; components import `cn` from `cn`.
