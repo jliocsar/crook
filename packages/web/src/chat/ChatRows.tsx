@@ -8,6 +8,7 @@ import { RowAction } from '@crook/web/chat/RowAction'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import { ThreadItem } from '@crook/web/chat/ThreadItem'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
+import { isCatchingUp } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Skeleton } from '@crook/web/components/ui/skeleton'
@@ -42,7 +43,12 @@ export const failureRows = (
     Option.map((failure) => ({
       key: FAILURE_KEY,
       content: (
-        <RowAction label="Try again" onAction={onRetry}>
+        <RowAction
+          label="Try again"
+          pendingLabel="Trying again"
+          pending={isCatchingUp(view)}
+          onAction={onRetry}
+        >
           <ActionFailure className="px-1 text-center" message={Option.some(failure.message)} />
         </RowAction>
       ),

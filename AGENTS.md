@@ -593,10 +593,37 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Shiki's hast names an element's classes in `properties.class`, a space-separated string, not in
   hast's usual `className` array (measured on 4.5). A walk that looks for `className` finds no
   line and renders every block plain; test the walk against a real highlighter's output.
+- A stream atom marks every value it emits as `waiting` until its stream ends (read in
+  `Atom`'s stream constructor), so the result of an atom over a stream that never ends, such as a
+  chat's transcript, is waiting from its first value on and says nothing about a refresh. A chat
+  that is catching up says so in the view it emits: while a fresher view is held back until the
+  agent has caught up, the atom emits the last view it showed, marked as catching up, and that
+  mark drives the header's "Catching up" pill and the pending Show earlier and Try again rows.
+  The cue hides while the chat is dimmed, since the dim already says the hub or the machine is
+  away, and once the pane no longer runs Claude, whose transcript never catches up. A failed
+  watch is not catching up, so Try again turns pending only once pressed.
+- Catching a chat up is bound by round trips, not by any hop's own work. The hub writes a
+  transcript event to the phone only after the phone acknowledged the one before, and holds one
+  event per phone, so the agent's next event waits on that round trip too. Run locally with every
+  hop timed, a cold open with the 512 KB tail reached the screen 72 ms after the phone asked, and
+  the agent began its watch under 1 ms after the hub registered it, so the wait sits in the
+  number of events times the phone's round trip. With the agent reading 64 KB per event, 800 KB
+  written since the phone last looked took 14 events and 14.3 s at an emulated 1 s round trip,
+  and 4.4 s at 300 ms; reading what the file holds in events of up to 1 MiB took 2 events, 2.2 s
+  and 0.8 s. Show earlier on a 3 MB transcript went from 48 events and 14.9 s to 5 events and
+  1.7 s at 300 ms (all measured against a local hub and agent through a proxy that delays each
+  WebSocket message). Fewer, larger events are the lever; a smaller read size is a regression.
 - An atom that has to react to another atom without re-running reads it through `get.stream`,
   which subscribes through the registry instead of adding a dependency (read in `AtomRegistry`).
   Each run of that stream adds a subscription that lives until the atom does, so run it once for
   the atom's life and fan it out, rather than re-running it per wait.
+- `get.stream` subscribes only when the stream first runs, and a stream run in a forked fiber
+  first runs whenever that fiber is scheduled, so a change that lands before then is lost. Under
+  CPU load the chat's restart listener subscribed after its watch had already failed, and a
+  Try again pressed in between never restarted it (measured: two tests failing every run with
+  sixteen busy loops beside them, passing every run once fixed). An effect that must not miss a
+  change subscribes through the `AtomRegistry` into a queue before it forks anything, and the
+  forked fiber drains the queue.
 - Claude Code's Read tool result numbers its lines as `1	…` today and `     1→…` in older
   transcripts (measured in local transcripts). Strip either only when every line carries it.
 - An agent with a long transcript to look at in a probe needs no tokens: `herdr agent start …

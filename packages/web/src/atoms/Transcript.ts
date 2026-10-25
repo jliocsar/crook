@@ -2,8 +2,10 @@ import * as Data from 'effect/Data'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Atom from 'effect/reactivity/Atom'
+import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
@@ -28,21 +30,17 @@ import {
   isOpened,
   isShowable,
   resumeOf,
+  shownAfter,
 } from '@crook/web/chat/TranscriptState'
 import type { TranscriptWatchFailure } from '@crook/web/chat/TranscriptState'
 import { findAgent, isOnlineMachine } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
-export interface Followed<Value> {
-  readonly now: Value
-  readonly changes: Stream.Stream<Value>
-}
-
 export interface WatchSignals {
-  readonly watchable: Stream.Stream<boolean>
-  readonly retries: Stream.Stream<number>
-  readonly awaitsCaughtUp: Followed<boolean>
-  readonly herd: Followed<Option.Option<HerdView>>
+  readonly watchable: Atom.Atom<boolean>
+  readonly retries: Atom.Atom<number>
+  readonly awaitsCaughtUp: Atom.Atom<boolean>
+  readonly herd: Atom.Atom<Option.Option<HerdView>>
 }
 
 export type TranscriptKey = PaneTranscriptKey | SubagentTranscriptKey
@@ -83,6 +81,29 @@ const isCaughtUp = (event: TranscriptEvent): boolean =>
     Match.orElse(() => false),
   )
 
+const subscribed = Effect.fn('Transcript.subscribed')(function* <Value>(
+  registry: AtomRegistry.AtomRegistry,
+  atom: Atom.Atom<Value>,
+  immediate: boolean,
+) {
+  const changes = yield* Queue.unbounded<Value>()
+
+  yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      registry.subscribe(
+        atom,
+        (value) => {
+          Queue.offerUnsafe(changes, value)
+        },
+        { immediate },
+      ),
+    ),
+    (unsubscribe) => Effect.sync(unsubscribe),
+  )
+
+  return Stream.fromQueue(changes)
+})
+
 const transcriptViews = (
   machine: MachineId,
   source: TranscriptSource,
@@ -93,22 +114,31 @@ const transcriptViews = (
     Effect.gen(function* () {
       const link = yield* HubLink
       const cache = yield* TranscriptCache
+      const registry = yield* AtomRegistry.AtomRegistry
+      const watchableChanges = yield* subscribed(registry, signals.watchable, true)
+      const retryChanges = yield* subscribed(registry, signals.retries, false)
+      const awaitsCaughtUpChanges = yield* subscribed(registry, signals.awaitsCaughtUp, false)
+      const herdChanges = yield* subscribed(registry, signals.herd, false)
+      const awaitsCaughtUpNow = registry.get(signals.awaitsCaughtUp)
       const cached = yield* cache.load(machine, source)
       const view = yield* SubscriptionRef.make(
-        whole ? EMPTY_TRANSCRIPT : Option.getOrElse(cached, () => EMPTY_TRANSCRIPT),
+        catchingUpFrom(
+          whole ? EMPTY_TRANSCRIPT : Option.getOrElse(cached, () => EMPTY_TRANSCRIPT),
+          awaitsCaughtUpNow,
+        ),
       )
       const restarts = yield* SubscriptionRef.make(0)
-      const awaitsCaughtUp = yield* Ref.make(signals.awaitsCaughtUp.now)
-      const herd = yield* Ref.make(signals.herd.now)
+      const awaitsCaughtUp = yield* Ref.make(awaitsCaughtUpNow)
+      const herd = yield* Ref.make(registry.get(signals.herd))
       const persist = Effect.flatMap(Ref.get(herd), (current) =>
         cache.persist(machine, source, current),
       )
 
-      yield* signals.awaitsCaughtUp.changes.pipe(
+      yield* awaitsCaughtUpChanges.pipe(
         Stream.runForEach((awaits) => Ref.set(awaitsCaughtUp, awaits)),
         Effect.forkScoped,
       )
-      yield* signals.herd.changes.pipe(
+      yield* herdChanges.pipe(
         Stream.runForEach((current) => Ref.set(herd, current)),
         Effect.forkScoped,
       )
@@ -116,12 +146,12 @@ const transcriptViews = (
       yield* Effect.addFinalizer(() => persist)
 
       yield* Stream.merge(
-        signals.watchable.pipe(
+        watchableChanges.pipe(
           Stream.changes,
           Stream.drop(1),
           Stream.filter((ready) => ready),
         ),
-        signals.retries,
+        retryChanges,
       ).pipe(
         Stream.runForEach(() => SubscriptionRef.update(restarts, (count) => count + 1)),
         Effect.forkScoped,
@@ -179,10 +209,7 @@ const transcriptViews = (
 
       yield* Effect.forkScoped(Effect.forever(watchOnce))
 
-      return Stream.concat(
-        Stream.fromIterable(Option.toArray(cached)),
-        SubscriptionRef.changes(view).pipe(Stream.filter(isShowable)),
-      )
+      return SubscriptionRef.changes(view).pipe(Stream.mapAccum(() => cached, shownAfter))
     }),
   )
 
@@ -229,18 +256,13 @@ const watchableAtomOf = (key: TranscriptKey): Atom.Atom<boolean> =>
     }),
   )
 
-const followed = <Value>(get: Atom.AtomContext, atom: Atom.Atom<Value>): Followed<Value> => ({
-  now: get.once(atom),
-  changes: get.stream(atom, { withoutInitialValue: true }),
-})
-
 export const transcriptAtom = Atom.family((key: TranscriptKey) =>
   hubRuntime.atom((get) =>
     transcriptViews(key.machine, sourceOf(key), get(transcriptWholeAtom(key)), {
-      watchable: get.stream(watchableAtomOf(key)),
-      retries: get.stream(transcriptRetryAtom(key), { withoutInitialValue: true }),
-      awaitsCaughtUp: followed(get, awaitsCaughtUpAtom(key.machine)),
-      herd: followed(get, herdViewAtom),
+      watchable: watchableAtomOf(key),
+      retries: transcriptRetryAtom(key),
+      awaitsCaughtUp: awaitsCaughtUpAtom(key.machine),
+      herd: herdViewAtom,
     }),
   ),
 )

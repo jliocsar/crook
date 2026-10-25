@@ -54,6 +54,7 @@ export interface ThreadEnvironment {
   readonly cwd: string
   readonly paneClosed: boolean
   readonly onShowEarlier: () => void
+  readonly earlierPending: boolean
   readonly onOpenRun: Option.Option<(run: SubagentRun) => void>
 }
 
@@ -372,7 +373,12 @@ function ThreadItemView({ item, environment }: { item: ChatItem; environment: Th
     Compacted: (compacted) => <CompactedDivider summary={compacted.summary} />,
     Cleared: () => <Divider>Conversation cleared</Divider>,
     Omitted: (omitted) => (
-      <RowAction label="Show earlier messages" onAction={environment.onShowEarlier}>
+      <RowAction
+        label="Show earlier messages"
+        pendingLabel="Loading earlier messages"
+        pending={environment.earlierPending}
+        onAction={environment.onShowEarlier}
+      >
         <Note>{omittedLabel(omitted.byteLength)}</Note>
       </RowAction>
     ),

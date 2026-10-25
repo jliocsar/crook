@@ -14,7 +14,8 @@ import {
 } from '@crook/web/atoms/Transcript'
 import { chatItems, hasToolRunning, isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
-import { activityOf, cwdOf, titleOf } from '@crook/web/chat/ChatModel'
+import { CatchingUpPill } from '@crook/web/chat/ChatHeader'
+import { activityOf, cwdOf, isWatching, titleOf } from '@crook/web/chat/ChatModel'
 import { failureRows, itemRows, TranscriptEmpty, workingRow } from '@crook/web/chat/ChatRows'
 import { ImageViewer } from '@crook/web/chat/Images'
 import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
@@ -22,7 +23,7 @@ import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import { runStatusShown } from '@crook/web/chat/ToolView'
-import { linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
+import { isCatchingUp, linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
 import { Response } from '@crook/web/components/ui/response'
 import { RunDot } from '@crook/web/components/ui/subagent-tree'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
@@ -84,6 +85,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const parent = AsyncResult.value(useAtomValue(transcriptAtom(parentKey)))
   const transcript = useTranscriptThread(key)
   const view = AsyncResult.value(transcript.result)
+  const catchingUp = isWatching(model) && isCatchingUp(view)
   const cwd = cwdOf(model)
   const paneClosed = model.presence === 'closed'
   const parentLines = linesOf(parent)
@@ -118,9 +120,10 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
       cwd,
       paneClosed,
       onShowEarlier: transcript.onShowEarlier,
+      earlierPending: transcript.whole && catchingUp,
       onOpenRun: Option.none(),
     }),
-    [cwd, paneClosed, transcript.onShowEarlier],
+    [cwd, paneClosed, transcript.onShowEarlier, transcript.whole, catchingUp],
   )
 
   const rows: readonly ThreadRow[] = [
@@ -155,6 +158,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
             ),
           })}
           backLabel={`Back to ${parentTitle}`}
+          trailing={<CatchingUpPill shown={catchingUp && !dimmed} />}
         />
         <div className="min-h-0 flex-1">
           <Thread rows={rows} dimmed={dimmed} empty={<TranscriptEmpty view={view} />} />

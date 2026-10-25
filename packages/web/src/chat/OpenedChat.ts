@@ -24,6 +24,7 @@ export const useOpenedChat = (machine: MachineId, pane: PaneId) => {
 
 export const useTranscriptThread = (key: TranscriptKey) => {
   const result = useAtomValue(transcriptAtom(key))
+  const whole = useAtomValue(transcriptWholeAtom(key))
   const showWhole = useAtomSet(transcriptWholeAtom(key))
   const retry = useAtomSet(transcriptRetryAtom(key))
   const onShowEarlier = React.useCallback(() => {
@@ -33,5 +34,5 @@ export const useTranscriptThread = (key: TranscriptKey) => {
     retry((count) => count + 1)
   }, [retry])
 
-  return { result, onShowEarlier, onRetry }
+  return { result, whole, onShowEarlier, onRetry }
 }

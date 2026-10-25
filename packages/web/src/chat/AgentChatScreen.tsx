@@ -12,7 +12,7 @@ import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
 import type { AskDockCommands, ComposerCommands } from '@crook/web/chat/ChatCommands'
-import { ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
+import { CatchingUpPill, ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
 import {
   chatItems,
   firstRunningTreeKey,
@@ -40,7 +40,7 @@ import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
-import { linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
+import { isCatchingUp, linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
@@ -175,7 +175,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     [machine, pane],
   )
   const transcript = useTranscriptThread(transcriptKey)
+  const latest = AsyncResult.value(transcript.result)
   const view = AsyncResult.value(React.useDeferredValue(transcript.result))
+  const catchingUp = isWatching(model) && isCatchingUp(latest)
   const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
   const [draft, setDraft] = React.useState('')
@@ -211,9 +213,10 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       cwd,
       paneClosed,
       onShowEarlier: transcript.onShowEarlier,
+      earlierPending: transcript.whole && catchingUp,
       onOpenRun: Option.some(openRun),
     }),
-    [cwd, paneClosed, transcript.onShowEarlier, openRun],
+    [cwd, paneClosed, transcript.onShowEarlier, transcript.whole, catchingUp, openRun],
   )
   const conversationRows = React.useMemo(
     () =>
@@ -242,7 +245,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
               workingRow((now) => shortElapsed(now, row.statusChangedAt)),
             ),
           ),
-          ...(isWatching(model) ? failureRows(view, transcript.onRetry) : []),
+          ...(isWatching(model) ? failureRows(latest, transcript.onRetry) : []),
         ]
 
   return (
@@ -253,6 +256,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         backLabel={backLabel}
         trailing={
           <>
+            <CatchingUpPill shown={catchingUp && !dimmed} />
             <RunningPill
               count={runningCount(items)}
               onShow={() => {

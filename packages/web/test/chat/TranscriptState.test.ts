@@ -13,6 +13,7 @@ import {
   EMPTY_TRANSCRIPT,
   failedWith,
   isShowable,
+  shownAfter,
   TranscriptLine,
 } from '@crook/web/chat/TranscriptState'
 
@@ -95,6 +96,15 @@ describe('applyTranscriptEvent', () => {
     expect(Option.isSome(view.failure)).toBe(true)
   })
 
+  it('stops catching up once the watch fails', () => {
+    const failed = failedWith(
+      catchingUpFrom(fold([opened(), chunk(0, 10, [prompt(0, 'hi')])]), true),
+      new MachineNotInHerd({ machine: LAPTOP }),
+    )
+
+    expect(failed.catchingUp).toBe(false)
+  })
+
   it('forgets the failure once a watch delivers again', () => {
     const failed = failedWith(
       fold([opened(), chunk(0, 10, [prompt(0, 'hi')])]),
@@ -145,5 +155,38 @@ describe('isShowable', () => {
     )
 
     expect(isShowable(applyTranscriptEvent(partway, caughtUp(0, NEXT_SESSION)))).toBe(false)
+  })
+})
+
+describe('shownAfter', () => {
+  const seen = fold([opened(), chunk(0, 10, [prompt(0, 'hi')]), caughtUp(10)])
+  const resuming = catchingUpFrom(seen, true)
+
+  it('keeps showing the last view, marked catching up, while a fresher one is held back', () => {
+    const [shown, emitted] = shownAfter(Option.some(seen), resuming)
+
+    expect(Arr.map(emitted, (view) => [offsets(view.lines), view.catchingUp])).toEqual([
+      [['old 0'], true],
+    ])
+    expect(Option.map(shown, (view) => view.catchingUp)).toEqual(Option.some(true))
+  })
+
+  it('emits nothing more until the held view can be shown', () => {
+    const [held] = shownAfter(Option.some(seen), resuming)
+    const partway = applyTranscriptEvent(resuming, chunk(10, 20, [said(10, 'hello')]))
+    const [, quiet] = shownAfter(held, partway)
+    const [, done] = shownAfter(held, applyTranscriptEvent(partway, caughtUp(20)))
+
+    expect(quiet).toEqual([])
+    expect(Arr.map(done, (view) => [offsets(view.lines), view.catchingUp])).toEqual([
+      [['old 0', 'old 10'], false],
+    ])
+  })
+
+  it('shows nothing while a first watch catches up', () => {
+    expect(shownAfter(Option.none(), catchingUpFrom(EMPTY_TRANSCRIPT, true))).toEqual([
+      Option.none(),
+      [],
+    ])
   })
 })

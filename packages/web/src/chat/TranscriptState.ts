@@ -50,6 +50,25 @@ export const isShowable = (view: TranscriptView): boolean =>
 export const catchingUpFrom = (view: TranscriptView, awaitsCaughtUp: boolean): TranscriptView =>
   new TranscriptView(Struct.evolve(view, { catchingUp: () => awaitsCaughtUp }))
 
+export const shownAfter = (
+  shown: Option.Option<TranscriptView>,
+  view: TranscriptView,
+): readonly [Option.Option<TranscriptView>, readonly TranscriptView[]] =>
+  pipe(
+    Option.liftPredicate(view, isShowable),
+    Option.orElse(() =>
+      pipe(
+        shown,
+        Option.filter((last) => !last.catchingUp),
+        Option.map((last) => catchingUpFrom(last, true)),
+      ),
+    ),
+    Option.match({
+      onNone: () => [shown, []],
+      onSome: (next) => [Option.some(next), [next]],
+    }),
+  )
+
 const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly TranscriptLine[] =>
   Match.value(event).pipe(
     Match.tagsExhaustive({
@@ -105,12 +124,17 @@ export const applyTranscriptEvent = (
   )
 
 export const failedWith = (view: TranscriptView, failure: TranscriptWatchFailure): TranscriptView =>
-  new TranscriptView(Struct.evolve(view, { failure: () => Option.some(failure) }))
+  new TranscriptView(
+    Struct.evolve(view, { catchingUp: () => false, failure: () => Option.some(failure) }),
+  )
 
 export const resumeOf = (
   view: TranscriptView,
   tail: Option.Option<TranscriptTailBytes>,
 ): TranscriptResume => ({ from: view.position, tail })
+
+export const isCatchingUp = (view: Option.Option<TranscriptView>): boolean =>
+  Option.exists(view, (found) => found.catchingUp)
 
 export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
