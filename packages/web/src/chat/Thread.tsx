@@ -30,6 +30,7 @@ export interface ThreadRow {
   readonly key: string
   readonly content: React.ReactNode
   readonly placeholder?: boolean
+  readonly sent?: boolean
 }
 
 interface Ghost {
@@ -228,6 +229,22 @@ const ghostsOf = (
     Arr.head,
   )
 
+const useOnSent = (rows: readonly ThreadRow[], onSent: () => void) => {
+  const [seen] = React.useState(() => new Set<string>())
+
+  React.useLayoutEffect(() => {
+    const sentNow = rows.filter((row) => row.sent === true && !seen.has(row.key))
+
+    for (const row of sentNow) {
+      seen.add(row.key)
+    }
+
+    if (sentNow.length > 0) {
+      onSent()
+    }
+  }, [rows, seen, onSent])
+}
+
 function Appear({
   rowKey,
   reveal,
@@ -326,6 +343,8 @@ export function Thread({
   const [memory] = React.useState(() => new Map<string, boolean>())
   const [following, setFollowing] = React.useState(true)
   const followingRef = React.useRef(true)
+  const lastTop = React.useRef(0)
+  const jumped = React.useRef(false)
   const reduce = useReducedMotion() ?? false
   const settled = useSettled(rows.length)
   const animates = settled && !reduce
@@ -349,11 +368,20 @@ export function Thread({
   const { ghost, gone } = useGhost(plan.departed, rows, virtualItems)
 
   const follow = (next: boolean) => {
-    followingRef.current = next
-    setFollowing(next)
+    if (next !== followingRef.current) {
+      followingRef.current = next
+      setFollowing(next)
+    }
   }
 
   const { raise, current: liftNow } = lift
+
+  useOnSent(rows, () => {
+    if (!followingRef.current) {
+      jumped.current = true
+      follow(true)
+    }
+  })
 
   const toBottom = React.useCallback(() => {
     if (viewport.current !== null) {
@@ -391,8 +419,11 @@ export function Thread({
     toBottom()
 
     const grown = element.scrollTop - before
+    const slides = animates && grown > 0 && !jumped.current
 
-    if (animates && grown > 0) {
+    jumped.current = false
+
+    if (slides) {
       raise({
         grown,
         ceiling: element.clientHeight,
@@ -435,10 +466,15 @@ export function Thread({
           data-following={following || undefined}
           className="h-full overflow-y-auto overscroll-contain"
           onScroll={(event) => {
-            const next = isAtBottom(event.currentTarget, liftNow())
+            const top = event.currentTarget.scrollTop
+            const movedUp = top < lastTop.current
 
-            if (next !== followingRef.current) {
-              follow(next)
+            lastTop.current = top
+
+            if (isAtBottom(event.currentTarget, liftNow())) {
+              follow(true)
+            } else if (movedUp) {
+              follow(false)
             }
           }}
         >

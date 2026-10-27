@@ -59,9 +59,7 @@ export const scrollsUnderLift = (added: number): void => {
   fireEvent.scroll(scrolling)
 }
 
-export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
-  const { rerender } = render(thread([row('prompt'), WORKING]))
-  const scrolling = viewport()
+const scrollable = (scrolling: HTMLElement) => {
   let height = HISTORY_HEIGHT
   let top = 0
 
@@ -74,7 +72,46 @@ export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
     },
   })
   scrolling.scrollTop = HISTORY_HEIGHT
+
+  return {
+    grow: (added: number) => {
+      height += added
+    },
+    bottom: () => height - scrolling.clientHeight,
+  }
+}
+
+export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
+  const { rerender } = render(thread([row('prompt'), WORKING]))
+  const { grow } = scrollable(viewport())
+
   yield* wait(SETTLE_MS)
-  height = HISTORY_HEIGHT + added
+  grow(added)
   rerender(thread([row('prompt'), row('text'), row('tool')]))
 })
+
+export const historyOpen = () => {
+  const history = [row('prompt'), row('text')]
+  const { rerender } = render(thread(history))
+  const scrolling = viewport()
+  const { grow, bottom } = scrollable(scrolling)
+
+  fireEvent.scroll(scrolling)
+
+  return {
+    top: () => scrolling.scrollTop,
+    bottom,
+    scrollsUp: (by: number) => {
+      scrolling.scrollTop -= by
+      fireEvent.scroll(scrolling)
+    },
+    growsBelow: (added: number) => {
+      grow(added)
+      fireEvent.scroll(scrolling)
+    },
+    sends: (added: number) => {
+      grow(added)
+      rerender(thread([...history, { key: 'sent', content: <p>sent</p>, sent: true }]))
+    },
+  }
+}

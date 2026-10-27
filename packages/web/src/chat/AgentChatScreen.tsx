@@ -75,6 +75,7 @@ const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly Threa
   pending.map((prompt) => ({
     key: prompt.key,
     content: <Message meta={prompt.queued ? 'Queued' : 'Sent'}>{prompt.text}</Message>,
+    sent: true,
   }))
 
 const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>) => {

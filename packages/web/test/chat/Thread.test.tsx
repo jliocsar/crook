@@ -8,6 +8,7 @@ import {
   answerGrows,
   following,
   ghost,
+  historyOpen,
   liftOf,
   openedOn,
   phoneViewport,
@@ -62,6 +63,38 @@ describe('Thread', () => {
       scrollsUnderLift(ANSWER_HEIGHT)
 
       expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('keeps following when the content grows under a scroll that did not move up', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.growsBelow(ANSWER_HEIGHT)
+
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('stops following once the user scrolls up', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.scrollsUp(ANSWER_HEIGHT)
+
+      expect(following()).toBe(false)
+    }),
+  )
+
+  it.effect('goes back to the end when a prompt is sent from further up', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.scrollsUp(ANSWER_HEIGHT)
+      opened.sends(ANSWER_HEIGHT)
+
+      expect(following()).toBe(true)
+      expect(opened.top()).toBe(opened.bottom())
     }),
   )
 

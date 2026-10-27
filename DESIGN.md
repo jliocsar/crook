@@ -351,8 +351,10 @@ screen" on the Ask.
   - "2 running", a pill shown while any subagent runs. Tapping it scrolls to the running tree;
   - `…`, which opens the agent's action sheet (The herd), while the agent is live or its machine
     is offline.
-- **The transcript** follows the live tail. Scrolled up, a "Latest" pill (`bg-foreground`, 44px)
-  shows above the dock and jumps back down.
+- **The transcript** follows the live tail. Only the user scrolling up lets go of it: content that
+  grows, a row that remeasures or a scroll the page makes itself never does. Scrolled up, a
+  "Latest" pill (`bg-foreground`, 44px) shows above the dock and jumps back down, and sending a
+  prompt jumps back down too.
   - **Show earlier** and **Try again** read "Loading earlier messages" and "Trying again" while
     their request is out, so no refresh is silent.
   - **Your messages** are Message bubbles at 16/24. One sent while Claude works, or behind one
