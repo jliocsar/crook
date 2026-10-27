@@ -1,6 +1,6 @@
 id = "crook"
 name = "crook"
-version = "0.0.5"
+version = "0.0.6"
 min_herdr_version = "0.9.5"
 description = "Connect this machine's crook agent to a hub and keep it running."
 platforms = ["linux", "macos"]
