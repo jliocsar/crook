@@ -111,7 +111,7 @@ const failedWith = (failure: TranscriptFailure, log: Effect.Effect<void>) =>
 
 const FOLLOW_ENDED: TranscriptUpdate = new TranscriptWatchFailed({
   failure: new TranscriptReadFailed({
-    detail: 'the agent stopped following it, which it only does when the watch is dropped',
+    detail: 'the agent stopped following the file on its own. Open the chat again to resume it.',
   }),
 })
 

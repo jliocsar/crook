@@ -608,9 +608,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   transcript message to the phone only after the phone acknowledged the one before. Before
   transcript events were coalesced, it also held one event per phone, so the agent's next event
   waited on that round trip too, and the numbers in the rest of this entry are from then. Run
-  locally with every hop timed, a cold open with the 512 KB tail reached the screen 72 ms after the phone asked, and
-  the agent began its watch under 1 ms after the hub registered it, so the wait sits in the
-  number of events times the phone's round trip. With the agent reading 64 KB per event, 800 KB
+  locally with every hop timed, a cold open with the 512 KB tail reached the screen 72 ms after
+  the phone asked, and the agent began its watch under 1 ms after the hub registered it, so the
+  wait sits in the number of events times the phone's round trip. With the agent reading 64 KB per event, 800 KB
   written since the phone last looked took 14 events and 14.3 s at an emulated 1 s round trip,
   and 4.4 s at 300 ms; reading what the file holds in events of up to 1 MiB took 2 events, 2.2 s
   and 0.8 s. Show earlier on a 3 MB transcript went from 48 events and 14.9 s to 5 events and
