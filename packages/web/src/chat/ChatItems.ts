@@ -96,9 +96,7 @@ interface Draft {
   readonly group: Option.Option<string>
 }
 
-interface Slot {
-  readonly members: Arr.NonEmptyReadonlyArray<Pending>
-}
+type Slot = Arr.NonEmptyReadonlyArray<Pending>
 
 interface Placing {
   readonly next: number
@@ -715,10 +713,7 @@ const merge = (first: ChatItem, later: ChatItem): ChatItem => {
 const FIRST_PLACEMENT: Placement = { turn: 0, boundary: Option.none() }
 
 const callOf = (pending: Pending): Option.Option<Call> =>
-  Pending.$match(pending, {
-    Shown: () => Option.none(),
-    Call: (call) => Option.some(call),
-  })
+  Option.liftPredicate(pending, Pending.$is('Call'))
 
 const isAgentCall = (pending: Pending): boolean =>
   Option.exists(callOf(pending), (call) => call.use.name === AGENT_TOOL)
@@ -731,16 +726,14 @@ const itemOf = (pending: Pending, evidence: Evidence): ChatItem =>
 
 const slotItem = (slot: Slot, evidence: Evidence): ChatItem =>
   pipe(
-    Arr.tailNonEmpty(slot.members),
-    Arr.reduce(itemOf(Arr.headNonEmpty(slot.members), evidence), (item, member) =>
+    Arr.tailNonEmpty(slot),
+    Arr.reduce(itemOf(Arr.headNonEmpty(slot), evidence), (item, member) =>
       merge(item, itemOf(member, evidence)),
     ),
   )
 
-const withStamps = <Value>(
-  stamps: Stamps<Value>,
-  fresh: readonly (readonly [string, Stamped<Value>])[],
-): Stamps<Value> => Arr.reduce(fresh, stamps, (all, [id, stamped]) => HashMap.set(all, id, stamped))
+const when = (moved: boolean, indexes: HashSet.HashSet<number>): HashSet.HashSet<number> =>
+  moved ? indexes : HashSet.empty()
 
 const targetOf = (placing: Placing, entry: Draft): readonly [Placing, Target] =>
   pipe(
@@ -764,16 +757,13 @@ const targetOf = (placing: Placing, entry: Draft): readonly [Placing, Target] =>
     }),
   )
 
-const joinedMembers = (
-  joined: HashMap.HashMap<number, Arr.NonEmptyReadonlyArray<Pending>>,
-  target: Target,
-): HashMap.HashMap<number, Arr.NonEmptyReadonlyArray<Pending>> =>
-  HashMap.set(
+const joinedMembers = (joined: HashMap.HashMap<number, Slot>, target: Target) =>
+  HashMap.modifyAt(
     joined,
     target.index,
-    Option.match(HashMap.get(joined, target.index), {
-      onNone: (): Arr.NonEmptyReadonlyArray<Pending> => [target.pending],
-      onSome: (members) => Arr.append(members, target.pending),
+    Option.match({
+      onNone: (): Option.Option<Slot> => Option.some([target.pending]),
+      onSome: (members) => Option.some(Arr.append(members, target.pending)),
     }),
   )
 
@@ -793,19 +783,23 @@ const slotsOfCallAfter = (
   slotsOfCall: HashMap.HashMap<string, HashSet.HashSet<number>>,
   targets: readonly Target[],
 ): HashMap.HashMap<string, HashSet.HashSet<number>> =>
-  Arr.reduce(targets, slotsOfCall, (all, target) =>
-    Option.match(callOf(target.pending), {
-      onNone: () => all,
-      onSome: (call) =>
-        HashMap.set(
-          all,
-          call.use.id,
-          HashSet.add(
-            Option.getOrElse(HashMap.get(all, call.use.id), () => HashSet.empty<number>()),
-            target.index,
-          ),
-        ),
-    }),
+  pipe(
+    targets,
+    Arr.flatMap((target) =>
+      Option.toArray(
+        Option.map(callOf(target.pending), (call) => [call.use.id, target.index] as const),
+      ),
+    ),
+    Arr.reduce(slotsOfCall, (all, [id, index]) =>
+      HashMap.modifyAt(
+        all,
+        id,
+        Option.match({
+          onNone: () => Option.some(HashSet.make(index)),
+          onSome: (indexes) => Option.some(HashSet.add(indexes, index)),
+        }),
+      ),
+    ),
   )
 
 const slotsOfIds = (
@@ -856,14 +850,13 @@ const advance = (
     targets,
     Arr.filter((target) => target.opens),
     Arr.flatMap((target) => Option.toArray(HashMap.get(joined, target.index))),
-    Arr.map((members): Slot => ({ members })),
   )
   const slots = pipe(
     previous.slots,
     Arr.map((slot, index) =>
       Option.match(HashMap.get(joined, index), {
         onNone: () => slot,
-        onSome: (members): Slot => ({ members: Arr.appendAll(slot.members, members) }),
+        onSome: (members): Slot => Arr.appendAll(slot, members),
       }),
     ),
     Arr.appendAll(opened),
@@ -886,16 +879,20 @@ const advance = (
   const dirty = pipe(
     HashSet.fromIterable(HashMap.keys(joined)),
     HashSet.union(
-      slotsOfIds(slotsOfCall, [
-        ...Arr.map(freshResults, ([id]) => id),
-        ...Arr.map(freshNotices, ([id]) => id),
-      ]),
+      slotsOfIds(
+        slotsOfCall,
+        pipe(
+          freshResults,
+          Arr.appendAll(freshNotices),
+          Arr.map(([id]) => id),
+        ),
+      ),
     ),
-    HashSet.union(turnMoved || activityMoved ? previous.lastTurnSlots : HashSet.empty()),
-    HashSet.union(agentsMoved ? agentSlots : HashSet.empty()),
+    HashSet.union(when(turnMoved || activityMoved, previous.lastTurnSlots)),
+    HashSet.union(when(agentsMoved, agentSlots)),
   )
-  const results = withStamps(previous.results, freshResults)
-  const notices = withStamps(previous.notices, freshNotices)
+  const results = HashMap.setMany(previous.results, freshResults)
+  const notices = HashMap.setMany(previous.notices, freshNotices)
   const evidence: Evidence = {
     results,
     notices,
@@ -907,11 +904,17 @@ const advance = (
   return {
     lines,
     context,
-    items: Arr.map(slots, (slot, index) =>
-      HashSet.has(dirty, index)
-        ? slotItem(slot, evidence)
-        : Option.getOrElse(Arr.get(previous.items, index), () => slotItem(slot, evidence)),
-    ),
+    items: Arr.map(slots, (slot, index) => {
+      const known = Arr.get(previous.items, index)
+
+      if (Option.isSome(known) && !HashSet.has(dirty, index)) {
+        return known.value
+      }
+
+      const next = slotItem(slot, evidence)
+
+      return Option.isSome(known) && Equal.equals(known.value, next) ? known.value : next
+    }),
     slots,
     placement,
     results,
@@ -923,12 +926,22 @@ const advance = (
   }
 }
 
+const sameLineAt =
+  (previous: readonly TranscriptLine[], lines: readonly TranscriptLine[]) =>
+  (index: number): boolean =>
+    Option.exists(
+      Option.all([Arr.get(previous, index), Arr.get(lines, index)]),
+      ([was, is]) => was === is,
+    )
+
 const extendsLines = (previous: ChatDerivation, lines: readonly TranscriptLine[]): boolean => {
-  const last = previous.lines.length - 1
+  if (previous.lines.length === 0) {
+    return true
+  }
 
   return (
-    lines.length > last &&
-    (last < 0 || (lines[0] === previous.lines[0] && lines[last] === previous.lines[last]))
+    lines.length >= previous.lines.length &&
+    Arr.every([0, previous.lines.length - 1], sameLineAt(previous.lines, lines))
   )
 }
 

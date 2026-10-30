@@ -117,12 +117,10 @@ export const chatScreenModel = (
           Option.map(entry, (found) => found.machine),
           () => previous.machine,
         ),
-        workspaceLabel: Option.orElse(
-          Option.flatMap(Option.all({ found: entry, shown: row }), ({ found, shown }) =>
-            workspaceLabelIn(found, shown),
-          ),
-          () => previous.workspaceLabel,
-        ),
+        workspaceLabel: Option.match(entry, {
+          onNone: () => previous.workspaceLabel,
+          onSome: (found) => Option.flatMap(row, (shown) => workspaceLabelIn(found, shown)),
+        }),
         row,
         endedAt: ended(presence)
           ? Option.orElse(

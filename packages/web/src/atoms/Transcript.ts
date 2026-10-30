@@ -116,8 +116,8 @@ const transcriptViews = (
       const registry = yield* AtomRegistry.AtomRegistry
       const watchableChanges = yield* subscribed(registry, signals.watchable, true)
       const retryChanges = yield* subscribed(registry, signals.retries, false)
-      const awaitsCaughtUp = Effect.sync(() => registry.get(signals.awaitsCaughtUp))
-      const awaitsCaughtUpNow = yield* awaitsCaughtUp
+      const readAwaitsCaughtUp = Effect.sync(() => registry.get(signals.awaitsCaughtUp))
+      const awaitsCaughtUpNow = yield* readAwaitsCaughtUp
       const cached = yield* cache.load(machine, source)
       const view = yield* SubscriptionRef.make(
         catchingUpFrom(
@@ -126,9 +126,8 @@ const transcriptViews = (
         ),
       )
       const restarts = yield* SubscriptionRef.make(0)
-      const persist = Effect.flatMap(
-        Effect.sync(() => registry.get(signals.herd)),
-        (current) => cache.persist(machine, source, current),
+      const persist = Effect.suspend(() =>
+        cache.persist(machine, source, registry.get(signals.herd)),
       )
 
       yield* Effect.addFinalizer(() => persist)
@@ -164,7 +163,7 @@ const transcriptViews = (
         )
       })
 
-      const resume = Effect.flatMap(awaitsCaughtUp, (awaits) =>
+      const resume = Effect.flatMap(readAwaitsCaughtUp, (awaits) =>
         SubscriptionRef.modify(view, (current) => [
           resumeOf(current, tailFor(whole)),
           catchingUpFrom(current, awaits),

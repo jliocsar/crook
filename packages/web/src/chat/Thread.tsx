@@ -198,15 +198,16 @@ const useGhost = (
 ) => {
   const frames = React.useRef<ReadonlyMap<string, Ghost>>(new Map())
   const [ghost, setGhost] = React.useState<Option.Option<Ghost>>(Option.none())
-  const lastKey = Option.getOrUndefined(Option.map(Arr.last(rows), (row) => row.key))
-
   React.useLayoutEffect(() => {
-    const left = ghostsOf(departedKeys(Array.from(frames.current.keys()), rows), frames.current)
+    const left = ghostsOf(
+      departedKeys(Arr.fromIterable(frames.current.keys()), rows),
+      frames.current,
+    )
 
     if (animates && Option.isSome(left)) {
       setGhost(left)
     }
-  }, [rows.length, lastKey])
+  }, [rows])
 
   React.useLayoutEffect(() => {
     frames.current = placeholderFrames(rows, virtualItems)

@@ -25,14 +25,19 @@ const itemRow = (
   rows: WeakMap<ChatItem, ThreadRow>,
   item: ChatItem,
   environment: ThreadEnvironment,
-): ThreadRow =>
-  Option.getOrElse(Option.fromUndefinedOr(rows.get(item)), () => {
-    const row = { key: item.key, content: <ThreadItem item={item} environment={environment} /> }
+): ThreadRow => {
+  const known = rows.get(item)
 
-    rows.set(item, row)
+  if (known !== undefined) {
+    return known
+  }
 
-    return row
-  })
+  const row = { key: item.key, content: <ThreadItem item={item} environment={environment} /> }
+
+  rows.set(item, row)
+
+  return row
+}
 
 export const useItemRows = (
   items: readonly ChatItem[],

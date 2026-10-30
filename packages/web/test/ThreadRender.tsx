@@ -113,8 +113,8 @@ const scrollable = (scrolling: HTMLElement) => {
   }
 }
 
-export const liveTail = Effect.fn('liveTail')(function* () {
-  const { rerender } = render(thread([row('prompt'), WORKING], null))
+export const liveTail = Effect.fn('liveTail')(function* (trailing: readonly ThreadRow[] = []) {
+  const { rerender } = render(thread([row('prompt'), WORKING, ...trailing], null))
   const { grow } = scrollable(viewport())
 
   yield* wait(SETTLE_MS)
@@ -122,7 +122,7 @@ export const liveTail = Effect.fn('liveTail')(function* () {
   return {
     lands: (keys: readonly string[], added: number) => {
       grow(added)
-      rerender(thread([row('prompt'), ...keys.map(row)], null))
+      rerender(thread([row('prompt'), ...keys.map(row), ...trailing], null))
     },
   }
 })

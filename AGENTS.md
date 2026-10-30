@@ -882,7 +882,9 @@ a turn of its own, enqueued as a task notification.
   still change. A tool call's result or a task notification can land in any later batch. The
   last turn's calls change when the next turn starts or the activity moves. Every subagent run
   depends on the rosters, the activity and the current session. Lines that do not extend the last
-  ones (a reset, a cached view, the whole transcript) start the fold over. Tests hold it equal to
+  ones (a reset, a cached view, the whole transcript) start the fold over. Whether they extend is
+  judged by the identity of the first and last line the fold saw: the transcript view only
+  appends lines or starts over with new ones, so a middle line never changes. Tests hold it equal to
   a full recompute at every batch size of real transcripts, with the activity both changing and
   steady: with it changing on every batch, a dropped notice went unnoticed, because the activity
   already re-resolved every subagent run (measured).

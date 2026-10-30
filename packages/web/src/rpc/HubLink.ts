@@ -110,8 +110,9 @@ const make = Effect.gen(function* () {
   const cache = yield* HerdCache
   const page = yield* PageSignals
   const sessionCheck = yield* SessionCheck
+  const cachedHerd = yield* cache.load
   const state = yield* SubscriptionRef.make(
-    new HubLinkState({ status: COLD_START, herd: yield* cache.load }),
+    new HubLinkState({ status: COLD_START, herd: cachedHerd }),
   )
   const connected = yield* SubscriptionRef.make(Option.none<HubCalls>())
   const resyncRequests = yield* SubscriptionRef.make(0)
@@ -127,9 +128,15 @@ const make = Effect.gen(function* () {
   yield* SubscriptionRef.changes(state).pipe(
     Stream.map((current) => current.herd),
     Stream.changesWith((before, after) => before === after),
-    Stream.drop(1),
+    Stream.filter((herd) => herd !== cachedHerd),
     Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-    Stream.runForEach(() => saveCurrentHerd),
+    Stream.runForEach(() =>
+      saveCurrentHerd.pipe(
+        Effect.catchDefect((defect) =>
+          Effect.logError('crook could not cache the herd on this device', defect),
+        ),
+      ),
+    ),
     Effect.forkScoped,
   )
 
@@ -217,18 +224,16 @@ const make = Effect.gen(function* () {
 
   const follow = (visible: boolean, online: boolean, ended: boolean): Effect.Effect<never> => {
     if (ended) {
-      return cacheWrites
-        .withPermit(
-          cache.clear.pipe(
-            Effect.andThen(
-              SubscriptionRef.set(
-                state,
-                new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
-              ),
-            ),
+      return cache.clear.pipe(
+        Effect.andThen(
+          SubscriptionRef.set(
+            state,
+            new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
           ),
-        )
-        .pipe(Effect.andThen(Effect.never))
+        ),
+        (logout) => cacheWrites.withPermit(logout),
+        Effect.andThen(Effect.never),
+      )
     }
 
     if (!visible) {

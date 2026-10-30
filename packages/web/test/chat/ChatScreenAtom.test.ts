@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@effect/vitest'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Atom from 'effect/reactivity/Atom'
 import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
@@ -102,6 +103,9 @@ describe('chatScreenAtom', () => {
         }),
       )
 
+      yield* Effect.sleep(Duration.zero)
+
+      expect(models.length).toBe(shown + 1)
       expect(wakes).toStrictEqual(before)
       expect(models.at(-1)?.presence).toBe('live')
     }).pipe(Effect.scoped),

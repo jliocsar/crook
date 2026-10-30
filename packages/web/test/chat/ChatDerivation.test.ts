@@ -55,6 +55,8 @@ import {
 const CHANGING_ACTIVITY: readonly AgentActivity[] = ['working', 'blocked', 'working', 'still']
 const STEADY_ACTIVITY: readonly AgentActivity[] = ['working']
 const BATCH_SIZES = [1, 2, 3, 5, 8]
+const LONG_CHAT_TURNS = 420
+const LONG_CHAT_LINES = 2000
 
 const encoder = new TextEncoder()
 
@@ -86,7 +88,10 @@ const contextAt = (
 })
 
 const prefixEnds = (count: number, size: number): readonly number[] =>
-  Arr.makeBy(Math.ceil(count / size) + 1, (step) => Math.min(step * size, count))
+  pipe(
+    Arr.makeBy(Math.ceil(count / size) + 1, (step) => Math.min(step * size, count)),
+    Arr.flatMap((end) => [end, end]),
+  )
 
 const derivedAlong = (
   lines: readonly TranscriptLine[],
@@ -204,6 +209,45 @@ describe('deriveChat', () => {
       true,
       true,
     ])
+  })
+
+  it('keeps every earlier item of a long chat when one line lands', () => {
+    const context = contextAt(0, NO_ROSTERS, STEADY_ACTIVITY)
+    const long = linesOf([
+      opened(),
+      chunk(
+        0,
+        1,
+        pipe(
+          Arr.makeBy(LONG_CHAT_TURNS, (turn) => turn * 10),
+          Arr.flatMap((offset) => [
+            prompt(offset, `question ${offset}`),
+            said(offset + 1, `thinking about ${offset}`),
+            toolUse(offset + 2, `toolu_${offset}`, 'Read', { file_path: `${CWD}/README.md` }),
+            toolResult(offset + 3, `toolu_${offset}`, 'contents'),
+            answered(offset + 4, `answer ${offset}`),
+          ]),
+        ),
+      ),
+    ])
+    const before = deriveChat(EMPTY_CHAT, long, context)
+    const after = deriveChat(
+      before,
+      [...long, ...linesOf([opened(), chunk(0, 1, [said(LONG_CHAT_TURNS * 10, 'more')])])],
+      context,
+    )
+
+    expect(long.length).toBeGreaterThan(LONG_CHAT_LINES)
+    expect(after.items.length).toBe(before.items.length + 1)
+    expect(Arr.every(before.items, (item, index) => after.items[index] === item)).toBe(true)
+  })
+
+  it('starts over when the working folder changes', () => {
+    const context = contextAt(0, NO_ROSTERS)
+    const moved = { ...context, cwd: '/somewhere/else' }
+    const derived = deriveChat(EMPTY_CHAT, backgroundRun, context)
+
+    expect(deriveChat(derived, backgroundRun, moved).items).toEqual(chatItems(backgroundRun, moved))
   })
 
   it('answers the same derivation when nothing changed', () => {
