@@ -570,6 +570,42 @@ const queuedPrompt = (
     }),
   )
 
+const isQueuedTaskNotification = (attachment: typeof RawAttachment.Type.attachment) =>
+  attachment.commandMode === TASK_NOTIFICATION_TAG ||
+  attachment.origin?.kind === TASK_NOTIFICATION_TAG
+
+const queuedTaskNotification = (
+  attachment: typeof RawAttachment.Type.attachment,
+  json: Schema.Json,
+  offset: TranscriptOffset,
+): readonly TranscriptMessage[] =>
+  pipe(
+    Option.fromUndefinedOr(attachment.prompt),
+    Option.filter(Predicate.isString),
+    Option.flatMap(taskNotificationBlock),
+    Option.match({
+      onNone: () => [],
+      onSome: (notice) => [
+        new UserMessage({
+          ...envelopeOf(json, offset),
+          isMeta: false,
+          origin: Option.some(TASK_NOTIFICATION_TAG),
+          queued: true,
+          blocks: [notice],
+        }),
+      ],
+    }),
+  )
+
+const queuedCommand = (
+  attachment: typeof RawAttachment.Type.attachment,
+  json: Schema.Json,
+  offset: TranscriptOffset,
+): readonly TranscriptMessage[] =>
+  isQueuedTaskNotification(attachment)
+    ? queuedTaskNotification(attachment, json, offset)
+    : queuedPrompt(attachment, json, offset)
+
 const attachmentEntry = (
   json: Schema.Json,
   offset: TranscriptOffset,
@@ -578,7 +614,7 @@ const attachmentEntry = (
     onNone: () => unrecognizedEntry(offset, 'attachment'),
     onSome: ({ attachment }) =>
       HashSet.has(KNOWN_ATTACHMENT_TYPES, attachment.type)
-        ? queuedPrompt(attachment, json, offset)
+        ? queuedCommand(attachment, json, offset)
         : unrecognizedEntry(offset, `attachment/${attachment.type}`),
   })
 

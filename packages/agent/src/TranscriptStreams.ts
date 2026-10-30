@@ -24,6 +24,7 @@ import {
 } from '@crook/claude/TranscriptLocator'
 import { type TailError, TranscriptTail } from '@crook/claude/TranscriptTail'
 import type { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
+import type { Subagent } from '@crook/domain/Subagent'
 import {
   SkillsChanged,
   SubagentsChanged,
@@ -123,6 +124,11 @@ const startIn = (session: ClaudeSessionId, from: Option.Option<TranscriptPositio
     Option.match({ onNone: () => TRANSCRIPT_START, onSome: (position) => position.offset }),
   )
 
+const rosterOf =
+  (session: ClaudeSessionId) =>
+  (subagents: readonly Subagent[]): TranscriptEvent =>
+    new SubagentsChanged({ session, subagents })
+
 const opened = (session: ClaudeSessionId) =>
   Stream.succeed<TranscriptEvent>(new TranscriptOpened({ session }))
 
@@ -172,14 +178,7 @@ const make = Effect.gen(function* () {
     )
 
   const live = (file: TranscriptFile, offset: TranscriptOffset) =>
-    Stream.merge(
-      tail.follow(file, offset),
-      roster
-        .watch(file)
-        .pipe(
-          Stream.map((subagents) => new SubagentsChanged({ session: file.session, subagents })),
-        ),
-    )
+    Stream.merge(tail.follow(file, offset), Stream.map(roster.watch(file), rosterOf(file.session)))
 
   const openSession = (
     { session, cwd }: PaneSession,
@@ -219,7 +218,10 @@ const make = Effect.gen(function* () {
         Option.match({
           onNone: () => Stream.empty,
           onSome: (file) =>
-            fromLineNearEnd(file, position.offset, tailBytes, (from) => tail.drain(file, from)),
+            Stream.concat(
+              fromLineNearEnd(file, position.offset, tailBytes, (from) => tail.drain(file, from)),
+              Stream.fromEffect(Effect.map(roster.read(file), rosterOf(file.session))),
+            ),
         }),
       ),
     )

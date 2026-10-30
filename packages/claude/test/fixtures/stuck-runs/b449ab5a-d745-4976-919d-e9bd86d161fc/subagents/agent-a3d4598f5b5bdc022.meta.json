@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Fix Effect API rule bugs",
+  "toolUseId": "toolu_01NjgY99f1V6at5oNQB3xTUv",
+  "spawnDepth": 1,
+  "requestShape": "background"
+}

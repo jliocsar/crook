@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
+import * as HashMap from 'effect/HashMap'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
@@ -9,7 +10,7 @@ import * as Str from 'effect/String'
 
 import { relativeToFolder } from '@crook/domain/Ask'
 import type { ClaudeSessionId, SubagentId } from '@crook/domain/Ids'
-import type { Subagent } from '@crook/domain/Subagent'
+import type { Subagent, SubagentStatus } from '@crook/domain/Subagent'
 import type {
   AssistantMessage,
   CompactTrigger,
@@ -20,7 +21,7 @@ import type {
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
-import { TranscriptLine } from '@crook/web/chat/TranscriptState'
+import { type SessionRosters, TranscriptLine } from '@crook/web/chat/TranscriptState'
 import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
 import { LINE_BREAK, PARAGRAPH_BREAK } from '@crook/web/text/Lines'
@@ -58,7 +59,7 @@ export type ChatItem = Data.TaggedEnum<{
 export interface ChatContext {
   readonly cwd: string
   readonly activity: AgentActivity
-  readonly subagents: readonly Subagent[]
+  readonly rosters: SessionRosters
 }
 
 interface Stamped<Value> {
@@ -81,6 +82,7 @@ interface Evidence {
   readonly results: ReadonlyMap<string, Stamped<ToolResultBlock>>
   readonly notices: ReadonlyMap<string, Stamped<string>>
   readonly lastTurn: number
+  readonly currentSession: Option.Option<ClaudeSessionId>
   readonly context: ChatContext
 }
 
@@ -130,6 +132,7 @@ export class SubagentRun extends Data.Class<{
   readonly prompt: string
   readonly background: boolean
   readonly status: RunStatus
+  readonly sessionIdle: boolean
   readonly startedAt: Option.Option<DateTime.Utc>
   readonly finishedAt: Option.Option<DateTime.Utc>
 }> {}
@@ -222,6 +225,8 @@ const startsTurn = (line: TranscriptLine): boolean =>
         Match.orElse(() => false),
       ),
   })
+
+const sessionOf = (line: TranscriptLine): ClaudeSessionId => line.session
 
 const keyOf = (line: TranscriptLine, index: number): string =>
   TranscriptLine.$match(line, {
@@ -351,6 +356,13 @@ const stampedValue = <Value>(stamped: Option.Option<Stamped<Value>>): Option.Opt
 const stampedAt = <Value>(stamped: Option.Option<Stamped<Value>>): Option.Option<DateTime.Utc> =>
   Option.flatMap(stamped, (found) => found.at)
 
+const rosterVerdict = (status: SubagentStatus): Option.Option<RunStatus> =>
+  Match.value(status).pipe(
+    Match.when('running', () => Option.none<RunStatus>()),
+    Match.when('completed', () => Option.some<RunStatus>('done')),
+    Match.orElse(() => Option.some<RunStatus>('failed')),
+  )
+
 const runStatus = (options: {
   readonly notice: Option.Option<string>
   readonly roster: Option.Option<Subagent>
@@ -360,18 +372,9 @@ const runStatus = (options: {
 }): RunStatus =>
   pipe(
     Option.firstSomeOf([
+      Option.flatMap(options.roster, (subagent) => rosterVerdict(subagent.status)),
       Option.map(options.notice, (status): RunStatus =>
         status === COMPLETED_STATUS ? 'done' : 'failed',
-      ),
-      pipe(
-        options.roster,
-        Option.filter((subagent) => subagent.stoppedByUser),
-        Option.map((): RunStatus => 'failed'),
-      ),
-      pipe(
-        options.roster,
-        Option.filter((subagent) => subagent.finished),
-        Option.map((): RunStatus => 'done'),
       ),
       pipe(
         options.result,
@@ -399,8 +402,11 @@ const subagentRun = (
   const input = decodeAgentInput(use.input)
   const stampedResult = Option.fromUndefinedOr(evidence.results.get(use.id))
   const result = stampedValue(stampedResult)
-  const roster = Arr.findFirst(evidence.context.subagents, (subagent) =>
-    Option.contains(subagent.toolUseId, use.id),
+  const roster = pipe(
+    HashMap.get(evidence.context.rosters, session),
+    Option.flatMap((subagents) =>
+      Arr.findFirst(subagents, (subagent) => Option.contains(subagent.toolUseId, use.id)),
+    ),
   )
   const launch = Option.flatMap(result, (found) => found.subagent)
   const notice = Option.fromUndefinedOr(evidence.notices.get(use.id))
@@ -443,6 +449,8 @@ const subagentRun = (
     ),
     background,
     status,
+    sessionIdle:
+      evidence.context.activity === 'still' || !Option.contains(evidence.currentSession, session),
     startedAt: at,
     finishedAt:
       status === 'running'
@@ -690,6 +698,7 @@ export const chatItems = (
     results: resultsIn(lines),
     notices: noticesIn(lines),
     lastTurn: lastState.turn,
+    currentSession: Option.map(Arr.last(lines), sessionOf),
     context,
   }
 

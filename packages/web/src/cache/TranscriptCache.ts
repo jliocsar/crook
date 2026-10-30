@@ -55,7 +55,7 @@ const StoredLine = Schema.Union([
 export class StoredTranscript extends Schema.Class<StoredTranscript>('StoredTranscript')({
   position: TranscriptPosition,
   lines: Schema.Array(StoredLine),
-  subagents: Schema.Array(Subagent),
+  rosters: Schema.HashMap(ClaudeSessionId, Schema.Array(Subagent)),
 }) {}
 
 export class TranscriptCacheUnavailable extends Schema.TaggedError<TranscriptCacheUnavailable>()(
@@ -101,7 +101,7 @@ const storedKeyOf = (
 const storedOf = (view: TranscriptView): Option.Option<StoredTranscript> =>
   Option.map(
     view.position,
-    (position) => new StoredTranscript({ position, lines: view.lines, subagents: view.subagents }),
+    (position) => new StoredTranscript({ position, lines: view.lines, rosters: view.rosters }),
   )
 
 const lineOf = (stored: typeof StoredLine.Type): TranscriptLine =>
@@ -117,7 +117,7 @@ const viewOf = (stored: StoredTranscript): TranscriptView =>
   new TranscriptView({
     position: Option.some(stored.position),
     lines: Arr.map(stored.lines, lineOf),
-    subagents: stored.subagents,
+    rosters: stored.rosters,
     skills: [],
     catchingUp: false,
     failure: Option.none(),

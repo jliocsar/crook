@@ -29,7 +29,7 @@ import {
   pathOf,
   picturesOf,
   resultText,
-  runStatusShown,
+  runTicks,
   toolDuration,
   treeRun,
   withoutLineNumbers,
@@ -216,7 +216,7 @@ function SubagentRuns({
   runs: readonly SubagentRun[]
   environment: ThreadEnvironment
 }) {
-  const now = useNow(runs.some((run) => runStatusShown(run, environment.paneClosed) === 'running'))
+  const now = useNow(runs.some((run) => runTicks(run, environment.paneClosed)))
 
   return (
     <SubagentTree

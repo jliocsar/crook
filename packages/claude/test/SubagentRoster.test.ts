@@ -3,6 +3,7 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
+import * as Schema from 'effect/Schema'
 import * as Queue from 'effect/Queue'
 import * as Stream from 'effect/Stream'
 
@@ -23,6 +24,22 @@ const SESSION = ClaudeSessionId.make(SUBAGENT_FIXTURE_SESSION)
 const READ_AGENT = SubagentId.make('a370777a87a436836')
 const SLEEP_AGENT = SubagentId.make('aa5c894dc268d33c7')
 const SUBAGENTS = `${FIXTURES}/subagent/${SUBAGENT_FIXTURE_SESSION}/subagents`
+const SLEEP_TOOL_USE = 'toolu_01ChD5J64zNtNw3N4bkav5Fx'
+
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Json))
+
+const noticeLine = (toolUseId: string) =>
+  `${encodeJson({
+    type: 'attachment',
+    uuid: 'e193f484-3ab2-4f97-bfb0-1c6e19889174',
+    timestamp: '2026-10-16T16:25:05.395Z',
+    attachment: {
+      type: 'queued_command',
+      prompt: `<task-notification>\n<task-id>${SLEEP_AGENT}</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n<status>completed</status>\n</task-notification>`,
+      commandMode: 'task-notification',
+      origin: { kind: 'task-notification' },
+    },
+  })}\n`
 
 const readAgent = new Subagent({
   id: READ_AGENT,
@@ -33,8 +50,7 @@ const readAgent = new Subagent({
   parent: Option.none(),
   spawnDepth: 1,
   background: true,
-  finished: true,
-  stoppedByUser: false,
+  status: 'completed',
 })
 
 const scratchSession = Effect.fn('scratchSession')(function* () {
@@ -87,8 +103,8 @@ layer(services, { excludeTestServices: true })('SubagentRoster', (live) => {
         ),
       ).toEqual(Option.some(readAgent))
       expect(
-        Option.map(nested, (subagent) => [subagent.parent, subagent.spawnDepth, subagent.finished]),
-      ).toEqual(Option.some([Option.some(SubagentId.make('a1764732aa4808ef6')), 2, false]))
+        Option.map(nested, (subagent) => [subagent.parent, subagent.spawnDepth, subagent.status]),
+      ).toEqual(Option.some([Option.some(SubagentId.make('a1764732aa4808ef6')), 2, 'running']))
       expect(subagentFromMeta(READ_AGENT, '{"description":"no type"}')).toEqual(Option.none())
       expect(subagentFromMeta(READ_AGENT, '{"agentType":"Explore"}')).toEqual(Option.none())
     }),
@@ -120,7 +136,33 @@ layer(services, { excludeTestServices: true })('SubagentRoster', (live) => {
 
       expect(first).toEqual([readAgent])
       expect(second.map((subagent) => subagent.id)).toEqual([READ_AGENT, SLEEP_AGENT])
-      expect(second.map((subagent) => subagent.finished)).toEqual([true, false])
+      expect(second.map((subagent) => subagent.status)).toEqual(['completed', 'running'])
+    }),
+  )
+
+  live.effect('settles a running subagent once a notification for it lands in the transcript', () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem
+      const path = yield* Path.Path
+      const file = yield* scratchSession()
+      const directory = subagentsDirectoryOf(path, file)
+      const meta = yield* fixtureText(
+        `subagent/${SUBAGENT_FIXTURE_SESSION}/subagents/agent-${SLEEP_AGENT}.meta.json`,
+      )
+
+      yield* fileSystem.makeDirectory(directory, { recursive: true })
+      yield* fileSystem.writeFileString(
+        `${directory}/agent-${SLEEP_AGENT}.meta.json`,
+        meta.replace('"finished": true', '"finished": false'),
+      )
+      const updates = yield* watching(file)
+      const first = yield* Queue.take(updates)
+
+      yield* fileSystem.writeFileString(file.path, noticeLine(SLEEP_TOOL_USE), { flag: 'a' })
+      const second = yield* Queue.take(updates)
+
+      expect(first.map((subagent) => subagent.status)).toEqual(['running'])
+      expect(second.map((subagent) => subagent.status)).toEqual(['completed'])
     }),
   )
 })

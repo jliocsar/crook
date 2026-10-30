@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
+import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
 import { SkillListing } from '@crook/domain/Skill'
@@ -64,7 +65,7 @@ describe('applyTranscriptEvent', () => {
     expect(offsets(view.lines)).toEqual(['old 0', 'old 10'])
   })
 
-  it('marks a cleared conversation and forgets the subagents of the old session', () => {
+  it('marks a cleared conversation and keeps the roster of the old session beside the new one', () => {
     const view = fold([
       opened(),
       new SubagentsChanged({ session: SESSION, subagents: [subagent({ toolUseId: 'toolu_1' })] }),
@@ -74,7 +75,9 @@ describe('applyTranscriptEvent', () => {
     ])
 
     expect(offsets(view.lines)).toEqual(['old 0', 'cleared', 'new 0'])
-    expect(view.subagents).toEqual([])
+    expect(HashMap.get(view.rosters, SESSION)).toEqual(
+      Option.some([subagent({ toolUseId: 'toolu_1' })]),
+    )
   })
 
   it('keeps the roster of the session it is in', () => {
@@ -85,7 +88,8 @@ describe('applyTranscriptEvent', () => {
       new SubagentsChanged({ session: NEXT_SESSION, subagents: [] }),
     ])
 
-    expect(view.subagents).toEqual(roster)
+    expect(HashMap.get(view.rosters, SESSION)).toEqual(Option.some(roster))
+    expect(HashMap.has(view.rosters, NEXT_SESSION)).toBe(false)
   })
 
   it('keeps the skills of the pane across /clear until the agent lists new ones', () => {

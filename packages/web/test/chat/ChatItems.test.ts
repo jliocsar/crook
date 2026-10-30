@@ -1,7 +1,9 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
+import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
+import type { Subagent } from '@crook/domain/Subagent'
 import { TextBlock } from '@crook/domain/TranscriptMessage'
 import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
@@ -37,11 +39,11 @@ const linesOf = (messages: readonly TranscriptMessage[]) =>
 
 const context = (
   activity: AgentActivity = 'working',
-  subagents: ChatContext['subagents'] = [],
-) => ({
+  subagents: readonly Subagent[] = [],
+): ChatContext => ({
   cwd: CWD,
   activity,
-  subagents,
+  rosters: HashMap.make([SESSION, subagents]),
 })
 
 const describeItem = (item: ChatItem): string =>
@@ -147,7 +149,7 @@ describe('chatItems', () => {
     expect(
       shown(
         [prompt(0, 'review'), toolUse(10, 'toolu_1', 'Agent', reviewerInput)],
-        context('still', [subagent({ toolUseId: 'toolu_1', finished: true })]),
+        context('still', [subagent({ toolUseId: 'toolu_1', status: 'completed' })]),
       ),
     ).toEqual(['you: review', 'subagents: Review the herd diff done'])
   })
@@ -156,7 +158,7 @@ describe('chatItems', () => {
     const runsOf = (messages: readonly TranscriptMessage[]) =>
       chatItems(
         linesOf(messages),
-        context('still', [subagent({ toolUseId: 'toolu_1', finished: true })]),
+        context('still', [subagent({ toolUseId: 'toolu_1', status: 'completed' })]),
       ).flatMap((item) => (ChatItem.$is('Subagents')(item) ? item.runs : []))
     const launched = [
       prompt(0, 'review'),

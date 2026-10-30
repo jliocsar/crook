@@ -634,6 +634,24 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   answer landed as one line about 9 s after its request, 118 ms after its stamp; no write ever
   left a partial line. Nothing can stream text to the phone, so the chat reveals each landed
   batch instead of pretending to type it.
+- A background task that finishes while Claude is busy reaches the transcript as an `attachment`
+  entry of type `queued_command` whose `commandMode` and `origin.kind` are `task-notification`,
+  carrying the same `<task-notification>` text a `user` entry carries when Claude was idle. A
+  subagent's meta does not always get `finished`: of 31 local metas without it, 30 were
+  background runs, every one had a notification for its tool use in its session's transcript,
+  and 14 had it only as such an attachment (measured on the laptop). A subagent's own transcript
+  does not say it ended either: 53 of 88 finished background subagents ended on a tool result,
+  as one mid-run does. So the agent decides each subagent's status from its meta and the last
+  notification naming its tool use anywhere in the session file, and sends that in the roster;
+  the phone takes the roster's outcome before anything it infers from the lines it holds.
+- Scanning a whole transcript for notifications parses only the lines that carry the tag: a
+  118 MB transcript of 24363 lines took 40 to 87 ms that way and 280 to 315 ms parsing every
+  line (measured in Bun on the laptop).
+- The phone keeps the last roster of every session a pane has shown, keyed by session, and the
+  agent sends a session's final roster when a watch crosses into the next one, so the runs of a
+  session the pane left keep their outcome. A background run outlives Claude's turn, so an idle
+  session does not end it; it only stops the run's elapsed time, since nothing then says the run
+  is still going.
 - A `translateY` on the thread's content extends its scroll container's scrollable overflow by
   the same amount: in Chromium 156 a 1000 px child lifted by 100 px gave the container a
   `scrollHeight` of 1100 and a bottom `scrollTop` 100 px further down (measured). While the

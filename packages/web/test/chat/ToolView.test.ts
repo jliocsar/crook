@@ -17,6 +17,7 @@ const REVIEW = new SubagentRun({
   prompt: 'Review it',
   background: false,
   status: 'done',
+  sessionIdle: false,
   startedAt: Option.none(),
   finishedAt: Option.none(),
 })

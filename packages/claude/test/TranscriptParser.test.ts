@@ -17,6 +17,33 @@ const encoder = new TextEncoder()
 const lineOf = (text: string) => encoder.encode(text)
 
 layer(services, { excludeTestServices: true })('parseLine on real transcript lines', (live) => {
+  live.effect('reads a notification Claude queued while busy as the task notification it is', () =>
+    Effect.gen(function* () {
+      const messages = yield* messagesOf('stuck-runs/cc70b540-d22a-4ea4-aaf9-a0db3ce151aa.jsonl')
+
+      expect(messages[0]).toEqual({
+        _tag: 'User',
+        offset: 0,
+        uuid: '0cbefe9d-84e3-4af1-a4f4-3ea5a2205dee',
+        timestamp: '2026-10-16T17:09:38.391Z',
+        isMeta: false,
+        origin: 'task-notification',
+        queued: true,
+        blocks: [
+          {
+            _tag: 'TaskNotification',
+            taskId: 'afd1b8e00453db0af',
+            toolUseId: 'toolu_01BcL6z8eadrfkoPgdRN12yS',
+            status: 'completed',
+            summary: 'Agent "herdr spikes S4 and S8" finished',
+            result: null,
+          },
+        ],
+      })
+      expect(messages).toHaveLength(2)
+    }),
+  )
+
   live.effect(
     'keeps the prompt, the reply and the turn end of a plain turn, and drops metadata',
     () =>
@@ -266,6 +293,18 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
 
       expect(messages).toMatchObject([
         { _tag: 'Assistant', isApiError: true, model: '<synthetic>' },
+        {
+          _tag: 'User',
+          origin: 'task-notification',
+          queued: true,
+          blocks: [
+            {
+              _tag: 'TaskNotification',
+              taskId: 'a2a36d68f3fc86124',
+              toolUseId: 'toolu_01JVHNKZ26EJ5VRh9NxnRHmM',
+            },
+          ],
+        },
         { _tag: 'System', blocks: [{ _tag: 'CompactBoundary', trigger: 'manual' }] },
         {
           _tag: 'System',

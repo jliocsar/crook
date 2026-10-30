@@ -96,6 +96,9 @@ const runMeta = (run: SubagentRun): string =>
 export const runStatusShown = (run: SubagentRun, paneClosed: boolean): SubagentRun['status'] =>
   paneClosed && run.status === 'running' ? 'failed' : run.status
 
+export const runTicks = (run: SubagentRun, paneClosed: boolean): boolean =>
+  runStatusShown(run, paneClosed) === 'running' && !run.sessionIdle
+
 export const treeRun = (run: SubagentRun, view: RunView): AgentRun => {
   const status = runStatusShown(run, view.paneClosed)
 
@@ -105,7 +108,7 @@ export const treeRun = (run: SubagentRun, view: RunView): AgentRun => {
     status,
     meta: view.paneClosed && run.status === 'running' ? PANE_CLOSED_NOTE : runMeta(run),
     duration: Option.getOrUndefined(
-      runningSpan(run.startedAt, run.finishedAt, status === 'running', view.now),
+      runningSpan(run.startedAt, run.finishedAt, runTicks(run, view.paneClosed), view.now),
     ),
     selectable: view.opensRuns && Option.isSome(run.subagent),
   }

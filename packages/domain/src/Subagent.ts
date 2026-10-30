@@ -2,6 +2,9 @@ import * as Schema from 'effect/Schema'
 
 import { SubagentId } from '@crook/domain/Ids'
 
+export const SubagentStatus = Schema.Literals(['running', 'completed', 'failed', 'stopped'])
+export type SubagentStatus = typeof SubagentStatus.Type
+
 export class Subagent extends Schema.Class<Subagent>('Subagent')({
   id: SubagentId,
   agentType: Schema.String,
@@ -11,6 +14,5 @@ export class Subagent extends Schema.Class<Subagent>('Subagent')({
   parent: Schema.OptionFromNullOr(SubagentId),
   spawnDepth: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   background: Schema.Boolean,
-  finished: Schema.Boolean,
-  stoppedByUser: Schema.Boolean,
+  status: SubagentStatus,
 }) {}
