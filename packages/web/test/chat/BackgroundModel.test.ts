@@ -13,6 +13,7 @@ import {
   dockOf,
   type DockRun,
   isShown,
+  settledEpisode,
 } from '@crook/web/chat/BackgroundModel'
 
 import { REVIEWER, SESSION } from '../TranscriptFixtures.ts'
@@ -100,12 +101,12 @@ describe('backgroundJobs', () => {
     expect(stateOf(jobs, 'toolu_gone')).toEqual(Option.some('unconfirmed'))
   })
 
-  it('trusts a shell nobody can check until it has been quiet for a long time', () => {
+  it('keeps a shell nobody can check running, however long it stays quiet', () => {
     const quiet = shell({ key: 'quiet', alive: Option.none(), lastOutputAt: 0 })
 
     expect(stateOf(jobsOf([quiet], [], at(60)), 'toolu_quiet')).toEqual(Option.some('running'))
-    expect(stateOf(jobsOf([quiet], [], at(60 * 60)), 'toolu_quiet')).toEqual(
-      Option.some('unconfirmed'),
+    expect(stateOf(jobsOf([quiet], [], at(24 * 60 * 60)), 'toolu_quiet')).toEqual(
+      Option.some('running'),
     )
   })
 
@@ -118,12 +119,11 @@ describe('backgroundJobs', () => {
     )
   })
 
-  it('cannot confirm a Monitor with no timeout once it has been quiet for a long time', () => {
+  it('keeps a Monitor with no timeout running, however long it stays quiet', () => {
     const persistent = monitor(Option.none())
 
-    expect(stateOf(jobsOf([persistent], [], at(60)), 'toolu_mon')).toEqual(Option.some('running'))
-    expect(stateOf(jobsOf([persistent], [], at(60 * 60)), 'toolu_mon')).toEqual(
-      Option.some('unconfirmed'),
+    expect(stateOf(jobsOf([persistent], [], at(24 * 60 * 60)), 'toolu_mon')).toEqual(
+      Option.some('running'),
     )
   })
 
@@ -211,5 +211,61 @@ describe('dockOf', () => {
 
     expect(dock.running).toBe(2)
     expect(Arr.map(dock.chips, (job) => job.shortLabel)).toEqual(['Review', 'dev'])
+  })
+})
+
+describe('settledEpisode', () => {
+  const episode = [
+    shell({ key: 'old', status: 'completed', startedAt: -600, endedAt: -500 }),
+    shell({ key: 'dev', status: 'stopped', endedAt: 30 }),
+    shell({ key: 'test', status: 'failed', endedAt: 20, summary: 'exit code 1' }),
+  ]
+  const runs = [reviewer('done', Option.some(25))]
+
+  const summaryAt = (seconds: number, promptedAt: Option.Option<number> = Option.none()) =>
+    settledEpisode({
+      jobs: jobsOf(episode, runs, at(seconds)),
+      now: at(seconds),
+      promptedAt: Option.map(promptedAt, at),
+    })
+
+  it('sums up the last episode once the dock has left', () => {
+    expect(Option.isNone(summaryAt(35))).toBe(true)
+    expect(
+      Option.map(summaryAt(50), (summary) => ({
+        parts: Arr.map(summary.parts, (part) => [part.text, part.state]),
+        focus: summary.focus.key,
+        since: summary.since,
+        until: summary.until,
+      })),
+    ).toEqual(
+      Option.some({
+        parts: [
+          ['1 subagent done', 'done'],
+          ['dev stopped', 'stopped'],
+          ['dev failed', 'failed'],
+        ],
+        focus: 'toolu_test',
+        since: at(0),
+        until: at(30),
+      }),
+    )
+  })
+
+  it('leaves the summary out once the user has prompted since', () => {
+    expect(Option.isSome(summaryAt(50, Option.some(10)))).toBe(true)
+    expect(Option.isNone(summaryAt(50, Option.some(40)))).toBe(true)
+  })
+
+  it('says nothing while any work still runs', () => {
+    expect(
+      Option.isNone(
+        settledEpisode({
+          jobs: jobsOf([...episode, shell({ key: 'serve', startedAt: 40 })], runs, at(90)),
+          now: at(90),
+          promptedAt: Option.none(),
+        }),
+      ),
+    ).toBe(true)
   })
 })

@@ -135,7 +135,9 @@ const streamsWith = Effect.fn('streamsWith')(function* (root: string, open: Ref.
   return Context.get(context, TranscriptStreams)
 })
 
-const following = Effect.fn('following')(function* () {
+const following = Effect.fn('following')(function* (
+  liveness: OpenTasks = Option.some(HashSet.make(TASK)),
+) {
   const fileSystem = yield* FileSystem.FileSystem
   const root = yield* fileSystem.makeTempDirectoryScoped()
   const transcript = `${root}/projects/${PROJECT}/${SESSION}.jsonl`
@@ -143,7 +145,7 @@ const following = Effect.fn('following')(function* () {
   yield* fileSystem.makeDirectory(`${root}/projects/${PROJECT}`, { recursive: true })
   yield* fileSystem.writeFileString(transcript, devServerLaunch)
 
-  const open = yield* Ref.make<OpenTasks>(Option.some(HashSet.make(TASK)))
+  const open = yield* Ref.make(liveness)
   const streams = yield* streamsWith(root, open)
   const states = yield* Queue.unbounded<string>()
 
@@ -199,6 +201,22 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer))(
 
           expect(yield* Queue.take(states)).toBe(`${TASK} gone`)
         }),
+    )
+
+    it.effect('never calls a shell gone on a system it cannot check, such as macOS', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const { states, transcript } = yield* following(Option.none())
+
+        expect(yield* Queue.take(states)).toBe(`${TASK} unknown`)
+
+        yield* TestClock.adjust(`${LIVENESS_RECHECK_SECONDS} seconds`)
+        yield* TestClock.adjust(`${LIVENESS_RECHECK_SECONDS} seconds`)
+        yield* TestClock.adjust(`${LIVENESS_RECHECK_SECONDS} seconds`)
+        yield* fileSystem.writeFileString(transcript, outputRead('later', 30), { flag: 'a' })
+
+        expect(yield* Queue.take(states)).toBe(`${TASK} unknown`)
+      }),
     )
   },
 )
