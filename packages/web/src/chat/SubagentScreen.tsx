@@ -12,13 +12,13 @@ import {
   SubagentTranscriptKey,
   transcriptAtom,
 } from '@crook/web/atoms/Transcript'
-import { chatItems, hasToolRunning, isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
+import { hasToolRunning, isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import { CatchingUpPill } from '@crook/web/chat/ChatHeader'
 import { activityOf, cwdOf, isWatching, titleOf } from '@crook/web/chat/ChatModel'
-import { failureRows, itemRows, TranscriptEmpty, workingRow } from '@crook/web/chat/ChatRows'
+import { failureRows, TranscriptEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { ImageViewer } from '@crook/web/chat/Images'
-import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
+import { useChatItems, useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -97,27 +97,28 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const parentLines = linesOf(parent)
   const parentRosters = rostersOf(parent)
   const parentActivity = activityOf(model)
-  const run = React.useMemo(
-    () =>
-      findRun(
-        runsIn(chatItems(parentLines, { cwd, activity: parentActivity, rosters: parentRosters })),
-        subagent,
-      ),
-    [parentLines, cwd, parentActivity, parentRosters, subagent],
-  )
+  const parentItems = useChatItems(parentLines, {
+    cwd,
+    activity: parentActivity,
+    rosters: parentRosters,
+  })
+  const run = React.useMemo(() => findRun(runsIn(parentItems), subagent), [parentItems, subagent])
   const ticking = Option.exists(run, (found) => runTicks(found, paneClosed))
   const lines = linesOf(view)
-  const items = React.useMemo(
-    () => chatItems(lines, { cwd, activity: ticking ? 'working' : 'still', rosters: NO_ROSTERS }),
-    [lines, cwd, ticking],
-  )
+  const items = useChatItems(lines, {
+    cwd,
+    activity: ticking ? 'working' : 'still',
+    rosters: NO_ROSTERS,
+  })
   const firstPrompt = Arr.findFirst(items, isUserPrompt)
   const prompt = Option.orElse(
     Option.flatMap(run, (found) => Option.liftPredicate(found.prompt, (text) => text !== '')),
     () => Option.map(firstPrompt, (item) => item.text),
   )
-  const shownItems = Arr.filter(items, (item) =>
-    Option.match(firstPrompt, { onNone: () => true, onSome: (first) => first.key !== item.key }),
+  const firstPromptKey = Option.getOrUndefined(Option.map(firstPrompt, (item) => item.key))
+  const shownItems = React.useMemo(
+    () => Arr.filter(items, (item) => item.key !== firstPromptKey),
+    [items, firstPromptKey],
   )
   const parentTitle = titleOf(model, pane)
 
@@ -132,9 +133,10 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
     [cwd, paneClosed, transcript.onShowEarlier, transcript.whole, catchingUp],
   )
 
+  const conversationRows = useItemRows(shownItems, environment)
   const rows: readonly ThreadRow[] = [
     ...Option.toArray(Option.map(prompt, askedRow)),
-    ...itemRows(shownItems, environment),
+    ...conversationRows,
     ...(ticking && !hasToolRunning(shownItems)
       ? Option.toArray(
           Option.map(

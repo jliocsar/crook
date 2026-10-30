@@ -9,7 +9,7 @@ import { ArrowDown } from 'lucide-react'
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react'
 import * as React from 'react'
 
-import { EMPTY_REVEAL_PLAN, liftFor, nextRevealPlan } from '@crook/web/chat/Reveal'
+import { departedKeys, liftFor } from '@crook/web/chat/Reveal'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { RenderCacheScope } from '@crook/web/components/RenderCache'
 import { RowMemoryScope } from '@crook/web/components/RowMemory'
@@ -173,23 +173,6 @@ const useSettled = (rowCount: number): boolean => {
   return settled
 }
 
-const useRevealPlan = (rows: readonly ThreadRow[], animates: boolean) => {
-  const signature = pipe(
-    rows,
-    Arr.map((row) => row.key),
-    Arr.join('\n'),
-  )
-  const [planned, setPlanned] = React.useState<Option.Option<string>>(Option.none())
-  const [plan, setPlan] = React.useState(EMPTY_REVEAL_PLAN)
-
-  if (!Option.contains(planned, signature)) {
-    setPlanned(Option.some(signature))
-    setPlan(nextRevealPlan(plan, rows, { animate: animates }))
-  }
-
-  return plan
-}
-
 const placeholderFrames = (
   rows: readonly ThreadRow[],
   virtualItems: readonly VirtualItem[],
@@ -209,20 +192,21 @@ const placeholderFrames = (
   )
 
 const useGhost = (
-  departed: readonly string[],
   rows: readonly ThreadRow[],
   virtualItems: readonly VirtualItem[],
+  animates: boolean,
 ) => {
   const frames = React.useRef<ReadonlyMap<string, Ghost>>(new Map())
   const [ghost, setGhost] = React.useState<Option.Option<Ghost>>(Option.none())
+  const lastKey = Option.getOrUndefined(Option.map(Arr.last(rows), (row) => row.key))
 
   React.useLayoutEffect(() => {
-    const left = ghostsOf(departed, frames.current)
+    const left = ghostsOf(departedKeys(Array.from(frames.current.keys()), rows), frames.current)
 
-    if (Option.isSome(left)) {
+    if (animates && Option.isSome(left)) {
       setGhost(left)
     }
-  }, [departed])
+  }, [rows.length, lastKey])
 
   React.useLayoutEffect(() => {
     frames.current = placeholderFrames(rows, virtualItems)
@@ -372,7 +356,6 @@ export function Thread({
   const reduce = useReducedMotion() ?? false
   const settled = useSettled(rows.length)
   const animates = settled && !reduce
-  const plan = useRevealPlan(rows, animates)
   const lift = useLift()
   const { raise, current: liftNow } = lift
 
@@ -408,7 +391,7 @@ export function Thread({
   })
   const totalSize = virtualizer.getTotalSize()
   const virtualItems = virtualizer.getVirtualItems()
-  const { ghost, gone } = useGhost(plan.departed, rows, virtualItems)
+  const { ghost, gone } = useGhost(rows, virtualItems, animates)
 
   const follow = (next: boolean) => {
     if (next !== followingRef.current) {

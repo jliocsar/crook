@@ -10,6 +10,7 @@ import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { findMachine } from '@crook/domain/HerdView'
 import type { HerdMachine } from '@crook/domain/HerdView'
+import type { Machine } from '@crook/domain/Machine'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { panePresence } from '@crook/domain/MachineState'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
@@ -31,7 +32,8 @@ export const ChatStatus = Data.taggedEnum<ChatStatus>()
 
 export class ChatScreenModel extends Data.Class<{
   readonly presence: ChatPresence
-  readonly machine: Option.Option<HerdMachine>
+  readonly machine: Option.Option<Machine>
+  readonly workspaceLabel: Option.Option<string>
   readonly row: Option.Option<AgentRow>
   readonly endedAt: Option.Option<DateTime.Utc>
 }> {}
@@ -39,6 +41,7 @@ export class ChatScreenModel extends Data.Class<{
 export const LOADING_CHAT = new ChatScreenModel({
   presence: 'loading',
   machine: Option.none(),
+  workspaceLabel: Option.none(),
   row: Option.none(),
   endedAt: Option.none(),
 })
@@ -79,6 +82,15 @@ const presenceIn = (
   })
 }
 
+const workspaceLabelIn = (entry: HerdMachine, row: AgentRow): Option.Option<string> =>
+  pipe(
+    entry.state,
+    Option.flatMap((state) =>
+      Arr.findFirst(state.workspaces, (workspace) => workspace.id === row.workspace),
+    ),
+    Option.map((workspace) => workspace.label),
+  )
+
 export const chatScreenModel = (
   snapshot: Option.Option<HerdSnapshot>,
   machine: MachineId,
@@ -101,7 +113,16 @@ export const chatScreenModel = (
 
       return new ChatScreenModel({
         presence,
-        machine: Option.orElse(entry, () => previous.machine),
+        machine: Option.orElse(
+          Option.map(entry, (found) => found.machine),
+          () => previous.machine,
+        ),
+        workspaceLabel: Option.orElse(
+          Option.flatMap(Option.all({ found: entry, shown: row }), ({ found, shown }) =>
+            workspaceLabelIn(found, shown),
+          ),
+          () => previous.workspaceLabel,
+        ),
         row,
         endedAt: ended(presence)
           ? Option.orElse(
@@ -116,7 +137,7 @@ export const chatScreenModel = (
 export const machineLabelOf = (model: ChatScreenModel): string =>
   Option.match(model.machine, {
     onNone: () => 'The machine',
-    onSome: (entry) => entry.machine.label,
+    onSome: (machine) => machine.label,
   })
 
 export const chatStatus = (model: ChatScreenModel): ChatStatus => {
@@ -167,17 +188,6 @@ export const herdrTurnOf = (model: ChatScreenModel, watchFailed: boolean): Herdr
     }),
   )
 
-export const workspaceLabelOf = (model: ChatScreenModel): Option.Option<string> =>
-  Option.flatMap(Option.all({ entry: model.machine, row: model.row }), ({ entry, row }) =>
-    pipe(
-      entry.state,
-      Option.flatMap((state) =>
-        Arr.findFirst(state.workspaces, (workspace) => workspace.id === row.workspace),
-      ),
-      Option.map((workspace) => workspace.label),
-    ),
-  )
-
 export const cwdOf = (model: ChatScreenModel): string =>
   Option.match(model.row, { onNone: () => '', onSome: (row) => row.cwd })
 
@@ -194,9 +204,9 @@ export const isWatching = (model: ChatScreenModel): boolean =>
   model.presence === 'live' || model.presence === 'loading'
 
 export const placeOf = (model: ChatScreenModel): Option.Option<string> =>
-  Option.flatMap(model.machine, (entry) =>
+  Option.flatMap(model.machine, (machine) =>
     pipe(
-      [Option.some(entry.machine.label), workspaceLabelOf(model)],
+      [Option.some(machine.label), model.workspaceLabel],
       Arr.getSomes,
       Arr.join(' · '),
       Option.liftPredicate((text) => text !== ''),

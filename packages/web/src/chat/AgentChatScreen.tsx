@@ -19,13 +19,7 @@ import type {
   PendingPromptRow,
 } from '@crook/web/chat/ChatCommands'
 import { CatchingUpPill, ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
-import {
-  chatItems,
-  firstRunningTreeKey,
-  hasToolRunning,
-  lastTurnEvidence,
-  runningCount,
-} from '@crook/web/chat/ChatItems'
+import { firstRunningTreeKey, hasToolRunning, runningCount } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import {
   activityOf,
@@ -39,12 +33,12 @@ import {
   titleOf,
 } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
-import { failureRows, itemRows, TranscriptEmpty, workingRow } from '@crook/web/chat/ChatRows'
+import { failureRows, TranscriptEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { Composer } from '@crook/web/chat/Composer'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
 import type { Restart } from '@crook/web/chat/EdgeCard'
 import { ImageViewer } from '@crook/web/chat/Images'
-import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
+import { useChatItems, useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -56,7 +50,13 @@ import {
   skillsOf,
 } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
-import { holdingSince, nextWorkingHold, NO_HOLD, sameHold } from '@crook/web/chat/WorkingHold'
+import {
+  holdingSince,
+  lastTurnEvidence,
+  nextWorkingHold,
+  NO_HOLD,
+  sameHold,
+} from '@crook/web/chat/WorkingHold'
 import type { WorkingSignals } from '@crook/web/chat/WorkingHold'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
@@ -151,7 +151,7 @@ function ChatDock({
             machineLabel={machineLabelOf(model)}
             since={
               kind === 'away'
-                ? Option.map(model.machine, (entry) => entry.machine.lastSeenAt)
+                ? Option.map(model.machine, (machine) => machine.lastSeenAt)
                 : model.endedAt
             }
             restart={kind === 'away' ? Option.none() : restart}
@@ -197,7 +197,7 @@ function ChatDock({
 function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const navigate = useNavigate()
   const { back } = usePushedScreen()
-  const { opened, model, connection, dimmed } = useOpenedChat(machine, pane)
+  const { opened, model, canAct, dimmed } = useOpenedChat(machine, pane)
   const transcriptKey = React.useMemo(
     () => new PaneTranscriptKey({ machine, pane }),
     [machine, pane],
@@ -218,10 +218,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     evidence,
   })
   const activity = Option.isSome(workingSince) ? 'working' : activityOf(model)
-  const items = React.useMemo(
-    () => chatItems(lines, { cwd, activity, rosters }),
-    [lines, cwd, activity, rosters],
-  )
+  const items = useChatItems(lines, { cwd, activity, rosters })
   const covered = useCoveredByPushedScreen()
   const scrollToEnd = React.useCallback(() => {
     thread.current?.scrollToEnd()
@@ -229,7 +226,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const commands = useChatCommands({
     opened,
     model,
-    connection,
+    canAct,
     items,
     draft,
     setDraft,
@@ -269,30 +266,40 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     }),
     [cwd, paneClosed, transcript.onShowEarlier, transcript.whole, catchingUp, openRun],
   )
-  const conversationRows = React.useMemo(
+  const shownItems = React.useMemo(
     () =>
-      itemRows(
-        withoutAskedCall(
-          withAlwaysNotes(items, commands.alwaysNotes),
-          Option.fromUndefinedOr(askedCall),
-        ),
-        environment,
+      withoutAskedCall(
+        withAlwaysNotes(items, commands.alwaysNotes),
+        Option.fromUndefinedOr(askedCall),
       ),
-    [items, commands.alwaysNotes, askedCall, environment],
+    [items, commands.alwaysNotes, askedCall],
   )
-
-  const working = Option.filter(workingSince, () => !hasToolRunning(items))
-  const rows: readonly ThreadRow[] =
-    model.presence === 'notClaude'
-      ? []
-      : [
-          ...conversationRows,
-          ...pendingPromptRows(commands.pendingPrompts),
-          ...Option.toArray(
-            Option.map(working, (since) => workingRow((now) => shortElapsed(now, since))),
-          ),
-          ...(isWatching(model) ? failureRows(latest, transcript.onRetry) : []),
-        ]
+  const conversationRows = useItemRows(shownItems, environment)
+  const workingAt = Option.getOrUndefined(Option.filter(workingSince, () => !hasToolRunning(items)))
+  const watching = isWatching(model)
+  const notClaude = model.presence === 'notClaude'
+  const rows = React.useMemo(
+    (): readonly ThreadRow[] =>
+      notClaude
+        ? []
+        : [
+            ...conversationRows,
+            ...pendingPromptRows(commands.pendingPrompts),
+            ...(workingAt === undefined ? [] : [workingRow((now) => shortElapsed(now, workingAt))]),
+            ...(watching
+              ? failureRows(AsyncResult.value(transcript.result), transcript.onRetry)
+              : []),
+          ],
+    [
+      notClaude,
+      conversationRows,
+      commands.pendingPrompts,
+      workingAt,
+      watching,
+      transcript.result,
+      transcript.onRetry,
+    ],
+  )
 
   return (
     <>

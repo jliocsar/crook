@@ -1,6 +1,8 @@
 import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
+import * as Equal from 'effect/Equal'
 import * as HashMap from 'effect/HashMap'
+import * as HashSet from 'effect/HashSet'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
@@ -11,7 +13,6 @@ import * as Str from 'effect/String'
 import { relativeToFolder } from '@crook/domain/Ask'
 import type { ClaudeSessionId, SubagentId } from '@crook/domain/Ids'
 import { type Subagent, type SubagentStatus, statusOfNotice } from '@crook/domain/Subagent'
-import { TurnDurationBlock } from '@crook/domain/TranscriptMessage'
 import type {
   AssistantMessage,
   CompactTrigger,
@@ -19,11 +20,10 @@ import type {
   SystemMessage,
   ToolResultBlock,
   ToolUseBlock,
-  UserBlock,
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
-import { type SessionRosters, TranscriptLine } from '@crook/web/chat/TranscriptState'
+import { NO_ROSTERS, type SessionRosters, TranscriptLine } from '@crook/web/chat/TranscriptState'
 import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
 import { LINE_BREAK, PARAGRAPH_BREAK } from '@crook/web/text/Lines'
@@ -69,28 +69,70 @@ interface Stamped<Value> {
   readonly at: Option.Option<DateTime.Utc>
 }
 
-interface Placed {
-  readonly line: TranscriptLine
+interface Placement {
   readonly turn: number
   readonly boundary: Option.Option<string>
 }
 
-export interface TurnEvidence {
-  readonly ends: boolean
-  readonly at: Option.Option<DateTime.Utc>
+interface Placed extends Placement {
+  readonly line: TranscriptLine
 }
 
+type Call = Data.TaggedEnum.Value<Pending, 'Call'>
+
+type Pending = Data.TaggedEnum<{
+  Shown: { readonly item: ChatItem }
+  Call: {
+    readonly session: ClaudeSessionId
+    readonly use: ToolUseBlock
+    readonly key: string
+    readonly at: Option.Option<DateTime.Utc>
+    readonly turn: number
+  }
+}>
+
 interface Draft {
-  readonly item: ChatItem
+  readonly pending: Pending
   readonly group: Option.Option<string>
 }
 
+interface Slot {
+  readonly members: Arr.NonEmptyReadonlyArray<Pending>
+}
+
+interface Placing {
+  readonly next: number
+  readonly groups: HashMap.HashMap<string, number>
+}
+
+interface Target {
+  readonly index: number
+  readonly opens: boolean
+  readonly pending: Pending
+}
+
+type Stamps<Value> = HashMap.HashMap<string, Stamped<Value>>
+
 interface Evidence {
-  readonly results: ReadonlyMap<string, Stamped<ToolResultBlock>>
-  readonly notices: ReadonlyMap<string, Stamped<string>>
+  readonly results: Stamps<ToolResultBlock>
+  readonly notices: Stamps<string>
   readonly lastTurn: number
   readonly currentSession: Option.Option<ClaudeSessionId>
   readonly context: ChatContext
+}
+
+export interface ChatDerivation {
+  readonly lines: readonly TranscriptLine[]
+  readonly context: ChatContext
+  readonly items: readonly ChatItem[]
+  readonly slots: readonly Slot[]
+  readonly placement: Placement
+  readonly results: Stamps<ToolResultBlock>
+  readonly notices: Stamps<string>
+  readonly groups: HashMap.HashMap<string, number>
+  readonly slotsOfCall: HashMap.HashMap<string, HashSet.HashSet<number>>
+  readonly lastTurnSlots: HashSet.HashSet<number>
+  readonly agentSlots: HashSet.HashSet<number>
 }
 
 const ASYNC_LAUNCH_STATUS = 'async_launched'
@@ -98,7 +140,6 @@ const INTERRUPTED_NOTE = 'Interrupted'
 const PATH_FIELDS = new Set(['file_path', 'notebook_path', 'path'])
 const AGENT_TOOL = 'Agent'
 const PLAN_TOOL = 'TodoWrite'
-const TOOL_USE_STOP = 'tool_use'
 
 const SUMMARY_FIELD = new Map([
   ['Bash', 'command'],
@@ -117,6 +158,8 @@ const SUMMARY_FIELD = new Map([
 ])
 
 export const ChatItem = Data.taggedEnum<ChatItem>()
+
+const Pending = Data.taggedEnum<Pending>()
 
 export class ToolCallModel extends Data.Class<{
   readonly id: string
@@ -258,20 +301,16 @@ const boundaryOf = (line: TranscriptLine): Option.Option<string> =>
       ),
   })
 
-const place = (lines: readonly TranscriptLine[]) =>
-  Arr.mapAccum(
-    lines,
-    { turn: 0, boundary: Option.none<string>() },
-    (state, line): readonly [{ turn: number; boundary: Option.Option<string> }, Placed] => {
-      const turn = startsTurn(line) ? state.turn + 1 : state.turn
-      const boundary = Option.orElse(boundaryOf(line), () => state.boundary)
+const place = (lines: readonly TranscriptLine[], from: Placement) =>
+  Arr.mapAccum(lines, from, (state, line): readonly [Placement, Placed] => {
+    const turn = startsTurn(line) ? state.turn + 1 : state.turn
+    const boundary = Option.orElse(boundaryOf(line), () => state.boundary)
 
-      return [
-        { turn, boundary },
-        { line, turn, boundary },
-      ]
-    },
-  )
+    return [
+      { turn, boundary },
+      { line, turn, boundary },
+    ]
+  })
 
 const userMessageOf = (line: TranscriptLine): Option.Option<UserMessage> =>
   TranscriptLine.$match(line, {
@@ -286,21 +325,19 @@ const userMessageOf = (line: TranscriptLine): Option.Option<UserMessage> =>
 const stampedBlocks = <Value>(
   lines: readonly TranscriptLine[],
   pick: (block: UserMessage['blocks'][number]) => Option.Option<readonly [string, Value]>,
-): ReadonlyMap<string, Stamped<Value>> =>
-  new Map(
-    pipe(
-      lines,
-      Arr.flatMap((line) => Option.toArray(userMessageOf(line))),
-      Arr.flatMap((user) =>
-        Arr.flatMap(user.blocks, (block) =>
-          pipe(
-            pick(block),
-            Option.map(([id, value]): readonly [string, Stamped<Value>] => [
-              id,
-              { value, at: user.timestamp },
-            ]),
-            Option.toArray,
-          ),
+): readonly (readonly [string, Stamped<Value>])[] =>
+  pipe(
+    lines,
+    Arr.flatMap((line) => Option.toArray(userMessageOf(line))),
+    Arr.flatMap((user) =>
+      Arr.flatMap(user.blocks, (block) =>
+        pipe(
+          pick(block),
+          Option.map(([id, value]): readonly [string, Stamped<Value>] => [
+            id,
+            { value, at: user.timestamp },
+          ]),
+          Option.toArray,
         ),
       ),
     ),
@@ -329,9 +366,15 @@ const noticesIn = (lines: readonly TranscriptLine[]) =>
     ),
   )
 
-const draft = (item: ChatItem): Draft => ({ item, group: Option.none() })
+const draft = (item: ChatItem): Draft => ({
+  pending: Pending.Shown({ item }),
+  group: Option.none(),
+})
 
-const grouped = (item: ChatItem, group: string): Draft => ({ item, group: Option.some(group) })
+const grouped = (item: ChatItem, group: string): Draft => ({
+  pending: Pending.Shown({ item }),
+  group: Option.some(group),
+})
 
 const outputNote = (text: string, key: string): readonly Draft[] =>
   Str.isNonEmpty(text.trim()) ? [draft(ChatItem.Note({ key, text: text.trim() }))] : []
@@ -404,7 +447,7 @@ const subagentRun = (
   evidence: Evidence,
 ): SubagentRun => {
   const input = decodeAgentInput(use.input)
-  const stampedResult = Option.fromUndefinedOr(evidence.results.get(use.id))
+  const stampedResult = HashMap.get(evidence.results, use.id)
   const result = stampedValue(stampedResult)
   const roster = pipe(
     HashMap.get(evidence.context.rosters, session),
@@ -413,7 +456,7 @@ const subagentRun = (
     ),
   )
   const launch = Option.flatMap(result, (found) => found.subagent)
-  const notice = Option.fromUndefinedOr(evidence.notices.get(use.id))
+  const notice = HashMap.get(evidence.notices, use.id)
   const background =
     Option.exists(input, (found) => found.run_in_background === true) ||
     Option.exists(roster, (subagent) => subagent.background) ||
@@ -465,19 +508,43 @@ const subagentRun = (
   })
 }
 
+const callItem = (call: Call, evidence: Evidence): ChatItem => {
+  if (call.use.name === AGENT_TOOL) {
+    return ChatItem.Subagents({
+      key: call.key,
+      runs: [subagentRun(call.session, call.use, call.at, call.turn, evidence)],
+    })
+  }
+
+  const stamped = HashMap.get(evidence.results, call.use.id)
+  const result = stampedValue(stamped)
+
+  return ChatItem.Tool({
+    key: call.key,
+    call: new ToolCallModel({
+      id: call.use.id,
+      name: call.use.name,
+      summary: toolSummary(call.use.name, call.use.input, evidence.context.cwd),
+      input: call.use.input,
+      status: toolStatus(result, call.turn, evidence),
+      result,
+      startedAt: call.at,
+      finishedAt: stampedAt(stamped),
+    }),
+  })
+}
+
 const toolDraft = (
   session: ClaudeSessionId,
   use: ToolUseBlock,
   key: string,
   at: Option.Option<DateTime.Utc>,
   turn: number,
-  evidence: Evidence,
 ): Draft => {
+  const call = Pending.Call({ session, use, key, at, turn })
+
   if (use.name === AGENT_TOOL) {
-    return grouped(
-      ChatItem.Subagents({ key, runs: [subagentRun(session, use, at, turn, evidence)] }),
-      `subagents ${turn}`,
-    )
+    return { pending: call, group: Option.some(`subagents ${turn}`) }
   }
 
   const plan = decodePlan(use.input)
@@ -486,24 +553,7 @@ const toolDraft = (
     return grouped(ChatItem.Plan({ key, steps: plan.value.todos }), `plan ${turn}`)
   }
 
-  const stamped = Option.fromUndefinedOr(evidence.results.get(use.id))
-  const result = stampedValue(stamped)
-
-  return draft(
-    ChatItem.Tool({
-      key,
-      call: new ToolCallModel({
-        id: use.id,
-        name: use.name,
-        summary: toolSummary(use.name, use.input, evidence.context.cwd),
-        input: use.input,
-        status: toolStatus(result, turn, evidence),
-        result,
-        startedAt: at,
-        finishedAt: stampedAt(stamped),
-      }),
-    }),
-  )
+  return { pending: call, group: Option.none() }
 }
 
 const assistantDrafts = (
@@ -511,7 +561,6 @@ const assistantDrafts = (
   message: AssistantMessage,
   keyAt: (index: number) => string,
   turn: number,
-  evidence: Evidence,
 ): readonly Draft[] =>
   Arr.flatMap(message.blocks, (block, index) =>
     Match.value(block).pipe(
@@ -529,9 +578,7 @@ const assistantDrafts = (
               ]
             : [],
         Thinking: () => [],
-        ToolUse: (use) => [
-          toolDraft(session, use, keyAt(index), message.timestamp, turn, evidence),
-        ],
+        ToolUse: (use) => [toolDraft(session, use, keyAt(index), message.timestamp, turn)],
         Unrecognized: () => [],
       }),
     ),
@@ -615,7 +662,7 @@ const systemDrafts = (
     ),
   )
 
-const draftsOf = (placed: Placed, evidence: Evidence): readonly Draft[] => {
+const draftsOf = (placed: Placed): readonly Draft[] => {
   const keyAt = (index: number) => keyOf(placed.line, index)
 
   return TranscriptLine.$match(placed.line, {
@@ -624,8 +671,7 @@ const draftsOf = (placed: Placed, evidence: Evidence): readonly Draft[] => {
       Match.value(message).pipe(
         Match.tagsExhaustive({
           User: (user) => userDrafts(user, keyAt, placed.boundary),
-          Assistant: (assistant) =>
-            assistantDrafts(session, assistant, keyAt, placed.turn, evidence),
+          Assistant: (assistant) => assistantDrafts(session, assistant, keyAt, placed.turn),
           System: (system) => systemDrafts(system, keyAt, placed.boundary),
           UnrecognizedEntry: () => [],
           Malformed: (malformed) => [
@@ -666,103 +712,251 @@ const merge = (first: ChatItem, later: ChatItem): ChatItem => {
   return first
 }
 
-const groupDrafts = (drafts: readonly Draft[]): readonly ChatItem[] => {
-  const groups = pipe(
-    drafts,
-    Arr.filter((entry) => Option.isSome(entry.group)),
-    Arr.groupBy((entry) => Option.getOrElse(entry.group, () => '')),
+const FIRST_PLACEMENT: Placement = { turn: 0, boundary: Option.none() }
+
+const callOf = (pending: Pending): Option.Option<Call> =>
+  Pending.$match(pending, {
+    Shown: () => Option.none(),
+    Call: (call) => Option.some(call),
+  })
+
+const isAgentCall = (pending: Pending): boolean =>
+  Option.exists(callOf(pending), (call) => call.use.name === AGENT_TOOL)
+
+const itemOf = (pending: Pending, evidence: Evidence): ChatItem =>
+  Pending.$match(pending, {
+    Shown: ({ item }) => item,
+    Call: (call) => callItem(call, evidence),
+  })
+
+const slotItem = (slot: Slot, evidence: Evidence): ChatItem =>
+  pipe(
+    Arr.tailNonEmpty(slot.members),
+    Arr.reduce(itemOf(Arr.headNonEmpty(slot.members), evidence), (item, member) =>
+      merge(item, itemOf(member, evidence)),
+    ),
   )
 
-  return Arr.flatMap(drafts, (entry) =>
-    Option.match(entry.group, {
-      onNone: () => [entry.item],
-      onSome: (group) =>
-        pipe(
-          Option.fromUndefinedOr(groups[group]),
-          Option.filter((members) => members[0] === entry),
-          Option.map((members) =>
-            pipe(
-              members,
-              Arr.drop(1),
-              Arr.reduce(entry.item, (item, member) => merge(item, member.item)),
-            ),
+const withStamps = <Value>(
+  stamps: Stamps<Value>,
+  fresh: readonly (readonly [string, Stamped<Value>])[],
+): Stamps<Value> => Arr.reduce(fresh, stamps, (all, [id, stamped]) => HashMap.set(all, id, stamped))
+
+const targetOf = (placing: Placing, entry: Draft): readonly [Placing, Target] =>
+  pipe(
+    entry.group,
+    Option.flatMap((group) => HashMap.get(placing.groups, group)),
+    Option.match({
+      onSome: (index): readonly [Placing, Target] => [
+        placing,
+        { index, opens: false, pending: entry.pending },
+      ],
+      onNone: (): readonly [Placing, Target] => [
+        {
+          next: placing.next + 1,
+          groups: Option.match(entry.group, {
+            onNone: () => placing.groups,
+            onSome: (group) => HashMap.set(placing.groups, group, placing.next),
+          }),
+        },
+        { index: placing.next, opens: true, pending: entry.pending },
+      ],
+    }),
+  )
+
+const joinedMembers = (
+  joined: HashMap.HashMap<number, Arr.NonEmptyReadonlyArray<Pending>>,
+  target: Target,
+): HashMap.HashMap<number, Arr.NonEmptyReadonlyArray<Pending>> =>
+  HashMap.set(
+    joined,
+    target.index,
+    Option.match(HashMap.get(joined, target.index), {
+      onNone: (): Arr.NonEmptyReadonlyArray<Pending> => [target.pending],
+      onSome: (members) => Arr.append(members, target.pending),
+    }),
+  )
+
+const indexesWhere = (
+  targets: readonly Target[],
+  keep: (pending: Pending) => boolean,
+): HashSet.HashSet<number> =>
+  HashSet.fromIterable(
+    pipe(
+      targets,
+      Arr.filter((target) => keep(target.pending)),
+      Arr.map((target) => target.index),
+    ),
+  )
+
+const slotsOfCallAfter = (
+  slotsOfCall: HashMap.HashMap<string, HashSet.HashSet<number>>,
+  targets: readonly Target[],
+): HashMap.HashMap<string, HashSet.HashSet<number>> =>
+  Arr.reduce(targets, slotsOfCall, (all, target) =>
+    Option.match(callOf(target.pending), {
+      onNone: () => all,
+      onSome: (call) =>
+        HashMap.set(
+          all,
+          call.use.id,
+          HashSet.add(
+            Option.getOrElse(HashMap.get(all, call.use.id), () => HashSet.empty<number>()),
+            target.index,
           ),
-          Option.toArray,
         ),
     }),
   )
+
+const slotsOfIds = (
+  slotsOfCall: HashMap.HashMap<string, HashSet.HashSet<number>>,
+  ids: readonly string[],
+): HashSet.HashSet<number> =>
+  Arr.reduce(ids, HashSet.empty<number>(), (all, id) =>
+    Option.match(HashMap.get(slotsOfCall, id), {
+      onNone: () => all,
+      onSome: (found) => HashSet.union(all, found),
+    }),
+  )
+
+const sessionOf = (lines: readonly TranscriptLine[]): Option.Option<ClaudeSessionId> =>
+  Option.map(Arr.last(lines), (line) => line.session)
+
+const startOf = (context: ChatContext): ChatDerivation => ({
+  lines: [],
+  context,
+  items: [],
+  slots: [],
+  placement: FIRST_PLACEMENT,
+  results: HashMap.empty(),
+  notices: HashMap.empty(),
+  groups: HashMap.empty(),
+  slotsOfCall: HashMap.empty(),
+  lastTurnSlots: HashSet.empty(),
+  agentSlots: HashSet.empty(),
+})
+
+const advance = (
+  previous: ChatDerivation,
+  lines: readonly TranscriptLine[],
+  context: ChatContext,
+): ChatDerivation => {
+  const fresh = Arr.drop(lines, previous.lines.length)
+  const [placement, placed] = place(fresh, previous.placement)
+  const freshResults = resultsIn(fresh)
+  const freshNotices = noticesIn(fresh)
+  const drafts = Arr.flatMap(placed, (entry: Placed) => draftsOf(entry))
+  const [placing, targets] = Arr.mapAccum(
+    drafts,
+    { next: previous.slots.length, groups: previous.groups },
+    targetOf,
+  )
+  const joined = Arr.reduce(targets, HashMap.empty(), joinedMembers)
+  const opened = pipe(
+    targets,
+    Arr.filter((target) => target.opens),
+    Arr.flatMap((target) => Option.toArray(HashMap.get(joined, target.index))),
+    Arr.map((members): Slot => ({ members })),
+  )
+  const slots = pipe(
+    previous.slots,
+    Arr.map((slot, index) =>
+      Option.match(HashMap.get(joined, index), {
+        onNone: () => slot,
+        onSome: (members): Slot => ({ members: Arr.appendAll(slot.members, members) }),
+      }),
+    ),
+    Arr.appendAll(opened),
+  )
+  const turnMoved = placement.turn !== previous.placement.turn
+  const activityMoved = context.activity !== previous.context.activity
+  const currentSession = Option.orElse(sessionOf(fresh), () => sessionOf(previous.lines))
+  const slotsOfCall = slotsOfCallAfter(previous.slotsOfCall, targets)
+  const lastTurnSlots = HashSet.union(
+    turnMoved ? HashSet.empty<number>() : previous.lastTurnSlots,
+    indexesWhere(targets, (pending) =>
+      Option.exists(callOf(pending), (call) => call.turn === placement.turn),
+    ),
+  )
+  const agentSlots = HashSet.union(previous.agentSlots, indexesWhere(targets, isAgentCall))
+  const agentsMoved =
+    activityMoved ||
+    context.rosters !== previous.context.rosters ||
+    !Equal.equals(currentSession, sessionOf(previous.lines))
+  const dirty = pipe(
+    HashSet.fromIterable(HashMap.keys(joined)),
+    HashSet.union(
+      slotsOfIds(slotsOfCall, [
+        ...Arr.map(freshResults, ([id]) => id),
+        ...Arr.map(freshNotices, ([id]) => id),
+      ]),
+    ),
+    HashSet.union(turnMoved || activityMoved ? previous.lastTurnSlots : HashSet.empty()),
+    HashSet.union(agentsMoved ? agentSlots : HashSet.empty()),
+  )
+  const results = withStamps(previous.results, freshResults)
+  const notices = withStamps(previous.notices, freshNotices)
+  const evidence: Evidence = {
+    results,
+    notices,
+    lastTurn: placement.turn,
+    currentSession,
+    context,
+  }
+
+  return {
+    lines,
+    context,
+    items: Arr.map(slots, (slot, index) =>
+      HashSet.has(dirty, index)
+        ? slotItem(slot, evidence)
+        : Option.getOrElse(Arr.get(previous.items, index), () => slotItem(slot, evidence)),
+    ),
+    slots,
+    placement,
+    results,
+    notices,
+    groups: placing.groups,
+    slotsOfCall,
+    lastTurnSlots,
+    agentSlots,
+  }
+}
+
+const extendsLines = (previous: ChatDerivation, lines: readonly TranscriptLine[]): boolean => {
+  const last = previous.lines.length - 1
+
+  return (
+    lines.length > last &&
+    (last < 0 || (lines[0] === previous.lines[0] && lines[last] === previous.lines[last]))
+  )
+}
+
+const sameContext = (previous: ChatContext, next: ChatContext): boolean =>
+  previous.cwd === next.cwd &&
+  previous.activity === next.activity &&
+  previous.rosters === next.rosters
+
+export const EMPTY_CHAT = startOf({ cwd: '', activity: 'still', rosters: NO_ROSTERS })
+
+export const deriveChat = (
+  previous: ChatDerivation,
+  lines: readonly TranscriptLine[],
+  context: ChatContext,
+): ChatDerivation => {
+  if (!extendsLines(previous, lines) || previous.context.cwd !== context.cwd) {
+    return advance(startOf(context), lines, context)
+  }
+
+  return lines.length === previous.lines.length && sameContext(previous.context, context)
+    ? previous
+    : advance(previous, lines, context)
 }
 
 export const chatItems = (
   lines: readonly TranscriptLine[],
   context: ChatContext,
-): readonly ChatItem[] => {
-  const [lastState, placed] = place(lines)
-  const evidence: Evidence = {
-    results: resultsIn(lines),
-    notices: noticesIn(lines),
-    lastTurn: lastState.turn,
-    currentSession: Option.map(Arr.last(lines), (line) => line.session),
-    context,
-  }
-
-  return groupDrafts(Arr.flatMap(placed, (entry) => draftsOf(entry, evidence)))
-}
-
-const userBlockEnds = (block: UserBlock): Option.Option<boolean> =>
-  Match.value(block).pipe(
-    Match.tagsExhaustive({
-      Interruption: () => Option.some(true),
-      Text: () => Option.some(false),
-      Image: () => Option.some(false),
-      ToolResult: () => Option.some(false),
-      TaskNotification: () => Option.some(false),
-      CompactSummary: () => Option.none<boolean>(),
-      LocalCommand: () => Option.none<boolean>(),
-      LocalCommandOutput: () => Option.none<boolean>(),
-      Unrecognized: () => Option.none<boolean>(),
-    }),
-  )
-
-const userEnds = (message: UserMessage): Option.Option<boolean> =>
-  pipe(
-    Option.liftPredicate(message, (found) => !found.isMeta),
-    Option.map((found) => pipe(found.blocks, Arr.map(userBlockEnds), Arr.getSomes)),
-    Option.filter((signs) => signs.length > 0),
-    Option.map((signs) => Arr.contains(signs, true)),
-  )
-
-const assistantEnds = (message: AssistantMessage): boolean =>
-  message.isApiError || Option.exists(message.stopReason, (reason) => reason !== TOOL_USE_STOP)
-
-const closesTurn = (message: SystemMessage): boolean =>
-  message.blocks.some(Schema.is(TurnDurationBlock))
-
-const signed = (
-  ends: Option.Option<boolean>,
-  at: Option.Option<DateTime.Utc>,
-): Option.Option<TurnEvidence> => Option.map(ends, (found): TurnEvidence => ({ ends: found, at }))
-
-const turnEvidenceOf = (line: TranscriptLine): Option.Option<TurnEvidence> =>
-  TranscriptLine.$match(line, {
-    SessionCleared: () => Option.none(),
-    Message: ({ message }) =>
-      Match.value(message).pipe(
-        Match.tagsExhaustive({
-          User: (user) => signed(userEnds(user), user.timestamp),
-          Assistant: (assistant) =>
-            signed(Option.some(assistantEnds(assistant)), assistant.timestamp),
-          System: (system) =>
-            signed(Option.as(Option.liftPredicate(system, closesTurn), true), system.timestamp),
-          UnrecognizedEntry: () => Option.none<TurnEvidence>(),
-          Malformed: () => Option.none<TurnEvidence>(),
-          Omitted: () => Option.none<TurnEvidence>(),
-        }),
-      ),
-  })
-
-export const lastTurnEvidence = (lines: readonly TranscriptLine[]): Option.Option<TurnEvidence> =>
-  Arr.findLast(lines, turnEvidenceOf)
+): readonly ChatItem[] => advance(startOf(context), lines, context).items
 
 export const runsIn = (items: readonly ChatItem[]): readonly SubagentRun[] =>
   Arr.flatMap(items, (item) => (isSubagents(item) ? item.runs : []))

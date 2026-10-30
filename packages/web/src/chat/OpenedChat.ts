@@ -3,7 +3,7 @@ import * as React from 'react'
 
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
-import { connectionAtom } from '@crook/web/atoms/Connection'
+import { canActAtom, staleAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import {
   transcriptAtom,
@@ -11,15 +11,19 @@ import {
   transcriptWholeAtom,
 } from '@crook/web/atoms/Transcript'
 import type { TranscriptKey } from '@crook/web/atoms/Transcript'
+import { deriveChat, EMPTY_CHAT } from '@crook/web/chat/ChatItems'
+import type { ChatContext, ChatItem } from '@crook/web/chat/ChatItems'
+import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
 
 export const useOpenedChat = (machine: MachineId, pane: PaneId) => {
   const opened = React.useMemo(() => new OpenedAgent({ machine, pane }), [machine, pane])
   const model = useAtomValue(chatScreenAtom(opened))
-  const connection = useAtomValue(connectionAtom)
+  const canAct = useAtomValue(canActAtom)
+  const stale = useAtomValue(staleAtom)
 
   useAtomMount(seenWhileOpenAtom(opened))
 
-  return { opened, model, connection, dimmed: model.presence === 'away' || connection.stale }
+  return { opened, model, canAct, dimmed: model.presence === 'away' || stale }
 }
 
 export const useTranscriptThread = (key: TranscriptKey) => {
@@ -35,4 +39,17 @@ export const useTranscriptThread = (key: TranscriptKey) => {
   }, [retry])
 
   return { result, whole, onShowEarlier, onRetry }
+}
+
+export const useChatItems = (
+  lines: readonly TranscriptLine[],
+  { cwd, activity, rosters }: ChatContext,
+): readonly ChatItem[] => {
+  const derived = React.useRef(EMPTY_CHAT)
+
+  return React.useMemo(() => {
+    derived.current = deriveChat(derived.current, lines, { cwd, activity, rosters })
+
+    return derived.current.items
+  }, [lines, cwd, activity, rosters])
 }

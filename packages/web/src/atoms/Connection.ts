@@ -12,4 +12,8 @@ export const connectionAtom = Atom.make((get) =>
   }),
 )
 
+export const canActAtom = Atom.make((get) => get(connectionAtom).canAct)
+
+export const staleAtom = Atom.make((get) => get(connectionAtom).stale)
+
 export const linkFailureAtom = Atom.make((get) => AsyncResult.cause(get(linkStateAtom)))

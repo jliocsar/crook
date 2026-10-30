@@ -17,7 +17,6 @@ import {
   chatScreenModel,
   chatStatus,
   LOADING_CHAT,
-  workspaceLabelOf,
 } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 
@@ -65,7 +64,7 @@ describe('chatScreenModel', () => {
     expect(live.presence).toBe('live')
     expect(chatStatus(live)).toStrictEqual(ChatStatus.Agent({ status: 'working' }))
     expect(activityOf(live)).toBe('working')
-    expect(workspaceLabelOf(live)).toStrictEqual(Option.some('crook'))
+    expect(live.workspaceLabel).toStrictEqual(Option.some('crook'))
   })
 
   it('tells an exited Claude from a closed pane, and keeps the row it last saw', () => {
