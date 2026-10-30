@@ -1,4 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
+import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
@@ -11,6 +12,8 @@ import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/Agent
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
+import { BackgroundDock, useSessionJobs } from '@crook/web/chat/BackgroundDock'
+import type { BackgroundJob } from '@crook/web/chat/BackgroundModel'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useCatchUp } from '@crook/web/chat/CatchUpTrail'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
@@ -257,6 +260,20 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     },
     [navigate, machine, pane],
   )
+  const backgroundJobsAt = useSessionJobs(view, items)
+  const openSubagentJob = React.useCallback(
+    (job: BackgroundJob) => {
+      const session = Option.map(Arr.last(lines), (line) => line.session)
+
+      if (Option.isSome(job.subagent) && Option.isSome(session)) {
+        void navigate({
+          to: '/m/$machine/p/$pane/sub/$session/$subagent',
+          params: { machine, pane, session: session.value, subagent: job.subagent.value },
+        })
+      }
+    },
+    [navigate, machine, pane, lines],
+  )
   const environment = React.useMemo<ThreadEnvironment>(
     () => ({
       cwd,
@@ -348,6 +365,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           overlay={catchUp.overlay}
         />
       </div>
+      <BackgroundDock jobsAt={backgroundJobsAt} onOpenSubagent={openSubagentJob} />
       <ChatDock
         model={model}
         closedHere={closedHere}

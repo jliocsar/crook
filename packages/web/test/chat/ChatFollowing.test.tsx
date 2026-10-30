@@ -38,6 +38,7 @@ import {
 
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
+const IN_SUBAGENT_TREE = '[data-slot="subagent-tree"] *'
 const VIEWPORT_WIDTH = 375
 const VIEWPORT_HEIGHT = 812
 
@@ -110,9 +111,9 @@ describe('the chat thread following the end', () => {
       fingerScrollsToTop(viewport)
       yield* click(
         present(
-          (yield* Effect.promise(() => screen.findByText('Review the herd diff'))).closest(
-            'button',
-          ),
+          (yield* Effect.promise(() =>
+            screen.findByText('Review the herd diff', { selector: IN_SUBAGENT_TREE }),
+          )).closest('button'),
           'The subagent row',
         ),
       )
