@@ -7,10 +7,12 @@ import { vi } from 'vitest'
 
 import { PaneId } from '@crook/domain/Ids'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
+import { pendingActionAtom, PendingActionKey } from '@crook/web/atoms/Commands'
 import { canActAtom, staleAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
+import { mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
 
 import { liveWith } from '../AppRender.tsx'
 import { agent, DESK, herd, LAPTOP, machine } from '../HerdFixtures.ts'
@@ -35,7 +37,7 @@ const watched = Effect.fn('watched')(function* () {
     (made) => Effect.sync(() => made.dispose()),
   )
   const models: ChatScreenModel[] = []
-  const wakes = { canAct: 0, stale: 0 }
+  const wakes = { canAct: 0, stale: 0, pendingAction: 0 }
 
   yield* Effect.acquireRelease(
     Effect.sync(() => [
@@ -46,12 +48,27 @@ const watched = Effect.fn('watched')(function* () {
         },
         { immediate: true },
       ),
-      registry.subscribe(canActAtom, () => {
-        wakes.canAct += 1
-      }),
-      registry.subscribe(staleAtom, () => {
-        wakes.stale += 1
-      }),
+      registry.subscribe(
+        canActAtom,
+        () => {
+          wakes.canAct += 1
+        },
+        { immediate: true },
+      ),
+      registry.subscribe(
+        staleAtom,
+        () => {
+          wakes.stale += 1
+        },
+        { immediate: true },
+      ),
+      registry.subscribe(
+        pendingActionAtom(new PendingActionKey({ key: mintIdempotencyKey(), machine: LAPTOP })),
+        () => {
+          wakes.pendingAction += 1
+        },
+        { immediate: true },
+      ),
     ]),
     (unsubscribes) =>
       Effect.sync(() => {

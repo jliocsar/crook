@@ -1,4 +1,5 @@
 import * as Data from 'effect/Data'
+import * as Equal from 'effect/Equal'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import type * as AsyncResult from 'effect/reactivity/AsyncResult'
@@ -51,5 +52,7 @@ export const pendingAction = (
   })
 
 export const pendingActionAtom = Atom.family((key: PendingActionKey) =>
-  Atom.make((get) => pendingAction(get(sendCommandAtom(key.key)), get(herdViewAtom), key.machine)),
+  Atom.make((get) =>
+    pendingAction(get(sendCommandAtom(key.key)), get(herdViewAtom), key.machine),
+  ).pipe(Atom.withEquality(Equal.equals)),
 )
