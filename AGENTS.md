@@ -722,6 +722,14 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Scanning a whole transcript for notifications parses only the lines that carry the tag: a
   118 MB transcript of 24363 lines took 40 to 87 ms that way and 280 to 315 ms parsing every
   line (measured in Bun on the laptop).
+- The agent counts the running subagents of every Claude pane all the time, not only while a chat
+  is open: it follows each session's subagent roster, settled by its notices the same way the
+  chat's roster is, and puts the count on the agent's row only when it changes, so a roster change
+  that leaves the count alone sends no herd update. On the 118 MB transcript a watch took 210 to
+  260 ms (406 to 517 ms of CPU) to its first count, and 1.9 to 2.9 ms of CPU per line appended,
+  at 2.8 KB a line on average (measured in Bun on the laptop, 200 appends, four runs). The count
+  is an optional key on the wire, so a row from an agent too old to send it decodes as not knowing
+  it, and its card shows none.
 - The phone keeps the last roster of every session a pane has shown, keyed by session, and the
   agent sends a session's final roster when a watch crosses into the next one, so the runs of a
   session the pane left keep their outcome. A background run outlives Claude's turn, so an idle

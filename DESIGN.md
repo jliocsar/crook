@@ -283,23 +283,50 @@ The Agents tab: every agent on every machine, one section per machine.
   while the hub can't act, and stays tappable when every machine is offline.
 - **No separate "Needs you" section.** Each machine's agents are in `AgentPriority` order
   (ARCHITECTURE §2.6), so what needs you sits at the top of its machine.
-- **A machine section** is a heading button that collapses it: the label (display, 20/28, 620),
-  the machine badge, "N need you" on the right when there are any, and a chevron. Collapsing is
-  UI state and isn't kept across launches.
+- **A machine section** is a quiet heading button that collapses it: the label (display, 18/24,
+  620), the machine badge, "N need you" on the right when there are any, and a chevron. Collapsing
+  is UI state and isn't kept across launches.
   - An offline machine shows one sentence instead of its agents: "Last seen 2h ago. Its agents
     come back when it reconnects."
   - A reconnecting machine's agents dim to 60%.
 - **The machine badge** is a plain Status Pill: online is `ok`, reconnecting is `warn` with a
   spinner, and offline is `idle`, reading "offline · 2h ago".
-- **Each agent is its own card** (`bg-card`, border, `rounded-xl`, 8px apart), 72px tall
-  (measured against the real herd):
-  - line 1: the title (16/24; 620 when it needs you, 500 otherwise), a muted pin icon when it is
-    pinned, and the time since its status changed, in mono 12px on the right;
-  - line 2: the status dot and word, a `·`, then `workspace · tab` and the branch in mono 12px.
-    On a blocked agent the pending ask's one-line summary takes this slot, in foreground mono
-    12px.
-  - The time and status word are foreground when the agent needs you, muted otherwise.
-  - A title herdr doesn't know falls back to the pane id.
+- **Each agent is its own Hero card** (`bg-card`, border, `rounded-xl`, 8px apart, 12px from the
+  screen's edges, padded 14px across, 10px above and 12px below), three lines 6px apart:
+  - line 1, where it runs: `workspace / tab` in 12/16, muted, with the workspace at
+    `foreground/70` and 500. A pinned card shows a muted pin icon on the right.
+  - line 2: the status icon, then the title in the display font (17/24, `-0.01em`; 620 when it
+    needs you, 500 otherwise). A title herdr doesn't know falls back to the pane id.
+  - line 3: the status pill, then the branch in plain mono 12px, muted, then the running subagent
+    count: up to three 5px `bg-primary` dots and the number, in mono 12px. The count shows only
+    while one runs, and only from an agent that publishes it.
+  - **Needs you:** the pill sits above the ask's one-line summary, a bubble
+    (`rounded-[12px_12px_12px_4px]`, warning 14% over the card, foreground mono 12px), and the
+    card's border takes the warning tint (warning 45% over the border). The switch between the
+    two third lines fades and folds in on the fade token.
+- **The status icon** is a Heroicons `20/solid` glyph at 20px, filled and colored by status. It is
+  the only place crook uses Heroicons; lucide stays everywhere else.
+
+  | Status    | Icon                     | Color                         |
+  | --------- | ------------------------ | ----------------------------- |
+  | `working` | `SparklesIcon`, breathes | `primary`                     |
+  | `blocked` | `HandRaisedIcon`         | `warning`                     |
+  | `done`    | `CheckCircleIcon`        | accent 85% over foreground    |
+  | `idle`    | `PauseCircleIcon`        | muted 75% over the background |
+  | `unknown` | `QuestionMarkCircleIcon` | muted 40% over the background |
+
+  The breathing is a CSS animation (scale to 0.8 and opacity to 0.62 and back over 1.6s, the
+  prototype's values), off under reduced motion. A status change swaps the icon through
+  `AnimatePresence`: the new one pops in on the bouncy spring, the old one fades out.
+
+- **The status pill** is a 24px tinted pill holding the word and the time since the status
+  changed, `Working 11m 05s`, with no dot between them: the word in 12.5px 620, the time in mono
+  11.5px at 80%. A working or blocked agent's time reads like a clock (`42s`, `11m 05s`,
+  `2h 05m`), anything else's in its largest unit (`14m`, `3h`). The tint and the ink per status
+  are primary 12%, warning 18%, accent 22%, muted, and muted at 70%, each word mixed toward the
+  foreground so it reads on its tint.
+- **The skeleton** on a first load is two sections of card-shaped blocks: a place line, a round
+  icon with a title line, and a pill.
 - **Tap** opens the agent's chat, and opening it marks a finished agent seen.
 - **Pinned agents sort first** in their machine, ahead of what needs you (`AgentPriority`).
 - **Swipe left** reveals Pin (Unpin on a pinned card) and Close, on the swipe row's knobs. Close

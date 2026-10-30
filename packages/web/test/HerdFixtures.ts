@@ -43,6 +43,7 @@ export const agent = (
     readonly ask?: Ask
     readonly createdByCrook?: boolean
     readonly claudeSession?: ClaudeSessionId
+    readonly runningSubagents?: number
   } = {},
 ) =>
   new AgentRow({
@@ -61,6 +62,7 @@ export const agent = (
     statusChangedAt: DateTime.subtractDuration(START, Duration.seconds(options.secondsAgo ?? 0)),
     beforeHandoff: Option.none(),
     ask: Option.fromUndefinedOr(options.ask),
+    runningSubagents: Option.fromUndefinedOr(options.runningSubagents),
   })
 
 export const machine = (

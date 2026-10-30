@@ -1,3 +1,4 @@
+import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import { Pin, PinOff, X } from 'lucide-react'
@@ -12,7 +13,7 @@ import { PaneAddress } from '@crook/web/atoms/AgentActions'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { SwipeRow, useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import type { OpenRow, SwipeAction } from '@crook/web/components/swipe/SwipeRow'
-import { AgentCard } from '@crook/web/herd/AgentCard'
+import { ASKING_BORDER, AgentCard } from '@crook/web/herd/AgentCard'
 import { useHeldOrder } from '@crook/web/herd/HeldOrder'
 import { SectionBody } from '@crook/web/herd/HerdLayout'
 import type { AgentCardModel, HerdLayout, HerdNotice } from '@crook/web/herd/HerdLayout'
@@ -90,12 +91,16 @@ function AgentCardRow({
       layout="position"
       transition={SPRING}
       exit={motionTokens().exit}
-      className="border-border/60 grid grid-cols-1 gap-2 [&+li]:border-t"
+      className="grid grid-cols-1 gap-2"
     >
       <SwipeRow
         id={toGlobalPaneId(machine, pane)}
         row={row}
-        surface="plain"
+        surface="agent"
+        frameClassName={cn(
+          'transition-[border-color] duration-(--motion) ease-(--ease-out)',
+          Option.isSome(card.askSummary) && ASKING_BORDER,
+        )}
         actions={[
           pinAction(card.pinned, pin.toggle, !controlsEnabled || pin.pending),
           closeAction(openActions, !controlsEnabled),
@@ -132,7 +137,7 @@ export function AgentCards({
   const ordered = useHeldOrder(agents, row.holding)
 
   return (
-    <ul className="grid grid-cols-1 px-2">
+    <ul className="grid grid-cols-1 gap-2 px-3">
       <AnimatePresence initial={false}>
         {ordered.map((card) => (
           <AgentCardRow
@@ -175,7 +180,7 @@ export function HerdList({
   const row = useOpenRow()
 
   return (
-    <div data-slot="herd-list" className="grid grid-cols-1 gap-4 pt-2">
+    <div data-slot="herd-list" className="grid grid-cols-1 gap-3 pt-2">
       {Option.match(layout.notice, {
         onNone: () => null,
         onSome: (notice) => HERD_NOTICE[notice]({ controlsEnabled, onNewAgent, onAddMachine }),

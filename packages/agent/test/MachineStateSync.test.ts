@@ -5,11 +5,14 @@ import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as HashMap from 'effect/HashMap'
+import type * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
@@ -18,6 +21,7 @@ import { GitBranches } from '@crook/agent/GitBranches'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
 import { PendingAsks } from '@crook/agent/PendingAsks'
+import { NO_RUNNING_COUNTS, RunningSubagents } from '@crook/agent/RunningSubagents'
 import { type AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import { type Ask, UnknownAsk } from '@crook/domain/Ask'
 import { AskId, ClaudeSessionId, PaneId } from '@crook/domain/Ids'
@@ -135,6 +139,8 @@ const startSync = Effect.fn('startSync')(function* (
   const failures = yield* Queue.unbounded<HerdrSubscriptionError>()
   const subscriptions = yield* Queue.unbounded<FakeSubscription>()
   const attempts = yield* Ref.make(0)
+  const runningCounts = yield* SubscriptionRef.make(NO_RUNNING_COUNTS)
+  const followed = yield* Queue.unbounded<HashSet.HashSet<ClaudeSessionId>>()
 
   yield* Queue.offer(replies, initial)
   yield* Queue.offerAll(failures, subscribeFailures)
@@ -154,6 +160,7 @@ const startSync = Effect.fn('startSync')(function* (
     Layer.provideMerge(MachineStateSync.layer, [
       herdr,
       CreatedPanes.layerTest(),
+      RunningSubagents.layerTest(runningCounts, (sessions) => Queue.offer(followed, sessions)),
       PendingAsks.layerTest(asks),
       recentPlaces,
       ClaudeSessions.layerTest(
@@ -175,6 +182,8 @@ const startSync = Effect.fn('startSync')(function* (
   return {
     sync: Context.get(context, MachineStateSync),
     createdPanes: Context.get(context, CreatedPanes),
+    runningCounts,
+    followed,
     subscriptions,
     readStarted,
     replies,
@@ -202,6 +211,23 @@ it.effect('starts from the herdr snapshot as version 0', () =>
     expect(
       state.agents.map((row) => [row.pane, row.status, row.claudeSession, row.branch]),
     ).toEqual([['w1:p1', 'working', Option.some(SESSION), Option.some(BRANCH)]])
+  }),
+)
+
+it.effect('counts the running subagents of the Claude sessions its agents are in', () =>
+  Effect.gen(function* () {
+    const { sync, runningCounts, followed } = yield* startSync(working)
+    const sessions = yield* Queue.take(followed)
+
+    yield* SubscriptionRef.set(runningCounts, HashMap.make([SESSION, 2]))
+    const counted = yield* stateAt(sync, 1)
+    yield* SubscriptionRef.set(runningCounts, HashMap.make([SESSION, 2], [HANDOFF_SESSION, 1]))
+    yield* SubscriptionRef.set(runningCounts, HashMap.make([SESSION, 0]))
+    const settled = yield* stateAt(sync, 2)
+
+    expect(Array.from(sessions)).toEqual([SESSION])
+    expect(counted.agents.map((row) => row.runningSubagents)).toEqual([Option.some(2)])
+    expect(settled.agents.map((row) => row.runningSubagents)).toEqual([Option.some(0)])
   }),
 )
 

@@ -62,6 +62,7 @@ const stateOn = (herdr: HerdrLink, status: AgentStatus = 'unknown') =>
         statusChangedAt: observedAt,
         beforeHandoff: Option.none(),
         ask: Option.none(),
+        runningSubagents: Option.none(),
       }),
     ],
     places: [],

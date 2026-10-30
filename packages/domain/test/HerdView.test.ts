@@ -54,6 +54,7 @@ const agentRow = (pane: string, claudeSession: Option.Option<ClaudeSessionId>) =
     statusChangedAt: observedAt,
     beforeHandoff: Option.none(),
     ask: Option.none(),
+    runningSubagents: Option.none(),
   })
 
 const herd = new HerdView({

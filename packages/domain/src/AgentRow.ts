@@ -14,6 +14,8 @@ type SettledStatus = Pick<AgentRow, 'status' | 'statusChangedAt'>
 
 export const StateChangeSeq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
+export const SubagentCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+
 export class StatusBeforeHandoff extends Schema.Class<StatusBeforeHandoff>('StatusBeforeHandoff')({
   status: AgentStatus,
   statusChangedAt: Schema.DateTimeUtcFromString,
@@ -37,6 +39,7 @@ export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   statusChangedAt: Schema.DateTimeUtcFromString,
   beforeHandoff: Schema.OptionFromNullOr(StatusBeforeHandoff),
   ask: Schema.OptionFromNullOr(Ask),
+  runningSubagents: Schema.OptionFromOptionalKey(SubagentCount),
 }) {}
 
 export const seenMarkOf = (row: AgentRow): SeenMark =>

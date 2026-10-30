@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
+import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
@@ -7,6 +8,7 @@ import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
 import * as Struct from 'effect/Struct'
 
+import type { RunningCounts } from '@crook/agent/RunningSubagents'
 import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import type { Ask } from '@crook/domain/Ask'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
@@ -41,6 +43,7 @@ export interface HerdReading {
   readonly panes: readonly PaneInfo[]
   readonly agents: readonly ResolvedAgent[]
   readonly createdPanes: HashSet.HashSet<PaneId>
+  readonly runningSubagents: RunningCounts
 }
 
 export interface HerdContents {
@@ -157,6 +160,9 @@ export const paneLabel = (pane: PaneInfo): Option.Option<string> =>
 const labelIn = (panes: readonly PaneInfo[]) => (info: AgentInfo) =>
   Arr.findFirst(panes, (pane) => pane.pane_id === info.pane_id).pipe(Option.flatMap(paneLabel))
 
+const runningIn = (counts: RunningCounts, claudeSession: Option.Option<ClaudeSessionId>) =>
+  Option.flatMap(claudeSession, (session) => HashMap.get(counts, session))
+
 const toAgentRow =
   (previousAgents: readonly AgentRow[], reading: HerdReading, now: DateTime.Utc) =>
   (resolved: ResolvedAgent) => {
@@ -183,6 +189,7 @@ const toAgentRow =
       statusChangedAt: statusChangedAt(previous, carried, status, now),
       beforeHandoff: keptBeforeHandoff(carried, status),
       ask: Option.filter(resolved.ask, () => status === 'blocked'),
+      runningSubagents: runningIn(reading.runningSubagents, claudeSession),
     })
   }
 
@@ -240,6 +247,27 @@ export const withCreatedPanes = (
             (row) =>
               new AgentRow(
                 Struct.evolve(row, { createdByCrook: () => HashSet.has(createdPanes, row.pane) }),
+              ),
+          ),
+      }),
+    ),
+  )
+
+export const withRunningSubagents = (
+  previous: MachineState,
+  counts: RunningCounts,
+): Option.Option<MachineState> =>
+  bumpedIfChanged(
+    previous,
+    new MachineState(
+      Struct.evolve(previous, {
+        agents: (rows) =>
+          rows.map(
+            (row) =>
+              new AgentRow(
+                Struct.evolve(row, {
+                  runningSubagents: () => runningIn(counts, row.claudeSession),
+                }),
               ),
           ),
       }),

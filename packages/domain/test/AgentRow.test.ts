@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import * as Struct from 'effect/Struct'
 
 import {
@@ -28,6 +29,7 @@ const rowTitled = (pane: string, title: string, label: Option.Option<string> = O
     statusChangedAt: DateTime.makeUnsafe(0),
     beforeHandoff: Option.none(),
     ask: Option.none(),
+    runningSubagents: Option.none(),
   })
 
 describe('agentTitleOrPane', () => {
@@ -68,5 +70,32 @@ describe('settledStatusOf', () => {
     expect([settledStatusOf(handedOff).status, settledStatusOf(handedOff).statusChangedAt]).toEqual(
       ['blocked', DateTime.makeUnsafe(5000)],
     )
+  })
+})
+
+describe('runningSubagents on the wire', () => {
+  const codec = AgentRow
+
+  it('decodes a row from an agent too old to count subagents as not knowing the count', () => {
+    const counted = new AgentRow(
+      Struct.evolve(rowTitled('w1:p1', 'Port the herd'), {
+        runningSubagents: () => Option.some(2),
+      }),
+    )
+    const older = Struct.omit(Schema.encodeSync(codec)(counted), ['runningSubagents'])
+
+    expect(Schema.decodeSync(codec)(older).runningSubagents).toEqual(Option.none())
+  })
+
+  it('carries a count through the wire, and leaves the key out when it is unknown', () => {
+    const counted = new AgentRow(
+      Struct.evolve(rowTitled('w1:p1', 'Port the herd'), {
+        runningSubagents: () => Option.some(3),
+      }),
+    )
+    const unknown = rowTitled('w1:p2', 'Port the herd')
+
+    expect(Schema.decodeSync(codec)(Schema.encodeSync(codec)(counted))).toEqual(counted)
+    expect(Object.keys(Schema.encodeSync(codec)(unknown))).not.toContain('runningSubagents')
   })
 })

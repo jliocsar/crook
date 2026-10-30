@@ -11,11 +11,17 @@ import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { PendingAsks } from '@crook/agent/PendingAsks'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
+import { RunningSubagents } from '@crook/agent/RunningSubagents'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { HerdrClient } from '@crook/herdr/HerdrClient'
 
 const machineFacts = Layer.provideMerge(
-  Layer.mergeAll(ClaudeSessions.layer, PendingAsks.layer, RecentPlaces.layer),
+  Layer.mergeAll(
+    ClaudeSessions.layer,
+    PendingAsks.layer,
+    RecentPlaces.layer,
+    RunningSubagents.layer,
+  ),
   Layer.mergeAll(HerdrClient.layer, GitBranches.layer, CreatedPanes.layer, AuditLog.layer),
 )
 

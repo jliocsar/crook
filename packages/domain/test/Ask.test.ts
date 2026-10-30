@@ -71,6 +71,7 @@ const rowAsking = (status: AgentStatus, ask: Option.Option<Ask>) =>
     statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
     beforeHandoff: Option.none(),
     ask,
+    runningSubagents: Option.none(),
   })
 
 describe('askSummary', () => {

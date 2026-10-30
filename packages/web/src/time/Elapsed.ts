@@ -28,6 +28,28 @@ export const shortElapsed = (now: DateTime.Utc, since: DateTime.Utc): string => 
   return `${Math.floor(hours / HOURS_PER_DAY)}d`
 }
 
+const twoDigits = (value: number): string => String(value).padStart(2, '0')
+
+export const clockElapsed = (now: DateTime.Utc, since: DateTime.Utc): string => {
+  const seconds = Math.max(0, Math.floor(Duration.toSeconds(DateTime.distance(since, now))))
+  const minutes = Math.floor(seconds / SECONDS_PER_MINUTE)
+  const hours = Math.floor(minutes / MINUTES_PER_HOUR)
+
+  if (seconds < SECONDS_PER_MINUTE) {
+    return `${seconds}s`
+  }
+
+  if (minutes < MINUTES_PER_HOUR) {
+    return `${minutes}m ${twoDigits(seconds % SECONDS_PER_MINUTE)}s`
+  }
+
+  if (hours < HOURS_PER_DAY) {
+    return `${hours}h ${twoDigits(minutes % MINUTES_PER_HOUR)}m`
+  }
+
+  return `${Math.floor(hours / HOURS_PER_DAY)}d`
+}
+
 const runDuration = (span: Duration.Duration): string => {
   const milliseconds = Math.round(Math.max(0, Duration.toMillis(span)))
   const exactSeconds = Duration.toSeconds(Duration.millis(milliseconds))
