@@ -658,6 +658,19 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   reveal's lift is up, the thread subtracts it before it judges whether it sits at the bottom or
   scrolls there; otherwise the slide read as the user scrolling away and the thread stopped
   following on every batch taller than the follow threshold.
+- TanStack Virtual corrects `scrollTop` itself when a row above the top first measures away
+  from its estimate, and writes the correction before React commits the new heights. A thread
+  that read every upward move as the user leaving lost the end on open: 299 rows of 20 px (every
+  tenth 200 px) under an 84 px estimate, each rendering 400 extra hidden elements, and a last row
+  of 2000 px opened 1468 px short of the end with following off in Chromium at 6x CPU
+  throttling, 3 of 3 opens, after a correction moved the scroll up 396 px. Without the extra
+  elements it landed 3 of 3, throttled or not (measured). Two guards each fixed it alone, 3 of
+  3: while following, the virtualizer keeps only corrections for growth above the top, since
+  the thread pins itself; and an upward move counts as leaving only after a touch, wheel, key or
+  pointer press, until the scroll settles. The thread keeps both.
+- The chat route remounts its screen whenever the machine or pane changes, so following and the
+  virtualizer's size cache start fresh per pane. A subagent opens as a child route, so the chat
+  stays mounted under it and pins to the end when it is uncovered again.
 - Motion reads `prefers-reduced-motion` once per module instance, so a test file that renders
   with it off and then on gets the first answer both times (measured: the reduced test saw the
   full animation). A component's reduced-motion tests live in a file of their own.
@@ -805,6 +818,11 @@ Checking the web app against real data, measured:
 - The installed agent's `run` dials `CROOK_HUB_URL` (the `/rpc/agent` path included) with its token, and a local hub wants the two exe.dev headers instead, so a probe puts a small Bun WebSocket proxy between them that adds `X-ExeDev-Email` and `X-ExeDev-Token-Ctx`.
 - agent-browser scrolls an element into view before it clicks it, which moves the scroll container
   around it. A scroll position read after such a click is the tool's, not the app's.
+- A finger scroll in Chromium is driven over CDP with `Input.dispatchTouchEvent` (start, a run of
+  moves, end) once touch emulation is on: it scrolled the thread and its momentum played out.
+  `Input.synthesizeScrollGesture` with a touch source fired `touchstart` and `touchend` and never
+  scrolled it (measured). One script throttles the CPU, drives the page and reads it back over a
+  single CDP connection.
 - herdr keeps its plugin registry under `$XDG_CONFIG_HOME/herdr`, and plugins are global to the
   user across sessions, so a plugin is linked for a probe only with `XDG_CONFIG_HOME` and `HOME`
   pointed under the worktree's `tmp/`; the user's own registry stayed untouched (measured). Never
@@ -888,6 +906,10 @@ happy-dom, measured:
   code), so a test cannot tell keyboard focus from a tap through it.
 - It has no `window.visualViewport`. A keyboard test defines one, an `EventTarget` carrying
   `height`, `offsetTop` and `scale`, and dispatches `resize` or `scroll` on it.
+- Its `ResizeObserver` never reports, and TanStack Virtual measures a row through its ref only
+  while it is not scrolling, so a row mounted by a scroll keeps its estimate for good. A test of
+  the virtualizer's own corrections stubs `ResizeObserver` with one that reports when told, and
+  waits a moment after: the correction landed after the call that reported the size (measured).
 :::
 
 :::tip
