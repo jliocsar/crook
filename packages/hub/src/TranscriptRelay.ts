@@ -12,15 +12,20 @@ import * as Ref from 'effect/Ref'
 import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
+import * as TxRef from 'effect/TxRef'
 
-import type { ClaudeSessionId, MachineId } from '@crook/domain/Ids'
+import type { MachineId } from '@crook/domain/Ids'
 import {
+  type SkillsChanged,
+  type SubagentsChanged,
+  type TranscriptCaughtUp,
   type TranscriptChunk,
   type TranscriptEvent,
   type TranscriptPosition,
   type TranscriptSource,
   type TranscriptTailBytes,
   continuesFrom,
+  inSession,
   positionAfter,
 } from '@crook/domain/Transcript'
 import {
@@ -38,7 +43,7 @@ import { type TranscriptMailbox, makeTranscriptMailbox } from '@crook/protocol/T
 interface Watcher {
   readonly machine: MachineId
   readonly source: TranscriptSource
-  readonly delivered: Ref.Ref<Option.Option<TranscriptPosition>>
+  readonly delivered: TxRef.TxRef<Option.Option<TranscriptPosition>>
   readonly tail: Option.Option<TranscriptTailBytes>
   readonly inbox: TranscriptMailbox
   readonly delivery: Semaphore.Semaphore
@@ -46,10 +51,7 @@ interface Watcher {
 
 type Watchers = HashMap.HashMap<TranscriptWatchId, Watcher>
 
-const inSession = (position: Option.Option<TranscriptPosition>, session: ClaudeSessionId) =>
-  Option.exists(position, (current) => current.session === session)
-
-const delivered = (updates: NonEmptyReadonlyArray<TranscriptUpdate>) =>
+const eventsOf = (updates: NonEmptyReadonlyArray<TranscriptUpdate>) =>
   Stream.concat(
     Stream.fromArray(
       Arr.flatMap(updates, (update) =>
@@ -68,6 +70,15 @@ const delivered = (updates: NonEmptyReadonlyArray<TranscriptUpdate>) =>
     ),
   )
 
+const upToFailure = (updates: NonEmptyReadonlyArray<TranscriptUpdate>) =>
+  pipe(
+    Arr.findFirstIndex(updates, isWatchFailed),
+    Option.match({
+      onNone: () => updates,
+      onSome: (index) => Arr.take(updates, index + 1),
+    }),
+  )
+
 const byWatchId = Order.mapInput(Order.Number, ([id]: readonly [TranscriptWatchId, Watcher]) => id)
 
 const demandOf = Effect.fn('TranscriptRelay.demandOf')(function* (
@@ -82,7 +93,7 @@ const demandOf = Effect.fn('TranscriptRelay.demandOf')(function* (
     ),
     ([id, watcher]) =>
       Effect.map(
-        Ref.get(watcher.delivered),
+        TxRef.get(watcher.delivered),
         (from) => new TranscriptWatch({ id, source: watcher.source, from, tail: watcher.tail }),
       ),
   )
@@ -112,7 +123,7 @@ const make = Effect.gen(function* () {
         const id = TranscriptWatchId.make(yield* Ref.getAndUpdate(nextId, (current) => current + 1))
         const inbox = yield* makeTranscriptMailbox
         const delivery = yield* Semaphore.make(1)
-        const position = yield* Ref.make(from)
+        const position = yield* TxRef.make(from)
 
         yield* Effect.acquireRelease(
           SubscriptionRef.update(
@@ -122,7 +133,7 @@ const make = Effect.gen(function* () {
           () => Effect.andThen(SubscriptionRef.update(watchers, HashMap.remove(id)), inbox.close),
         )
 
-        return Stream.fromEffectRepeat(inbox.take).pipe(Stream.flatMap(delivered))
+        return Stream.fromEffectRepeat(inbox.take).pipe(Stream.flatMap(eventsOf))
       }),
     )
 
@@ -133,15 +144,17 @@ const make = Effect.gen(function* () {
     )
 
   const forward = (watcher: Watcher, event: TranscriptEvent) =>
-    Effect.andThen(
-      watcher.inbox.offer(event),
-      Ref.update(watcher.delivered, (position) => positionAfter(position, event)),
+    Effect.tx(
+      Effect.andThen(
+        watcher.inbox.offer(event),
+        TxRef.update(watcher.delivered, (position) => positionAfter(position, event)),
+      ),
     )
 
   const forwardInSession = (
     watcher: Watcher,
     position: Option.Option<TranscriptPosition>,
-    event: Exclude<TranscriptEvent, TranscriptChunk>,
+    event: SubagentsChanged | SkillsChanged | TranscriptCaughtUp,
   ) => (inSession(position, event.session) ? forward(watcher, event) : Effect.void)
 
   const append = (
@@ -161,7 +174,7 @@ const make = Effect.gen(function* () {
     )
 
   const deliver = (id: TranscriptWatchId, watcher: Watcher, update: TranscriptUpdate) =>
-    Effect.flatMap(Ref.get(watcher.delivered), (position) =>
+    Effect.flatMap(TxRef.get(watcher.delivered), (position) =>
       Match.value(update).pipe(
         Match.tagsExhaustive({
           TranscriptOpened: (opened) =>
@@ -192,7 +205,9 @@ const make = Effect.gen(function* () {
         ),
       onSome: (found) =>
         found.delivery.withPermit(
-          Effect.forEach(updates, (update) => deliver(id, found, update), { discard: true }),
+          Effect.forEach(upToFailure(updates), (update) => deliver(id, found, update), {
+            discard: true,
+          }),
         ),
     })
   })

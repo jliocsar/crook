@@ -3,6 +3,7 @@ import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
@@ -303,9 +304,15 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
 
       yield* transcripts.publish(LAPTOP, id, [opened])
+      const overlapping = yield* transcripts
+        .publish(LAPTOP, id, [chunkBetween(5, 20)])
+        .pipe(Effect.flip)
       yield* transcripts.publish(LAPTOP, id, [chunkBetween(10, 20)])
       const demand = yield* transcripts.demands(LAPTOP).pipe(Stream.runHead)
 
+      expect(overlapping).toEqual(
+        new TranscriptOutOfStep({ watch: id, expected: Option.some(at(10)) }),
+      )
       expect(yield* Queue.take(events)).toBe('chunk 10-20 1')
       expect(Option.map(demand, (current) => current.watches.map((watch) => watch.from))).toEqual(
         Option.some([Option.some(at(20))]),
@@ -327,24 +334,32 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
     }),
   )
 
-  it.effect('delivers what came before a failure, then ends the watch with it', () =>
-    Effect.gen(function* () {
-      const transcripts = yield* relay
-      const events = yield* watching(transcripts, paneSource, Option.none())
-      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
-      const failure = new TranscriptReadFailed({ detail: 'permission denied' })
+  it.effect(
+    'delivers what came before a failure, then ends the watch with it and takes no more',
+    () =>
+      Effect.gen(function* () {
+        const transcripts = yield* relay
+        const events = yield* watching(transcripts, paneSource, Option.none())
+        const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+        const failure = new TranscriptReadFailed({ detail: 'permission denied' })
 
-      yield* transcripts.publish(LAPTOP, id, [opened])
-      yield* transcripts.publish(LAPTOP, id, [new TranscriptWatchFailed({ failure })])
+        yield* transcripts.publish(LAPTOP, id, [opened])
+        const ended = yield* Effect.exit(
+          transcripts.publish(LAPTOP, id, [
+            new TranscriptWatchFailed({ failure }),
+            chunkBetween(20, 30),
+          ]),
+        )
 
-      expect(
-        yield* Effect.forEach(
-          Arr.makeBy(2, () => events),
-          Queue.take,
-        ),
-      ).toEqual([`opened ${SESSION}`, `failed ${failure.message}`])
-      expect(yield* watchIds(transcripts, LAPTOP, 0)).toEqual([])
-    }),
+        expect(
+          yield* Effect.forEach(
+            Arr.makeBy(2, () => events),
+            Queue.take,
+          ),
+        ).toEqual([`opened ${SESSION}`, `failed ${failure.message}`])
+        expect(Exit.isSuccess(ended)).toBe(true)
+        expect(yield* watchIds(transcripts, LAPTOP, 0)).toEqual([])
+      }),
   )
 
   it.effect(
@@ -355,9 +370,10 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
         const events = yield* watching(transcripts, paneSource, Option.none())
         const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
 
+        yield* transcripts.publish(LAPTOP, id, [opened, chunkBetween(0, 10)])
+        const first = yield* Queue.takeN(events, 2)
+
         yield* transcripts.publish(LAPTOP, id, [
-          opened,
-          chunkBetween(0, 10),
           opened,
           new TranscriptOpened({ session: NEXT_SESSION }),
           new SubagentsChanged({ session: SESSION, subagents: [] }),
@@ -366,12 +382,8 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
           new TranscriptCaughtUp({ session: NEXT_SESSION, offset: TranscriptOffset.make(0) }),
         ])
 
-        expect(
-          yield* Effect.forEach(
-            Arr.makeBy(4, () => events),
-            Queue.take,
-          ),
-        ).toEqual([`opened ${SESSION}`, 'chunk 0-10 1', `opened ${NEXT_SESSION}`, 'caught up 0'])
+        expect(first).toEqual([`opened ${SESSION}`, 'chunk 0-10 1'])
+        expect(yield* Queue.takeN(events, 2)).toEqual([`opened ${NEXT_SESSION}`, 'caught up 0'])
         expect(yield* Queue.size(events)).toBe(0)
       }),
   )
@@ -414,9 +426,11 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       expect(afterEvents).toBe(beforeEvents)
       expect(demandsWorkedOut()).toBe(beforeEvents + 2)
       expect(both).toHaveLength(2)
-      expect(Option.map(demand, (current) => current.watches[0]?.from)).toEqual(
-        Option.some(Option.some(at(200))),
-      )
+      expect(
+        Option.flatMap(demand, (current) =>
+          Option.map(Arr.head(current.watches), (watch) => watch.from),
+        ),
+      ).toEqual(Option.some(Option.some(at(200))))
     }).pipe(Effect.withTracer(countingSpans(spans)))
   })
 })

@@ -639,6 +639,10 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   read reached and resends freely, a repeated open on every resume included; that cursor is
   what drains the rest of a session the pane left, and the hub could only hand it over after a
   round trip. An older agent gets the same filtering, since it happens at the hub.
+  The position moves in the same transaction that puts the update in the phone's mailbox. Done
+  as two steps, an agent connection dropping between them would leave the position behind what
+  the phone holds, and the agent's resend from that position would reach the phone twice, with
+  nothing downstream left to drop it (reasoned from the interrupt points, not measured).
 - A watch's delivered position lives beside the watch, outside the set the agents' demands are
   built from, so only a watch that comes or goes works out a machine's demand again. Updating
   the position inside that set recomputed the demand once per event: 21 events cost 21

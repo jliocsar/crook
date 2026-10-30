@@ -84,6 +84,9 @@ export const continuesFrom = (
     (current) => current.session === chunk.session && current.offset === chunk.offset,
   )
 
+export const inSession = (position: Option.Option<TranscriptPosition>, session: ClaudeSessionId) =>
+  Option.exists(position, (current) => current.session === session)
+
 export const positionAfter = (
   position: Option.Option<TranscriptPosition>,
   event: TranscriptEvent,
@@ -91,7 +94,7 @@ export const positionAfter = (
   Match.value(event).pipe(
     Match.tagsExhaustive({
       TranscriptOpened: (opened) =>
-        Option.exists(position, (current) => current.session === opened.session)
+        inSession(position, opened.session)
           ? position
           : Option.some(
               new TranscriptPosition({ session: opened.session, offset: TRANSCRIPT_START }),
