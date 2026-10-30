@@ -10,6 +10,7 @@ import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import {
   ChatItem,
   chatItems,
+  lastTurnEvidence,
   runningCount,
   toolSummary,
   toolTitle,
@@ -18,6 +19,9 @@ import type { AgentActivity, ChatContext } from '@crook/web/chat/ChatItems'
 import { TranscriptLine } from '@crook/web/chat/TranscriptState'
 
 import {
+  answered,
+  at,
+  calledTool,
   compactBoundary,
   compactSummary,
   CWD,
@@ -31,6 +35,7 @@ import {
   subagent,
   toolResult,
   toolUse,
+  turnDuration,
   user,
 } from '../TranscriptFixtures.ts'
 
@@ -219,6 +224,48 @@ describe('chatItems', () => {
     )
 
     expect(new Set(keys).size).toBe(2)
+  })
+})
+
+describe('lastTurnEvidence', () => {
+  const evidence = (messages: readonly TranscriptMessage[]) =>
+    Option.map(lastTurnEvidence(linesOf(messages)), (found) => ({ ends: found.ends, at: found.at }))
+
+  it('reads a turn as over once Claude answers with a stop reason other than a tool call', () => {
+    expect(evidence([prompt(0, 'Fix it'), answered(10, 'Fixed', 5)])).toStrictEqual(
+      Option.some({ ends: true, at: at(5) }),
+    )
+  })
+
+  it('reads a turn as still going after a prompt, a tool call or its result', () => {
+    expect(evidence([prompt(0, 'Fix it')])).toMatchObject(Option.some({ ends: false }))
+    expect(evidence([prompt(0, 'Fix it'), calledTool(10, 'toolu_1')])).toMatchObject(
+      Option.some({ ends: false }),
+    )
+    expect(
+      evidence([prompt(0, 'Fix it'), calledTool(10, 'toolu_1'), toolResult(20, 'toolu_1', 'ok')]),
+    ).toMatchObject(Option.some({ ends: false }))
+  })
+
+  it('reads an interruption and the turn duration Claude writes last as the end of a turn', () => {
+    expect(evidence([prompt(0, 'Fix it'), interrupted(10)])).toMatchObject(
+      Option.some({ ends: true }),
+    )
+    expect(evidence([prompt(0, 'Fix it'), said(10, 'Fixed'), turnDuration(20, 7)])).toStrictEqual(
+      Option.some({ ends: true, at: at(7) }),
+    )
+  })
+
+  it('looks past entries that say nothing about the turn, and finds nothing in an empty transcript', () => {
+    expect(
+      evidence([
+        prompt(0, 'Fix it'),
+        answered(10, 'Fixed', 3),
+        user(20, [new TextBlock({ text: 'caveat' })], { isMeta: true }),
+        compactBoundary(30),
+      ]),
+    ).toStrictEqual(Option.some({ ends: true, at: at(3) }))
+    expect(evidence([])).toStrictEqual(Option.none())
   })
 })
 

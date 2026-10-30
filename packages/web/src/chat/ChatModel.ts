@@ -13,6 +13,7 @@ import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { panePresence } from '@crook/domain/MachineState'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import type { AgentActivity } from '@crook/web/chat/ChatItems'
+import { HerdrTurn } from '@crook/web/chat/WorkingHold'
 import { findAgent } from '@crook/web/herd/HerdLayout'
 
 type ChatPresence = 'loading' | 'live' | 'away' | 'exited' | 'closed' | 'notClaude'
@@ -148,6 +149,24 @@ export const activityOf = (model: ChatScreenModel): AgentActivity => {
     },
   })
 }
+
+export const herdrTurnOf = (model: ChatScreenModel, watchFailed: boolean): HerdrTurn =>
+  pipe(
+    model.row,
+    Option.filter(() => model.presence === 'live' && !watchFailed),
+    Option.match({
+      onNone: () => HerdrTurn.Elsewhere(),
+      onSome: (row) => {
+        if (row.status === 'working') {
+          return HerdrTurn.Working({ since: row.statusChangedAt })
+        }
+
+        return row.status === 'idle' || row.status === 'done'
+          ? HerdrTurn.Idle()
+          : HerdrTurn.Elsewhere()
+      },
+    }),
+  )
 
 export const workspaceLabelOf = (model: ChatScreenModel): Option.Option<string> =>
   Option.flatMap(Option.all({ entry: model.machine, row: model.row }), ({ entry, row }) =>

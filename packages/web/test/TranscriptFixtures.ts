@@ -16,6 +16,7 @@ import {
   TextBlock,
   ToolResultBlock,
   ToolUseBlock,
+  TurnDurationBlock,
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import type {
@@ -61,6 +62,38 @@ export const assistant = (offset: number, blocks: readonly AssistantBlock[], sec
     stopReason: Option.none(),
     isApiError: false,
     blocks,
+  })
+
+export const answered = (offset: number, text: string, seconds = 0) =>
+  new AssistantMessage({
+    offset: TranscriptOffset.make(offset),
+    uuid: Option.none(),
+    timestamp: at(seconds),
+    apiMessageId: Option.none(),
+    model: Option.some('claude-opus-4-7'),
+    stopReason: Option.some('end_turn'),
+    isApiError: false,
+    blocks: [new TextBlock({ text })],
+  })
+
+export const calledTool = (offset: number, id: string, seconds = 0) =>
+  new AssistantMessage({
+    offset: TranscriptOffset.make(offset),
+    uuid: Option.none(),
+    timestamp: at(seconds),
+    apiMessageId: Option.none(),
+    model: Option.some('claude-opus-4-7'),
+    stopReason: Option.some('tool_use'),
+    isApiError: false,
+    blocks: [new ToolUseBlock({ id, name: 'Read', input: { file_path: 'README.md' } })],
+  })
+
+export const turnDuration = (offset: number, seconds = 0) =>
+  new SystemMessage({
+    offset: TranscriptOffset.make(offset),
+    uuid: Option.none(),
+    timestamp: at(seconds),
+    blocks: [new TurnDurationBlock({ durationMs: 1000 })],
   })
 
 export const prompt = (offset: number, text: string) => user(offset, [new TextBlock({ text })])

@@ -18,6 +18,7 @@ import type {
   SystemMessage,
   ToolResultBlock,
   ToolUseBlock,
+  UserBlock,
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
@@ -73,6 +74,11 @@ interface Placed {
   readonly boundary: Option.Option<string>
 }
 
+export interface TurnEvidence {
+  readonly ends: boolean
+  readonly at: Option.Option<DateTime.Utc>
+}
+
 interface Draft {
   readonly item: ChatItem
   readonly group: Option.Option<string>
@@ -91,6 +97,7 @@ const INTERRUPTED_NOTE = 'Interrupted'
 const PATH_FIELDS = new Set(['file_path', 'notebook_path', 'path'])
 const AGENT_TOOL = 'Agent'
 const PLAN_TOOL = 'TodoWrite'
+const TOOL_USE_STOP = 'tool_use'
 
 const SUMMARY_FIELD = new Map([
   ['Bash', 'command'],
@@ -700,6 +707,64 @@ export const chatItems = (
 
   return groupDrafts(Arr.flatMap(placed, (entry) => draftsOf(entry, evidence)))
 }
+
+const userBlockEnds = (block: UserBlock): Option.Option<boolean> =>
+  Match.value(block).pipe(
+    Match.tags({
+      Interruption: () => Option.some(true),
+      Text: () => Option.some(false),
+      Image: () => Option.some(false),
+      ToolResult: () => Option.some(false),
+      TaskNotification: () => Option.some(false),
+    }),
+    Match.orElse(() => Option.none<boolean>()),
+  )
+
+const userEnds = (message: UserMessage): Option.Option<boolean> =>
+  pipe(
+    Option.liftPredicate(message, (found) => !found.isMeta),
+    Option.map((found) => pipe(found.blocks, Arr.map(userBlockEnds), Arr.getSomes)),
+    Option.filter((signs) => signs.length > 0),
+    Option.map((signs) => signs.includes(true)),
+  )
+
+const assistantEnds = (message: AssistantMessage): boolean =>
+  message.isApiError || Option.exists(message.stopReason, (reason) => reason !== TOOL_USE_STOP)
+
+const systemEnds = (message: SystemMessage): Option.Option<boolean> =>
+  Option.liftPredicate(true, () =>
+    message.blocks.some((block) =>
+      Match.value(block).pipe(
+        Match.tag('TurnDuration', () => true),
+        Match.orElse(() => false),
+      ),
+    ),
+  )
+
+const signed = (
+  ends: Option.Option<boolean>,
+  at: Option.Option<DateTime.Utc>,
+): Option.Option<TurnEvidence> => Option.map(ends, (found): TurnEvidence => ({ ends: found, at }))
+
+const turnEvidenceOf = (line: TranscriptLine): Option.Option<TurnEvidence> =>
+  TranscriptLine.$match(line, {
+    SessionCleared: () => Option.none(),
+    Message: ({ message }) =>
+      Match.value(message).pipe(
+        Match.tagsExhaustive({
+          User: (user) => signed(userEnds(user), user.timestamp),
+          Assistant: (assistant) =>
+            signed(Option.some(assistantEnds(assistant)), assistant.timestamp),
+          System: (system) => signed(systemEnds(system), system.timestamp),
+          UnrecognizedEntry: () => Option.none<TurnEvidence>(),
+          Malformed: () => Option.none<TurnEvidence>(),
+          Omitted: () => Option.none<TurnEvidence>(),
+        }),
+      ),
+  })
+
+export const lastTurnEvidence = (lines: readonly TranscriptLine[]): Option.Option<TurnEvidence> =>
+  Arr.findLast(lines, turnEvidenceOf)
 
 export const runsIn = (items: readonly ChatItem[]): readonly SubagentRun[] =>
   Arr.flatMap(items, (item) => (isSubagents(item) ? item.runs : []))

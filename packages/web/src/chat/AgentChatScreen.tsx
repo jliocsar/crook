@@ -22,6 +22,7 @@ import {
   chatItems,
   firstRunningTreeKey,
   hasToolRunning,
+  lastTurnEvidence,
   runningCount,
 } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
@@ -30,6 +31,7 @@ import {
   chatStatus,
   cwdOf,
   edgeKindOf,
+  herdrTurnOf,
   isWatching,
   machineLabelOf,
   placeOf,
@@ -47,6 +49,7 @@ import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import { isCatchingUp, linesOf, rostersOf, skillsOf } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
+import { useWorkingHold } from '@crook/web/chat/WorkingHold'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
@@ -187,10 +190,18 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
   const [draft, setDraft] = React.useState('')
-  const activity = activityOf(model)
   const cwd = cwdOf(model)
   const rosters = rostersOf(view)
   const lines = linesOf(view)
+  const evidence = React.useMemo(() => lastTurnEvidence(lines), [lines])
+  const held = useWorkingHold({
+    herdr: herdrTurnOf(
+      model,
+      Option.exists(view, (found) => Option.isSome(found.failure)),
+    ),
+    evidence,
+  })
+  const activity = held ? 'working' : activityOf(model)
   const items = React.useMemo(
     () => chatItems(lines, { cwd, activity, rosters }),
     [lines, cwd, activity, rosters],
@@ -254,10 +265,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     [items, commands.alwaysNotes, askedCall, environment],
   )
 
-  const working = Option.filter(
-    model.row,
-    () => model.presence === 'live' && activity === 'working' && !hasToolRunning(items),
-  )
+  const working = Option.filter(model.row, () => held && !hasToolRunning(items))
   const rows: readonly ThreadRow[] =
     model.presence === 'notClaude'
       ? []
