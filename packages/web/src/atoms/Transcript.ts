@@ -3,7 +3,6 @@ import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
-import * as Ref from 'effect/Ref'
 import * as Atom from 'effect/reactivity/Atom'
 import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 import * as Stream from 'effect/Stream'
@@ -117,9 +116,8 @@ const transcriptViews = (
       const registry = yield* AtomRegistry.AtomRegistry
       const watchableChanges = yield* subscribed(registry, signals.watchable, true)
       const retryChanges = yield* subscribed(registry, signals.retries, false)
-      const awaitsCaughtUpChanges = yield* subscribed(registry, signals.awaitsCaughtUp, false)
-      const herdChanges = yield* subscribed(registry, signals.herd, false)
-      const awaitsCaughtUpNow = registry.get(signals.awaitsCaughtUp)
+      const awaitsCaughtUp = Effect.sync(() => registry.get(signals.awaitsCaughtUp))
+      const awaitsCaughtUpNow = yield* awaitsCaughtUp
       const cached = yield* cache.load(machine, source)
       const view = yield* SubscriptionRef.make(
         catchingUpFrom(
@@ -128,19 +126,9 @@ const transcriptViews = (
         ),
       )
       const restarts = yield* SubscriptionRef.make(0)
-      const awaitsCaughtUp = yield* Ref.make(awaitsCaughtUpNow)
-      const herd = yield* Ref.make(registry.get(signals.herd))
-      const persist = Effect.flatMap(Ref.get(herd), (current) =>
-        cache.persist(machine, source, current),
-      )
-
-      yield* awaitsCaughtUpChanges.pipe(
-        Stream.runForEach((awaits) => Ref.set(awaitsCaughtUp, awaits)),
-        Effect.forkScoped,
-      )
-      yield* herdChanges.pipe(
-        Stream.runForEach((current) => Ref.set(herd, current)),
-        Effect.forkScoped,
+      const persist = Effect.flatMap(
+        Effect.sync(() => registry.get(signals.herd)),
+        (current) => cache.persist(machine, source, current),
       )
 
       yield* Effect.addFinalizer(() => persist)
@@ -176,7 +164,7 @@ const transcriptViews = (
         )
       })
 
-      const resume = Effect.flatMap(Ref.get(awaitsCaughtUp), (awaits) =>
+      const resume = Effect.flatMap(awaitsCaughtUp, (awaits) =>
         SubscriptionRef.modify(view, (current) => [
           resumeOf(current, tailFor(whole)),
           catchingUpFrom(current, awaits),
