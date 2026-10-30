@@ -12,6 +12,7 @@ import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
+import { useCatchUp } from '@crook/web/chat/CatchUpTrail'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
 import type {
   AskDockCommands,
@@ -274,7 +275,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       ),
     [items, commands.alwaysNotes, askedCall],
   )
-  const conversationRows = useItemRows(shownItems, environment)
+  const catchUp = useCatchUp(view, useItemRows(shownItems, environment))
   const workingAt = Option.getOrUndefined(Option.filter(workingSince, () => !hasToolRunning(items)))
   const watching = isWatching(model)
   const notClaude = model.presence === 'notClaude'
@@ -283,7 +284,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       notClaude
         ? []
         : [
-            ...conversationRows,
+            ...catchUp.rows,
             ...pendingPromptRows(commands.pendingPrompts),
             ...(workingAt === undefined ? [] : [workingRow((now) => shortElapsed(now, workingAt))]),
             ...(watching
@@ -292,7 +293,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           ],
     [
       notClaude,
-      conversationRows,
+      catchUp.rows,
       commands.pendingPrompts,
       workingAt,
       watching,
@@ -338,7 +339,13 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         }
       />
       <div className="min-h-0 flex-1">
-        <Thread handle={thread} rows={rows} dimmed={dimmed} empty={emptyThread(model, view)} />
+        <Thread
+          handle={thread}
+          rows={rows}
+          dimmed={dimmed}
+          empty={emptyThread(model, view)}
+          overlay={catchUp.overlay}
+        />
       </div>
       <ChatDock
         model={model}

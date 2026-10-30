@@ -41,6 +41,20 @@
 
 @theme {
   --animate-breathe: breathe 1.6s ease-in-out infinite;
+  --animate-hop: hop 1.1s ease-in-out infinite;
+
+  @keyframes hop {
+    0%,
+    100% {
+      transform: translateX(-2px);
+      opacity: 0.2;
+    }
+
+    50% {
+      transform: translateX(2px);
+      opacity: 1;
+    }
+  }
 
   @keyframes breathe {
     0%,
