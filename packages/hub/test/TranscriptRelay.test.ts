@@ -182,6 +182,34 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
     }),
   )
 
+  it.effect('forwards a batch up to a chunk that is out of step, and refuses the rest', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* watching(transcripts, paneSource, Option.none())
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+
+      const refused = yield* transcripts
+        .publish(LAPTOP, id, [
+          opened,
+          chunkBetween(0, 10),
+          chunkBetween(20, 30),
+          new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(30) }),
+        ])
+        .pipe(Effect.flip)
+      const delivered = yield* Effect.forEach(
+        Arr.makeBy(2, () => events),
+        Queue.take,
+      )
+      const demand = yield* transcripts.demands(LAPTOP).pipe(Stream.runHead)
+
+      expect(refused).toEqual(new TranscriptOutOfStep({ watch: id, expected: Option.some(at(10)) }))
+      expect(delivered).toEqual([`opened ${SESSION}`, 'chunk 0-10 1'])
+      expect(Option.map(demand, (current) => current.watches.map((watch) => watch.from))).toEqual(
+        Option.some([Option.some(at(10))]),
+      )
+    }),
+  )
+
   it.effect('passes on that the agent caught up, without moving the position', () =>
     Effect.gen(function* () {
       const transcripts = yield* relay

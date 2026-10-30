@@ -75,7 +75,7 @@ export const connectTo = (url: URL, token: Redacted.Redacted) =>
 
 const transcriptLinkOf = (client: AgentLinkClient): TranscriptLink => ({
   demands: client.TranscriptDemands(),
-  publish: (watch, updates) => client.PublishTranscript({ watch, updates }),
+  publish: (watch, updates) => client.PublishTranscriptBatch({ watch, updates }),
 })
 
 const make = (connect: HubConnect, hello: Hello) =>

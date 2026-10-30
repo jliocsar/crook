@@ -111,9 +111,12 @@ const failed = new TranscriptWatchFailed({
 
 const forkTracked = Effect.fn('forkTracked')(function* <Value>(effect: Effect.Effect<Value>) {
   const done = yield* Ref.make(false)
-  const fiber = yield* Effect.forkChild(Effect.tap(effect, () => Ref.set(done, true)))
+  const fiber = yield* Effect.forkChild(
+    Effect.tap(effect, () => Ref.set(done, true)),
+    { startImmediately: true },
+  )
 
-  return { fiber, done: Effect.andThen(Effect.yieldNow, Ref.get(done)) }
+  return { fiber, done: Ref.get(done) }
 })
 
 it('joins chunks that continue each other and keeps only the latest skills and roster', () => {

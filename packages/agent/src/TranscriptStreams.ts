@@ -50,6 +50,7 @@ import {
   type TranscriptWatch,
   TranscriptWatchFailed,
   type TranscriptWatchId,
+  isWatchFailed,
 } from '@crook/protocol/Transcripts'
 import { makeTranscriptMailbox } from '@crook/protocol/TranscriptBatch'
 
@@ -76,8 +77,6 @@ export class TranscriptDemandsEnded extends Schema.TaggedError<TranscriptDemands
     return 'The hub ended the stream of transcripts it wants from this machine, so open chats would stop updating. crook reconnects on its own; if this keeps happening, check the hub logs.'
   }
 }
-
-const isWatchFailed = Schema.is(TranscriptWatchFailed)
 
 const sameSession = Option.makeEquivalence(
   Equivalence.mapInput(
@@ -109,6 +108,12 @@ const failedWith = (failure: TranscriptFailure, log: Effect.Effect<void>) =>
     Stream.fromEffectDrain(log),
     Stream.succeed<TranscriptUpdate>(new TranscriptWatchFailed({ failure })),
   )
+
+const FOLLOW_ENDED: TranscriptUpdate = new TranscriptWatchFailed({
+  failure: new TranscriptReadFailed({
+    detail: 'the agent stopped following it, which it only does when the watch is dropped',
+  }),
+})
 
 const followFailed = (error: FollowError) =>
   failedWith(toWireFailure(error), Effect.logWarning(error.message))
@@ -176,6 +181,7 @@ const publishAll = Effect.fn('TranscriptStreams.publishAll')(function* (
   yield* events.pipe(
     Stream.catch(followFailed),
     Stream.catchDefect((defect) => followDefected(Cause.die(defect))),
+    Stream.concat(Stream.succeed(FOLLOW_ENDED)),
     Stream.runForEach(outbox.offer),
     Effect.forkScoped,
   )

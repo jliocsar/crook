@@ -93,6 +93,11 @@ export const TranscriptDemands = Rpc.make('TranscriptDemands', {
 })
 
 export const PublishTranscript = Rpc.make('PublishTranscript', {
+  payload: { watch: TranscriptWatchId, update: TranscriptUpdate },
+  error: TranscriptOutOfStep,
+})
+
+export const PublishTranscriptBatch = Rpc.make('PublishTranscriptBatch', {
   payload: { watch: TranscriptWatchId, updates: Schema.NonEmptyArray(TranscriptUpdate) },
   error: TranscriptOutOfStep,
 })
@@ -103,4 +108,5 @@ export class AgentLink extends RpcGroup.make(
   CompleteCommand,
   TranscriptDemands,
   PublishTranscript,
+  PublishTranscriptBatch,
 ) {}

@@ -17,7 +17,11 @@ import {
   type TranscriptOpened,
 } from '@crook/domain/Transcript'
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
-import type { TranscriptUpdate, TranscriptWatchFailed } from '@crook/protocol/Transcripts'
+import {
+  type TranscriptUpdate,
+  type TranscriptWatchFailed,
+  isWatchFailed,
+} from '@crook/protocol/Transcripts'
 
 interface SessionUpdates {
   readonly session: ClaudeSessionId
@@ -154,7 +158,7 @@ const readBytes = (chunk: TranscriptChunk) =>
   chunk.offset -
   Arr.reduce(chunk.messages, 0, (sum, message) => sum + omittedBytes(message))
 
-export const heldBytes = (batch: TranscriptBatch) =>
+const heldBytes = (batch: TranscriptBatch) =>
   Arr.reduce(batch.sessions, 0, (sum, updates) =>
     Arr.reduce(updates.chunks, sum, (total, chunk) => total + readBytes(chunk)),
   )
@@ -195,7 +199,7 @@ export const makeTranscriptMailbox: Effect.Effect<TranscriptMailbox> = Effect.ma
     offer: (update) =>
       Effect.tx(
         Effect.flatMap(TxRef.get(state), (held) =>
-          Option.exists(held, isFull)
+          Option.exists(held, isFull) && !isWatchFailed(update)
             ? Effect.txRetry
             : TxRef.set(
                 state,

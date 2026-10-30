@@ -622,11 +622,19 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   roster of a session the pane left stays ahead of the session it opened. The agent publishes
   everything its mailbox holds as one call and keeps reading while it waits for the reply; the
   hub replies once the updates are in the phone's mailbox, and the phone gets everything held
-  since its last acknowledgement as one message. A mailbox takes no more once it holds 1 MiB of
-  read lines, so a slow phone holds the agent back instead of filling the hub. There is no time
-  debounce: merging only happens while a message is already out, so an idle pipe adds no delay.
+  since its last acknowledgement as one message. A caught-up mark merged that way can name an
+  offset before the end of the joined chunk; nothing reads its offset. A mailbox takes no more
+  once it holds 1 MiB of read lines, so a slow phone holds the agent back instead of filling the
+  hub, but always takes a failure. There is no time debounce: merging only happens while a
+  message is already out, so an idle pipe adds no delay.
+- The agent publishes a batch through its own call, and the hub still answers the single-update
+  call an agent from before coalescing makes. A hub is the side that updates first, and an agent
+  behind it stays online until the phone offers to update it, so dropping that call would leave
+  every older agent's chats without transcripts.
 - The agent holds a session it opened until it has caught up on it, so the backlog, the
   caught-up mark, then the skills and roster land in one message, and the skills never go first.
+  A subagent watch whose file does not exist yet therefore sends nothing until it does; the phone
+  waits for the caught-up mark from a current agent anyway, so it shows the same.
   The hub cannot hold the same way: an agent too old to send the caught-up mark would leave the
   phone with nothing, so it forwards whatever it holds.
 - Coalescing measured against a local hub and agent in one process, each socket behind a proxy
@@ -635,7 +643,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   1.85 to 1.91 s to 2 messages and 0.70 to 0.71 s, the second carrying only the subagent roster;
   a resume with 5 new lines went from 4 messages and 1.51 to 1.54 s to 2 messages and 0.62 to
   0.65 s, against a floor of 0.6 s for phone to hub to agent and back; ten writes 20 ms apart
-  went from 10 messages and 3.07 s to 2 messages and 0.61 s. Ten writes with no gap were one
+  went from 10 messages and 3.07 s to 2 messages and 0.61 to 0.63 s. Ten writes with no gap were one
   message both before and after, since one file event read them all.
 - Effect RPC sends each array a stream handler emits as one message and waits for the client's
   acknowledgement before pulling again (read in its server source), so a stream that emits a

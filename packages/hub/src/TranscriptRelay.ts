@@ -9,7 +9,6 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Ref from 'effect/Ref'
-import * as Schema from 'effect/Schema'
 import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -31,8 +30,9 @@ import {
   TranscriptOutOfStep,
   type TranscriptUpdate,
   TranscriptWatch,
-  TranscriptWatchFailed,
+  type TranscriptWatchFailed,
   TranscriptWatchId,
+  isWatchFailed,
 } from '@crook/protocol/Transcripts'
 import { type TranscriptMailbox, makeTranscriptMailbox } from '@crook/protocol/TranscriptBatch'
 
@@ -46,8 +46,6 @@ interface Watcher {
 }
 
 type Watchers = HashMap.HashMap<TranscriptWatchId, Watcher>
-
-const isWatchFailed = Schema.is(TranscriptWatchFailed)
 
 const unseenOnly = (
   delivered: Option.Option<TranscriptPosition>,

@@ -189,6 +189,7 @@ const startLink = Effect.fn('startLink')(function* (script: Partial<HubScript> =
           Queue.offer(completed, completion).pipe(Effect.andThen(complete(completion))),
         TranscriptDemands: () => Stream.never,
         PublishTranscript: () => Effect.void,
+        PublishTranscriptBatch: () => Effect.void,
       }),
     )
 
@@ -460,6 +461,7 @@ const hubServer = (port: number, hub: RealHub) =>
             Queue.offer(hub.completions, completion).pipe(Effect.andThen(Effect.void)),
           TranscriptDemands: () => Stream.never,
           PublishTranscript: () => Effect.void,
+          PublishTranscriptBatch: () => Effect.void,
         }),
         hubProtocol,
       ]),
