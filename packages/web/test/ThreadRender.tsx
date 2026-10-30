@@ -31,10 +31,10 @@ export const phoneViewport = (): void => {
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT)
 }
 
-export const revealOf = (key: string): string | null =>
-  present(document.querySelector(`[data-row="${key}"] .min-w-0`), `the ${key} row`).getAttribute(
-    'data-reveal',
-  )
+export const fades = (key: string): boolean =>
+  present(document.querySelector(`[data-row="${key}"]`), `the ${key} row`).querySelector(
+    '[style*="opacity"]',
+  ) !== null
 
 export const ghost = (): Element | null => document.querySelector('[data-slot="thread-ghost"]')
 
@@ -83,13 +83,24 @@ const scrollable = (scrolling: HTMLElement) => {
   }
 }
 
-export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
+export const liveTail = Effect.fn('liveTail')(function* () {
   const { rerender } = render(thread([row('prompt'), WORKING], null))
   const { grow } = scrollable(viewport())
 
   yield* wait(SETTLE_MS)
-  grow(added)
-  rerender(thread([row('prompt'), row('text'), row('tool')], null))
+
+  return {
+    lands: (keys: readonly string[], added: number) => {
+      grow(added)
+      rerender(thread([row('prompt'), ...keys.map(row)], null))
+    },
+  }
+})
+
+export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
+  const tail = yield* liveTail()
+
+  tail.lands(['text', 'tool'], added)
 })
 
 export const historyOpen = () => {
