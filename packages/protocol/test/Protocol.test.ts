@@ -120,14 +120,19 @@ const agentLinkHandlers = AgentLink.toLayer({
         ),
   CompleteCommand: () => Effect.void,
   TranscriptDemands: () => Stream.make(demand),
-  PublishTranscript: ({ watch, update }) =>
-    Match.value(update).pipe(
-      Match.tag('TranscriptChunk', (chunk) =>
-        chunk.offset === 0
-          ? Effect.void
-          : Effect.fail(new TranscriptOutOfStep({ watch, expected: Option.some(resumeAt) })),
-      ),
-      Match.orElse(() => Effect.void),
+  PublishTranscript: ({ watch, updates }) =>
+    Effect.forEach(
+      updates,
+      (update) =>
+        Match.value(update).pipe(
+          Match.tag('TranscriptChunk', (chunk) =>
+            chunk.offset === 0
+              ? Effect.void
+              : Effect.fail(new TranscriptOutOfStep({ watch, expected: Option.some(resumeAt) })),
+          ),
+          Match.orElse(() => Effect.void),
+        ),
+      { discard: true },
     ),
 })
 
@@ -216,14 +221,18 @@ layer(agentLinkHandlers)('AgentLink', (rpc) => {
         nextOffset: TranscriptOffset.make(800),
         messages: [],
       })
-      const outOfStep = yield* client.PublishTranscript({ watch, update: late }).pipe(Effect.flip)
+      const outOfStep = yield* client
+        .PublishTranscript({ watch, updates: [late] })
+        .pipe(Effect.flip)
 
-      yield* client.PublishTranscript({ watch, update: firstChunk })
+      yield* client.PublishTranscript({ watch, updates: [opened, firstChunk] })
       yield* client.PublishTranscript({
         watch,
-        update: new TranscriptWatchFailed({
-          failure: new TranscriptResumeRejected({ detail: 'mid-line' }),
-        }),
+        updates: [
+          new TranscriptWatchFailed({
+            failure: new TranscriptResumeRejected({ detail: 'mid-line' }),
+          }),
+        ],
       })
 
       expect(demands).toEqual([demand])

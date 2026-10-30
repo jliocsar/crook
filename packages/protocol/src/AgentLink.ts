@@ -93,7 +93,7 @@ export const TranscriptDemands = Rpc.make('TranscriptDemands', {
 })
 
 export const PublishTranscript = Rpc.make('PublishTranscript', {
-  payload: { watch: TranscriptWatchId, update: TranscriptUpdate },
+  payload: { watch: TranscriptWatchId, updates: Schema.NonEmptyArray(TranscriptUpdate) },
   error: TranscriptOutOfStep,
 })
 

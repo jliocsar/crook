@@ -605,9 +605,10 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   away, and once the pane no longer runs Claude, whose transcript never catches up. A failed
   watch is not catching up, so Try again turns pending only once pressed.
 - Catching a chat up is bound by round trips, not by any hop's own work. The hub writes a
-  transcript event to the phone only after the phone acknowledged the one before, and holds one
-  event per phone, so the agent's next event waits on that round trip too. Run locally with every
-  hop timed, a cold open with the 512 KB tail reached the screen 72 ms after the phone asked, and
+  transcript message to the phone only after the phone acknowledged the one before. Before
+  transcript events were coalesced, it also held one event per phone, so the agent's next event
+  waited on that round trip too, and the numbers in the rest of this entry are from then. Run
+  locally with every hop timed, a cold open with the 512 KB tail reached the screen 72 ms after the phone asked, and
   the agent began its watch under 1 ms after the hub registered it, so the wait sits in the
   number of events times the phone's round trip. With the agent reading 64 KB per event, 800 KB
   written since the phone last looked took 14 events and 14.3 s at an emulated 1 s round trip,
@@ -615,6 +616,32 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   and 0.8 s. Show earlier on a 3 MB transcript went from 48 events and 14.9 s to 5 events and
   1.7 s at 300 ms (all measured against a local hub and agent through a proxy that delays each
   WebSocket message). Fewer, larger events are the lever; a smaller read size is a regression.
+- Neither the agent nor the hub waits on the phone per event. Each keeps what is pending for a
+  watch in a mailbox that merges as it goes: chunks that continue each other join into one, a
+  later skill list or subagent roster replaces the earlier one of its session, and the final
+  roster of a session the pane left stays ahead of the session it opened. The agent publishes
+  everything its mailbox holds as one call and keeps reading while it waits for the reply; the
+  hub replies once the updates are in the phone's mailbox, and the phone gets everything held
+  since its last acknowledgement as one message. A mailbox takes no more once it holds 1 MiB of
+  read lines, so a slow phone holds the agent back instead of filling the hub. There is no time
+  debounce: merging only happens while a message is already out, so an idle pipe adds no delay.
+- The agent holds a session it opened until it has caught up on it, so the backlog, the
+  caught-up mark, then the skills and roster land in one message, and the skills never go first.
+  The hub cannot hold the same way: an agent too old to send the caught-up mark would leave the
+  phone with nothing, so it forwards whatever it holds.
+- Coalescing measured against a local hub and agent in one process, each socket behind a proxy
+  delaying every WebSocket message 150 ms (an emulated 300 ms round trip), on a 3 MB real
+  transcript with a subagent folder: a cold open with the 512 KB tail went from 6 messages and
+  1.85 to 1.91 s to 2 messages and 0.70 to 0.71 s, the second carrying only the subagent roster;
+  a resume with 5 new lines went from 4 messages and 1.51 to 1.54 s to 2 messages and 0.62 to
+  0.65 s, against a floor of 0.6 s for phone to hub to agent and back; ten writes 20 ms apart
+  went from 10 messages and 3.07 s to 2 messages and 0.61 s. Ten writes with no gap were one
+  message both before and after, since one file event read them all.
+- Effect RPC sends each array a stream handler emits as one message and waits for the client's
+  acknowledgement before pulling again (read in its server source), so a stream that emits a
+  whole mailbox take as one array costs one round trip. `Stream.fromEffectRepeat` followed by
+  `Stream.flatMap` over `Stream.fromArray` and by `Stream.mapAccum` keeps that array whole
+  (measured).
 - An atom that has to react to another atom without re-running reads it through `get.stream`,
   which subscribes through the registry instead of adding a dependency (read in `AtomRegistry`).
   Each run of that stream adds a subscription that lives until the atom does, so run it once for

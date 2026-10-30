@@ -1,6 +1,8 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import { expect, layer } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -83,6 +85,12 @@ const describe = (event: TranscriptEvent) =>
       SkillsChanged: (changed) => `skills ${changed.session}`,
       TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.session} ${caughtUp.offset}`,
     }),
+  )
+
+const describeUpdate = (update: TranscriptUpdate) =>
+  Match.value(update).pipe(
+    Match.tag('TranscriptWatchFailed', (failed) => `failed ${failed.failure.message}`),
+    Match.orElse(describe),
   )
 
 const stateOn = (session: Option.Option<ClaudeSessionId>) =>
@@ -206,7 +214,8 @@ const fakeHub = Effect.fn('fakeHub')(function* (
 
   const link: TranscriptLink = {
     demands: Stream.fromQueue(demands),
-    publish: accept,
+    publish: (watch, updates) =>
+      Effect.forEach(updates, (update) => accept(watch, update), { discard: true }),
   }
 
   return { accepted, link }
@@ -731,13 +740,73 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
 
         expect(yield* takeAll(hub.accepted, 6)).toEqual([
           `0 opened ${FIRST_SESSION}`,
-          `0 skills ${FIRST_SESSION}`,
           `0 rejected chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
           `0 opened ${FIRST_SESSION}`,
-          `0 skills ${FIRST_SESSION}`,
           `0 chunk ${FIRST_SESSION} 0-${bytesOf(seen + missed)} 2`,
+          `0 caught up ${FIRST_SESSION} ${bytesOf(seen + missed)}`,
+          `0 skills ${FIRST_SESSION}`,
         ])
       }),
+    )
+
+    it.effect(
+      'sends an opening with what it caught up on, and a burst behind a publish as one',
+      () =>
+        Effect.gen(function* () {
+          const root = yield* claudeRoot()
+          const path = transcriptPath(root, FIRST_SESSION)
+          const first = userLine('first')
+          const burst = [userLine('one'), userLine('two'), userLine('three')]
+
+          yield* append(path, first)
+
+          const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+          const streams = yield* streamsAt(root, state)
+          const demands = yield* Queue.unbounded<TranscriptDemand>()
+          const published = yield* Queue.unbounded<readonly string[]>()
+          const answered = yield* Deferred.make<void>()
+          const link: TranscriptLink = {
+            demands: Stream.fromQueue(demands),
+            publish: (watch, updates) =>
+              Effect.andThen(
+                Queue.offer(
+                  published,
+                  Arr.map(updates, (update) => `${watch} ${describeUpdate(update)}`),
+                ),
+                Deferred.await(answered),
+              ),
+          }
+
+          yield* Effect.forkScoped(streams.serve(link))
+          yield* Queue.offer(
+            demands,
+            new TranscriptDemand({
+              watches: [
+                new TranscriptWatch({
+                  id: WATCH,
+                  source: new PaneTranscript({ pane: PANE }),
+                  from: Option.none(),
+                  tail: Option.none(),
+                }),
+              ],
+            }),
+          )
+
+          expect(yield* Queue.take(published)).toEqual([
+            `0 opened ${FIRST_SESSION}`,
+            `0 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
+            `0 caught up ${FIRST_SESSION} ${bytesOf(first)}`,
+            `0 skills ${FIRST_SESSION}`,
+          ])
+
+          yield* Effect.forEach(burst, (line) => append(path, line), { discard: true })
+          yield* Effect.sleep(WATCHERS_SETTLED)
+          yield* Deferred.succeed(answered, undefined)
+
+          expect(yield* Queue.take(published)).toEqual([
+            `0 chunk ${FIRST_SESSION} ${bytesOf(first)}-${bytesOf(first + burst.join(''))} 3`,
+          ])
+        }),
     )
 
     it.effect('stops a watch the hub no longer asks for', () =>
@@ -765,9 +834,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
 
         expect(yield* takeAll(hub.accepted, 4)).toEqual([
           `0 opened ${FIRST_SESSION}`,
-          `0 skills ${FIRST_SESSION}`,
           `0 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
           `0 caught up ${FIRST_SESSION} ${bytesOf(first)}`,
+          `0 skills ${FIRST_SESSION}`,
         ])
 
         yield* Queue.offer(demands, new TranscriptDemand({ watches: [] }))
@@ -778,9 +847,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
 
         expect(yield* takeAll(hub.accepted, 4)).toEqual([
           `1 opened ${FIRST_SESSION}`,
-          `1 skills ${FIRST_SESSION}`,
           `1 chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
           `1 caught up ${FIRST_SESSION} ${bytesOf(first)}`,
+          `1 skills ${FIRST_SESSION}`,
         ])
 
         yield* append(transcriptPath(root, FIRST_SESSION), second)

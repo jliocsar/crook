@@ -166,9 +166,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
 
       expect(yield* takeAll(events, 4)).toEqual([
         `opened ${FIRST_SESSION}`,
-        `skills ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} 0-${bytesOf(first)} 1`,
         `caught up ${FIRST_SESSION} ${bytesOf(first)}`,
+        `skills ${FIRST_SESSION}`,
       ])
 
       yield* append(root, FIRST_SESSION, second)
@@ -179,11 +179,12 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
 
       yield* SubscriptionRef.set(state, stateOn(machine, 2, CLEARED_SESSION))
 
-      expect(yield* takeAll(events, 4)).toEqual([
+      expect(yield* takeAll(events, 5)).toEqual([
         `subagents ${FIRST_SESSION} 0`,
         `opened ${CLEARED_SESSION}`,
-        `skills ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,
+        `caught up ${CLEARED_SESSION} ${bytesOf(cleared)}`,
+        `skills ${CLEARED_SESSION}`,
       ])
     }),
   )
@@ -208,9 +209,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
 
       expect(yield* takeAll(events, 4)).toEqual([
         `opened ${FIRST_SESSION}`,
+        `chunk ${FIRST_SESSION} 0-${bytesOf(skipped + recent)} 2`,
+        `caught up ${FIRST_SESSION} ${bytesOf(skipped + recent)}`,
         `skills ${FIRST_SESSION}`,
-        `chunk ${FIRST_SESSION} 0-${bytesOf(skipped)} 1`,
-        `chunk ${FIRST_SESSION} ${bytesOf(skipped)}-${bytesOf(skipped + recent)} 1`,
       ])
     }),
   )
@@ -240,12 +241,13 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
         Option.none(),
       )
 
-      expect(yield* takeAll(events, 5)).toEqual([
+      expect(yield* takeAll(events, 6)).toEqual([
         `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
         `subagents ${FIRST_SESSION} 0`,
         `opened ${CLEARED_SESSION}`,
-        `skills ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,
+        `caught up ${CLEARED_SESSION} ${bytesOf(cleared)}`,
+        `skills ${CLEARED_SESSION}`,
       ])
     }),
   )
@@ -265,9 +267,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
 
       expect(yield* takeAll(events, 4)).toEqual([
         `opened ${FIRST_SESSION}`,
-        `skills ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} 0-${bytesOf(before)} 1`,
         `caught up ${FIRST_SESSION} ${bytesOf(before)}`,
+        `skills ${FIRST_SESSION}`,
       ])
 
       yield* Scope.close(agent, Exit.void)
@@ -275,9 +277,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
       yield* startAgent(machine, root, state)
 
       expect(yield* takeAll(events, 3)).toEqual([
-        `skills ${FIRST_SESSION}`,
         `chunk ${FIRST_SESSION} ${bytesOf(before)}-${bytesOf(before + during)} 1`,
         `caught up ${FIRST_SESSION} ${bytesOf(before + during)}`,
+        `skills ${FIRST_SESSION}`,
       ])
     }),
   )

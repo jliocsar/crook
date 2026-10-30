@@ -1,6 +1,7 @@
 import { expect, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -52,6 +53,21 @@ const chunkBetween = (offset: number, nextOffset: number) =>
   })
 
 const opened = new TranscriptOpened({ session: SESSION })
+
+const skillsOf = (count: number) =>
+  new SkillsChanged({
+    session: SESSION,
+    skills: Arr.makeBy(
+      count,
+      () =>
+        new SkillListing({
+          name: 'prototype',
+          description: 'Build several versions of a UI piece',
+          argumentHint: Option.none(),
+          scope: 'project',
+        }),
+    ),
+  })
 
 const describeEvent = (event: TranscriptEvent) =>
   Match.value(event).pipe(
@@ -144,14 +160,16 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       const events = yield* watching(transcripts, paneSource, Option.none())
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
 
-      const early = yield* transcripts.publish(LAPTOP, id, chunkBetween(0, 10)).pipe(Effect.flip)
+      const early = yield* transcripts.publish(LAPTOP, id, [chunkBetween(0, 10)]).pipe(Effect.flip)
 
-      yield* transcripts.publish(LAPTOP, id, opened)
-      yield* transcripts.publish(LAPTOP, id, chunkBetween(0, 10))
-      const skipped = yield* transcripts.publish(LAPTOP, id, chunkBetween(20, 30)).pipe(Effect.flip)
+      yield* transcripts.publish(LAPTOP, id, [opened])
+      yield* transcripts.publish(LAPTOP, id, [chunkBetween(0, 10)])
+      const skipped = yield* transcripts
+        .publish(LAPTOP, id, [chunkBetween(20, 30)])
+        .pipe(Effect.flip)
 
-      yield* transcripts.publish(LAPTOP, id, opened)
-      yield* transcripts.publish(LAPTOP, id, chunkBetween(10, 20))
+      yield* transcripts.publish(LAPTOP, id, [opened])
+      yield* transcripts.publish(LAPTOP, id, [chunkBetween(10, 20)])
 
       expect(early).toEqual(new TranscriptOutOfStep({ watch: id, expected: Option.none() }))
       expect(skipped).toEqual(new TranscriptOutOfStep({ watch: id, expected: Option.some(at(10)) }))
@@ -170,21 +188,22 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       const events = yield* watching(transcripts, paneSource, Option.none())
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
 
-      yield* transcripts.publish(LAPTOP, id, opened)
-      yield* transcripts.publish(LAPTOP, id, chunkBetween(0, 10))
-      yield* transcripts.publish(
-        LAPTOP,
-        id,
-        new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(10) }),
+      const delivered = yield* Effect.forEach(
+        [
+          opened,
+          chunkBetween(0, 10),
+          new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(10) }),
+          chunkBetween(10, 20),
+        ],
+        (update) => Effect.andThen(transcripts.publish(LAPTOP, id, [update]), Queue.take(events)),
       )
-      yield* transcripts.publish(LAPTOP, id, chunkBetween(10, 20))
 
-      expect(
-        yield* Effect.forEach(
-          Arr.makeBy(4, () => events),
-          Queue.take,
-        ),
-      ).toEqual([`opened ${SESSION}`, 'chunk 0-10 1', 'caught up 10', 'chunk 10-20 1'])
+      expect(delivered).toEqual([
+        `opened ${SESSION}`,
+        'chunk 0-10 1',
+        'caught up 10',
+        'chunk 10-20 1',
+      ])
     }),
   )
 
@@ -193,26 +212,48 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       const transcripts = yield* relay
       const events = yield* watching(transcripts, paneSource, Option.none())
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
-      const skills = [
-        new SkillListing({
-          name: 'prototype',
-          description: 'Build several versions of a UI piece',
-          argumentHint: Option.none(),
-          scope: 'project',
-        }),
-      ]
 
-      yield* transcripts.publish(LAPTOP, id, new SkillsChanged({ session: SESSION, skills }))
-      yield* transcripts.publish(LAPTOP, id, opened)
-      yield* transcripts.publish(LAPTOP, id, new SkillsChanged({ session: SESSION, skills }))
-      yield* transcripts.publish(LAPTOP, id, chunkBetween(0, 10))
+      yield* transcripts.publish(LAPTOP, id, [skillsOf(1)])
+      const delivered = yield* Effect.forEach(
+        [opened, skillsOf(1), chunkBetween(0, 10)],
+        (update) => Effect.andThen(transcripts.publish(LAPTOP, id, [update]), Queue.take(events)),
+      )
 
-      expect(
-        yield* Effect.forEach(
-          Arr.makeBy(3, () => events),
-          Queue.take,
+      expect(delivered).toEqual([`opened ${SESSION}`, 'skills 1', 'chunk 0-10 1'])
+    }),
+  )
+
+  it.effect('merges what the agent sends while the phone still holds the last delivery', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const deliveries = yield* Queue.unbounded<readonly string[]>()
+      const acknowledged = yield* Deferred.make<void>()
+
+      yield* transcripts.watch(LAPTOP, paneSource, Option.none(), Option.none()).pipe(
+        Stream.runForEachArray((events) =>
+          Effect.andThen(
+            Queue.offer(deliveries, Arr.map(events, describeEvent)),
+            Deferred.await(acknowledged),
+          ),
         ),
-      ).toEqual([`opened ${SESSION}`, 'skills 1', 'chunk 0-10 1'])
+        Effect.ignore,
+        Effect.forkScoped,
+      )
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+
+      yield* transcripts.publish(LAPTOP, id, [opened])
+      const first = yield* Queue.take(deliveries)
+
+      yield* transcripts.publish(LAPTOP, id, [chunkBetween(0, 10), skillsOf(1)])
+      yield* transcripts.publish(LAPTOP, id, [chunkBetween(10, 20)])
+      yield* transcripts.publish(LAPTOP, id, [
+        new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(20) }),
+        skillsOf(2),
+      ])
+      yield* Deferred.succeed(acknowledged, undefined)
+
+      expect(first).toEqual([`opened ${SESSION}`])
+      expect(yield* Queue.take(deliveries)).toEqual(['chunk 0-20 2', 'caught up 20', 'skills 2'])
     }),
   )
 
@@ -222,8 +263,8 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       const events = yield* watching(transcripts, paneSource, Option.some(at(10)))
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
 
-      yield* transcripts.publish(LAPTOP, id, opened)
-      yield* transcripts.publish(LAPTOP, id, chunkBetween(10, 20))
+      yield* transcripts.publish(LAPTOP, id, [opened])
+      yield* transcripts.publish(LAPTOP, id, [chunkBetween(10, 20)])
       const demand = yield* transcripts.demands(LAPTOP).pipe(Stream.runHead)
 
       expect(yield* Queue.take(events)).toBe('chunk 10-20 1')
@@ -239,8 +280,8 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       const events = yield* watching(transcripts, paneSource, Option.none())
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
 
-      yield* transcripts.publish(DESKTOP, id, opened)
-      yield* transcripts.publish(LAPTOP, id, opened)
+      yield* transcripts.publish(DESKTOP, id, [opened])
+      yield* transcripts.publish(LAPTOP, id, [opened])
 
       expect(yield* Queue.take(events)).toBe(`opened ${SESSION}`)
       expect(yield* Queue.size(events)).toBe(0)
@@ -254,8 +295,8 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
       const failure = new TranscriptReadFailed({ detail: 'permission denied' })
 
-      yield* transcripts.publish(LAPTOP, id, opened)
-      yield* transcripts.publish(LAPTOP, id, new TranscriptWatchFailed({ failure }))
+      yield* transcripts.publish(LAPTOP, id, [opened])
+      yield* transcripts.publish(LAPTOP, id, [new TranscriptWatchFailed({ failure })])
 
       expect(
         yield* Effect.forEach(

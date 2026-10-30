@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import type { NonEmptyReadonlyArray } from 'effect/Array'
 import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -50,6 +51,7 @@ import {
   TranscriptWatchFailed,
   type TranscriptWatchId,
 } from '@crook/protocol/Transcripts'
+import { makeTranscriptMailbox } from '@crook/protocol/TranscriptBatch'
 
 export type FollowError = LocateError | TailError | SubagentsUnreadable
 
@@ -62,7 +64,7 @@ export interface TranscriptLink {
   readonly demands: Stream.Stream<TranscriptDemand, RpcClientError>
   readonly publish: (
     watch: TranscriptWatchId,
-    update: TranscriptUpdate,
+    updates: NonEmptyReadonlyArray<TranscriptUpdate>,
   ) => Effect.Effect<void, TranscriptOutOfStep | RpcClientError>
 }
 
@@ -74,6 +76,8 @@ export class TranscriptDemandsEnded extends Schema.TaggedError<TranscriptDemands
     return 'The hub ended the stream of transcripts it wants from this machine, so open chats would stop updating. crook reconnects on its own; if this keeps happening, check the hub logs.'
   }
 }
+
+const isWatchFailed = Schema.is(TranscriptWatchFailed)
 
 const sameSession = Option.makeEquivalence(
   Equivalence.mapInput(
@@ -161,6 +165,28 @@ const skillsIn = (
       (skills): TranscriptEvent => new SkillsChanged({ session, skills }),
     ),
   )
+
+const publishAll = Effect.fn('TranscriptStreams.publishAll')(function* (
+  link: TranscriptLink,
+  watch: TranscriptWatchId,
+  events: Stream.Stream<TranscriptEvent, FollowError>,
+) {
+  const outbox = yield* makeTranscriptMailbox
+
+  yield* events.pipe(
+    Stream.catch(followFailed),
+    Stream.catchDefect((defect) => followDefected(Cause.die(defect))),
+    Stream.runForEach(outbox.offer),
+    Effect.forkScoped,
+  )
+
+  yield* outbox.takeCaughtUp.pipe(
+    Effect.flatMap((taken) =>
+      Effect.as(link.publish(watch, taken), Arr.some(taken, isWatchFailed)),
+    ),
+    Effect.repeat({ until: (ended) => ended }),
+  )
+}, Effect.scoped)
 
 const make = Effect.gen(function* () {
   const sync = yield* MachineStateSync
@@ -328,18 +354,14 @@ const make = Effect.gen(function* () {
     )
 
   const runWatch = (link: TranscriptLink, watch: TranscriptWatch) => {
-    const attempt = Effect.fn('TranscriptStreams.attempt')(function* (
+    const attempt = (
       from: Option.Option<TranscriptPosition>,
-    ): Effect.fn.Return<void, RpcClientError> {
-      return yield* follow(watch.source, from, watch.tail).pipe(
-        Stream.catch(followFailed),
-        Stream.catchDefect((defect) => followDefected(Cause.die(defect))),
-        Stream.runForEach((update) => link.publish(watch.id, update)),
+    ): Effect.Effect<void, RpcClientError> =>
+      publishAll(link, watch.id, follow(watch.source, from, watch.tail)).pipe(
         Effect.catchTag('TranscriptOutOfStep', (outOfStep) =>
           Effect.andThen(Effect.logDebug(outOfStep.message), attempt(outOfStep.expected)),
         ),
       )
-    })
 
     return attempt(watch.from).pipe(
       Effect.catchTag('RpcClientError', (error) => Effect.logDebug(error.message)),

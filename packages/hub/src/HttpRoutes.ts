@@ -138,7 +138,7 @@ const routes = Effect.gen(function* () {
         PublishState: ({ state }) => herd.publish(machine, state),
         CompleteCommand: ({ id, result }) => router.complete(machine, id, result),
         TranscriptDemands: () => transcripts.demands(machine),
-        PublishTranscript: ({ watch, update }) => transcripts.publish(machine, watch, update),
+        PublishTranscript: ({ watch, updates }) => transcripts.publish(machine, watch, updates),
       }),
     )
 

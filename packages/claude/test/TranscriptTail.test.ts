@@ -10,7 +10,6 @@ import * as Stream from 'effect/Stream'
 
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import {
-  CHUNK_READ_LIMIT,
   NEWLINE,
   TranscriptOffsetBeyondEnd,
   TranscriptOffsetMidLine,
@@ -20,7 +19,12 @@ import {
   type TailEvent,
 } from '@crook/claude/TranscriptTail'
 import { TranscriptOffset } from '@crook/domain/Ids'
-import { TranscriptCaughtUp, TranscriptChunk, TranscriptTailBytes } from '@crook/domain/Transcript'
+import {
+  CHUNK_READ_LIMIT,
+  TranscriptCaughtUp,
+  TranscriptChunk,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
 
 import {
   FIXTURES,

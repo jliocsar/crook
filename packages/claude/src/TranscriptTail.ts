@@ -15,6 +15,7 @@ import type { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import { parseLine } from '@crook/claude/TranscriptParser'
 import { type ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
 import {
+  CHUNK_READ_LIMIT,
   TranscriptCaughtUp,
   TranscriptChunk,
   type TranscriptTailBytes,
@@ -46,7 +47,6 @@ export type TailError =
 
 export const NEWLINE = 0x0a
 export const TAIL_READ_SIZE = 64 * 1024
-export const CHUNK_READ_LIMIT = 1024 * 1024
 
 export class TranscriptUnreadable extends Schema.TaggedError<TranscriptUnreadable>()(
   'TranscriptUnreadable',
