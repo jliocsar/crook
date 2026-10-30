@@ -461,8 +461,9 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
       yield* transcripts.publish(LAPTOP, id, [opened])
       yield* Queue.take(deliveries)
       yield* transcripts.publish(LAPTOP, id, [chunkBetween(0, CHUNK_READ_LIMIT)])
-      const waiting = yield* Effect.forkChild(transcripts.publish(LAPTOP, id, [next]))
-      yield* Effect.yieldNow
+      const waiting = yield* Effect.forkChild(transcripts.publish(LAPTOP, id, [next]), {
+        startImmediately: true,
+      })
       yield* Fiber.interrupt(waiting)
       const cutOff = yield* Effect.exit(Fiber.join(waiting))
       const afterCutOff = yield* fromOfDemand
