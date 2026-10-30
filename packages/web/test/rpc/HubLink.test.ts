@@ -129,6 +129,24 @@ describe('HubLink', () => {
     }),
   )
 
+  it.effect('keeps caching the herd after a write that died', () =>
+    Effect.gen(function* () {
+      const { browser, current, nextSession, settle } = yield* start()
+      const session = yield* nextSession
+
+      yield* Ref.set(browser.saveDies, true)
+      yield* Queue.offer(session.views, cachedView)
+      yield* current
+      yield* Queue.offer(session.views, liveView)
+      yield* current
+      yield* settle
+
+      expect(Option.map(yield* Ref.get(browser.saved), (saved) => saved.view)).toEqual(
+        Option.some(liveView),
+      )
+    }),
+  )
+
   it.effect('forgets the herd on logout even when a cache write was still out', () =>
     Effect.gen(function* () {
       const { browser, link, current, nextSession, settle } = yield* start()

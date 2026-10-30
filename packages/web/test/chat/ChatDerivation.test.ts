@@ -87,7 +87,7 @@ const contextAt = (
   rosters,
 })
 
-const prefixEnds = (count: number, size: number): readonly number[] =>
+const replayedPrefixEnds = (count: number, size: number): readonly number[] =>
   pipe(
     Arr.makeBy(Math.ceil(count / size) + 1, (step) => Math.min(step * size, count)),
     Arr.flatMap((end) => [end, end]),
@@ -100,7 +100,7 @@ const derivedAlong = (
   activities: readonly AgentActivity[],
 ) =>
   Arr.mapAccum(
-    prefixEnds(lines.length, size),
+    replayedPrefixEnds(lines.length, size),
     EMPTY_CHAT,
     (previous, end, step): readonly [ChatDerivation, { full: unknown; incremental: unknown }] => {
       const prefix = lines.slice(0, end)

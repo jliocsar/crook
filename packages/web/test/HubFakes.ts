@@ -139,6 +139,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const saved = yield* Ref.make(cached)
   const saves = yield* Ref.make(0)
   const saveAnswers = yield* Latch.make(true)
+  const saveDies = yield* Ref.make(false)
   const visible = yield* SubscriptionRef.make(true)
   const online = yield* SubscriptionRef.make(true)
   const expired = yield* Ref.make(false)
@@ -200,6 +201,10 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
         load: Ref.get(saved),
         save: (snapshot) =>
           saveAnswers.await.pipe(
+            Effect.andThen(Ref.getAndSet(saveDies, false)),
+            Effect.flatMap((dies) =>
+              dies ? Effect.die('the snapshot did not encode') : Effect.void,
+            ),
             Effect.andThen(Ref.set(saved, Option.some(snapshot))),
             Effect.andThen(Ref.update(saves, (count) => count + 1)),
           ),
@@ -244,6 +249,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
     saved,
     saves,
     saveAnswers,
+    saveDies,
     visible,
     online,
     expired,

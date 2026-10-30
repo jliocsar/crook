@@ -732,7 +732,7 @@ const slotItem = (slot: Slot, evidence: Evidence): ChatItem =>
     ),
   )
 
-const when = (moved: boolean, indexes: HashSet.HashSet<number>): HashSet.HashSet<number> =>
+const indexesWhen = (moved: boolean, indexes: HashSet.HashSet<number>): HashSet.HashSet<number> =>
   moved ? indexes : HashSet.empty()
 
 const targetOf = (placing: Placing, entry: Draft): readonly [Placing, Target] =>
@@ -758,13 +758,13 @@ const targetOf = (placing: Placing, entry: Draft): readonly [Placing, Target] =>
   )
 
 const joinedMembers = (joined: HashMap.HashMap<number, Slot>, target: Target) =>
-  HashMap.modifyAt(
-    joined,
-    target.index,
-    Option.match({
-      onNone: (): Option.Option<Slot> => Option.some([target.pending]),
-      onSome: (members) => Option.some(Arr.append(members, target.pending)),
-    }),
+  HashMap.modifyAt(joined, target.index, (members) =>
+    Option.some(
+      Option.match(members, {
+        onNone: (): Slot => [target.pending],
+        onSome: (found) => Arr.append(found, target.pending),
+      }),
+    ),
   )
 
 const indexesWhere = (
@@ -791,13 +791,13 @@ const slotsOfCallAfter = (
       ),
     ),
     Arr.reduce(slotsOfCall, (all, [id, index]) =>
-      HashMap.modifyAt(
-        all,
-        id,
-        Option.match({
-          onNone: () => Option.some(HashSet.make(index)),
-          onSome: (indexes) => Option.some(HashSet.add(indexes, index)),
-        }),
+      HashMap.modifyAt(all, id, (indexes) =>
+        Option.some(
+          Option.match(indexes, {
+            onNone: () => HashSet.make(index),
+            onSome: (found) => HashSet.add(found, index),
+          }),
+        ),
       ),
     ),
   )
@@ -888,8 +888,8 @@ const advance = (
         ),
       ),
     ),
-    HashSet.union(when(turnMoved || activityMoved, previous.lastTurnSlots)),
-    HashSet.union(when(agentsMoved, agentSlots)),
+    HashSet.union(indexesWhen(turnMoved || activityMoved, previous.lastTurnSlots)),
+    HashSet.union(indexesWhen(agentsMoved, agentSlots)),
   )
   const results = HashMap.setMany(previous.results, freshResults)
   const notices = HashMap.setMany(previous.notices, freshNotices)

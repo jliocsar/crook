@@ -224,16 +224,16 @@ const make = Effect.gen(function* () {
 
   const follow = (visible: boolean, online: boolean, ended: boolean): Effect.Effect<never> => {
     if (ended) {
-      return cache.clear.pipe(
+      const forget = cache.clear.pipe(
         Effect.andThen(
           SubscriptionRef.set(
             state,
             new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
           ),
         ),
-        (logout) => cacheWrites.withPermit(logout),
-        Effect.andThen(Effect.never),
       )
+
+      return cacheWrites.withPermit(forget).pipe(Effect.andThen(Effect.never))
     }
 
     if (!visible) {

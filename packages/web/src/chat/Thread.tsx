@@ -198,6 +198,7 @@ const useGhost = (
 ) => {
   const frames = React.useRef<ReadonlyMap<string, Ghost>>(new Map())
   const [ghost, setGhost] = React.useState<Option.Option<Ghost>>(Option.none())
+
   React.useLayoutEffect(() => {
     const left = ghostsOf(
       departedKeys(Arr.fromIterable(frames.current.keys()), rows),
