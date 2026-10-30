@@ -88,6 +88,7 @@ const useOnScrollStop = (stopped: () => void) => {
 
 const useScrollIntent = () => {
   const held = React.useRef(false)
+  const scrolledWhileHeld = React.useRef(false)
   const gestured = React.useRef(false)
   const pinAsked = React.useRef(false)
 
@@ -98,11 +99,16 @@ const useScrollIntent = () => {
 
   const pressed = () => {
     held.current = true
+    scrolledWhileHeld.current = false
     gestureBegan()
   }
 
   const released = () => {
     held.current = false
+
+    if (!scrolledWhileHeld.current) {
+      gestured.current = false
+    }
   }
 
   const isUserScroll = () => held.current || gestured.current
@@ -120,14 +126,23 @@ const useScrollIntent = () => {
       onKeyDown: gestureBegan,
       onPointerDown: (event: React.PointerEvent) => {
         if (event.pointerType !== 'touch') {
+          const pressEnded = new AbortController()
+
+          const release = () => {
+            pressEnded.abort()
+            released()
+          }
+
           pressed()
+          window.addEventListener('pointerup', release, { signal: pressEnded.signal })
+          window.addEventListener('pointercancel', release, { signal: pressEnded.signal })
         }
       },
-      onPointerUp: (event: React.PointerEvent) => {
-        if (event.pointerType !== 'touch') {
-          released()
-        }
-      },
+    },
+    scrolled: () => {
+      if (held.current) {
+        scrolledWhileHeld.current = true
+      }
     },
     isUserScroll,
     askedPin,
@@ -568,6 +583,7 @@ export function Thread({
             const movedUp = top < lastTop.current
 
             lastTop.current = top
+            intent.scrolled()
 
             if (isAtBottom(event.currentTarget, liftNow())) {
               follow(true)

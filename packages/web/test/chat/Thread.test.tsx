@@ -176,6 +176,28 @@ describe('Thread', () => {
     }),
   )
 
+  it.effect('keeps following a correction after a mouse press released outside the thread', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.mouseReleasedOutside()
+      opened.correctedUp(SHORT_SCROLL)
+
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('keeps following a correction after a click that scrolled nothing', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.clicked()
+      opened.correctedUp(SHORT_SCROLL)
+
+      expect(following()).toBe(true)
+    }),
+  )
+
   it.effect('keeps following a correction once a wheel scroll has settled', () =>
     Effect.gen(function* () {
       const opened = historyOpen()
