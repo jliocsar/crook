@@ -1,17 +1,11 @@
 import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
+import * as Str from 'effect/String'
 
 import type { AgentStatus } from '@crook/domain/AgentStatus'
+import { STATUS_WORD } from '@crook/web/components/StatusWord'
 import { Swap } from '@crook/web/components/Swap'
 import { clockElapsed, shortElapsed } from '@crook/web/time/Elapsed'
-
-const STATUS_LABEL = {
-  working: 'Working',
-  blocked: 'Needs you',
-  done: 'Done',
-  idle: 'Idle',
-  unknown: 'Unknown',
-} satisfies Record<AgentStatus, string>
 
 const STATUS_PILL_TONE = {
   working: 'bg-primary/12 text-[color-mix(in_oklab,var(--primary)_88%,var(--foreground))]',
@@ -41,10 +35,22 @@ export function AgentStatusPill({
         STATUS_PILL_TONE[status],
       )}
     >
-      <Swap id={status}>{STATUS_LABEL[status]}</Swap>
-      <span className="font-mono text-[11.5px] font-normal tabular-nums opacity-80">
-        {isLive(status) ? clockElapsed(now, since) : shortElapsed(now, since)}
-      </span>
+      <Swap id={status}>{Str.capitalize(STATUS_WORD[status])}</Swap>
+      {isLive(status) ? (
+        <>
+          <span
+            aria-hidden="true"
+            className="font-mono text-[11.5px] font-normal tabular-nums opacity-80"
+          >
+            {clockElapsed(now, since)}
+          </span>
+          <span className="sr-only">{shortElapsed(now, since)}</span>
+        </>
+      ) : (
+        <span className="font-mono text-[11.5px] font-normal tabular-nums opacity-80">
+          {shortElapsed(now, since)}
+        </span>
+      )}
     </span>
   )
 }

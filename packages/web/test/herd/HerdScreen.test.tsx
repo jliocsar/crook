@@ -24,8 +24,14 @@ const busyLaptop = machine(LAPTOP, [
 const cardTitles = () =>
   Array.from(document.querySelectorAll('[data-slot="agent-title"]'), (title) => title.textContent)
 
+const visibleText = (element: Element | null | undefined) =>
+  Array.from(element?.children ?? [])
+    .filter((child) => !child.classList.contains('sr-only'))
+    .map((child) => child.textContent)
+    .join(' ')
+
 const statusPills = () =>
-  Array.from(document.querySelectorAll('[data-slot="agent-status"]'), (pill) => pill.textContent)
+  Array.from(document.querySelectorAll('[data-slot="agent-status"]'), visibleText)
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -50,7 +56,8 @@ describe('HerdScreen', () => {
         'Port the herd screen',
       ])
       expect(screen.getByText('feat/jc-93')).toBeDefined()
-      expect(statusPills()).toEqual(['Needs you3m 00s', 'Done2h', 'Working42s'])
+      expect(statusPills()).toEqual(['Needs you 3m 00s', 'Done 2h', 'Working 42s'])
+      expect(document.querySelector('[data-slot="agent-status"] .sr-only')?.textContent).toBe('3m')
     }),
   )
 
@@ -78,7 +85,7 @@ describe('HerdScreen', () => {
 
       expect(summary.getAttribute('data-slot')).toBe('ask-summary')
       expect(summary.previousElementSibling?.getAttribute('data-slot')).toBe('agent-status')
-      expect(summary.previousElementSibling?.textContent).toBe('Needs you0s')
+      expect(visibleText(summary.previousElementSibling)).toBe('Needs you 0s')
       expect(card?.querySelector('[data-slot="agent-place"]')?.textContent).toBe('crook/web')
       expect(summary.closest('[data-slot="swipe-card"]')?.className).toContain(
         'border-[color-mix(in_oklab,var(--warning)_45%,var(--border))]',
@@ -164,6 +171,7 @@ describe('HerdScreen', () => {
       const loading = yield* Effect.promise(() => screen.findByText('Loading your agents'))
 
       expect(loading.closest('[role="status"]')).not.toBeNull()
+      expect(document.querySelectorAll('[data-slot="card-skeleton"]')).toHaveLength(5)
       expect(screen.getByRole('link', { name: 'Agents' })).toBeDefined()
       expect(screen.getAllByText('Connecting to the hub').length).toBeGreaterThan(0)
     }),

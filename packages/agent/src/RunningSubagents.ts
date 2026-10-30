@@ -16,10 +16,12 @@ import type { Subagent } from '@crook/domain/Subagent'
 
 export type RunningCounts = HashMap.HashMap<ClaudeSessionId, number>
 
+type FollowSessions = (sessions: HashSet.HashSet<ClaudeSessionId>) => Effect.Effect<void>
+
 export const NO_RUNNING_COUNTS: RunningCounts = HashMap.empty()
 
 export const runningCount = (roster: readonly Subagent[]): number =>
-  Arr.filter(roster, (subagent) => subagent.status === 'running').length
+  Arr.countBy(roster, (subagent) => subagent.status === 'running')
 
 const make = Effect.gen(function* () {
   const locator = yield* TranscriptLocator
@@ -40,7 +42,7 @@ const make = Effect.gen(function* () {
       Stream.runForEach((count) => SubscriptionRef.update(counts, HashMap.set(session, count))),
       Effect.catch((error) =>
         Effect.logWarning(
-          `Stopped counting the running subagents of a Claude session, so its card shows none until the pane starts another session: ${error.message}`,
+          `Stopped counting the running subagents of a Claude session, so its card shows no count until an agent on this machine opens or leaves a Claude session: ${error.message}`,
         ),
       ),
       Effect.ensuring(SubscriptionRef.update(counts, HashMap.remove(session))),
@@ -75,7 +77,7 @@ export class RunningSubagents extends Context.Service<
   {
     readonly current: Effect.Effect<RunningCounts>
     readonly changes: Stream.Stream<RunningCounts>
-    readonly follow: (sessions: HashSet.HashSet<ClaudeSessionId>) => Effect.Effect<void>
+    readonly follow: FollowSessions
   }
 >()('@crook/agent/RunningSubagents') {
   static readonly layerWithoutDependencies = Layer.effect(this, make)
@@ -91,7 +93,7 @@ export class RunningSubagents extends Context.Service<
 
   static readonly fromRef = (
     counts: SubscriptionRef.SubscriptionRef<RunningCounts>,
-    follow: (sessions: HashSet.HashSet<ClaudeSessionId>) => Effect.Effect<void>,
+    follow: FollowSessions,
   ) =>
     RunningSubagents.of({
       current: SubscriptionRef.get(counts),
@@ -101,6 +103,6 @@ export class RunningSubagents extends Context.Service<
 
   static readonly layerTest = (
     counts: SubscriptionRef.SubscriptionRef<RunningCounts>,
-    follow: (sessions: HashSet.HashSet<ClaudeSessionId>) => Effect.Effect<void> = () => Effect.void,
+    follow: FollowSessions = () => Effect.void,
   ) => Layer.succeed(this, this.fromRef(counts, follow))
 }
