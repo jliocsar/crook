@@ -326,25 +326,28 @@ const make = Effect.gen(function* () {
     )
 
     return Arr.isReadonlyArrayNonEmpty(directories)
-      ? Stream.mergeAll(
-          Arr.map(directories, (directory) =>
-            fileWatch
-              .watchWhenPresent(directory)
-              .pipe(
-                Stream.mapError(
-                  (cause) => new BackgroundOutputUnreadable({ path: directory, cause }),
-                ),
+      ? Stream.unwrap(
+          Effect.map(outputsAfter(files, NO_OUTPUTS), (current) =>
+            Stream.mergeAll(
+              Arr.map(directories, (directory) =>
+                fileWatch
+                  .watchWhenPresent(directory)
+                  .pipe(
+                    Stream.mapError(
+                      (cause) => new BackgroundOutputUnreadable({ path: directory, cause }),
+                    ),
+                  ),
               ),
+              { concurrency: 'unbounded' },
+            ).pipe(
+              Stream.filter(readyOr((name) => names.has(name))),
+              Stream.buffer({ capacity: 1, strategy: 'sliding' }),
+              Stream.scanEffect(
+                () => current,
+                (known) => outputsAfter(files, known),
+              ),
+            ),
           ),
-          { concurrency: 'unbounded' },
-        ).pipe(
-          Stream.filter(readyOr((name) => names.has(name))),
-          Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-          Stream.scanEffect(
-            () => NO_OUTPUTS,
-            (known) => outputsAfter(files, known),
-          ),
-          Stream.drop(1),
         )
       : Stream.succeed(NO_OUTPUTS)
   }

@@ -2,6 +2,7 @@ import * as Arr from 'effect/Array'
 import type { NonEmptyReadonlyArray } from 'effect/Array'
 import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Equivalence from 'effect/Equivalence'
 import * as FiberMap from 'effect/FiberMap'
@@ -11,6 +12,7 @@ import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
+import * as Schedule from 'effect/Schedule'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as Struct from 'effect/Struct'
@@ -94,6 +96,8 @@ export class TranscriptDemandsEnded extends Schema.TaggedError<TranscriptDemands
     return 'The hub ended the stream of transcripts it wants from this machine, so open chats would stop updating. crook reconnects on its own; if this keeps happening, check the hub logs.'
   }
 }
+
+const LIVENESS_RECHECK = Duration.seconds(5)
 
 const sameSession = Option.makeEquivalence(
   Equivalence.mapInput(
@@ -182,6 +186,14 @@ const backgroundOf =
 const hasBackgroundWork = (snapshot: BackgroundSnapshot) =>
   snapshot.tasks.length > 0 || snapshot.activity.length > 0
 
+const hasRunningShell = (snapshot: BackgroundSnapshot): boolean =>
+  Arr.some(snapshot.tasks, (task) =>
+    Match.value(task).pipe(
+      Match.tag('ShellTask', (shell) => shell.status === 'running'),
+      Match.orElse(() => false),
+    ),
+  )
+
 const withLiveness = (snapshot: BackgroundSnapshot, open: OpenTasks): BackgroundSnapshot => ({
   ...snapshot,
   tasks: Arr.map(snapshot.tasks, (task) =>
@@ -227,6 +239,13 @@ const backgroundWork = (
   file: TranscriptFile,
 ) =>
   background.watch(file).pipe(
+    Stream.switchMap((snapshot) =>
+      hasRunningShell(snapshot)
+        ? Stream.as(Stream.fromSchedule(Schedule.spaced(LIVENESS_RECHECK)), snapshot).pipe(
+            Stream.prepend([snapshot]),
+          )
+        : Stream.succeed(snapshot),
+    ),
     Stream.mapEffect((snapshot) =>
       Effect.map(liveness.openTasks(file), (open) => withLiveness(snapshot, open)),
     ),
