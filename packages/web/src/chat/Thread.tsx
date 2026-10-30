@@ -1,5 +1,5 @@
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
-import type { Range, VirtualItem } from '@tanstack/react-virtual'
+import type { Range, Virtualizer, VirtualItem } from '@tanstack/react-virtual'
 import { cn } from 'cn'
 import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
@@ -30,7 +30,6 @@ export interface ThreadRow {
   readonly key: string
   readonly content: React.ReactNode
   readonly placeholder?: boolean
-  readonly sent?: boolean
 }
 
 interface Ghost {
@@ -41,6 +40,7 @@ interface Ghost {
 
 export interface ThreadHandle {
   readonly scrollToKey: (key: string) => void
+  readonly scrollToEnd: () => void
 }
 
 const ESTIMATED_ROW_HEIGHT = 84
@@ -56,6 +56,106 @@ const ThreadRowBody = React.memo(RowBody)
 
 const isAtBottom = (viewport: HTMLElement, lifted: number): boolean =>
   viewport.scrollHeight - lifted - viewport.scrollTop - viewport.clientHeight <= FOLLOW_THRESHOLD
+
+const correctsOnlyGrowthAbove = (
+  item: VirtualItem,
+  delta: number,
+  instance: Virtualizer<HTMLDivElement, Element>,
+): boolean => delta > 0 && item.start < (instance.scrollOffset ?? 0)
+
+const adjustsOnResizeWhile = (
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+  following: boolean,
+): void => {
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = following
+    ? correctsOnlyGrowthAbove
+    : undefined
+}
+
+const useOnScrollStop = (stopped: () => void) => {
+  const scrolling = React.useRef(false)
+
+  return (instance: Virtualizer<HTMLDivElement, Element>) => {
+    const wasScrolling = scrolling.current
+
+    scrolling.current = instance.isScrolling
+
+    if (wasScrolling && !instance.isScrolling) {
+      stopped()
+    }
+  }
+}
+
+const useScrollIntent = () => {
+  const held = React.useRef(false)
+  const scrolledWhileHeld = React.useRef(false)
+  const gestured = React.useRef(false)
+  const pinAsked = React.useRef(false)
+
+  const gestureBegan = () => {
+    gestured.current = true
+    pinAsked.current = false
+  }
+
+  const pressed = () => {
+    held.current = true
+    scrolledWhileHeld.current = false
+    gestureBegan()
+  }
+
+  const released = () => {
+    held.current = false
+
+    if (!scrolledWhileHeld.current) {
+      gestured.current = false
+    }
+  }
+
+  const isUserScroll = () => held.current || gestured.current
+
+  const askedPin = React.useCallback(() => {
+    pinAsked.current = true
+  }, [])
+
+  return {
+    handlers: {
+      onTouchStart: pressed,
+      onTouchEnd: released,
+      onTouchCancel: released,
+      onWheel: gestureBegan,
+      onKeyDown: gestureBegan,
+      onPointerDown: (event: React.PointerEvent) => {
+        if (event.pointerType !== 'touch') {
+          const pressEnded = new AbortController()
+
+          const release = () => {
+            pressEnded.abort()
+            released()
+          }
+
+          pressed()
+          window.addEventListener('pointerup', release, { signal: pressEnded.signal })
+          window.addEventListener('pointercancel', release, { signal: pressEnded.signal })
+        }
+      },
+    },
+    scrolled: () => {
+      if (held.current) {
+        scrolledWhileHeld.current = true
+      }
+    },
+    isUserScroll,
+    askedPin,
+    settle: (): boolean => {
+      const repins = !isUserScroll() || pinAsked.current
+
+      gestured.current = held.current
+      pinAsked.current = false
+
+      return repins
+    },
+  }
+}
 
 const useSettled = (rowCount: number): boolean => {
   const [settled, setSettled] = React.useState(false)
@@ -229,22 +329,6 @@ const ghostsOf = (
     Arr.head,
   )
 
-const useOnSent = (rows: readonly ThreadRow[], onSent: () => void) => {
-  const [seen] = React.useState(() => new Set<string>())
-
-  React.useLayoutEffect(() => {
-    const sentNow = rows.filter((row) => row.sent === true && !seen.has(row.key))
-
-    for (const row of sentNow) {
-      seen.add(row.key)
-    }
-
-    if (sentNow.length > 0) {
-      onSent()
-    }
-  }, [rows, seen, onSent])
-}
-
 function Appear({
   rowKey,
   reveal,
@@ -327,6 +411,25 @@ function ThreadGhost({
   )
 }
 
+function LatestButton({ following, onJump }: { following: boolean; onJump: () => void }) {
+  return (
+    <button
+      type="button"
+      data-slot="conversation-jump"
+      aria-hidden={following || undefined}
+      tabIndex={following ? -1 : undefined}
+      className={cn(
+        'bg-foreground text-background focus-visible:ring-ring absolute bottom-3 left-1/2 inline-flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-md transition-[opacity,transform] duration-200 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none',
+        following ? 'pointer-events-none translate-y-1 opacity-0' : 'opacity-100',
+      )}
+      onClick={onJump}
+    >
+      <ArrowDown aria-hidden="true" size={JUMP_ICON_SIZE} />
+      Latest
+    </button>
+  )
+}
+
 export function Thread({
   rows,
   dimmed,
@@ -344,12 +447,29 @@ export function Thread({
   const [following, setFollowing] = React.useState(true)
   const followingRef = React.useRef(true)
   const lastTop = React.useRef(0)
-  const jumped = React.useRef(false)
+  const intent = useScrollIntent()
   const reduce = useReducedMotion() ?? false
   const settled = useSettled(rows.length)
   const animates = settled && !reduce
   const { plan, shown } = useRevealPlan(rows, animates)
   const lift = useLift()
+  const { raise, current: liftNow } = lift
+
+  const { askedPin } = intent
+
+  const toBottom = React.useCallback(() => {
+    if (viewport.current !== null) {
+      askedPin()
+      viewport.current.scrollTop = viewport.current.scrollHeight - liftNow()
+    }
+  }, [liftNow, askedPin])
+
+  const onScrollStop = useOnScrollStop(() => {
+    if (intent.settle() && followingRef.current) {
+      toBottom()
+    }
+  })
+
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => viewport.current,
@@ -362,6 +482,7 @@ export function Thread({
     useFlushSync: false,
     rangeExtractor: (range) =>
       defaultRangeExtractor({ ...range, startIndex: lift.firstIndex(range) }),
+    onChange: onScrollStop,
   })
   const totalSize = virtualizer.getTotalSize()
   const virtualItems = virtualizer.getVirtualItems()
@@ -370,24 +491,14 @@ export function Thread({
   const follow = (next: boolean) => {
     if (next !== followingRef.current) {
       followingRef.current = next
+      adjustsOnResizeWhile(virtualizer, next)
       setFollowing(next)
     }
   }
 
-  const { raise, current: liftNow } = lift
-
-  useOnSent(rows, () => {
-    if (!followingRef.current) {
-      jumped.current = true
-      follow(true)
-    }
-  })
-
-  const toBottom = React.useCallback(() => {
-    if (viewport.current !== null) {
-      viewport.current.scrollTop = viewport.current.scrollHeight - liftNow()
-    }
-  }, [liftNow])
+  React.useLayoutEffect(() => {
+    adjustsOnResizeWhile(virtualizer, followingRef.current)
+  }, [virtualizer])
 
   React.useImperativeHandle(
     handle,
@@ -403,8 +514,12 @@ export function Thread({
           })
         }
       },
+      scrollToEnd: () => {
+        follow(true)
+        toBottom()
+      },
     }),
-    [rows, virtualizer, reduce],
+    [rows, virtualizer, reduce, toBottom],
   )
 
   React.useLayoutEffect(() => {
@@ -419,11 +534,8 @@ export function Thread({
     toBottom()
 
     const grown = element.scrollTop - before
-    const slides = animates && grown > 0 && !jumped.current
 
-    jumped.current = false
-
-    if (slides) {
+    if (animates && grown > 0) {
       raise({
         grown,
         ceiling: element.clientHeight,
@@ -465,15 +577,17 @@ export function Thread({
           data-slot="conversation-viewport"
           data-following={following || undefined}
           className="h-full overflow-y-auto overscroll-contain"
+          {...intent.handlers}
           onScroll={(event) => {
             const top = event.currentTarget.scrollTop
             const movedUp = top < lastTop.current
 
             lastTop.current = top
+            intent.scrolled()
 
             if (isAtBottom(event.currentTarget, liftNow())) {
               follow(true)
-            } else if (movedUp) {
+            } else if (movedUp && intent.isUserScroll()) {
               follow(false)
             }
           }}
@@ -521,26 +635,17 @@ export function Thread({
             </motion.div>
           )}
         </div>
-        <button
-          type="button"
-          data-slot="conversation-jump"
-          aria-hidden={following || undefined}
-          tabIndex={following ? -1 : undefined}
-          className={cn(
-            'bg-foreground text-background focus-visible:ring-ring absolute bottom-3 left-1/2 inline-flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-md transition-[opacity,transform] duration-200 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none',
-            following ? 'pointer-events-none translate-y-1 opacity-0' : 'opacity-100',
-          )}
-          onClick={() => {
+        <LatestButton
+          following={following}
+          onJump={() => {
             follow(true)
+            askedPin()
             viewport.current?.scrollTo({
               top: viewport.current.scrollHeight,
               behavior: reduce ? 'auto' : 'smooth',
             })
           }}
-        >
-          <ArrowDown aria-hidden="true" size={JUMP_ICON_SIZE} />
-          Latest
-        </button>
+        />
       </Dimmed>
     </RenderCacheScope>
   )

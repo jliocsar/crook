@@ -68,6 +68,7 @@ interface ChatCommandsInput {
   readonly items: readonly ChatItem[]
   readonly draft: string
   readonly setDraft: (draft: string) => void
+  readonly onPromptSent: () => void
 }
 
 export interface PendingPrompt {
@@ -326,6 +327,7 @@ export const useChatCommands = ({
   items,
   draft,
   setDraft,
+  onPromptSent,
 }: ChatCommandsInput): ChatCommands => {
   const { machine, pane } = opened
   const prompt = useCommandAction(machine)
@@ -359,6 +361,7 @@ export const useChatCommands = ({
   }
 
   const send = (text: string) => {
+    onPromptSent()
     Option.match(openAsk, {
       onNone: () => {
         sendPrompt(new Prompt({ pane, text }))

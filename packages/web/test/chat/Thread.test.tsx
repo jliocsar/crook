@@ -2,7 +2,7 @@ import { describe, expect, it } from '@effect/vitest'
 import * as Effect from 'effect/Effect'
 import { afterEach, beforeEach, vi } from 'vitest'
 
-import { afterSpring, present } from '../Dom.ts'
+import { afterSpring, present, wait } from '../Dom.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 import {
   answerGrows,
@@ -14,11 +14,18 @@ import {
   phoneViewport,
   revealOf,
   scrollsUnderLift,
+  rowsShrinkAfterOpen,
+  SETTLE_MS,
   VIEWPORT_HEIGHT,
 } from '../ThreadRender.tsx'
 
 const ANSWER_HEIGHT = 300
 const LONG_ANSWER_HEIGHT = 5000
+const SHORT_SCROLL = 100
+const NUDGE = 20
+const MANY_ROWS = 60
+const RENDERED_ROW_HEIGHT = 120
+const SHORT_ROW_HEIGHT = 20
 
 beforeEach(() => {
   stubMediaQueries([])
@@ -27,6 +34,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('Thread', () => {
@@ -76,13 +84,156 @@ describe('Thread', () => {
     }),
   )
 
-  it.effect('stops following once the user scrolls up', () =>
+  it.effect('stops following once a finger scrolls up', () =>
     Effect.sync(() => {
       const opened = historyOpen()
 
-      opened.scrollsUp(ANSWER_HEIGHT)
+      opened.fingerScrollsUp(ANSWER_HEIGHT)
 
       expect(following()).toBe(false)
+    }),
+  )
+
+  it.effect('stops following once the wheel scrolls up', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.wheelsUp(ANSWER_HEIGHT)
+
+      expect(following()).toBe(false)
+    }),
+  )
+
+  it.effect('keeps following when the virtualizer corrects the scroll upward', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.correctedUp(ANSWER_HEIGHT)
+
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('keeps the virtualizer from correcting the scroll while it follows', () =>
+    Effect.gen(function* () {
+      const opened = rowsShrinkAfterOpen(MANY_ROWS, RENDERED_ROW_HEIGHT, SHORT_ROW_HEIGHT)
+
+      opened.measured()
+      yield* wait(SETTLE_MS)
+
+      expect(opened.corrections()).toBe(0)
+      expect(opened.top()).toBe(opened.bottom())
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('pins back to the end once a corrected scroll settles', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.correctedUp(SHORT_SCROLL)
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom())
+    }),
+  )
+
+  it.effect('stays where a finger left it once its scroll settles', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.fingerScrollsUp(SHORT_SCROLL)
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom() - SHORT_SCROLL)
+    }),
+  )
+
+  it.effect('stays where a small nudge left it while it keeps following', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.fingerScrollsUp(NUDGE)
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom() - NUDGE)
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('stays where a mouse drag on the scrollbar left it once its scroll settles', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.mouseDragsUp(NUDGE)
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom() - NUDGE)
+    }),
+  )
+
+  it.effect('keeps following a correction after a mouse press released outside the thread', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.mouseReleasedOutside()
+      opened.correctedUp(SHORT_SCROLL)
+
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('keeps following a correction after a click that scrolled nothing', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.clicked()
+      opened.correctedUp(SHORT_SCROLL)
+
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('keeps following a correction once a wheel scroll has settled', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.wheelsUp(NUDGE)
+      yield* wait(SETTLE_MS)
+      opened.correctedUp(SHORT_SCROLL)
+
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('stays on the row it jumped to once that scroll settles', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.jumpsTo('prompt')
+      yield* wait(SETTLE_MS)
+
+      expect(following()).toBe(false)
+      expect(opened.top()).toBeLessThan(opened.bottom())
+    }),
+  )
+
+  it.effect('goes back to the end when Latest is pressed', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      opened.fingerScrollsUp(SHORT_SCROLL)
+      opened.pressesLatest()
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom())
+      expect(following()).toBe(true)
     }),
   )
 
@@ -90,7 +241,7 @@ describe('Thread', () => {
     Effect.sync(() => {
       const opened = historyOpen()
 
-      opened.scrollsUp(ANSWER_HEIGHT)
+      opened.fingerScrollsUp(ANSWER_HEIGHT)
       opened.sends(ANSWER_HEIGHT)
 
       expect(following()).toBe(true)

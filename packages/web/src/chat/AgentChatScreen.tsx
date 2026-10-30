@@ -52,6 +52,7 @@ import { Collapse } from '@crook/web/components/Collapse'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { Message } from '@crook/web/components/ui/message'
 import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
+import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 
@@ -75,7 +76,6 @@ const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly Threa
   pending.map((prompt) => ({
     key: prompt.key,
     content: <Message meta={prompt.queued ? 'Queued' : 'Sent'}>{prompt.text}</Message>,
-    sent: true,
   }))
 
 const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>) => {
@@ -195,11 +195,29 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     () => chatItems(lines, { cwd, activity, rosters }),
     [lines, cwd, activity, rosters],
   )
-  const commands = useChatCommands({ opened, model, connection, items, draft, setDraft })
+  const covered = useCoveredByPushedScreen()
+  const scrollToEnd = React.useCallback(() => {
+    thread.current?.scrollToEnd()
+  }, [])
+  const commands = useChatCommands({
+    opened,
+    model,
+    connection,
+    items,
+    draft,
+    setDraft,
+    onPromptSent: scrollToEnd,
+  })
   const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS
   const openActions = useOpenAgentActions()
   const closedHere = useClosedFromChat(machine, pane)
   const title = titleOf(model, pane)
+
+  React.useLayoutEffect(() => {
+    if (!covered) {
+      scrollToEnd()
+    }
+  }, [covered, scrollToEnd])
 
   const paneClosed = model.presence === 'closed'
   const askedCall = Option.getOrUndefined(Option.map(commands.ask, (dock) => dock.ask.id))

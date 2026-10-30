@@ -1,7 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -42,6 +41,7 @@ import { STOP_SETTLE } from '@crook/web/chat/ChatCommands'
 import { COLD_START } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
+import { fingerScrollsToTop, followedToBottom, manyLines, tallViewport } from '../ChatThread.ts'
 import { click, eventually, findByRole, present, wait } from '../Dom.ts'
 import { agent, CROOK_TAB, CROOK_WORKSPACE, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered, STARTED_PANE } from '../HubFakes.ts'
@@ -69,9 +69,6 @@ const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
 const VIEWPORT_WIDTH = 375
 const VIEWPORT_HEIGHT = 812
-const TALL_SCROLL_HEIGHT = 100_000
-const MANY_LINES = 120
-const LINE_BYTES = 10
 
 const ask = new PermissionAsk({
   id: AskId.make('toolu_01XXC3'),
@@ -108,31 +105,6 @@ const withShellPane = (entry: HerdMachine, pane: string): HerdMachine =>
 const live = (rows: readonly AgentRow[]) => liveWith(herd([laptopWith(rows)]))
 
 const field = () => present(screen.queryByRole('textbox'), 'The composer')
-
-const tallViewport = () => {
-  const viewport = present(
-    document.querySelector<HTMLElement>('[data-slot="conversation-viewport"]'),
-    'The thread',
-  )
-
-  Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: TALL_SCROLL_HEIGHT })
-
-  return viewport
-}
-
-const followedToBottom = Effect.fn('followedToBottom')(function* (viewport: HTMLElement) {
-  yield* eventually(() => {
-    expect(viewport.scrollTop).toBe(TALL_SCROLL_HEIGHT)
-  })
-  fireEvent.scroll(viewport)
-})
-
-const manyLines = (from: number) =>
-  chunk(
-    from,
-    from + MANY_LINES * LINE_BYTES,
-    Arr.makeBy(MANY_LINES, (index) => said(from + index * LINE_BYTES, `Line ${index}`)),
-  )
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -815,8 +787,7 @@ describe('AgentChatScreen', () => {
       yield* eventually(() => {
         expect(screen.queryByRole('button', { name: /^Read\(/u })).toBeNull()
       })
-      viewport.scrollTop = 0
-      fireEvent.scroll(viewport)
+      fingerScrollsToTop(viewport)
 
       const tool = yield* Effect.promise(() => screen.findByRole('button', { name: /^Read\(/u }))
 

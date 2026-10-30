@@ -1,24 +1,26 @@
-import { fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import * as React from 'react'
 import { vi } from 'vitest'
 
 import { Thread } from '@crook/web/chat/Thread'
-import type { ThreadRow } from '@crook/web/chat/Thread'
+import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 
 import { present, wait } from './Dom.ts'
 
-const SETTLE_MS = 400
 const VIEWPORT_WIDTH = 375
 const HISTORY_HEIGHT = 1000
 
 export const VIEWPORT_HEIGHT = 812
+export const SETTLE_MS = 400
 
 const row = (key: string): ThreadRow => ({ key, content: <p>{key}</p> })
 
 const WORKING: ThreadRow = { key: 'working', content: <p>Working</p>, placeholder: true }
 
-const thread = (rows: readonly ThreadRow[]) => (
-  <Thread rows={rows} dimmed={false} empty={<p>No messages yet</p>} />
+const thread = (rows: readonly ThreadRow[], handle: React.Ref<ThreadHandle>) => (
+  <Thread handle={handle} rows={rows} dimmed={false} empty={<p>No messages yet</p>} />
 )
 
 const viewport = (): HTMLElement =>
@@ -45,7 +47,7 @@ export const liftOf = (): string =>
 export const following = (): boolean => viewport().hasAttribute('data-following')
 
 export const openedOn = (keys: readonly string[]) => {
-  render(thread(keys.map(row)))
+  render(thread(keys.map(row), null))
 }
 
 export const scrollsUnderLift = (added: number): void => {
@@ -82,36 +84,165 @@ const scrollable = (scrolling: HTMLElement) => {
 }
 
 export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
-  const { rerender } = render(thread([row('prompt'), WORKING]))
+  const { rerender } = render(thread([row('prompt'), WORKING], null))
   const { grow } = scrollable(viewport())
 
   yield* wait(SETTLE_MS)
   grow(added)
-  rerender(thread([row('prompt'), row('text'), row('tool')]))
+  rerender(thread([row('prompt'), row('text'), row('tool')], null))
 })
 
 export const historyOpen = () => {
   const history = [row('prompt'), row('text')]
-  const { rerender } = render(thread(history))
+  const handle = React.createRef<ThreadHandle>()
+  const { rerender } = render(thread(history, handle))
   const scrolling = viewport()
   const { grow, bottom } = scrollable(scrolling)
 
   fireEvent.scroll(scrolling)
 
+  const movesUp = (by: number) => {
+    scrolling.scrollTop -= by
+    fireEvent.scroll(scrolling)
+  }
+
   return {
     top: () => scrolling.scrollTop,
     bottom,
-    scrollsUp: (by: number) => {
-      scrolling.scrollTop -= by
-      fireEvent.scroll(scrolling)
+    fingerScrollsUp: (by: number) => {
+      fireEvent.touchStart(scrolling)
+      movesUp(by)
+      fireEvent.touchEnd(scrolling)
+    },
+    mouseDragsUp: (by: number) => {
+      fireEvent.pointerDown(scrolling, { pointerType: 'mouse' })
+      movesUp(by)
+      fireEvent.pointerUp(scrolling, { pointerType: 'mouse' })
+    },
+    mouseReleasedOutside: () => {
+      fireEvent.pointerDown(scrolling, { pointerType: 'mouse' })
+      fireEvent.pointerUp(document.body, { pointerType: 'mouse' })
+    },
+    clicked: () => {
+      fireEvent.pointerDown(scrolling, { pointerType: 'mouse' })
+      fireEvent.pointerUp(scrolling, { pointerType: 'mouse' })
+    },
+    wheelsUp: (by: number) => {
+      fireEvent.wheel(scrolling)
+      movesUp(by)
+    },
+    correctedUp: movesUp,
+    jumpsTo: (key: string) => {
+      handle.current?.scrollToKey(key)
+    },
+    pressesLatest: () => {
+      fireEvent.click(
+        present(
+          document.querySelector<HTMLElement>('[data-slot="conversation-jump"]'),
+          'the Latest button',
+        ),
+      )
     },
     growsBelow: (added: number) => {
       grow(added)
       fireEvent.scroll(scrolling)
     },
     sends: (added: number) => {
+      handle.current?.scrollToEnd()
       grow(added)
-      rerender(thread([...history, { key: 'sent', content: <p>sent</p>, sent: true }]))
+      rerender(thread([...history, row('sent')], handle))
     },
+  }
+}
+
+const heldMeasurements = (rowHeight: number) => {
+  const observed = new Set<Element>()
+  const reports = new Set<ResizeObserverCallback>()
+
+  class HeldResizeObserver {
+    constructor(report: ResizeObserverCallback) {
+      reports.add(report)
+    }
+
+    observe(target: Element) {
+      observed.add(target)
+    }
+
+    unobserve(target: Element) {
+      observed.delete(target)
+    }
+
+    disconnect() {}
+  }
+
+  const rows = () => Arr.filter([...observed], (target) => target.hasAttribute('data-index'))
+
+  return {
+    HeldResizeObserver,
+    deliver: () => {
+      const entries = Arr.map(rows(), (target) => ({
+        target,
+        borderBoxSize: [{ blockSize: rowHeight, inlineSize: VIEWPORT_WIDTH }],
+        contentBoxSize: [],
+        devicePixelContentBoxSize: [],
+        contentRect: new DOMRect(0, 0, VIEWPORT_WIDTH, rowHeight),
+      }))
+
+      for (const report of reports) {
+        report(entries, new HeldResizeObserver(report))
+      }
+    },
+  }
+}
+
+export const rowsShrinkAfterOpen = (
+  count: number,
+  renderedHeight: number,
+  measuredHeight: number,
+) => {
+  const measurements = heldMeasurements(measuredHeight)
+
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
+    function rendered(this: HTMLElement) {
+      return this.hasAttribute('data-index') ? renderedHeight : 0
+    },
+  )
+
+  vi.stubGlobal('ResizeObserver', measurements.HeldResizeObserver)
+  render(
+    thread(
+      Arr.makeBy(count, (index) => row(`row ${index}`)),
+      null,
+    ),
+  )
+
+  const scrolling = viewport()
+
+  Object.defineProperty(scrolling, 'scrollHeight', {
+    configurable: true,
+    get: () =>
+      Number.parseFloat(
+        present(
+          scrolling.querySelector<HTMLElement>('[data-slot="conversation-content"]'),
+          'the thread content',
+        ).style.height,
+      ),
+  })
+
+  const corrections = vi.spyOn(scrolling, 'scrollTo')
+
+  scrolling.scrollTop = scrolling.scrollHeight
+  fireEvent.scroll(scrolling)
+
+  return {
+    measured: () => {
+      act(() => {
+        measurements.deliver()
+      })
+      fireEvent.scroll(scrolling)
+    },
+    corrections: () => corrections.mock.calls.length,
+    top: () => scrolling.scrollTop,
+    bottom: () => scrolling.scrollHeight,
   }
 }
