@@ -20,6 +20,7 @@ import { answered, chunk, opened, prompt } from '../TranscriptFixtures.ts'
 
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
+const WORKING_ROW = { selector: '[data-slot="thinking-state-label"]' }
 
 const live = (rows: readonly AgentRow[]) => liveWith(herd([machine(LAPTOP, rows)]))
 
@@ -46,17 +47,17 @@ describe('the Working row', () => {
 
       yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'Fix the herd')])])
       yield* Effect.promise(() => screen.findByText('Fix the herd'))
-      yield* Effect.promise(() => screen.findByText('Working'))
+      yield* Effect.promise(() => screen.findByText('Working', WORKING_ROW))
       yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'idle', { seq: 2 })]))
       yield* findByRole('button', 'Send')
 
-      expect(screen.getByText('Working')).toBeDefined()
+      expect(screen.getByText('Working', WORKING_ROW)).toBeDefined()
       expect(screen.getByText('7m')).toBeDefined()
 
       yield* Queue.offer(transcript, chunk(10, 20, [answered(10, 'Fixed the herd', 5)]))
       yield* Effect.promise(() => screen.findByText('Fixed the herd'))
 
-      expect(screen.queryByText('Working')).toBeNull()
+      expect(screen.queryByText('Working', WORKING_ROW)).toBeNull()
     }),
   )
 
@@ -67,11 +68,11 @@ describe('the Working row', () => {
 
       yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'Fix the herd')])])
       yield* Effect.promise(() => screen.findByText('Fix the herd'))
-      yield* Effect.promise(() => screen.findByText('Working'))
+      yield* Effect.promise(() => screen.findByText('Working', WORKING_ROW))
       yield* Queue.offer(transcript, chunk(10, 20, [answered(10, 'Fixed the herd', 5)]))
       yield* Effect.promise(() => screen.findByText('Fixed the herd'))
 
-      expect(screen.queryByText('Working')).toBeNull()
+      expect(screen.queryByText('Working', WORKING_ROW)).toBeNull()
       expect(screen.getByRole('button', { name: 'Stop (Esc)' })).toBeDefined()
     }),
   )
@@ -86,10 +87,10 @@ describe('the Working row', () => {
         chunk(0, 20, [prompt(0, 'Fix the herd'), answered(10, 'Fixed the herd')]),
       ])
       yield* Effect.promise(() => screen.findByText('Fixed the herd'))
-      yield* Effect.promise(() => screen.findByText('Working'))
+      yield* Effect.promise(() => screen.findByText('Working', WORKING_ROW))
       yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'idle', { seq: 2 })]))
       yield* eventually(() => {
-        expect(screen.queryByText('Working')).toBeNull()
+        expect(screen.queryByText('Working', WORKING_ROW)).toBeNull()
       })
     }),
   )
