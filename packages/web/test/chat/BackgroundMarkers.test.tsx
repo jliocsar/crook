@@ -5,6 +5,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Struct from 'effect/Struct'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { ShellTask } from '@crook/domain/Background'
@@ -146,6 +147,45 @@ describe('background work in the chat', () => {
 
         expect(marker?.getAttribute('data-state')).toBe('running')
       })
+    }),
+  )
+
+  it.effect('sums up the background work at the end of the thread once it has settled', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(
+        CHAT,
+        liveWith(herd([machine(LAPTOP, [agent('w1:p1', 'idle')])])),
+      )
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+      const settled = new ShellTask(
+        Struct.evolve(devServer('stopped'), {
+          endedAt: () => Option.some(DateTime.subtract(NOW, { seconds: 60 })),
+        }),
+      )
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        launched,
+        new BackgroundChanged({ session: SESSION, tasks: [settled], activity: [] }),
+      ])
+
+      const summary = yield* Effect.promise(() =>
+        screen.findByText(
+          (_text, element) =>
+            element?.getAttribute('data-slot') === 'background-summary' &&
+            (element.textContent ?? '').includes('Background work finished'),
+        ),
+      )
+
+      expect(summary.textContent).toContain('dev stopped')
+      expect(summary.textContent).toContain('10s')
+      expect(document.querySelector('[data-slot="background-dock"]')).toBeNull()
+
+      yield* click(summary)
+
+      const sheet = yield* findByRole('dialog', 'bun run dev')
+
+      expect(sheet.textContent).toContain('ready in 876 ms')
     }),
   )
 })

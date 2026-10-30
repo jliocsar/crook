@@ -21,7 +21,7 @@ import { useNow } from '@crook/web/time/Now'
 const MONITOR_TOOL = 'Monitor'
 const BASH_TOOL = 'Bash'
 
-const JOB_DOT = {
+export const JOB_DOT = {
   running: 'bg-primary animate-pulse motion-reduce:animate-none',
   done: 'bg-accent',
   failed: 'bg-destructive',

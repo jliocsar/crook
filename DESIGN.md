@@ -457,10 +457,16 @@ screen" on the Ask.
     the background", "Read its output at 14:22", "Stopped it", and how it ended. A Monitor's
     shows its events with their times and "watching" while it runs. Unconfirmed work says
     "crook can't tell whether this is still running".
-  - **Unconfirmed** is crook's word for work nothing said ended but nothing can vouch for
-    either: a shell whose process no longer holds its output file, a shell nobody can check
-    that has been quiet for 15 minutes, a Monitor past its timeout, or a Monitor with no timeout
-    that has been quiet for 15 minutes.
+  - **The summary row** takes over when the dock leaves, 14s after the last job ends: the
+    thread ends with "Background work finished", the episode's span in mono on the right, and
+    a line of dotted parts, "1 subagent done · 1 failed · dev stopped · CI done", a failure in
+    `destructive`. An episode is the run of work whose times overlap the last job's. Tapping it
+    opens the failed job, or the one that ended last. It sits below the conversation like
+    Working does, and goes when the user sends the next prompt or new work starts.
+  - **Unconfirmed** is crook's word for work nothing said ended though something says it
+    should have: a shell whose process no longer holds its output file, or a Monitor past its
+    timeout. Silence alone is not that signal, so a shell nobody can check, as on a Mac with no
+    `/proc`, runs until Claude says it ended, however quiet it is.
 - **The dock** sits at the bottom, on `bg-card`, above the home indicator: the Ask over the
   composer. When the keyboard opens, the dock rises above it from the visual viewport. The
   thread gives way first, then the Ask scrolls inside what is left, so neither the composer nor
@@ -567,9 +573,8 @@ Unmeasured knobs, picked in the prototype; settle them on the phone:
 - double-tap zooms 2.5x within 300ms, and pinch stops at 4x;
 - swipe-down closes past 96px, or at 500px/s over the last 80ms once it has moved 24px;
 - the backdrop fades out over 320px of drag;
-- a finished background chip stays 7s and the tray 14s after the last job ends, at most two
-  chips get their long labels, and a shell nobody can check turns unconfirmed after 15 quiet
-  minutes;
+- a finished background chip stays 7s and the tray 14s after the last job ends, and at most
+  two chips get their long labels;
 - the agent rechecks a running shell's process every 5s (one check measured 0.32 ms of wall
   time and 1.17 ms of CPU), and calls it gone only once its first miss is 5s old, so a shell
   that exits normally isn't flagged in the moment before Claude's notice lands;
@@ -963,5 +968,3 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 ## Open
 
 - The machine sections follow the hub's machine order; no order has been decided.
-- The thread has no "Background work finished" summary row yet. The prototype ends an episode
-  with one; the background dock's settle state says it for now.

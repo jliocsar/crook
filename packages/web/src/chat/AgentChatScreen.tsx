@@ -40,6 +40,7 @@ import {
   titleOf,
 } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
+import { summaryRows, useEpisodeSummary } from '@crook/web/chat/BackgroundSummary'
 import { failureRows, TranscriptEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { Composer } from '@crook/web/chat/Composer'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
@@ -279,6 +280,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   )
   const backgroundWork = useBackgroundWork(view, items, openSubagentJob)
   const backgroundContext = React.useMemo(() => Option.some(backgroundWork), [backgroundWork])
+  const episodeSummary = useEpisodeSummary(backgroundWork, lines)
   const environment = React.useMemo<ThreadEnvironment>(
     () => ({
       cwd,
@@ -308,6 +310,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         ? []
         : [
             ...catchUp.rows,
+            ...summaryRows(episodeSummary, backgroundWork.open),
             ...pendingPromptRows(commands.pendingPrompts),
             ...(workingAt === undefined ? [] : [workingRow((now) => shortElapsed(now, workingAt))]),
             ...(watching
@@ -317,6 +320,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     [
       notClaude,
       catchUp.rows,
+      episodeSummary,
+      backgroundWork.open,
       commands.pendingPrompts,
       workingAt,
       watching,
