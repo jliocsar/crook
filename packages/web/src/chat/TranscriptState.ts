@@ -94,10 +94,13 @@ const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly Tran
 
 const rostersAfter = (view: TranscriptView, event: TranscriptEvent): SessionRosters =>
   Match.value(event).pipe(
-    Match.tag('SubagentsChanged', (changed) =>
-      HashMap.set(view.rosters, changed.session, changed.subagents),
-    ),
-    Match.orElse(() => view.rosters),
+    Match.tagsExhaustive({
+      TranscriptOpened: () => view.rosters,
+      TranscriptChunk: () => view.rosters,
+      SubagentsChanged: (changed) => HashMap.set(view.rosters, changed.session, changed.subagents),
+      SkillsChanged: () => view.rosters,
+      TranscriptCaughtUp: () => view.rosters,
+    }),
   )
 
 const skillsAfter = (view: TranscriptView, event: TranscriptEvent): readonly SkillListing[] =>

@@ -105,11 +105,11 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
       ),
     [parentLines, cwd, parentActivity, parentRosters, subagent],
   )
-  const running = Option.exists(run, (found) => runStatusShown(found, paneClosed) === 'running')
+  const ticking = Option.exists(run, (found) => runTicks(found, paneClosed))
   const lines = linesOf(view)
   const items = React.useMemo(
-    () => chatItems(lines, { cwd, activity: running ? 'working' : 'still', rosters: NO_ROSTERS }),
-    [lines, cwd, running],
+    () => chatItems(lines, { cwd, activity: ticking ? 'working' : 'still', rosters: NO_ROSTERS }),
+    [lines, cwd, ticking],
   )
   const firstPrompt = Arr.findFirst(items, isUserPrompt)
   const prompt = Option.orElse(
@@ -135,7 +135,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const rows: readonly ThreadRow[] = [
     ...Option.toArray(Option.map(prompt, askedRow)),
     ...itemRows(shownItems, environment),
-    ...(Option.exists(run, (found) => runTicks(found, paneClosed)) && !hasToolRunning(shownItems)
+    ...(ticking && !hasToolRunning(shownItems)
       ? Option.toArray(
           Option.map(
             Option.flatMap(run, (found) => found.startedAt),

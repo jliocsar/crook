@@ -129,6 +129,23 @@ const rosterOf =
   (subagents: readonly Subagent[]): TranscriptEvent =>
     new SubagentsChanged({ session, subagents })
 
+const finalRoster = Effect.fn('TranscriptStreams.finalRoster')(function* (
+  roster: SubagentRoster['Service'],
+  file: TranscriptFile,
+) {
+  return yield* roster.read(file).pipe(
+    Effect.map((subagents) => Stream.succeed(rosterOf(file.session)(subagents))),
+    Effect.catch((error) =>
+      Effect.as(
+        Effect.logWarning(
+          `Sent no final subagent list for the session the pane left: ${error.message}`,
+        ),
+        Stream.empty,
+      ),
+    ),
+  )
+})
+
 const opened = (session: ClaudeSessionId) =>
   Stream.succeed<TranscriptEvent>(new TranscriptOpened({ session }))
 
@@ -220,7 +237,7 @@ const make = Effect.gen(function* () {
           onSome: (file) =>
             Stream.concat(
               fromLineNearEnd(file, position.offset, tailBytes, (from) => tail.drain(file, from)),
-              Stream.fromEffect(Effect.map(roster.read(file), rosterOf(file.session))),
+              Stream.unwrap(finalRoster(roster, file)),
             ),
         }),
       ),

@@ -10,7 +10,7 @@ import * as Str from 'effect/String'
 
 import { relativeToFolder } from '@crook/domain/Ask'
 import type { ClaudeSessionId, SubagentId } from '@crook/domain/Ids'
-import type { Subagent, SubagentStatus } from '@crook/domain/Subagent'
+import { type Subagent, type SubagentStatus, statusOfNotice } from '@crook/domain/Subagent'
 import type {
   AssistantMessage,
   CompactTrigger,
@@ -87,7 +87,6 @@ interface Evidence {
 }
 
 const ASYNC_LAUNCH_STATUS = 'async_launched'
-const COMPLETED_STATUS = 'completed'
 const INTERRUPTED_NOTE = 'Interrupted'
 const PATH_FIELDS = new Set(['file_path', 'notebook_path', 'path'])
 const AGENT_TOOL = 'Agent'
@@ -226,8 +225,6 @@ const startsTurn = (line: TranscriptLine): boolean =>
       ),
   })
 
-const sessionOf = (line: TranscriptLine): ClaudeSessionId => line.session
-
 const keyOf = (line: TranscriptLine, index: number): string =>
   TranscriptLine.$match(line, {
     SessionCleared: ({ session }) => `${session} cleared`,
@@ -360,7 +357,8 @@ const rosterVerdict = (status: SubagentStatus): Option.Option<RunStatus> =>
   Match.value(status).pipe(
     Match.when('running', () => Option.none<RunStatus>()),
     Match.when('completed', () => Option.some<RunStatus>('done')),
-    Match.orElse(() => Option.some<RunStatus>('failed')),
+    Match.whenOr('failed', 'stopped', () => Option.some<RunStatus>('failed')),
+    Match.exhaustive,
   )
 
 const runStatus = (options: {
@@ -373,9 +371,7 @@ const runStatus = (options: {
   pipe(
     Option.firstSomeOf([
       Option.flatMap(options.roster, (subagent) => rosterVerdict(subagent.status)),
-      Option.map(options.notice, (status): RunStatus =>
-        status === COMPLETED_STATUS ? 'done' : 'failed',
-      ),
+      Option.flatMap(options.notice, (status) => rosterVerdict(statusOfNotice(status))),
       pipe(
         options.result,
         Option.filter((result) => result.isError),
@@ -698,7 +694,7 @@ export const chatItems = (
     results: resultsIn(lines),
     notices: noticesIn(lines),
     lastTurn: lastState.turn,
-    currentSession: Option.map(Arr.last(lines), sessionOf),
+    currentSession: Option.map(Arr.last(lines), (line) => line.session),
     context,
   }
 

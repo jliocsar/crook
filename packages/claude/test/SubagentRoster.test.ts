@@ -140,6 +140,29 @@ layer(services, { excludeTestServices: true })('SubagentRoster', (live) => {
     }),
   )
 
+  live.effect('starts from the notifications already in the transcript, never from none', () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem
+      const path = yield* Path.Path
+      const file = yield* scratchSession()
+      const directory = subagentsDirectoryOf(path, file)
+      const meta = yield* fixtureText(
+        `subagent/${SUBAGENT_FIXTURE_SESSION}/subagents/agent-${SLEEP_AGENT}.meta.json`,
+      )
+
+      yield* fileSystem.writeFileString(file.path, noticeLine(SLEEP_TOOL_USE))
+      yield* fileSystem.makeDirectory(directory, { recursive: true })
+      yield* fileSystem.writeFileString(
+        `${directory}/agent-${SLEEP_AGENT}.meta.json`,
+        meta.replace('"finished": true', '"finished": false'),
+      )
+      const updates = yield* watching(file)
+      const first = yield* Queue.take(updates)
+
+      expect(first.map((subagent) => subagent.status)).toEqual(['completed'])
+    }),
+  )
+
   live.effect('settles a running subagent once a notification for it lands in the transcript', () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem

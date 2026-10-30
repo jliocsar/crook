@@ -30,6 +30,11 @@ import { SubagentId } from '@crook/domain/Ids'
 import { Subagent, type SubagentStatus } from '@crook/domain/Subagent'
 import { TRANSCRIPT_START } from '@crook/domain/Transcript'
 
+interface NoticeScan {
+  readonly notices: TaskNotices
+  readonly caughtUp: boolean
+}
+
 const META_SUFFIX = '.meta.json'
 const BACKGROUND_SHAPE = 'background'
 
@@ -56,6 +61,7 @@ const SubagentMeta = Schema.fromJsonString(
   }),
 )
 
+const NO_NOTICE_SCAN: NoticeScan = { notices: NO_TASK_NOTICES, caughtUp: false }
 const BY_ID = Order.mapInput(Order.String, (subagent: Subagent) => subagent.id)
 
 const decodeMeta = Schema.decodeUnknownOption(SubagentMeta)
@@ -100,10 +106,15 @@ export const subagentFromMeta = (id: SubagentId, content: string) =>
       }),
   )
 
-const noticesAfter = (known: TaskNotices, event: TailEvent): TaskNotices =>
+const scanAfter = (scan: NoticeScan, event: TailEvent): NoticeScan =>
   Match.value(event).pipe(
-    Match.tag('TranscriptChunk', (chunk) => withTaskNotices(known, chunk.messages)),
-    Match.orElse(() => known),
+    Match.tagsExhaustive({
+      TranscriptChunk: (chunk) => ({
+        notices: withTaskNotices(scan.notices, chunk.messages),
+        caughtUp: scan.caughtUp,
+      }),
+      TranscriptCaughtUp: () => ({ notices: scan.notices, caughtUp: true }),
+    }),
   )
 
 const make = Effect.gen(function* () {
@@ -135,6 +146,7 @@ const make = Effect.gen(function* () {
     }
 
     return fileSystem.readDirectory(directory).pipe(
+      Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(Arr.empty<string>())),
       Effect.mapError(unreadable),
       Effect.map((names) => pipe(names, Arr.map(subagentIdOf), Arr.getSomes)),
       Effect.flatMap((ids) => Effect.forEach(ids, readMeta, { concurrency: 'unbounded' })),
@@ -157,7 +169,9 @@ const make = Effect.gen(function* () {
 
   const watchNotices = (file: TranscriptFile) =>
     tail.followWith(file, TRANSCRIPT_START, taskNoticeLines).pipe(
-      Stream.scan(() => NO_TASK_NOTICES, noticesAfter),
+      Stream.scan(() => NO_NOTICE_SCAN, scanAfter),
+      Stream.filter((scan) => scan.caughtUp),
+      Stream.map((scan) => scan.notices),
       Stream.changes,
     )
 
@@ -168,14 +182,18 @@ const make = Effect.gen(function* () {
     )
 
   const read = Effect.fn('SubagentRoster.read')(function* (file: TranscriptFile) {
-    const directory = subagentsDirectoryOf(path, file)
-    const present = yield* fileSystem
-      .exists(directory)
-      .pipe(Effect.mapError((cause) => new SubagentsUnreadable({ path: directory, cause })))
-    const roster = present ? yield* readRoster(directory) : Arr.empty<Subagent>()
-    const notices = yield* tail
-      .drainWith(file, TRANSCRIPT_START, taskNoticeLines)
-      .pipe(Stream.runFold(() => NO_TASK_NOTICES, noticesAfter))
+    const [roster, notices] = yield* Effect.all(
+      [
+        readRoster(subagentsDirectoryOf(path, file)),
+        tail.drainWith(file, TRANSCRIPT_START, taskNoticeLines).pipe(
+          Stream.runFold(
+            () => NO_TASK_NOTICES,
+            (known, chunk) => withTaskNotices(known, chunk.messages),
+          ),
+        ),
+      ],
+      { concurrency: 'unbounded' },
+    )
 
     return settledRoster(roster, notices)
   })

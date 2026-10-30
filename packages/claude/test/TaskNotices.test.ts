@@ -24,6 +24,7 @@ const STUCK_RUNS = `${FIXTURES}/stuck-runs`
 const STUCK_RUN_COUNT = 14
 const TOOL_USE = 'toolu_01TEtTJbTWm42en6AZWUKeaZ'
 const LINE = TranscriptOffset.make(0)
+const QUEUED_NOTICE = `{"type":"attachment","attachment":{"type":"queued_command","prompt":"<task-notification>\\n<task-id>a19676da0e503de60</task-id>\\n<tool-use-id>${TOOL_USE}</tool-use-id>\\n<status>completed</status>\\n</task-notification>","commandMode":"task-notification","origin":{"kind":"task-notification"}}}`
 
 const encoder = new TextEncoder()
 
@@ -125,6 +126,9 @@ describe('taskNoticeLines', () => {
     })
 
     expect(taskNoticeLines(encoder.encode(prompt), LINE)).toEqual([])
+    expect(taskNoticeLines(encoder.encode(QUEUED_NOTICE), LINE)).toEqual([
+      noticeFor(TOOL_USE, 'completed'),
+    ])
   })
 })
 

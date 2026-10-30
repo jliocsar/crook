@@ -1,21 +1,18 @@
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
-import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 
 import { parseLine } from '@crook/claude/TranscriptParser'
 import type { TranscriptOffset } from '@crook/domain/Ids'
-import { Subagent, type SubagentStatus } from '@crook/domain/Subagent'
+import { Subagent, type SubagentStatus, statusOfNotice } from '@crook/domain/Subagent'
 import type { TaskNotificationBlock, TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 export type TaskNotices = HashMap.HashMap<string, TaskNotificationBlock>
 
 const NOTICE_MARKER = '<task-notification>'
-const COMPLETED_STATUS = 'completed'
-const STOPPED_STATUSES = HashSet.make('killed', 'stopped')
 
 const decoder = new TextDecoder()
 
@@ -56,13 +53,7 @@ export const withTaskNotices = (
   )
 
 export const noticeOutcome = (notice: TaskNotificationBlock): Option.Option<SubagentStatus> =>
-  Option.map(notice.status, (status): SubagentStatus => {
-    if (status === COMPLETED_STATUS) {
-      return 'completed'
-    }
-
-    return HashSet.has(STOPPED_STATUSES, status) ? 'stopped' : 'failed'
-  })
+  Option.map(notice.status, statusOfNotice)
 
 export const settledSubagent =
   (notices: TaskNotices) =>

@@ -550,6 +550,41 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
     )
 
     it.effect(
+      'opens the session cleared into even when the one it left has unreadable subagents',
+      () =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem
+          const root = yield* claudeRoot()
+          const seen = userLine('seen')
+          const after = userLine('after')
+
+          yield* append(transcriptPath(root, FIRST_SESSION), seen)
+          yield* append(transcriptPath(root, CLEARED_SESSION), after)
+          yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
+          yield* fileSystem.chmod(subagentsPath(root, FIRST_SESSION), 0o000)
+          yield* Effect.addFinalizer(() =>
+            Effect.ignore(fileSystem.chmod(subagentsPath(root, FIRST_SESSION), 0o700)),
+          )
+
+          const state = yield* SubscriptionRef.make(stateOn(Option.some(CLEARED_SESSION)))
+          const streams = yield* streamsAt(root, state)
+          const events = yield* collect(
+            streams.follow(
+              new PaneTranscript({ pane: PANE }),
+              positionAt(FIRST_SESSION, bytesOf(seen)),
+              Option.none(),
+            ),
+          )
+
+          expect(yield* takeAll(events, 3)).toEqual([
+            `opened ${CLEARED_SESSION}`,
+            `skills ${CLEARED_SESSION}`,
+            `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
+          ])
+        }),
+    )
+
+    it.effect(
       'lists the skills of the pane folder and of the Claude folder its session lives in',
       () =>
         Effect.gen(function* () {
