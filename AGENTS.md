@@ -666,8 +666,8 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   throttling, 3 of 3 opens, after a correction moved the scroll up 396 px. Without the extra
   elements it landed 3 of 3, throttled or not (measured). Two guards each fixed it alone, 3 of
   3: while following, the virtualizer keeps only corrections for growth above the top, since
-  the thread pins itself; and an upward move counts as leaving only after a touch, wheel, key or
-  mouse press, until the scroll settles. The thread keeps both. Growth keeps its correction
+  the thread pins itself; and an upward move counts as leaving only after a touch, wheel, key, mouse or
+  pen press, until the scroll settles. The thread keeps both. Growth keeps its correction
   because the pin judges a slide by how far it moved the scroll, so an uncorrected row growing
   above the top would slide the reveal for it (read in the pin's effect).
 - A following thread pins again when a scroll settles, after any scroll the user did not start

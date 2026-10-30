@@ -114,6 +114,11 @@ export const historyOpen = () => {
       movesUp(by)
       fireEvent.touchEnd(scrolling)
     },
+    mouseDragsUp: (by: number) => {
+      fireEvent.pointerDown(scrolling, { pointerType: 'mouse' })
+      movesUp(by)
+      fireEvent.pointerUp(scrolling, { pointerType: 'mouse' })
+    },
     wheelsUp: (by: number) => {
       fireEvent.wheel(scrolling)
       movesUp(by)

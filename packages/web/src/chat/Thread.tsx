@@ -87,7 +87,7 @@ const useOnScrollStop = (stopped: () => void) => {
 }
 
 const useScrollIntent = () => {
-  const touching = React.useRef(false)
+  const held = React.useRef(false)
   const gestured = React.useRef(false)
   const pinAsked = React.useRef(false)
 
@@ -96,11 +96,16 @@ const useScrollIntent = () => {
     pinAsked.current = false
   }
 
-  const fingerLeft = () => {
-    touching.current = false
+  const pressed = () => {
+    held.current = true
+    gestureBegan()
   }
 
-  const isUserScroll = () => touching.current || gestured.current
+  const released = () => {
+    held.current = false
+  }
+
+  const isUserScroll = () => held.current || gestured.current
 
   const askedPin = React.useCallback(() => {
     pinAsked.current = true
@@ -108,22 +113,19 @@ const useScrollIntent = () => {
 
   return {
     handlers: {
-      onTouchStart: () => {
-        touching.current = true
-        gestureBegan()
-      },
-      onTouchEnd: fingerLeft,
-      onTouchCancel: fingerLeft,
+      onTouchStart: pressed,
+      onTouchEnd: released,
+      onTouchCancel: released,
       onWheel: gestureBegan,
       onKeyDown: gestureBegan,
       onPointerDown: (event: React.PointerEvent) => {
         if (event.pointerType !== 'touch') {
-          gestureBegan()
+          pressed()
         }
       },
       onPointerUp: (event: React.PointerEvent) => {
         if (event.pointerType !== 'touch') {
-          gestured.current = false
+          released()
         }
       },
     },
@@ -132,7 +134,7 @@ const useScrollIntent = () => {
     settle: (): boolean => {
       const repins = !isUserScroll() || pinAsked.current
 
-      gestured.current = touching.current
+      gestured.current = held.current
       pinAsked.current = false
 
       return repins
@@ -621,6 +623,7 @@ export function Thread({
           following={following}
           onJump={() => {
             follow(true)
+            askedPin()
             viewport.current?.scrollTo({
               top: viewport.current.scrollHeight,
               behavior: reduce ? 'auto' : 'smooth',

@@ -164,6 +164,18 @@ describe('Thread', () => {
     }),
   )
 
+  it.effect('stays where a mouse drag on the scrollbar left it once its scroll settles', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.mouseDragsUp(NUDGE)
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom() - NUDGE)
+    }),
+  )
+
   it.effect('keeps following a correction once a wheel scroll has settled', () =>
     Effect.gen(function* () {
       const opened = historyOpen()
