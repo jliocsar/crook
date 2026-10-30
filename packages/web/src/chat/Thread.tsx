@@ -4,6 +4,7 @@ import { cn } from 'cn'
 import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
+import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 import { ArrowDown } from 'lucide-react'
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react'
@@ -29,13 +30,8 @@ interface Ghost {
   readonly content: React.ReactNode
 }
 
-export interface RowSpan {
-  readonly start: number
-  readonly end: number
-}
-
 export interface ThreadLayout {
-  readonly spanOf: (key: string) => Option.Option<RowSpan>
+  readonly startOf: (key: string) => Option.Option<number>
   readonly width: () => number
 }
 
@@ -282,16 +278,23 @@ const useThreadLayout = (
   rows: readonly ThreadRow[],
   virtualizer: Virtualizer<HTMLDivElement, Element>,
   content: React.RefObject<HTMLDivElement | null>,
+  used: boolean,
 ): ThreadLayout => {
-  const rowIndex = React.useMemo(() => new Map(rows.map((row, index) => [row.key, index])), [rows])
+  const rowIndex = React.useMemo(
+    () =>
+      used
+        ? HashMap.fromIterable(Arr.map(rows, (row, index) => [row.key, index] as const))
+        : HashMap.empty<string, number>(),
+    [rows, used],
+  )
 
   return React.useMemo(
     (): ThreadLayout => ({
-      spanOf: (key) =>
+      startOf: (key) =>
         pipe(
-          Option.fromUndefinedOr(rowIndex.get(key)),
+          HashMap.get(rowIndex, key),
           Option.flatMap((index) => Arr.get(virtualizer.measurementsCache, index)),
-          Option.map((item) => ({ start: item.start, end: item.end })),
+          Option.map((item) => item.start),
         ),
       width: () => content.current?.clientWidth ?? 0,
     }),
@@ -428,7 +431,7 @@ export function Thread({
   const totalSize = virtualizer.getTotalSize()
   const virtualItems = virtualizer.getVirtualItems()
   const { ghost, gone } = useGhost(rows, virtualItems, animates)
-  const layout = useThreadLayout(rows, virtualizer, content)
+  const layout = useThreadLayout(rows, virtualizer, content, overlay !== undefined)
 
   const follow = (next: boolean) => {
     if (next !== followingRef.current) {

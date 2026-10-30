@@ -275,7 +275,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       ),
     [items, commands.alwaysNotes, askedCall],
   )
-  const catchUp = useCatchUp(view, useItemRows(shownItems, environment))
+  const conversationRows = useItemRows(shownItems, environment)
+  const catchUp = useCatchUp(view, conversationRows)
   const workingAt = Option.getOrUndefined(Option.filter(workingSince, () => !hasToolRunning(items)))
   const watching = isWatching(model)
   const notClaude = model.presence === 'notClaude'

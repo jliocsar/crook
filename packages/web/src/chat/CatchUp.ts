@@ -2,6 +2,7 @@ import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
+import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -35,12 +36,14 @@ const stampOf = (line: TranscriptLine): Option.Option<DateTime.Utc> =>
     SessionCleared: () => Option.none(),
     Message: ({ message }) =>
       Match.value(message).pipe(
-        Match.tags({
+        Match.tagsExhaustive({
           User: (user) => user.timestamp,
           Assistant: (assistant) => assistant.timestamp,
           System: (system) => system.timestamp,
+          UnrecognizedEntry: () => Option.none(),
+          Malformed: () => Option.none(),
+          Omitted: () => Option.none(),
         }),
-        Match.orElse(() => Option.none()),
       ),
   })
 
@@ -132,17 +135,17 @@ export const releasedRows = (
   shown: number,
   marker: ThreadRow,
 ): readonly ThreadRow[] => {
-  const indexOf = new Map(rows.map((row, index) => [row.key, index]))
-  const present = (candidates: readonly string[]): readonly number[] =>
-    Arr.flatMap(candidates, (key) => Option.toArray(Option.fromUndefinedOr(indexOf.get(key))))
-  const visible = Option.match(Arr.head(present(keys.slice(shown))), {
-    onNone: () => rows,
-    onSome: (held) => rows.slice(0, held),
-  })
-  const markerAt = Option.match(Arr.last(present(keys.slice(0, shown))), {
-    onNone: () => visible.length,
-    onSome: (last) => last + 1,
-  })
+  const indexOf = HashMap.fromIterable(Arr.map(rows, (row, index) => [row.key, index] as const))
+  const [released, held] = Arr.splitAt(keys, shown)
+  const visible = Option.match(
+    Arr.findFirst(held, (key) => HashMap.get(indexOf, key)),
+    { onNone: () => rows, onSome: (index) => Arr.take(rows, index) },
+  )
+  const markerAt = Option.match(
+    Arr.findLast(released, (key) => HashMap.get(indexOf, key)),
+    { onNone: () => visible.length, onSome: (index) => index + 1 },
+  )
+  const [before, after] = Arr.splitAt(visible, markerAt)
 
-  return [...visible.slice(0, markerAt), marker, ...visible.slice(markerAt)]
+  return [...before, marker, ...after]
 }

@@ -1,6 +1,5 @@
 import { cn } from 'cn'
 import * as Arr from 'effect/Array'
-import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import { Laptop } from 'lucide-react'
 import { animate, motion, useReducedMotion, useSpring } from 'motion/react'
@@ -12,7 +11,7 @@ import type { Lapse } from '@crook/web/chat/CatchUp'
 import { hookPath, hookShape, LINE_X, pointAlong, ridePath } from '@crook/web/chat/HookPath'
 import type { HookGeometry } from '@crook/web/chat/HookPath'
 import { ROW_GAP } from '@crook/web/chat/Thread'
-import type { RowSpan, ThreadLayout, ThreadRow } from '@crook/web/chat/Thread'
+import type { ThreadLayout, ThreadRow } from '@crook/web/chat/Thread'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { GLIDE, SPRING } from '@crook/web/motion/Springs'
@@ -76,11 +75,8 @@ const drawnTo = (shape: HookGeometry, ridden: number, corner: number, run: numbe
   return corner < 1 ? start + corner * (turned - start) : turned + run * (shape.total - turned)
 }
 
-const firstSpan = (layout: ThreadLayout, keys: readonly string[]): Option.Option<RowSpan> =>
-  pipe(
-    Arr.flatMap(keys, (key) => Option.toArray(layout.spanOf(key))),
-    Arr.head,
-  )
+const firstStart = (layout: ThreadLayout, keys: readonly string[]): Option.Option<number> =>
+  Arr.findFirst(keys, (key) => layout.startOf(key))
 
 const useRelease = (count: number, instant: boolean): number => {
   const [released, setReleased] = React.useState(0)
@@ -130,15 +126,18 @@ const useHeldAfter = (flag: boolean, milliseconds: number): boolean => {
 function Dots({ still }: { still: boolean }) {
   return (
     <span aria-hidden="true" className="ms-0.5 inline-flex items-center gap-[3px]">
-      {Arr.map(['delay-0', 'delay-150', 'delay-300'], (delay) => (
-        <span
-          key={delay}
-          className={cn(
-            'size-[3px] rounded-full bg-current motion-reduce:animate-none',
-            still ? 'opacity-70' : `animate-hop ${delay}`,
-          )}
-        />
-      ))}
+      {Arr.map(
+        ['[animation-delay:0ms]', '[animation-delay:150ms]', '[animation-delay:300ms]'],
+        (delay) => (
+          <span
+            key={delay}
+            className={cn(
+              'size-[3px] rounded-full bg-current motion-reduce:animate-none',
+              still ? 'opacity-70' : `animate-hop ${delay}`,
+            )}
+          />
+        ),
+      )}
     </span>
   )
 }
@@ -258,6 +257,7 @@ function CatchUpTrail({
   const carrier = React.useRef<Carrier>({ wrapper: null, chip: null, pill: null })
   const bottom = useSpring(0, RIDE_SPRING)
   const placed = React.useRef(false)
+  const target = React.useRef(0)
   const ridden = React.useRef(0)
   const corner = React.useRef(0)
   const run = React.useRef(0)
@@ -266,29 +266,34 @@ function CatchUpTrail({
   const draw = React.useCallback(() => {
     const line = path.current
     const now = latest.current
-    const marker = now.layout.spanOf(CATCH_UP_KEY)
+    const marker = now.layout.startOf(CATCH_UP_KEY)
 
     if (line === null || Option.isNone(marker)) {
       return
     }
 
-    const rowsEnd = marker.value.start - ROW_GAP
-    const top = Option.map(firstSpan(now.layout, now.released), (span) =>
-      Math.round(span.start + LINE_INSET),
+    const rowsEnd = marker.value - ROW_GAP
+    const top = Option.map(firstStart(now.layout, now.released), (start) =>
+      Math.round(start + LINE_INSET),
     )
 
     if (!placed.current) {
       bottom.jump(rowsEnd)
+      target.current = rowsEnd
       placed.current = true
-    } else if (Math.abs(bottom.get() - rowsEnd) > SETTLE_EPSILON) {
+    } else if (Math.abs(target.current - rowsEnd) > SETTLE_EPSILON) {
+      target.current = rowsEnd
       bottom.set(rowsEnd)
     }
 
     if (!now.settled || Option.isNone(top)) {
-      const y0 = Option.getOrElse(top, () => rowsEnd)
-      const length = Option.isSome(top)
-        ? Math.max(0, Math.round(bottom.get() - LINE_INSET) - y0)
-        : 0
+      const { y0, length } = Option.match(top, {
+        onNone: () => ({ y0: rowsEnd, length: 0 }),
+        onSome: (start) => ({
+          y0: start,
+          length: Math.max(0, Math.round(bottom.get() - LINE_INSET) - start),
+        }),
+      })
 
       ridden.current = length
       line.setAttribute('d', ridePath(y0, length))
@@ -299,7 +304,7 @@ function CatchUpTrail({
       return
     }
 
-    const yc = Math.round(marker.value.start + DIVIDER_HEIGHT / 2)
+    const yc = Math.round(marker.value + DIVIDER_HEIGHT / 2)
     const pillLeft = (now.layout.width() - pillWidth()) / 2
     const shape = hookShape(top.value, yc, Math.round(pillLeft - HALO))
     const endAt = now.finished
@@ -370,7 +375,7 @@ function CatchUpTrail({
     ]
 
     return () => {
-      Arr.map(controls, (control) => {
+      Arr.forEach(controls, (control) => {
         control.stop()
       })
     }
@@ -407,11 +412,11 @@ export function useCatchUp(view: Option.Option<TranscriptView>, rows: readonly T
     setPhase(next)
   }
 
-  const landed = landedOf(next)
+  const landed = React.useMemo(() => landedOf(next), [next])
   const count = Option.match(landed, { onNone: () => 0, onSome: (found) => found.keys.length })
   const shown = useRelease(count, reduce)
   const done = count > 0 && shown >= count
-  const held = useHeldAfter(done, SETTLE_AFTER_MS)
+  const held = useHeldAfter(done && !reduce, SETTLE_AFTER_MS)
   const settled = done && (reduce || held)
   const [animated, setAnimated] = React.useState(false)
   const finished = settled && (reduce || animated)
@@ -427,35 +432,31 @@ export function useCatchUp(view: Option.Option<TranscriptView>, rows: readonly T
   const onFinished = React.useCallback(() => {
     setAnimated(true)
   }, [])
-  const marker = React.useMemo(
-    () =>
-      Option.map(landedOf(next), (found): ThreadRow => ({
-        key: CATCH_UP_KEY,
-        content: <CatchUpDivider lapse={found.lapse} shown={finished} pillRef={pill} />,
-      })),
-    [next, finished],
-  )
   const released = React.useMemo(
     () =>
-      Option.match(landedOf(next), {
+      Option.match(landed, {
         onNone: () => [],
         onSome: (found) => found.keys.slice(0, shown),
       }),
-    [next, shown],
+    [landed, shown],
   )
   const shownRows = React.useMemo(
     () =>
-      Option.match(Option.all({ found: landedOf(next), row: marker }), {
+      Option.match(landed, {
         onNone: () => rows,
-        onSome: ({ found, row }) => releasedRows(rows, found.keys, shown, row),
+        onSome: (found) =>
+          releasedRows(rows, found.keys, shown, {
+            key: CATCH_UP_KEY,
+            content: <CatchUpDivider lapse={found.lapse} shown={finished} pillRef={pill} />,
+          }),
       }),
-    [rows, next, shown, marker],
+    [rows, landed, shown, finished],
   )
   const overlay = React.useMemo(
     () =>
       Option.getOrUndefined(
         Option.map(
-          landedOf(next),
+          landed,
           (found) =>
             function renderTrail(layout: ThreadLayout) {
               return (
@@ -472,7 +473,7 @@ export function useCatchUp(view: Option.Option<TranscriptView>, rows: readonly T
             },
         ),
       ),
-    [next, released, settled, finished, pillWidth, onFinished],
+    [landed, released, settled, finished, pillWidth, onFinished],
   )
 
   return { rows: shownRows, overlay }

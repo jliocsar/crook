@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
 import { screen, waitFor } from '@testing-library/react'
+import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -21,6 +22,9 @@ const CHAT = '/m/laptop/p/w1:p1'
 const VIEWPORT_WIDTH = 375
 const VIEWPORT_HEIGHT = 812
 const SETTLED_MS = 4000
+const LONG_CATCH_UP = 25
+const STEPPED_ROWS = 22
+const LONG_RELEASE_MS = 8000
 const MISSED = ['First on laptop.', 'Second on laptop.', 'Third on laptop.']
 
 const source = new PaneTranscript({ pane: PANE })
@@ -49,12 +53,15 @@ const hooked = settles(() => {
   expect(chip()).toBeNull()
 })
 
-const missedShown = () => MISSED.filter((text) => screen.queryByText(text) !== null).length
+const shownOf = (texts: readonly string[]) =>
+  texts.filter((text) => screen.queryByText(text) !== null).length
 
-const watchReleases = () => {
+const missedShown = () => shownOf(MISSED)
+
+const watchReleases = (texts: readonly string[] = MISSED) => {
   const counts: number[] = []
   const observer = new MutationObserver(() => {
-    const shown = missedShown()
+    const shown = shownOf(texts)
 
     if (counts.at(-1) !== shown) {
       counts.push(shown)
@@ -185,6 +192,39 @@ describe('a laptop catch-up', () => {
         expect(follows(present(divider(), 'the catch-up divider'), sent)).toBe(true)
         expect(document.querySelectorAll('[data-slot="catch-up-divider"]')).toHaveLength(1)
       }),
+  )
+
+  it.effect(
+    'lands the earlier rows of a long catch-up at once and releases the last 22',
+    () =>
+      Effect.gen(function* () {
+        const link = yield* reopened()
+        const missed = Arr.makeBy(LONG_CATCH_UP, (index) => `Long line ${index}.`)
+        const releases = watchReleases(missed)
+
+        yield* Queue.offerAll(yield* link.transcriptFor(source), [
+          chunk(
+            10,
+            10 + LONG_CATCH_UP * 10,
+            missed.map((text, index) => said(10 + index * 10, text)),
+          ),
+          caughtUp(10 + LONG_CATCH_UP * 10),
+        ])
+        yield* Effect.promise(() =>
+          waitFor(
+            () => {
+              expect(shownOf(missed)).toBe(LONG_CATCH_UP)
+            },
+            { timeout: LONG_RELEASE_MS },
+          ),
+        )
+
+        const seen = releases().filter((shown) => shown > 0)
+
+        expect(seen[0]).toBe(LONG_CATCH_UP - STEPPED_ROWS)
+        expect(seen).toHaveLength(STEPPED_ROWS + 1)
+      }),
+    LONG_RELEASE_MS * 2,
   )
 
   it.effect('shows no divider when nothing happened on the laptop', () =>
