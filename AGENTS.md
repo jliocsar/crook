@@ -631,6 +631,26 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   call an agent from before coalescing makes. A hub is the side that updates first, and an agent
   behind it stays online until the phone offers to update it, so dropping that call would leave
   every older agent's chats without transcripts.
+- The hub alone decides what a phone has already been sent. It keeps one delivered position per
+  watch and judges each update as it arrives: it drops an open of the session the phone is
+  already in and any roster, skill list or caught-up mark of another session, and refuses a chunk
+  that does not continue the position, so the agent restarts from there. The phone applies
+  whatever arrives and keeps a position only to resume from. The agent sends from where its own
+  read reached and resends freely, a repeated open on every resume included; that cursor is
+  what drains the rest of a session the pane left, and the hub could only hand it over after a
+  round trip. An older agent gets the same filtering, since it happens at the hub.
+  The position moves in the same transaction that puts the update in the phone's mailbox. Done
+  as two steps, an agent connection dropping between them would leave the position behind what
+  the phone holds, and the agent's resend from that position would reach the phone twice, with
+  nothing downstream left to drop it (reasoned from the interrupt points, not measured).
+- A watch's delivered position lives beside the watch, outside the set the agents' demands are
+  built from, so only a watch that comes or goes works out a machine's demand again. Updating
+  the position inside that set recomputed the demand once per event: 21 events cost 21
+  recomputations before, and none after (measured with a counting tracer).
+- A test that publishes twice and expects two deliveries takes the first before it publishes
+  the second. The mailbox joins whatever the phone has not taken yet, and whether the phone's
+  fiber got a turn in between hung on unrelated work in the hub: dropping a per-event update
+  made two chunks a test expected apart arrive joined (measured).
 - The agent holds a session it opened until it has caught up on it, so the backlog, the
   caught-up mark, then the skills and roster land in one message, and the skills never go first.
   A subagent watch whose file does not exist yet therefore sends nothing until it does; the phone

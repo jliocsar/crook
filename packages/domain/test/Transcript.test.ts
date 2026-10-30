@@ -14,14 +14,12 @@ import {
   continuesFrom,
   omittedUpTo,
   positionAfter,
-  remainderAfter,
 } from '@crook/domain/Transcript'
 import {
   AssistantMessage,
   ImageBlock,
   OmittedLines,
   TextBlock,
-  UnrecognizedEntry,
 } from '@crook/domain/TranscriptMessage'
 
 const FIRST = ClaudeSessionId.make('309f44d5-235f-4550-a0c7-1691715aad75')
@@ -38,17 +36,6 @@ const chunk = (session: ClaudeSessionId, offset: number, nextOffset: number) =>
     messages: [],
   })
 
-const entryAt = (offset: number) =>
-  new UnrecognizedEntry({ offset: TranscriptOffset.make(offset), entryType: 'future' })
-
-const chunkOf = (session: ClaudeSessionId, offsets: readonly number[], nextOffset: number) =>
-  new TranscriptChunk({
-    session,
-    offset: TranscriptOffset.make(offsets[0] ?? nextOffset),
-    nextOffset: TranscriptOffset.make(nextOffset),
-    messages: offsets.map(entryAt),
-  })
-
 describe('positionAfter', () => {
   it('moves to the end of each chunk and keeps its place through a repeated open', () => {
     const opened = positionAfter(Option.none(), new TranscriptOpened({ session: FIRST }))
@@ -60,6 +47,7 @@ describe('positionAfter', () => {
     expect(positionAfter(read, new SubagentsChanged({ session: FIRST, subagents: [] }))).toEqual(
       read,
     )
+    expect(positionAfter(read, new SkillsChanged({ session: FIRST, skills: [] }))).toEqual(read)
   })
 
   it('starts the next session at its first byte after /clear', () => {
@@ -79,20 +67,6 @@ describe('TranscriptCaughtUp', () => {
         new TranscriptCaughtUp({ session: FIRST, offset: TranscriptOffset.make(800) }),
       ),
     ).toEqual(read)
-  })
-
-  it('passes on only for the session the position is in', () => {
-    const position = Option.some(at(FIRST, 800))
-    const caughtUp = new TranscriptCaughtUp({ session: FIRST, offset: TranscriptOffset.make(800) })
-
-    expect(remainderAfter(position, caughtUp)).toEqual(Option.some(caughtUp))
-    expect(
-      remainderAfter(
-        position,
-        new TranscriptCaughtUp({ session: CLEARED, offset: TranscriptOffset.make(0) }),
-      ),
-    ).toEqual(Option.none())
-    expect(remainderAfter(Option.none(), caughtUp)).toEqual(Option.none())
   })
 
   it('crosses the wire as JSON and comes back equal', () => {
@@ -155,67 +129,5 @@ describe('TranscriptEvent', () => {
         Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(ImageBlock)))(image),
       ),
     ).toEqual(image)
-  })
-})
-
-describe('remainderAfter', () => {
-  it('passes on what continues the position, and nothing already behind it', () => {
-    const position = Option.some(at(FIRST, 100))
-
-    expect(remainderAfter(position, chunkOf(FIRST, [100, 150], 200))).toEqual(
-      Option.some(chunkOf(FIRST, [100, 150], 200)),
-    )
-    expect(remainderAfter(position, chunkOf(FIRST, [0, 50], 100))).toEqual(Option.none())
-    expect(remainderAfter(position, chunkOf(CLEARED, [100], 200))).toEqual(Option.none())
-    expect(remainderAfter(Option.none(), chunkOf(FIRST, [0], 100))).toEqual(Option.none())
-  })
-
-  it('cuts a chunk that overlaps the position down to the lines after it', () => {
-    expect(remainderAfter(Option.some(at(FIRST, 100)), chunkOf(FIRST, [0, 50, 100], 200))).toEqual(
-      Option.some(chunkOf(FIRST, [100], 200)),
-    )
-  })
-
-  it('keeps the part of an Omitted note the position has not passed yet', () => {
-    expect(
-      remainderAfter(Option.some(at(FIRST, 500)), omittedUpTo(FIRST, TranscriptOffset.make(800))),
-    ).toEqual(
-      Option.some(
-        new TranscriptChunk({
-          session: FIRST,
-          offset: TranscriptOffset.make(500),
-          nextOffset: TranscriptOffset.make(800),
-          messages: [new OmittedLines({ offset: TranscriptOffset.make(500), byteLength: 300 })],
-        }),
-      ),
-    )
-  })
-
-  it('opens only a session the position is not in, and lists subagents only of its own', () => {
-    const position = Option.some(at(FIRST, 100))
-    const subagents = new SubagentsChanged({ session: FIRST, subagents: [] })
-
-    expect(remainderAfter(position, new TranscriptOpened({ session: FIRST }))).toEqual(
-      Option.none(),
-    )
-    expect(remainderAfter(position, new TranscriptOpened({ session: CLEARED }))).toEqual(
-      Option.some(new TranscriptOpened({ session: CLEARED })),
-    )
-    expect(remainderAfter(position, subagents)).toEqual(Option.some(subagents))
-    expect(
-      remainderAfter(position, new SubagentsChanged({ session: CLEARED, subagents: [] })),
-    ).toEqual(Option.none())
-  })
-
-  it('passes on the skills of the session the position is in, without moving it', () => {
-    const position = Option.some(at(FIRST, 100))
-    const skills = new SkillsChanged({ session: FIRST, skills: [] })
-
-    expect(remainderAfter(position, skills)).toEqual(Option.some(skills))
-    expect(remainderAfter(position, new SkillsChanged({ session: CLEARED, skills: [] }))).toEqual(
-      Option.none(),
-    )
-    expect(remainderAfter(Option.none(), skills)).toEqual(Option.none())
-    expect(positionAfter(position, skills)).toEqual(position)
   })
 })

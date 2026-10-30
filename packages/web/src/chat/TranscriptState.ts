@@ -10,7 +10,6 @@ import type { SkillListing } from '@crook/domain/Skill'
 import type { Subagent } from '@crook/domain/Subagent'
 import {
   positionAfter,
-  remainderAfter,
   type TranscriptEvent,
   type TranscriptPosition,
   type TranscriptTailBytes,
@@ -115,30 +114,18 @@ const catchingUpAfter = (view: TranscriptView, event: TranscriptEvent): boolean 
     Match.orElse(() => view.catchingUp),
   )
 
-const recovered = (view: TranscriptView): TranscriptView =>
-  Option.isNone(view.failure)
-    ? view
-    : new TranscriptView(Struct.evolve(view, { failure: () => Option.none() }))
-
 export const applyTranscriptEvent = (
   view: TranscriptView,
   event: TranscriptEvent,
 ): TranscriptView =>
-  pipe(
-    remainderAfter(view.position, event),
-    Option.match({
-      onNone: () => recovered(view),
-      onSome: (fresh) =>
-        new TranscriptView({
-          position: positionAfter(view.position, fresh),
-          lines: [...view.lines, ...freshLines(view, fresh)],
-          rosters: rostersAfter(view, fresh),
-          skills: skillsAfter(view, fresh),
-          catchingUp: catchingUpAfter(view, fresh),
-          failure: Option.none(),
-        }),
-    }),
-  )
+  new TranscriptView({
+    position: positionAfter(view.position, event),
+    lines: [...view.lines, ...freshLines(view, event)],
+    rosters: rostersAfter(view, event),
+    skills: skillsAfter(view, event),
+    catchingUp: catchingUpAfter(view, event),
+    failure: Option.none(),
+  })
 
 export const failedWith = (view: TranscriptView, failure: TranscriptWatchFailure): TranscriptView =>
   new TranscriptView(
