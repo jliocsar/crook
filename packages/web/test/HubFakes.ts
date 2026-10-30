@@ -137,6 +137,8 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const commandAnswer =
     yield* Ref.make<Exit.Exit<CommandReceipt, CommandFailure | HubCallFailed>>(NO_COMMAND_ANSWER)
   const saved = yield* Ref.make(cached)
+  const saves = yield* Ref.make(0)
+  const saveAnswers = yield* Latch.make(true)
   const visible = yield* SubscriptionRef.make(true)
   const online = yield* SubscriptionRef.make(true)
   const expired = yield* Ref.make(false)
@@ -196,7 +198,11 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
       HerdCache,
       HerdCache.of({
         load: Ref.get(saved),
-        save: (snapshot) => Ref.set(saved, Option.some(snapshot)),
+        save: (snapshot) =>
+          saveAnswers.await.pipe(
+            Effect.andThen(Ref.set(saved, Option.some(snapshot))),
+            Effect.andThen(Ref.update(saves, (count) => count + 1)),
+          ),
         clear: Ref.set(saved, Option.none()),
       }),
     ),
@@ -236,6 +242,8 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
     sent,
     commandAnswer,
     saved,
+    saves,
+    saveAnswers,
     visible,
     online,
     expired,

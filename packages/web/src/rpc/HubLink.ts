@@ -8,6 +8,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
+import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
@@ -115,6 +116,22 @@ const make = Effect.gen(function* () {
   const connected = yield* SubscriptionRef.make(Option.none<HubCalls>())
   const resyncRequests = yield* SubscriptionRef.make(0)
   const loggedOut = yield* SubscriptionRef.make(false)
+  const cacheWrites = yield* Semaphore.make(1)
+
+  const saveCurrentHerd = cacheWrites.withPermit(
+    Effect.flatMap(SubscriptionRef.get(state), (current) =>
+      Option.match(current.herd, { onNone: () => Effect.void, onSome: cache.save }),
+    ),
+  )
+
+  yield* SubscriptionRef.changes(state).pipe(
+    Stream.map((current) => current.herd),
+    Stream.changesWith((before, after) => before === after),
+    Stream.drop(1),
+    Stream.buffer({ capacity: 1, strategy: 'sliding' }),
+    Stream.runForEach(() => saveCurrentHerd),
+    Effect.forkScoped,
+  )
 
   const updateStatus = (step: (status: LinkStatus) => LinkStatus) =>
     SubscriptionRef.update(
@@ -147,8 +164,6 @@ const make = Effect.gen(function* () {
         Effect.forkScoped,
       )
     }
-
-    yield* cache.save(snapshot)
   })
 
   const attempt = Effect.fn('HubLink.attempt')(function* (
@@ -202,15 +217,18 @@ const make = Effect.gen(function* () {
 
   const follow = (visible: boolean, online: boolean, ended: boolean): Effect.Effect<never> => {
     if (ended) {
-      return cache.clear.pipe(
-        Effect.andThen(
-          SubscriptionRef.set(
-            state,
-            new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
+      return cacheWrites
+        .withPermit(
+          cache.clear.pipe(
+            Effect.andThen(
+              SubscriptionRef.set(
+                state,
+                new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
+              ),
+            ),
           ),
-        ),
-        Effect.andThen(Effect.never),
-      )
+        )
+        .pipe(Effect.andThen(Effect.never))
     }
 
     if (!visible) {
