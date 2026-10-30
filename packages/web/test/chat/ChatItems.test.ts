@@ -10,13 +10,13 @@ import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import {
   ChatItem,
   chatItems,
-  lastTurnEvidence,
   runningCount,
   toolSummary,
   toolTitle,
 } from '@crook/web/chat/ChatItems'
 import type { AgentActivity, ChatContext } from '@crook/web/chat/ChatItems'
 import { TranscriptLine } from '@crook/web/chat/TranscriptState'
+import { lastTurnEvidence } from '@crook/web/chat/WorkingHold'
 
 import {
   answered,

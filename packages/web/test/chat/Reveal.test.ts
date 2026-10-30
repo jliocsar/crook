@@ -1,39 +1,21 @@
 import { describe, expect, it } from 'vitest'
 
-import { EMPTY_REVEAL_PLAN, liftFor, nextRevealPlan } from '@crook/web/chat/Reveal'
-import type { RevealPlan, RevealRow } from '@crook/web/chat/Reveal'
-
-const ANIMATED = { animate: true }
-const STILL_OPTIONS = { animate: false }
-const WORKING: RevealRow = { key: 'working', placeholder: true }
+import { departedKeys, liftFor } from '@crook/web/chat/Reveal'
+import type { RevealRow } from '@crook/web/chat/Reveal'
 
 const rows = (...keys: readonly string[]): readonly RevealRow[] => keys.map((key) => ({ key }))
 
-const settledOn = (shown: readonly RevealRow[]): RevealPlan =>
-  nextRevealPlan(EMPTY_REVEAL_PLAN, shown, STILL_OPTIONS)
-
-describe('nextRevealPlan', () => {
+describe('departedKeys', () => {
   it('lets the working row leave as a ghost when the answer takes its place', () => {
-    const before = settledOn([...rows('prompt'), WORKING])
-    const plan = nextRevealPlan(before, rows('prompt', 'text', 'tool'), ANIMATED)
-
-    expect(plan.departed).toStrictEqual(['working'])
-    expect(plan.placeholders.size).toBe(0)
+    expect(departedKeys(['working'], rows('prompt', 'text', 'tool'))).toStrictEqual(['working'])
   })
 
   it('keeps the working row in place while rows land above it', () => {
-    const before = settledOn([...rows('prompt'), WORKING])
-    const plan = nextRevealPlan(before, [...rows('prompt', 'text'), WORKING], ANIMATED)
-
-    expect(plan.departed).toStrictEqual([])
-    expect([...plan.placeholders]).toStrictEqual(['working'])
+    expect(departedKeys(['working'], rows('prompt', 'text', 'working'))).toStrictEqual([])
   })
 
-  it('lets nothing leave as a ghost while the thread is still loading or motion is reduced', () => {
-    const before = settledOn([...rows('prompt'), WORKING])
-    const plan = nextRevealPlan(before, rows('prompt', 'text'), STILL_OPTIONS)
-
-    expect(plan.departed).toStrictEqual([])
+  it('has nothing to let go while no placeholder was shown', () => {
+    expect(departedKeys([], rows('prompt', 'text'))).toStrictEqual([])
   })
 })
 

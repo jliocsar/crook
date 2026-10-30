@@ -2,7 +2,7 @@ import { describe, expect, it } from '@effect/vitest'
 import * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 
-import type { TurnEvidence } from '@crook/web/chat/ChatItems'
+import type { TurnEvidence } from '@crook/web/chat/WorkingHold'
 import { HerdrTurn, holdingSince, nextWorkingHold, sameHold } from '@crook/web/chat/WorkingHold'
 
 const STARTED = DateTime.makeUnsafe('2026-10-20T12:00:00Z')

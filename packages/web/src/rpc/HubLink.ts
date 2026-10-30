@@ -8,6 +8,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
+import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
@@ -109,12 +110,35 @@ const make = Effect.gen(function* () {
   const cache = yield* HerdCache
   const page = yield* PageSignals
   const sessionCheck = yield* SessionCheck
+  const cachedHerd = yield* cache.load
   const state = yield* SubscriptionRef.make(
-    new HubLinkState({ status: COLD_START, herd: yield* cache.load }),
+    new HubLinkState({ status: COLD_START, herd: cachedHerd }),
   )
   const connected = yield* SubscriptionRef.make(Option.none<HubCalls>())
   const resyncRequests = yield* SubscriptionRef.make(0)
   const loggedOut = yield* SubscriptionRef.make(false)
+  const cacheWrites = yield* Semaphore.make(1)
+
+  const saveCurrentHerd = cacheWrites.withPermit(
+    Effect.flatMap(SubscriptionRef.get(state), (current) =>
+      Option.match(current.herd, { onNone: () => Effect.void, onSome: cache.save }),
+    ),
+  )
+
+  yield* SubscriptionRef.changes(state).pipe(
+    Stream.map((current) => current.herd),
+    Stream.changesWith((before, after) => before === after),
+    Stream.filter((herd) => herd !== cachedHerd),
+    Stream.buffer({ capacity: 1, strategy: 'sliding' }),
+    Stream.runForEach(() =>
+      saveCurrentHerd.pipe(
+        Effect.catchDefect((defect) =>
+          Effect.logError('crook could not cache the herd on this device', defect),
+        ),
+      ),
+    ),
+    Effect.forkScoped,
+  )
 
   const updateStatus = (step: (status: LinkStatus) => LinkStatus) =>
     SubscriptionRef.update(
@@ -147,8 +171,6 @@ const make = Effect.gen(function* () {
         Effect.forkScoped,
       )
     }
-
-    yield* cache.save(snapshot)
   })
 
   const attempt = Effect.fn('HubLink.attempt')(function* (
@@ -202,15 +224,16 @@ const make = Effect.gen(function* () {
 
   const follow = (visible: boolean, online: boolean, ended: boolean): Effect.Effect<never> => {
     if (ended) {
-      return cache.clear.pipe(
+      const forget = cache.clear.pipe(
         Effect.andThen(
           SubscriptionRef.set(
             state,
             new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
           ),
         ),
-        Effect.andThen(Effect.never),
       )
+
+      return cacheWrites.withPermit(forget).pipe(Effect.andThen(Effect.never))
     }
 
     if (!visible) {

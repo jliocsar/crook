@@ -10,6 +10,7 @@ import {
   ghost,
   historyOpen,
   liftOf,
+  liveTail,
   fades,
   openedOn,
   phoneViewport,
@@ -52,6 +53,16 @@ describe('Thread', () => {
           expect(ghost()).toBeNull()
         })
       }),
+  )
+
+  it.effect('fades the working row out even when the rows keep their count and last row', () =>
+    Effect.gen(function* () {
+      const tail = yield* liveTail([{ key: 'failure', content: <p>Try again</p> }])
+
+      tail.lands(['text'], ANSWER_HEIGHT)
+
+      expect(present(ghost(), 'the working ghost').textContent).toBe('Working')
+    }),
   )
 
   it.effect('slides the thread up by what the answer added, then settles it in place', () =>

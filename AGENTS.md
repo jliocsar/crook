@@ -870,6 +870,46 @@ a turn of its own, enqueued as a task notification.
 - A focus test compares `document.activeElement` with the element itself. Focus that fell to the
   body still passes a check on its `textContent`, which holds every label on the page (measured: a
   test asserting the tab's text passed with focus on the body).
+- Re-deriving the whole chat on every transcript event grew with its length. One event of one or
+  two lines cost 112, 134, 182 and 316 ms of main-thread work at 252, 1008, 2007 and 4005 lines,
+  and most of that was creating a row element for every item (66 ms at 2007 lines, React's
+  development build) and re-deriving every item (19 ms). The chat's items are now a fold over
+  the appended lines, and each unchanged item keeps its row element. An event then cost 72 to
+  81 ms at every length from 1008 to 4005 lines, of which the fold was 0.6 to 1.4 ms (measured on
+  the dev server in Chromium at 4x CPU throttling, a synthetic transcript, sampled by the CDP
+  profiler; the first run in a fresh page reads higher, 112 before and 81 and 121 after).
+- The fold places and drafts each new line on its own, then re-resolves only the items that can
+  still change. A tool call's result or a task notification can land in any later batch. The
+  last turn's calls change when the next turn starts or the activity moves. Every subagent run
+  depends on the rosters, the activity and the current session. Lines that do not extend the last
+  ones (a reset, a cached view, the whole transcript) start the fold over. Whether they extend is
+  judged by the identity of the first and last line the fold saw: the transcript view only
+  appends lines or starts over with new ones, so a middle line never changes. Tests hold it equal to
+  a full recompute at every batch size of real transcripts, with the activity both changing and
+  steady: with it changing on every batch, a dropped notice went unnoticed, because the activity
+  already re-resolved every subagent run (measured).
+- Appending to the transcript view copies its line array, which costs 0.1 to 0.2 ms per event at
+  4005 lines and 4x throttling (measured), so the view keeps a plain array.
+- Every herd update re-rendered the open chat, 10 of 10 updates from another machine. Three
+  values the chat reads were rebuilt on each one: the chat's model, the connection view (its sync
+  time moves with every herd) and each command action's progress, which builds a fresh `Idle`
+  per herd. Structural equality on the model and on the progress, the model holding only what
+  the chat shows, and reading only whether it can act and whether it is stale from the
+  connection brought that to 0 of 10 (measured by counting component renders through React's
+  devtools hook).
+- The Agents page stays mounted under a pushed chat and re-renders its cards on every herd update
+  and every clock second, at about 64 ms of React work per herd update at 4x throttling (measured
+  with the chat itself rendering nothing).
+- An atom subscription made without `immediate` does not compute the atom, so it depends on
+  nothing and never fires until something else reads the atom: a test that counted wakes that way
+  counted none, whatever the atom did (measured).
+- An effect that needs an atom's latest value only at given moments reads it with the registry's
+  `get` right then. Mirroring it into a `Ref` through a subscription cost a fiber per atom and
+  added nothing; only a change that must not be missed needs the subscription.
+- The herd cache is written by one fiber, never on the receive path. It saves whatever herd the
+  link holds and coalesces the updates that land while a write is out, with no time debounce, like
+  the transcript pipe. Logout clears the cache and forgets the herd while holding that writer's
+  permit, so a write still out lands before the clear and none can start after it.
 
 :::tip
 Checking the web app against real data, measured:

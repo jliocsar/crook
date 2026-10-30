@@ -46,7 +46,6 @@ import type { CommandAction } from '@crook/web/chat/CommandAction'
 import type { AskDockProps } from '@crook/web/chat/AskDock'
 import type { ComposerProps, ComposerMode } from '@crook/web/chat/Composer'
 import type { Restart } from '@crook/web/chat/EdgeCard'
-import type { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
 export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
@@ -64,7 +63,7 @@ export interface ChatCommands {
 interface ChatCommandsInput {
   readonly opened: OpenedAgent
   readonly model: ChatScreenModel
-  readonly connection: ConnectionView
+  readonly canAct: boolean
   readonly items: readonly ChatItem[]
   readonly draft: string
   readonly setDraft: (draft: string) => void
@@ -193,12 +192,8 @@ const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
     Match.orElse(() => Option.none<PaneId>()),
   )
 
-const placeholderOf = (
-  connection: ConnectionView,
-  mode: ComposerMode,
-  blocked: boolean,
-): string => {
-  if (!connection.canAct) {
+const placeholderOf = (canAct: boolean, mode: ComposerMode, blocked: boolean): string => {
+  if (!canAct) {
     return 'Sending is paused until crook reconnects'
   }
 
@@ -323,7 +318,7 @@ const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
 export const useChatCommands = ({
   opened,
   model,
-  connection,
+  canAct,
   items,
   draft,
   setDraft,
@@ -335,6 +330,11 @@ export const useChatCommands = ({
   const restart = useCommandAction(machine)
   const answer = useCommandAction(machine)
   const prompted = usePromptWait(items)
+  const promptInFlight = isPromptInFlight(prompt)
+  const pendingPrompts = React.useMemo(
+    () => pendingPromptRows(prompted.wait, items, promptInFlight),
+    [prompted.wait, items, promptInFlight],
+  )
   const activity = activityOf(model)
   const blocked = activity === 'blocked'
   const stopping = useStopLock(stop)
@@ -387,7 +387,7 @@ export const useChatCommands = ({
     ask: Option.map(openAsk, (ask) => ({
       ask,
       state: answerState(answer, ask.id),
-      disabled: !connection.canAct || declining,
+      disabled: !canAct || declining,
       onAnswer: answerAsk(ask),
       onDeclineWithMessage: send,
     })),
@@ -402,13 +402,13 @@ export const useChatCommands = ({
       mode,
       working: activity === 'working',
       disabled:
-        !connection.canAct ||
+        !canAct ||
         (blocked && mode === 'prompt') ||
         (mode === 'decline' && answering) ||
         model.presence === 'loading',
       sending: isSending(prompt.state),
       stopping,
-      placeholder: placeholderOf(connection, mode, blocked),
+      placeholder: placeholderOf(canAct, mode, blocked),
       label: mode === 'decline' ? 'Tell Claude what to do instead' : 'Message to Claude',
       failure: Option.orElse(failureMessageOf(prompt.state), () => failureMessageOf(stop.state)),
     },
@@ -419,10 +419,10 @@ export const useChatCommands = ({
           restart.send(new StartAgent({ kind: 'claude', folder, task: Option.none() }))
         },
         starting: isInFlight(restart),
-        disabled: !connection.canAct,
+        disabled: !canAct,
         failure: failureMessageOf(restart.state),
       }),
     ),
-    pendingPrompts: pendingPromptRows(prompted.wait, items, isPromptInFlight(prompt)),
+    pendingPrompts,
   }
 }

@@ -2,6 +2,7 @@ import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
+import * as React from 'react'
 
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { RowAction } from '@crook/web/chat/RowAction'
@@ -20,14 +21,35 @@ const FAILURE_KEY = 'transcript failure'
 const WORKING_LABEL = 'Working'
 const NO_MESSAGES = 'No messages yet'
 
-export const itemRows = (
+const itemRow = (
+  rows: WeakMap<ChatItem, ThreadRow>,
+  item: ChatItem,
+  environment: ThreadEnvironment,
+): ThreadRow => {
+  const known = rows.get(item)
+
+  if (known !== undefined) {
+    return known
+  }
+
+  const row = { key: item.key, content: <ThreadItem item={item} environment={environment} /> }
+
+  rows.set(item, row)
+
+  return row
+}
+
+export const useItemRows = (
   items: readonly ChatItem[],
   environment: ThreadEnvironment,
-): readonly ThreadRow[] =>
-  Arr.map(items, (item) => ({
-    key: item.key,
-    content: <ThreadItem item={item} environment={environment} />,
-  }))
+): readonly ThreadRow[] => {
+  const rows = React.useMemo(() => new WeakMap<ChatItem, ThreadRow>(), [environment])
+
+  return React.useMemo(
+    () => Arr.map(items, (item) => itemRow(rows, item, environment)),
+    [items, rows, environment],
+  )
+}
 
 export const workingRow = (elapsed: (now: DateTime.Utc) => string): ThreadRow => ({
   key: WORKING_KEY,

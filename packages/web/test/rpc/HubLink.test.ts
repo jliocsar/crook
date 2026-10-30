@@ -43,6 +43,7 @@ const SETTLE_STEPS = 50
 
 const cachedView = herd([machine(LAPTOP, [agent('w1:p1', 'working')])])
 const liveView = herd([machine(LAPTOP, [agent('w1:p1', 'done')])])
+const laterView = herd([machine(LAPTOP, [agent('w1:p1', 'idle')])])
 const refused = new HubConnectionLost({ detail: 'connection refused' })
 
 const isDialing = LinkStatus.$is('Dialing')
@@ -100,6 +101,69 @@ describe('HubLink', () => {
       expect(Option.map(yield* Ref.get(browser.saved), (saved) => saved.view)).toEqual(
         Option.some(liveView),
       )
+    }),
+  )
+
+  it.effect('takes every herd update while a cache write is out, then caches only the latest', () =>
+    Effect.gen(function* () {
+      const { browser, current, nextSession, settle } = yield* start()
+      const session = yield* nextSession
+
+      yield* browser.saveAnswers.close
+      yield* Queue.offer(session.views, cachedView)
+      yield* current
+      yield* Queue.offer(session.views, liveView)
+      yield* Queue.offer(session.views, laterView)
+      const state = yield* current
+
+      expect(Option.getOrThrow(state.herd).view).toBe(laterView)
+      expect(yield* Ref.get(browser.saves)).toBe(0)
+
+      yield* browser.saveAnswers.open
+      yield* settle
+
+      expect(Option.map(yield* Ref.get(browser.saved), (saved) => saved.view)).toEqual(
+        Option.some(laterView),
+      )
+      expect(yield* Ref.get(browser.saves)).toBe(2)
+    }),
+  )
+
+  it.effect('keeps caching the herd after a write that died', () =>
+    Effect.gen(function* () {
+      const { browser, current, nextSession, settle } = yield* start()
+      const session = yield* nextSession
+
+      yield* Ref.set(browser.saveDies, true)
+      yield* Queue.offer(session.views, cachedView)
+      yield* current
+      yield* Queue.offer(session.views, liveView)
+      yield* current
+      yield* settle
+
+      expect(Option.map(yield* Ref.get(browser.saved), (saved) => saved.view)).toEqual(
+        Option.some(liveView),
+      )
+    }),
+  )
+
+  it.effect('forgets the herd on logout even when a cache write was still out', () =>
+    Effect.gen(function* () {
+      const { browser, link, current, nextSession, settle } = yield* start()
+      const session = yield* nextSession
+
+      yield* browser.saveAnswers.close
+      yield* Queue.offer(session.views, liveView)
+      yield* current
+      const loggingOut = yield* Effect.forkChild(link.logOut, { startImmediately: true })
+
+      yield* settle
+      yield* browser.saveAnswers.open
+      yield* Fiber.join(loggingOut)
+      yield* settle
+
+      expect((yield* current).herd).toEqual(Option.none())
+      expect(yield* Ref.get(browser.saved)).toEqual(Option.none())
     }),
   )
 

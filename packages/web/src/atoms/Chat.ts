@@ -1,3 +1,4 @@
+import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import * as Atom from 'effect/reactivity/Atom'
 
@@ -24,5 +25,5 @@ export const chatScreenAtom = Atom.family((opened: OpenedAgent) =>
       Option.getOrElse(get.self<ChatScreenModel>(), () => LOADING_CHAT),
       get(connectionAtom).stale,
     ),
-  ),
+  ).pipe(Atom.withEquality(Equal.equals)),
 )

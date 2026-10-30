@@ -144,6 +144,7 @@
         "workbox-routing": "^7.4.1",
       },
       "devDependencies": {
+        "@crook/claude": "workspace:*",
         "@crook/tsconfig": "workspace:*",
         "@effect/platform-bun": "4.0.5",
         "@tailwindcss/vite": "^4.3.3",
