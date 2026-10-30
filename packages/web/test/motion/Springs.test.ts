@@ -1,5 +1,5 @@
 import { spring } from 'motion/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from '@effect/vitest'
 
 import { GLIDE, MOMENTUM_GLIDE } from '@crook/web/motion/Springs'
 

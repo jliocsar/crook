@@ -1,7 +1,6 @@
 import * as Data from 'effect/Data'
 import * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
-import * as React from 'react'
 
 import type { TurnEvidence } from '@crook/web/chat/ChatItems'
 
@@ -18,7 +17,9 @@ export interface WorkingSignals {
 
 export const HerdrTurn = Data.taggedEnum<HerdrTurn>()
 
-const NO_HOLD = Option.none<DateTime.Utc>()
+export const NO_HOLD = Option.none<DateTime.Utc>()
+
+export const sameHold = Option.makeEquivalence(DateTime.Equivalence)
 
 const endedSince = (since: DateTime.Utc, evidence: Option.Option<TurnEvidence>): boolean =>
   Option.exists(
@@ -34,33 +35,16 @@ export const nextWorkingHold = (
   signals: WorkingSignals,
 ): Option.Option<DateTime.Utc> =>
   HerdrTurn.$match(signals.herdr, {
-    Working: ({ since }) =>
-      Option.exists(heldSince, (held) => DateTime.Equivalence(held, since))
-        ? heldSince
-        : Option.some(since),
+    Working: ({ since }) => Option.some(since),
     Idle: () =>
-      Option.isNone(heldSince) ||
-      Option.exists(
+      Option.filter(
         heldSince,
         (since) => !endedSince(since, signals.evidence) && stillOpen(signals.evidence),
-      )
-        ? heldSince
-        : NO_HOLD,
+      ),
     Elsewhere: () => NO_HOLD,
   })
 
-export const isHeld = (
+export const holdingSince = (
   heldSince: Option.Option<DateTime.Utc>,
   evidence: Option.Option<TurnEvidence>,
-): boolean => Option.exists(heldSince, (since) => !endedSince(since, evidence))
-
-export const useWorkingHold = (signals: WorkingSignals): boolean => {
-  const [heldSince, setHeldSince] = React.useState(NO_HOLD)
-  const next = nextWorkingHold(heldSince, signals)
-
-  if (next !== heldSince) {
-    setHeldSince(next)
-  }
-
-  return isHeld(next, signals.evidence)
-}
+): Option.Option<DateTime.Utc> => Option.filter(heldSince, (since) => !endedSince(since, evidence))

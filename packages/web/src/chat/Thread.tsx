@@ -236,11 +236,11 @@ const useGhost = (
 }
 
 const useLift = () => {
-  const settled = useMotionValue(0)
-  const trailing = useSpring(settled, MOMENTUM_GLIDE)
-  const transform = useTransform(() => translate('Y', settled.get() - trailing.get()))
+  const resting = useMotionValue(0)
+  const trailing = useSpring(resting, MOMENTUM_GLIDE)
+  const transform = useTransform(() => translate('Y', resting.get() - trailing.get()))
   const liftedFrom = React.useRef<Option.Option<number>>(Option.none())
-  const current = React.useCallback(() => settled.get() - trailing.get(), [settled, trailing])
+  const current = React.useCallback(() => resting.get() - trailing.get(), [resting, trailing])
 
   const firstIndex = (range: Range): number =>
     pipe(
@@ -261,7 +261,7 @@ const useLift = () => {
     }) => {
       const before = current()
       const next = liftFor(options.grown, before, options.ceiling)
-      const rest = settled.get() + options.grown
+      const rest = resting.get() + options.grown
 
       liftedFrom.current = options.indexAt(next)
 
@@ -269,13 +269,13 @@ const useLift = () => {
         trailing.jump(rest - next)
       }
 
-      settled.set(rest)
+      resting.set(rest)
 
       if (options.content !== null) {
         options.content.style.transform = translate('Y', next)
       }
     },
-    [current, settled, trailing],
+    [current, resting, trailing],
   )
 
   return { transform, firstIndex, raise, current }
@@ -381,7 +381,8 @@ export function Thread({
   const toBottom = React.useCallback(() => {
     if (viewport.current !== null) {
       askedPin()
-      viewport.current.scrollTop = viewport.current.scrollHeight - liftNow()
+      viewport.current.scrollTop =
+        viewport.current.scrollHeight - liftNow() - viewport.current.clientHeight
     }
   }, [liftNow, askedPin])
 

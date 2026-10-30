@@ -44,6 +44,12 @@ export const liftOf = (): string =>
     'the thread content',
   ).style.transform
 
+export const lifted = (): number => {
+  const pixels = Number.parseFloat(liftOf().replace('translateY(', ''))
+
+  return Number.isNaN(pixels) ? 0 : pixels
+}
+
 export const following = (): boolean => viewport().hasAttribute('data-following')
 
 export const openedOn = (keys: readonly string[]) => {
@@ -65,12 +71,15 @@ const scrollable = (scrolling: HTMLElement) => {
   let height = HISTORY_HEIGHT
   let top = 0
 
-  Object.defineProperty(scrolling, 'scrollHeight', { configurable: true, get: () => height })
+  Object.defineProperty(scrolling, 'scrollHeight', {
+    configurable: true,
+    get: () => height + lifted(),
+  })
   Object.defineProperty(scrolling, 'scrollTop', {
     configurable: true,
     get: () => top,
     set: (next: number) => {
-      top = Math.max(0, Math.min(next, height - scrolling.clientHeight))
+      top = Math.max(0, Math.min(next, scrolling.scrollHeight - scrolling.clientHeight))
     },
   })
   scrolling.scrollTop = HISTORY_HEIGHT
@@ -242,7 +251,7 @@ export const rowsShrinkAfterOpen = (
 
   const corrections = vi.spyOn(scrolling, 'scrollTo')
 
-  scrolling.scrollTop = scrolling.scrollHeight
+  scrolling.scrollTop = scrolling.scrollHeight - scrolling.clientHeight
   fireEvent.scroll(scrolling)
 
   return {
@@ -254,6 +263,6 @@ export const rowsShrinkAfterOpen = (
     },
     corrections: () => corrections.mock.calls.length,
     top: () => scrolling.scrollTop,
-    bottom: () => scrolling.scrollHeight,
+    bottom: () => scrolling.scrollHeight - scrolling.clientHeight,
   }
 }

@@ -11,6 +11,7 @@ import * as Str from 'effect/String'
 import { relativeToFolder } from '@crook/domain/Ask'
 import type { ClaudeSessionId, SubagentId } from '@crook/domain/Ids'
 import { type Subagent, type SubagentStatus, statusOfNotice } from '@crook/domain/Subagent'
+import { TurnDurationBlock } from '@crook/domain/TranscriptMessage'
 import type {
   AssistantMessage,
   CompactTrigger,
@@ -710,14 +711,17 @@ export const chatItems = (
 
 const userBlockEnds = (block: UserBlock): Option.Option<boolean> =>
   Match.value(block).pipe(
-    Match.tags({
+    Match.tagsExhaustive({
       Interruption: () => Option.some(true),
       Text: () => Option.some(false),
       Image: () => Option.some(false),
       ToolResult: () => Option.some(false),
       TaskNotification: () => Option.some(false),
+      CompactSummary: () => Option.none<boolean>(),
+      LocalCommand: () => Option.none<boolean>(),
+      LocalCommandOutput: () => Option.none<boolean>(),
+      Unrecognized: () => Option.none<boolean>(),
     }),
-    Match.orElse(() => Option.none<boolean>()),
   )
 
 const userEnds = (message: UserMessage): Option.Option<boolean> =>
@@ -731,15 +735,8 @@ const userEnds = (message: UserMessage): Option.Option<boolean> =>
 const assistantEnds = (message: AssistantMessage): boolean =>
   message.isApiError || Option.exists(message.stopReason, (reason) => reason !== TOOL_USE_STOP)
 
-const systemEnds = (message: SystemMessage): Option.Option<boolean> =>
-  Option.liftPredicate(true, () =>
-    message.blocks.some((block) =>
-      Match.value(block).pipe(
-        Match.tag('TurnDuration', () => true),
-        Match.orElse(() => false),
-      ),
-    ),
-  )
+const closesTurn = (message: SystemMessage): boolean =>
+  message.blocks.some(Schema.is(TurnDurationBlock))
 
 const signed = (
   ends: Option.Option<boolean>,
@@ -755,7 +752,8 @@ const turnEvidenceOf = (line: TranscriptLine): Option.Option<TurnEvidence> =>
           User: (user) => signed(userEnds(user), user.timestamp),
           Assistant: (assistant) =>
             signed(Option.some(assistantEnds(assistant)), assistant.timestamp),
-          System: (system) => signed(systemEnds(system), system.timestamp),
+          System: (system) =>
+            signed(Option.as(Option.liftPredicate(system, closesTurn), true), system.timestamp),
           UnrecognizedEntry: () => Option.none<TurnEvidence>(),
           Malformed: () => Option.none<TurnEvidence>(),
           Omitted: () => Option.none<TurnEvidence>(),

@@ -678,6 +678,12 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   reveal's lift is up, the thread subtracts it before it judges whether it sits at the bottom or
   scrolls there; otherwise the slide read as the user scrolling away and the thread stopped
   following on every batch taller than the follow threshold.
+  Scrolling there means `scrollHeight` minus the lift minus `clientHeight`. Asking for
+  `scrollHeight` minus the lift alone lets the browser clamp at the lifted bottom, so a batch
+  landing mid-glide counted the lift still up as growth, doubled it, and the scroll was clamped
+  down under the shrinking lift for 37 to 38 frames of a six-batch burst, the glide stopping short
+  instead of easing out. With `clientHeight` subtracted it was 2 to 3 frames (measured in Chromium
+  at 4x CPU throttling, batches 100 ms apart, two runs each).
 - TanStack Virtual corrects `scrollTop` itself when a row above the top first measures away
   from its estimate, and writes the correction before React commits the new heights. A thread
   that read every upward move as the user leaving lost the end on open: 299 rows of 20 px (every
@@ -936,6 +942,9 @@ happy-dom, measured:
 - A motion value that an animation moves reads a `getVelocity` of 0 every frame: the value is
   set twice per frame at different times, so its previous frame value equals its current one
   (measured). Test a glide by where it goes, not by the speed it reports.
+- It does not clamp `scrollTop`: a viewport whose `scrollHeight` a test fixed at 100000 kept a
+  `scrollTop` of 100000 when set to it (measured). A test reads the bottom as `scrollHeight` minus
+  `clientHeight`, which is where a browser clamps.
 - Its `ResizeObserver` never reports, and TanStack Virtual measures a row through its ref only
   while it is not scrolling, so a row mounted by a scroll keeps its estimate for good. A test of
   the virtualizer's own corrections stubs `ResizeObserver` with one that reports when told, and

@@ -2,6 +2,7 @@ import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 
 import { agentTitleOrPane } from '@crook/domain/AgentRow'
@@ -156,15 +157,13 @@ export const herdrTurnOf = (model: ChatScreenModel, watchFailed: boolean): Herdr
     Option.filter(() => model.presence === 'live' && !watchFailed),
     Option.match({
       onNone: () => HerdrTurn.Elsewhere(),
-      onSome: (row) => {
-        if (row.status === 'working') {
-          return HerdrTurn.Working({ since: row.statusChangedAt })
-        }
-
-        return row.status === 'idle' || row.status === 'done'
-          ? HerdrTurn.Idle()
-          : HerdrTurn.Elsewhere()
-      },
+      onSome: (row) =>
+        Match.value(row.status).pipe(
+          Match.when('working', () => HerdrTurn.Working({ since: row.statusChangedAt })),
+          Match.whenOr('idle', 'done', () => HerdrTurn.Idle()),
+          Match.whenOr('blocked', 'unknown', () => HerdrTurn.Elsewhere()),
+          Match.exhaustive,
+        ),
     }),
   )
 

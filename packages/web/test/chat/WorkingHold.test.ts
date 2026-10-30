@@ -3,7 +3,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 
 import type { TurnEvidence } from '@crook/web/chat/ChatItems'
-import { HerdrTurn, isHeld, nextWorkingHold } from '@crook/web/chat/WorkingHold'
+import { HerdrTurn, holdingSince, nextWorkingHold, sameHold } from '@crook/web/chat/WorkingHold'
 
 const STARTED = DateTime.makeUnsafe('2026-10-20T12:00:00Z')
 const LATER = DateTime.makeUnsafe('2026-10-20T12:00:30Z')
@@ -25,7 +25,7 @@ const step = (
 ) => {
   const next = nextWorkingHold(heldSince, { herdr, evidence: found })
 
-  return { next, held: isHeld(next, found) }
+  return { next, held: Option.isSome(holdingSince(next, found)) }
 }
 
 const HELD = Option.some(STARTED)
@@ -68,6 +68,6 @@ describe('nextWorkingHold', () => {
     const next = step(HELD, HerdrTurn.Working({ since: LATER }), ANSWER)
 
     expect(next.held).toBe(true)
-    expect(step(HELD, working, PROMPT).next).toBe(HELD)
+    expect(sameHold(step(HELD, working, PROMPT).next, HELD)).toBe(true)
   })
 })

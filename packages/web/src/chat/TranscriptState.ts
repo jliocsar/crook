@@ -153,6 +153,9 @@ export const resumeOf = (
 export const isCatchingUp = (view: Option.Option<TranscriptView>): boolean =>
   Option.exists(view, (found) => found.catchingUp)
 
+export const hasFailed = (view: Option.Option<TranscriptView>): boolean =>
+  Option.exists(view, (found) => Option.isSome(found.failure))
+
 export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
 

@@ -4,12 +4,10 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 import { afterSpring } from '../Dom.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
-import { liftOf, liveTail, phoneViewport } from '../ThreadRender.tsx'
+import { lifted, liveTail, phoneViewport, VIEWPORT_HEIGHT } from '../ThreadRender.tsx'
 
 const ANSWER_HEIGHT = 300
 const NEXT_BATCH_HEIGHT = 120
-
-const lifted = (): number => Number.parseFloat(liftOf().replace('translateY(', ''))
 
 beforeEach(() => {
   stubMediaQueries([])
@@ -36,6 +34,24 @@ describe('Thread glide', () => {
       tail.lands(['text', 'tool'], NEXT_BATCH_HEIGHT)
 
       expect(lifted()).toBeCloseTo(midGlide + NEXT_BATCH_HEIGHT)
+
+      yield* afterSpring(() => {
+        expect(lifted()).toBe(0)
+      })
+    }),
+  )
+
+  it.effect('keeps a burst taller than the screen within one screen of lift, then settles', () =>
+    Effect.gen(function* () {
+      const tail = yield* liveTail()
+      const keys = ['first', 'second', 'third', 'fourth', 'fifth']
+
+      for (const [index] of keys.entries()) {
+        tail.lands(keys.slice(0, index + 1), ANSWER_HEIGHT)
+
+        expect(lifted()).toBeGreaterThan(0)
+        expect(lifted()).toBeLessThanOrEqual(VIEWPORT_HEIGHT)
+      }
 
       yield* afterSpring(() => {
         expect(lifted()).toBe(0)

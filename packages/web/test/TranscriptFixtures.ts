@@ -52,41 +52,33 @@ export const user = (
     blocks,
   })
 
-export const assistant = (offset: number, blocks: readonly AssistantBlock[], seconds = 0) =>
+export const assistant = (
+  offset: number,
+  blocks: readonly AssistantBlock[],
+  seconds = 0,
+  stopReason = Option.none<string>(),
+) =>
   new AssistantMessage({
     offset: TranscriptOffset.make(offset),
     uuid: Option.none(),
     timestamp: at(seconds),
     apiMessageId: Option.none(),
     model: Option.some('claude-opus-4-7'),
-    stopReason: Option.none(),
+    stopReason,
     isApiError: false,
     blocks,
   })
 
 export const answered = (offset: number, text: string, seconds = 0) =>
-  new AssistantMessage({
-    offset: TranscriptOffset.make(offset),
-    uuid: Option.none(),
-    timestamp: at(seconds),
-    apiMessageId: Option.none(),
-    model: Option.some('claude-opus-4-7'),
-    stopReason: Option.some('end_turn'),
-    isApiError: false,
-    blocks: [new TextBlock({ text })],
-  })
+  assistant(offset, [new TextBlock({ text })], seconds, Option.some('end_turn'))
 
 export const calledTool = (offset: number, id: string, seconds = 0) =>
-  new AssistantMessage({
-    offset: TranscriptOffset.make(offset),
-    uuid: Option.none(),
-    timestamp: at(seconds),
-    apiMessageId: Option.none(),
-    model: Option.some('claude-opus-4-7'),
-    stopReason: Option.some('tool_use'),
-    isApiError: false,
-    blocks: [new ToolUseBlock({ id, name: 'Read', input: { file_path: 'README.md' } })],
-  })
+  assistant(
+    offset,
+    [new ToolUseBlock({ id, name: 'Read', input: { file_path: 'README.md' } })],
+    seconds,
+    Option.some('tool_use'),
+  )
 
 export const turnDuration = (offset: number, seconds = 0) =>
   new SystemMessage({

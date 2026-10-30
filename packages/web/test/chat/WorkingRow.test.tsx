@@ -40,7 +40,10 @@ afterEach(() => {
 describe('the Working row', () => {
   it.effect('keeps the Working row until the answer lands when herdr goes idle first', () =>
     Effect.gen(function* () {
-      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
+      const { link } = yield* renderApp(
+        CHAT,
+        live([agent('w1:p1', 'working', { secondsAgo: 120 })]),
+      )
       const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
 
       yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'Fix the herd')])])
@@ -50,6 +53,7 @@ describe('the Working row', () => {
       yield* findByRole('button', 'Send')
 
       expect(screen.getByText('Working')).toBeDefined()
+      expect(screen.getByText('7m')).toBeDefined()
 
       yield* Queue.offer(transcript, chunk(10, 20, [answered(10, 'Fixed the herd', 5)]))
       yield* Effect.promise(() => screen.findByText('Fixed the herd'))
