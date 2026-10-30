@@ -18,9 +18,10 @@ import type { AgentInfo, PaneProcess } from '@crook/herdr/Records'
 
 const CLAUDE_AGENT = 'claude'
 const CLAUDE_PROCESS_NAME = 'claude'
-const PROC_ROOT = '/proc'
 const STAT_COMM_TERMINATOR = ') '
 const STAT_START_TIME_INDEX = 19
+
+export const PROC_ROOT = '/proc'
 
 export class ClaudeSessionFileUnreadable extends Schema.TaggedError<ClaudeSessionFileUnreadable>()(
   'ClaudeSessionFileUnreadable',
@@ -51,7 +52,7 @@ const claudeRoot = (environ: string) =>
     Option.orElse(() => Option.map(environValue(environ, 'HOME'), (home) => `${home}/.claude`)),
   )
 
-const startTime = (stat: string) =>
+export const startTime = (stat: string) =>
   Arr.get(
     stat.slice(stat.lastIndexOf(STAT_COMM_TERMINATOR) + STAT_COMM_TERMINATOR.length).split(' '),
     STAT_START_TIME_INDEX,

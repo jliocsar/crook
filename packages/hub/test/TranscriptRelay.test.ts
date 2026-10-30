@@ -16,6 +16,7 @@ import * as Tracer from 'effect/Tracer'
 import { ClaudeSessionId, MachineId, PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import { SkillListing } from '@crook/domain/Skill'
 import {
+  BackgroundChanged,
   CHUNK_READ_LIMIT,
   PaneTranscript,
   SkillsChanged,
@@ -84,6 +85,7 @@ const describeEvent = (event: TranscriptEvent) =>
         `chunk ${chunk.offset}-${chunk.nextOffset} ${chunk.messages.length}`,
       SubagentsChanged: (changed) => `subagents ${changed.subagents.length}`,
       SkillsChanged: (changed) => `skills ${changed.skills.length}`,
+      BackgroundChanged: (changed) => `background ${changed.tasks.length}`,
       TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.offset}`,
     }),
   )
@@ -371,6 +373,7 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
           opened,
           new TranscriptOpened({ session: NEXT_SESSION }),
           new SubagentsChanged({ session: SESSION, subagents: [] }),
+          new BackgroundChanged({ session: SESSION, tasks: [], activity: [] }),
           skillsOf(1),
           new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(10) }),
           new TranscriptCaughtUp({ session: NEXT_SESSION, offset: TranscriptOffset.make(0) }),

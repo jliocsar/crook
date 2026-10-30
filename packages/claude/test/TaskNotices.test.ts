@@ -55,6 +55,8 @@ const noticeFor = (toolUseId: string, status: string) =>
         status: Option.some(status),
         summary: Option.none(),
         result: Option.none(),
+        event: Option.none(),
+        outputFile: Option.none(),
       }),
     ],
   })

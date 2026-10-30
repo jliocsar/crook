@@ -48,6 +48,11 @@ export class SubagentLaunch extends Schema.Class<SubagentLaunch>('SubagentLaunch
   status: Schema.String,
 }) {}
 
+export class TaskLaunch extends Schema.Class<TaskLaunch>('TaskLaunch')({
+  taskId: Schema.String,
+  timeoutMs: Schema.OptionFromNullOr(Schema.Int),
+}) {}
+
 export const ToolResultContent = Schema.Union([
   TextBlock,
   ImageBlock,
@@ -62,6 +67,7 @@ export class ToolResultBlock extends Schema.TaggedClass<ToolResultBlock>()('Tool
   content: Schema.Array(ToolResultContent),
   patch: Schema.OptionFromNullOr(Schema.Array(PatchHunk)),
   subagent: Schema.OptionFromNullOr(SubagentLaunch),
+  task: Schema.OptionFromOptionalKey(TaskLaunch),
 }) {}
 
 export class CompactSummaryBlock extends Schema.TaggedClass<CompactSummaryBlock>()(
@@ -77,6 +83,8 @@ export class TaskNotificationBlock extends Schema.TaggedClass<TaskNotificationBl
     status: Schema.OptionFromNullOr(Schema.String),
     summary: Schema.OptionFromNullOr(Schema.String),
     result: Schema.OptionFromNullOr(Schema.String),
+    event: Schema.OptionFromOptionalKey(Schema.String),
+    outputFile: Schema.OptionFromOptionalKey(Schema.String),
   },
 ) {}
 

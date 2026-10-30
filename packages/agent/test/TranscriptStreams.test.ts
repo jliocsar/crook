@@ -18,7 +18,9 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { TaskLiveness } from '@crook/agent/TaskLiveness'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
+import { BackgroundWork } from '@crook/claude/BackgroundWork'
 import { SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
@@ -83,6 +85,8 @@ const describe = (event: TranscriptEvent) =>
       SubagentsChanged: (changed) =>
         `subagents ${changed.session} ${changed.subagents.map((subagent) => subagent.id).join(',')}`,
       SkillsChanged: (changed) => `skills ${changed.session}`,
+      BackgroundChanged: (changed) =>
+        `background ${changed.session} ${changed.tasks.map((task) => `${task.taskId} ${task.status}`).join(',')}`,
       TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.session} ${caughtUp.offset}`,
     }),
   )
@@ -145,6 +149,8 @@ const defectiveStreams = Effect.fn('defectiveStreams')(function* (
       TranscriptTail.layer,
       SubagentRoster.layer,
       SkillCatalog.layerAt([], []),
+      BackgroundWork.layer,
+      TaskLiveness.layerTest(() => Option.none()),
       MachineStateSync.layerTest(state),
     ]),
   )
@@ -199,6 +205,7 @@ const fakeHub = Effect.fn('fakeHub')(function* (
           Effect.andThen(move(watch, opened), record(watch, describe(opened))),
         SubagentsChanged: (changed) => record(watch, describe(changed)),
         SkillsChanged: (changed) => record(watch, describe(changed)),
+        BackgroundChanged: (changed) => record(watch, describe(changed)),
         TranscriptCaughtUp: (caughtUp) => record(watch, describe(caughtUp)),
         TranscriptChunk: (chunk) =>
           Effect.flatMap(positionOf(watch), (at) =>

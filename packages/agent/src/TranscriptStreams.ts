@@ -13,9 +13,17 @@ import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
+import * as Struct from 'effect/Struct'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { type OpenTasks, TaskLiveness } from '@crook/agent/TaskLiveness'
+import {
+  type BackgroundSnapshot,
+  type BackgroundWatchError,
+  BackgroundWork,
+  sameSnapshot,
+} from '@crook/claude/BackgroundWork'
 import { MANAGED_SKILL_HOMES, SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SubagentRoster, type SubagentsUnreadable } from '@crook/claude/SubagentRoster'
 import {
@@ -25,8 +33,10 @@ import {
 } from '@crook/claude/TranscriptLocator'
 import { type TailError, TranscriptTail } from '@crook/claude/TranscriptTail'
 import type { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
+import { type BackgroundTask, ShellTask } from '@crook/domain/Background'
 import type { Subagent } from '@crook/domain/Subagent'
 import {
+  BackgroundChanged,
   SkillsChanged,
   SubagentsChanged,
   TRANSCRIPT_START,
@@ -54,7 +64,14 @@ import {
 } from '@crook/protocol/Transcripts'
 import { makeTranscriptMailbox } from '@crook/protocol/TranscriptBatch'
 
-export type FollowError = LocateError | TailError | SubagentsUnreadable
+export type FollowError = LocateError | TailError | SubagentsUnreadable | BackgroundWatchError
+
+interface LiveSources {
+  readonly tail: TranscriptTail['Service']
+  readonly roster: SubagentRoster['Service']
+  readonly background: BackgroundWork['Service']
+  readonly liveness: TaskLiveness['Service']
+}
 
 interface PaneSession {
   readonly session: ClaudeSessionId
@@ -95,6 +112,8 @@ const toWireFailure = (error: FollowError): TranscriptFailure =>
       TranscriptUnreadable: (unreadable) =>
         new TranscriptReadFailed({ detail: unreadable.message }),
       SubagentsUnreadable: (unreadable) => new TranscriptReadFailed({ detail: unreadable.message }),
+      BackgroundOutputUnreadable: (unreadable) =>
+        new TranscriptReadFailed({ detail: unreadable.message }),
       TranscriptOffsetBeyondEnd: (rejected) =>
         new TranscriptResumeRejected({ detail: rejected.message }),
       TranscriptOffsetMidLine: (rejected) =>
@@ -155,6 +174,77 @@ const finalRoster = Effect.fn('TranscriptStreams.finalRoster')(function* (
   )
 })
 
+const backgroundOf =
+  (session: ClaudeSessionId) =>
+  (snapshot: BackgroundSnapshot): TranscriptEvent =>
+    new BackgroundChanged({ session, tasks: snapshot.tasks, activity: snapshot.activity })
+
+const hasBackgroundWork = (snapshot: BackgroundSnapshot) =>
+  snapshot.tasks.length > 0 || snapshot.activity.length > 0
+
+const withLiveness = (snapshot: BackgroundSnapshot, open: OpenTasks): BackgroundSnapshot => ({
+  ...snapshot,
+  tasks: Arr.map(snapshot.tasks, (task) =>
+    Match.value(task).pipe(
+      Match.tag('ShellTask', (shell): BackgroundTask =>
+        shell.status === 'running'
+          ? new ShellTask(
+              Struct.evolve(shell, {
+                alive: () => Option.map(open, (tasks) => HashSet.has(tasks, shell.taskId)),
+              }),
+            )
+          : shell,
+      ),
+      Match.orElse((): BackgroundTask => task),
+    ),
+  ),
+})
+
+const finalBackground = Effect.fn('TranscriptStreams.finalBackground')(function* (
+  background: BackgroundWork['Service'],
+  file: TranscriptFile,
+) {
+  return yield* background.read(file).pipe(
+    Effect.map((snapshot) =>
+      hasBackgroundWork(snapshot)
+        ? Stream.succeed(backgroundOf(file.session)(snapshot))
+        : Stream.empty,
+    ),
+    Effect.catch((error) =>
+      Effect.as(
+        Effect.logWarning(
+          `Sent no final background work for the session the pane left: ${error.message}`,
+        ),
+        Stream.empty,
+      ),
+    ),
+  )
+})
+
+const backgroundWork = (
+  background: BackgroundWork['Service'],
+  liveness: TaskLiveness['Service'],
+  file: TranscriptFile,
+) =>
+  background.watch(file).pipe(
+    Stream.mapEffect((snapshot) =>
+      Effect.map(liveness.openTasks(file), (open) => withLiveness(snapshot, open)),
+    ),
+    Stream.changesWith(sameSnapshot),
+    Stream.dropWhile((snapshot) => !hasBackgroundWork(snapshot)),
+    Stream.map(backgroundOf(file.session)),
+  )
+
+const liveEvents = (sources: LiveSources, file: TranscriptFile, offset: TranscriptOffset) =>
+  Stream.mergeAll(
+    [
+      sources.tail.follow(file, offset),
+      Stream.map(sources.roster.watch(file), rosterOf(file.session)),
+      backgroundWork(sources.background, sources.liveness, file),
+    ],
+    { concurrency: 'unbounded' },
+  )
+
 const opened = (session: ClaudeSessionId) =>
   Stream.succeed<TranscriptEvent>(new TranscriptOpened({ session }))
 
@@ -200,6 +290,8 @@ const make = Effect.gen(function* () {
   const tail = yield* TranscriptTail
   const roster = yield* SubagentRoster
   const catalog = yield* SkillCatalog
+  const background = yield* BackgroundWork
+  const sources: LiveSources = { tail, roster, background, liveness: yield* TaskLiveness }
 
   const fromLineNearEnd = (
     file: TranscriptFile,
@@ -226,16 +318,13 @@ const make = Effect.gen(function* () {
       }),
     )
 
-  const live = (file: TranscriptFile, offset: TranscriptOffset) =>
-    Stream.merge(tail.follow(file, offset), Stream.map(roster.watch(file), rosterOf(file.session)))
-
   const openSession = (
     { session, cwd }: PaneSession,
     offset: TranscriptOffset,
     tailBytes: Option.Option<TranscriptTailBytes>,
   ) => {
     const following = (file: TranscriptFile) =>
-      fromLineNearEnd(file, offset, tailBytes, (from) => live(file, from))
+      fromLineNearEnd(file, offset, tailBytes, (from) => liveEvents(sources, file, from))
 
     return Stream.concat(
       opened(session),
@@ -269,7 +358,10 @@ const make = Effect.gen(function* () {
           onSome: (file) =>
             Stream.concat(
               fromLineNearEnd(file, position.offset, tailBytes, (from) => tail.drain(file, from)),
-              Stream.unwrap(finalRoster(roster, file)),
+              Stream.concat(
+                Stream.unwrap(finalRoster(roster, file)),
+                Stream.unwrap(finalBackground(background, file)),
+              ),
             ),
         }),
       ),
@@ -427,6 +519,8 @@ export class TranscriptStreams extends Context.Service<
         TranscriptTail.layer,
         SubagentRoster.layer,
         SkillCatalog.layerAt(roots, MANAGED_SKILL_HOMES),
+        BackgroundWork.layer,
+        TaskLiveness.layer,
       ]),
     )
 
@@ -436,6 +530,8 @@ export class TranscriptStreams extends Context.Service<
       TranscriptTail.layer,
       SubagentRoster.layer,
       SkillCatalog.layer,
+      BackgroundWork.layer,
+      TaskLiveness.layer,
     ]),
   )
 }

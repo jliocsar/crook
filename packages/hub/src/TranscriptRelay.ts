@@ -16,6 +16,7 @@ import * as TxRef from 'effect/TxRef'
 
 import type { MachineId } from '@crook/domain/Ids'
 import {
+  type BackgroundChanged,
   type SkillsChanged,
   type SubagentsChanged,
   type TranscriptCaughtUp,
@@ -154,7 +155,7 @@ const make = Effect.gen(function* () {
   const forwardInSession = (
     watcher: Watcher,
     position: Option.Option<TranscriptPosition>,
-    event: SubagentsChanged | SkillsChanged | TranscriptCaughtUp,
+    event: SubagentsChanged | SkillsChanged | BackgroundChanged | TranscriptCaughtUp,
   ) => (inSession(position, event.session) ? forward(watcher, event) : Effect.void)
 
   const append = (
@@ -182,6 +183,7 @@ const make = Effect.gen(function* () {
           TranscriptChunk: (chunk) => append(id, watcher, position, chunk),
           SubagentsChanged: (changed) => forwardInSession(watcher, position, changed),
           SkillsChanged: (changed) => forwardInSession(watcher, position, changed),
+          BackgroundChanged: (changed) => forwardInSession(watcher, position, changed),
           TranscriptCaughtUp: (caughtUp) => forwardInSession(watcher, position, caughtUp),
           TranscriptWatchFailed: (failed) => fail(id, watcher, failed),
         }),

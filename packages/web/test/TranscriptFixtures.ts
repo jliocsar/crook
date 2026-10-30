@@ -125,6 +125,7 @@ export const toolResult = (
         ],
         patch: Option.none(),
         subagent: Option.fromUndefinedOr(options.launch),
+        task: Option.none(),
       }),
     ],
     { seconds: options.seconds ?? 0 },
@@ -138,6 +139,8 @@ export const notification = (offset: number, toolUseId: string, status: string) 
       status: Option.some(status),
       summary: Option.some('Reviewer finished'),
       result: Option.none(),
+      event: Option.none(),
+      outputFile: Option.none(),
     }),
   ])
 

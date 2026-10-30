@@ -17,7 +17,7 @@ import { agentsIn } from '@crook/domain/MachineState'
 import { Subagent } from '@crook/domain/Subagent'
 import { TranscriptPosition, type TranscriptSource } from '@crook/domain/Transcript'
 import { TranscriptMessage } from '@crook/domain/TranscriptMessage'
-import { TranscriptLine, TranscriptView } from '@crook/web/chat/TranscriptState'
+import { NO_BACKGROUNDS, TranscriptLine, TranscriptView } from '@crook/web/chat/TranscriptState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 
 export interface TranscriptStore {
@@ -118,6 +118,7 @@ const viewOf = (stored: StoredTranscript): TranscriptView =>
     position: Option.some(stored.position),
     lines: Arr.map(stored.lines, lineOf),
     rosters: stored.rosters,
+    backgrounds: NO_BACKGROUNDS,
     skills: [],
     catchingUp: false,
     failure: Option.none(),
