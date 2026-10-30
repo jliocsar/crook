@@ -15,13 +15,14 @@ import {
   revealOf,
   scrollsUnderLift,
   rowsShrinkAfterOpen,
+  SETTLE_MS,
   VIEWPORT_HEIGHT,
 } from '../ThreadRender.tsx'
 
 const ANSWER_HEIGHT = 300
 const LONG_ANSWER_HEIGHT = 5000
-const SCROLL_SETTLE_MS = 400
 const SHORT_SCROLL = 100
+const NUDGE = 20
 const MANY_ROWS = 60
 const RENDERED_ROW_HEIGHT = 120
 const SHORT_ROW_HEIGHT = 20
@@ -118,7 +119,7 @@ describe('Thread', () => {
       const opened = rowsShrinkAfterOpen(MANY_ROWS, RENDERED_ROW_HEIGHT, SHORT_ROW_HEIGHT)
 
       opened.measured()
-      yield* wait(SCROLL_SETTLE_MS)
+      yield* wait(SETTLE_MS)
 
       expect(opened.corrections()).toBe(0)
       expect(opened.top()).toBe(opened.bottom())
@@ -130,9 +131,9 @@ describe('Thread', () => {
     Effect.gen(function* () {
       const opened = historyOpen()
 
-      yield* wait(SCROLL_SETTLE_MS)
+      yield* wait(SETTLE_MS)
       opened.correctedUp(SHORT_SCROLL)
-      yield* wait(SCROLL_SETTLE_MS)
+      yield* wait(SETTLE_MS)
 
       expect(opened.top()).toBe(opened.bottom())
     }),
@@ -142,11 +143,63 @@ describe('Thread', () => {
     Effect.gen(function* () {
       const opened = historyOpen()
 
-      yield* wait(SCROLL_SETTLE_MS)
+      yield* wait(SETTLE_MS)
       opened.fingerScrollsUp(SHORT_SCROLL)
-      yield* wait(SCROLL_SETTLE_MS)
+      yield* wait(SETTLE_MS)
 
       expect(opened.top()).toBe(opened.bottom() - SHORT_SCROLL)
+    }),
+  )
+
+  it.effect('stays where a small nudge left it while it keeps following', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.fingerScrollsUp(NUDGE)
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom() - NUDGE)
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('keeps following a correction once a wheel scroll has settled', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.wheelsUp(NUDGE)
+      yield* wait(SETTLE_MS)
+      opened.correctedUp(SHORT_SCROLL)
+
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('stays on the row it jumped to once that scroll settles', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.jumpsTo('prompt')
+      yield* wait(SETTLE_MS)
+
+      expect(following()).toBe(false)
+      expect(opened.top()).toBeLessThan(opened.bottom())
+    }),
+  )
+
+  it.effect('goes back to the end when Latest is pressed', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      opened.fingerScrollsUp(SHORT_SCROLL)
+      opened.pressesLatest()
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom())
+      expect(following()).toBe(true)
     }),
   )
 

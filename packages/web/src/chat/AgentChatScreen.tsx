@@ -213,7 +213,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const closedHere = useClosedFromChat(machine, pane)
   const title = titleOf(model, pane)
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!covered) {
       scrollToEnd()
     }

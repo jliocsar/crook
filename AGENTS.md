@@ -667,7 +667,14 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   elements it landed 3 of 3, throttled or not (measured). Two guards each fixed it alone, 3 of
   3: while following, the virtualizer keeps only corrections for growth above the top, since
   the thread pins itself; and an upward move counts as leaving only after a touch, wheel, key or
-  pointer press, until the scroll settles. The thread keeps both.
+  mouse press, until the scroll settles. The thread keeps both. Growth keeps its correction
+  because the pin judges a slide by how far it moved the scroll, so an uncorrected row growing
+  above the top would slide the reveal for it (read in the pin's effect).
+- A following thread pins again when a scroll settles, after any scroll the user did not start
+  and after one during which it asked for a pin, so a write lost to a scroll still under way is
+  made again. That iOS drops a `scrollTop` write during momentum is not measured yet. After a
+  user's own scroll with no pin asked it stays put, so a nudge that stays inside the follow
+  threshold is left where the finger put it.
 - The chat route remounts its screen whenever the machine or pane changes, so following and the
   virtualizer's size cache start fresh per pane. A subagent opens as a child route, so the chat
   stays mounted under it and pins to the end when it is uncovered again.

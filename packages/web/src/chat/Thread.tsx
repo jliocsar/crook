@@ -63,10 +63,19 @@ const correctsOnlyGrowthAbove = (
   instance: Virtualizer<HTMLDivElement, Element>,
 ): boolean => delta > 0 && item.start < (instance.scrollOffset ?? 0)
 
-const useScrollStop = () => {
+const adjustsOnResizeWhile = (
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+  following: boolean,
+): void => {
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = following
+    ? correctsOnlyGrowthAbove
+    : undefined
+}
+
+const useOnScrollStop = (stopped: () => void) => {
   const scrolling = React.useRef(false)
 
-  return (stopped: () => void) => (instance: Virtualizer<HTMLDivElement, Element>) => {
+  return (instance: Virtualizer<HTMLDivElement, Element>) => {
     const wasScrolling = scrolling.current
 
     scrolling.current = instance.isScrolling
@@ -79,33 +88,54 @@ const useScrollStop = () => {
 
 const useScrollIntent = () => {
   const touching = React.useRef(false)
-  const handled = React.useRef(false)
+  const gestured = React.useRef(false)
+  const pinAsked = React.useRef(false)
 
-  const began = () => {
-    handled.current = true
+  const gestureBegan = () => {
+    gestured.current = true
+    pinAsked.current = false
   }
 
-  const lifted = () => {
+  const fingerLeft = () => {
     touching.current = false
   }
+
+  const isUserScroll = () => touching.current || gestured.current
+
+  const askedPin = React.useCallback(() => {
+    pinAsked.current = true
+  }, [])
 
   return {
     handlers: {
       onTouchStart: () => {
         touching.current = true
-        began()
+        gestureBegan()
       },
-      onTouchEnd: lifted,
-      onTouchCancel: lifted,
-      onWheel: began,
-      onKeyDown: began,
-      onPointerDown: began,
+      onTouchEnd: fingerLeft,
+      onTouchCancel: fingerLeft,
+      onWheel: gestureBegan,
+      onKeyDown: gestureBegan,
+      onPointerDown: (event: React.PointerEvent) => {
+        if (event.pointerType !== 'touch') {
+          gestureBegan()
+        }
+      },
+      onPointerUp: (event: React.PointerEvent) => {
+        if (event.pointerType !== 'touch') {
+          gestured.current = false
+        }
+      },
     },
-    byUser: () => touching.current || handled.current,
-    settle: () => {
-      if (!touching.current) {
-        handled.current = false
-      }
+    isUserScroll,
+    askedPin,
+    settle: (): boolean => {
+      const repins = !isUserScroll() || pinAsked.current
+
+      gestured.current = touching.current
+      pinAsked.current = false
+
+      return repins
     },
   }
 }
@@ -400,7 +430,6 @@ export function Thread({
   const [following, setFollowing] = React.useState(true)
   const followingRef = React.useRef(true)
   const lastTop = React.useRef(0)
-  const whenScrollStops = useScrollStop()
   const intent = useScrollIntent()
   const reduce = useReducedMotion() ?? false
   const settled = useSettled(rows.length)
@@ -409,11 +438,20 @@ export function Thread({
   const lift = useLift()
   const { raise, current: liftNow } = lift
 
+  const { askedPin } = intent
+
   const toBottom = React.useCallback(() => {
     if (viewport.current !== null) {
+      askedPin()
       viewport.current.scrollTop = viewport.current.scrollHeight - liftNow()
     }
-  }, [liftNow])
+  }, [liftNow, askedPin])
+
+  const onScrollStop = useOnScrollStop(() => {
+    if (intent.settle() && followingRef.current) {
+      toBottom()
+    }
+  })
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -427,34 +465,22 @@ export function Thread({
     useFlushSync: false,
     rangeExtractor: (range) =>
       defaultRangeExtractor({ ...range, startIndex: lift.firstIndex(range) }),
-    onChange: whenScrollStops(() => {
-      intent.settle()
-
-      if (followingRef.current) {
-        toBottom()
-      }
-    }),
+    onChange: onScrollStop,
   })
   const totalSize = virtualizer.getTotalSize()
   const virtualItems = virtualizer.getVirtualItems()
   const { ghost, gone } = useGhost(plan.departed, rows, virtualItems)
 
-  const holdOnResize = (holds: boolean) => {
-    virtualizer.shouldAdjustScrollPositionOnItemSizeChange = holds
-      ? correctsOnlyGrowthAbove
-      : undefined
-  }
-
   const follow = (next: boolean) => {
     if (next !== followingRef.current) {
       followingRef.current = next
-      holdOnResize(next)
+      adjustsOnResizeWhile(virtualizer, next)
       setFollowing(next)
     }
   }
 
   React.useLayoutEffect(() => {
-    holdOnResize(followingRef.current)
+    adjustsOnResizeWhile(virtualizer, followingRef.current)
   }, [virtualizer])
 
   React.useImperativeHandle(
@@ -543,7 +569,7 @@ export function Thread({
 
             if (isAtBottom(event.currentTarget, liftNow())) {
               follow(true)
-            } else if (movedUp && intent.byUser()) {
+            } else if (movedUp && intent.isUserScroll()) {
               follow(false)
             }
           }}

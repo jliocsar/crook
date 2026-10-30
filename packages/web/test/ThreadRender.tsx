@@ -9,11 +9,11 @@ import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 
 import { present, wait } from './Dom.ts'
 
-const SETTLE_MS = 400
 const VIEWPORT_WIDTH = 375
 const HISTORY_HEIGHT = 1000
 
 export const VIEWPORT_HEIGHT = 812
+export const SETTLE_MS = 400
 
 const row = (key: string): ThreadRow => ({ key, content: <p>{key}</p> })
 
@@ -119,6 +119,17 @@ export const historyOpen = () => {
       movesUp(by)
     },
     correctedUp: movesUp,
+    jumpsTo: (key: string) => {
+      handle.current?.scrollToKey(key)
+    },
+    pressesLatest: () => {
+      fireEvent.click(
+        present(
+          document.querySelector<HTMLElement>('[data-slot="conversation-jump"]'),
+          'the Latest button',
+        ),
+      )
+    },
     growsBelow: (added: number) => {
       grow(added)
       fireEvent.scroll(scrolling)
@@ -171,12 +182,16 @@ const heldMeasurements = (rowHeight: number) => {
   }
 }
 
-export const rowsShrinkAfterOpen = (count: number, from: number, to: number) => {
-  const measurements = heldMeasurements(to)
+export const rowsShrinkAfterOpen = (
+  count: number,
+  renderedHeight: number,
+  measuredHeight: number,
+) => {
+  const measurements = heldMeasurements(measuredHeight)
 
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
     function rendered(this: HTMLElement) {
-      return this.hasAttribute('data-index') ? from : 0
+      return this.hasAttribute('data-index') ? renderedHeight : 0
     },
   )
 
