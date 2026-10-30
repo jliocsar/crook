@@ -123,12 +123,12 @@ const make = Effect.gen(function* () {
         const id = TranscriptWatchId.make(yield* Ref.getAndUpdate(nextId, (current) => current + 1))
         const inbox = yield* makeTranscriptMailbox
         const delivery = yield* Semaphore.make(1)
-        const position = yield* TxRef.make(from)
+        const delivered = yield* TxRef.make(from)
 
         yield* Effect.acquireRelease(
           SubscriptionRef.update(
             watchers,
-            HashMap.set(id, { machine, source, delivered: position, tail, inbox, delivery }),
+            HashMap.set(id, { machine, source, delivered, tail, inbox, delivery }),
           ),
           () => Effect.andThen(SubscriptionRef.update(watchers, HashMap.remove(id)), inbox.close),
         )
