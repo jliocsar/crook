@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Fix comment/assertion rule bugs",
+  "toolUseId": "toolu_01J7PzgiB2buswvHYuutp4av",
+  "spawnDepth": 1,
+  "requestShape": "background"
+}

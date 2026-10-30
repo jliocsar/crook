@@ -4,6 +4,7 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Path from 'effect/Path'
@@ -13,12 +14,26 @@ import * as Stream from 'effect/Stream'
 
 import { FileWatch, readyOr } from '@crook/claude/FileWatch'
 import {
+  NO_TASK_NOTICES,
+  type TaskNotices,
+  settledRoster,
+  taskNoticeLines,
+  withTaskNotices,
+} from '@crook/claude/TaskNotices'
+import {
   SUBAGENT_FILE_PREFIX,
   type TranscriptFile,
   subagentsDirectoryOf,
 } from '@crook/claude/TranscriptLocator'
+import { type TailError, type TailEvent, TranscriptTail } from '@crook/claude/TranscriptTail'
 import { SubagentId } from '@crook/domain/Ids'
-import { Subagent } from '@crook/domain/Subagent'
+import { Subagent, type SubagentStatus } from '@crook/domain/Subagent'
+import { TRANSCRIPT_START } from '@crook/domain/Transcript'
+
+interface NoticeScan {
+  readonly notices: TaskNotices
+  readonly caughtUp: boolean
+}
 
 const META_SUFFIX = '.meta.json'
 const BACKGROUND_SHAPE = 'background'
@@ -46,9 +61,18 @@ const SubagentMeta = Schema.fromJsonString(
   }),
 )
 
+const NO_NOTICE_SCAN: NoticeScan = { notices: NO_TASK_NOTICES, caughtUp: false }
 const BY_ID = Order.mapInput(Order.String, (subagent: Subagent) => subagent.id)
 
 const decodeMeta = Schema.decodeUnknownOption(SubagentMeta)
+
+const statusOfMeta = (meta: typeof SubagentMeta.Type): SubagentStatus => {
+  if (meta.stoppedByUser === true) {
+    return 'stopped'
+  }
+
+  return meta.finished === true ? 'completed' : 'running'
+}
 
 const decodeSubagentId = Schema.decodeUnknownOption(SubagentId)
 
@@ -78,15 +102,26 @@ export const subagentFromMeta = (id: SubagentId, content: string) =>
         parent: Option.fromUndefinedOr(meta.parentAgentId),
         spawnDepth: meta.spawnDepth,
         background: meta.requestShape === BACKGROUND_SHAPE,
-        finished: meta.finished ?? false,
-        stoppedByUser: meta.stoppedByUser ?? false,
+        status: statusOfMeta(meta),
       }),
+  )
+
+const scanAfter = (scan: NoticeScan, event: TailEvent): NoticeScan =>
+  Match.value(event).pipe(
+    Match.tagsExhaustive({
+      TranscriptChunk: (chunk) => ({
+        notices: withTaskNotices(scan.notices, chunk.messages),
+        caughtUp: scan.caughtUp,
+      }),
+      TranscriptCaughtUp: () => ({ notices: scan.notices, caughtUp: true }),
+    }),
   )
 
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const fileWatch = yield* FileWatch
+  const tail = yield* TranscriptTail
 
   const readRoster = (directory: string) => {
     const unreadable = (cause: PlatformError) => new SubagentsUnreadable({ path: directory, cause })
@@ -111,6 +146,7 @@ const make = Effect.gen(function* () {
     }
 
     return fileSystem.readDirectory(directory).pipe(
+      Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(Arr.empty<string>())),
       Effect.mapError(unreadable),
       Effect.map((names) => pipe(names, Arr.map(subagentIdOf), Arr.getSomes)),
       Effect.flatMap((ids) => Effect.forEach(ids, readMeta, { concurrency: 'unbounded' })),
@@ -119,7 +155,7 @@ const make = Effect.gen(function* () {
     )
   }
 
-  const watch = (file: TranscriptFile) => {
+  const watchMetas = (file: TranscriptFile) => {
     const directory = subagentsDirectoryOf(path, file)
     const unreadable = (cause: PlatformError) => new SubagentsUnreadable({ path: directory, cause })
 
@@ -128,11 +164,41 @@ const make = Effect.gen(function* () {
       Stream.filter(readyOr((name) => name.endsWith(META_SUFFIX))),
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
       Stream.mapEffect(() => readRoster(directory)),
-      Stream.changesWith(isSameRoster),
     )
   }
 
-  return SubagentRoster.of({ watch })
+  const watchNotices = (file: TranscriptFile) =>
+    tail.followWith(file, TRANSCRIPT_START, taskNoticeLines).pipe(
+      Stream.scan(() => NO_NOTICE_SCAN, scanAfter),
+      Stream.filter((scan) => scan.caughtUp),
+      Stream.map((scan) => scan.notices),
+      Stream.changes,
+    )
+
+  const watch = (file: TranscriptFile) =>
+    Stream.zipLatest(watchMetas(file), watchNotices(file)).pipe(
+      Stream.map(([roster, notices]) => settledRoster(roster, notices)),
+      Stream.changesWith(isSameRoster),
+    )
+
+  const read = Effect.fn('SubagentRoster.read')(function* (file: TranscriptFile) {
+    const [roster, notices] = yield* Effect.all(
+      [
+        readRoster(subagentsDirectoryOf(path, file)),
+        tail.drainWith(file, TRANSCRIPT_START, taskNoticeLines).pipe(
+          Stream.runFold(
+            () => NO_TASK_NOTICES,
+            (known, chunk) => withTaskNotices(known, chunk.messages),
+          ),
+        ),
+      ],
+      { concurrency: 'unbounded' },
+    )
+
+    return settledRoster(roster, notices)
+  })
+
+  return SubagentRoster.of({ watch, read })
 })
 
 export class SubagentRoster extends Context.Service<
@@ -140,8 +206,13 @@ export class SubagentRoster extends Context.Service<
   {
     readonly watch: (
       file: TranscriptFile,
-    ) => Stream.Stream<readonly Subagent[], SubagentsUnreadable>
+    ) => Stream.Stream<readonly Subagent[], SubagentsUnreadable | TailError>
+    readonly read: (
+      file: TranscriptFile,
+    ) => Effect.Effect<readonly Subagent[], SubagentsUnreadable | TailError>
   }
 >()('@crook/claude/SubagentRoster') {
-  static readonly layer = Layer.effect(this, make).pipe(Layer.provide(FileWatch.layer))
+  static readonly layer = Layer.effect(this, make).pipe(
+    Layer.provide([FileWatch.layer, TranscriptTail.layer]),
+  )
 }

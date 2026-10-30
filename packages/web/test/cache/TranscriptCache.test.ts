@@ -2,6 +2,7 @@ import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
@@ -206,7 +207,9 @@ describe('TranscriptCache', () => {
       const nextRun = yield* cacheOver(store)
 
       expect(
-        Option.map(yield* nextRun.cache.load(LAPTOP, paneSource), (view) => view.subagents),
+        Option.flatMap(yield* nextRun.cache.load(LAPTOP, paneSource), (view) =>
+          HashMap.get(view.rosters, SESSION),
+        ),
       ).toEqual(Option.some([reviewer]))
     }),
   )

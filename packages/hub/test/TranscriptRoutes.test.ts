@@ -179,7 +179,8 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
 
       yield* SubscriptionRef.set(state, stateOn(machine, 2, CLEARED_SESSION))
 
-      expect(yield* takeAll(events, 3)).toEqual([
+      expect(yield* takeAll(events, 4)).toEqual([
+        `subagents ${FIRST_SESSION} 0`,
         `opened ${CLEARED_SESSION}`,
         `skills ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,
@@ -239,8 +240,9 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
         Option.none(),
       )
 
-      expect(yield* takeAll(events, 4)).toEqual([
+      expect(yield* takeAll(events, 5)).toEqual([
         `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
+        `subagents ${FIRST_SESSION} 0`,
         `opened ${CLEARED_SESSION}`,
         `skills ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,

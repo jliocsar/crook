@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Browser smoke test web app",
+  "toolUseId": "toolu_01JVHNKZ26EJ5VRh9NxnRHmM",
+  "spawnDepth": 1,
+  "requestShape": "background"
+}

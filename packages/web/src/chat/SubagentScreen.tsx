@@ -22,8 +22,8 @@ import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
-import { runStatusShown } from '@crook/web/chat/ToolView'
-import { isCatchingUp, linesOf, subagentsOf } from '@crook/web/chat/TranscriptState'
+import { runStatusShown, runTicks } from '@crook/web/chat/ToolView'
+import { isCatchingUp, linesOf, NO_ROSTERS, rostersOf } from '@crook/web/chat/TranscriptState'
 import { Response } from '@crook/web/components/ui/response'
 import { RunDot } from '@crook/web/components/ui/subagent-tree'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
@@ -43,11 +43,16 @@ const SUBAGENT_TITLE = 'Subagent'
 const findRun = (runs: readonly SubagentRun[], subagent: SubagentId): Option.Option<SubagentRun> =>
   Arr.findFirst(runs, (run) => Option.contains(run.subagent, subagent))
 
-const runLine = (run: SubagentRun, status: SubagentRun['status'], now: DateTime.Utc): string =>
+const runLine = (
+  run: SubagentRun,
+  status: SubagentRun['status'],
+  ticks: boolean,
+  now: DateTime.Utc,
+): string =>
   pipe(
     [
       Option.some(status),
-      runningSpan(run.startedAt, run.finishedAt, status === 'running', now),
+      runningSpan(run.startedAt, run.finishedAt, ticks, now),
       Option.liftPredicate(run.agentType, (type) => type !== ''),
       run.model,
     ],
@@ -70,9 +75,10 @@ const askedRow = (prompt: string): ThreadRow => ({
 
 function RunLine({ run, paneClosed }: { run: SubagentRun; paneClosed: boolean }) {
   const status = runStatusShown(run, paneClosed)
-  const now = useNow(status === 'running')
+  const ticks = runTicks(run, paneClosed)
+  const now = useNow(ticks)
 
-  return <span className="truncate font-mono">{runLine(run, status, now)}</span>
+  return <span className="truncate font-mono">{runLine(run, status, ticks, now)}</span>
 }
 
 export function SubagentScreen({ machine, pane, session, subagent }: SubagentScreenProps) {
@@ -89,21 +95,21 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const cwd = cwdOf(model)
   const paneClosed = model.presence === 'closed'
   const parentLines = linesOf(parent)
-  const parentRoster = subagentsOf(parent)
+  const parentRosters = rostersOf(parent)
   const parentActivity = activityOf(model)
   const run = React.useMemo(
     () =>
       findRun(
-        runsIn(chatItems(parentLines, { cwd, activity: parentActivity, subagents: parentRoster })),
+        runsIn(chatItems(parentLines, { cwd, activity: parentActivity, rosters: parentRosters })),
         subagent,
       ),
-    [parentLines, cwd, parentActivity, parentRoster, subagent],
+    [parentLines, cwd, parentActivity, parentRosters, subagent],
   )
-  const running = Option.exists(run, (found) => runStatusShown(found, paneClosed) === 'running')
+  const ticking = Option.exists(run, (found) => runTicks(found, paneClosed))
   const lines = linesOf(view)
   const items = React.useMemo(
-    () => chatItems(lines, { cwd, activity: running ? 'working' : 'still', subagents: [] }),
-    [lines, cwd, running],
+    () => chatItems(lines, { cwd, activity: ticking ? 'working' : 'still', rosters: NO_ROSTERS }),
+    [lines, cwd, ticking],
   )
   const firstPrompt = Arr.findFirst(items, isUserPrompt)
   const prompt = Option.orElse(
@@ -129,7 +135,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const rows: readonly ThreadRow[] = [
     ...Option.toArray(Option.map(prompt, askedRow)),
     ...itemRows(shownItems, environment),
-    ...(running && !hasToolRunning(shownItems)
+    ...(ticking && !hasToolRunning(shownItems)
       ? Option.toArray(
           Option.map(
             Option.flatMap(run, (found) => found.startedAt),

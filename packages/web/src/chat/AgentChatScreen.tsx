@@ -45,7 +45,7 @@ import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
-import { isCatchingUp, linesOf, skillsOf, subagentsOf } from '@crook/web/chat/TranscriptState'
+import { isCatchingUp, linesOf, rostersOf, skillsOf } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
@@ -189,11 +189,11 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const [draft, setDraft] = React.useState('')
   const activity = activityOf(model)
   const cwd = cwdOf(model)
-  const subagents = subagentsOf(view)
+  const rosters = rostersOf(view)
   const lines = linesOf(view)
   const items = React.useMemo(
-    () => chatItems(lines, { cwd, activity, subagents }),
-    [lines, cwd, activity, subagents],
+    () => chatItems(lines, { cwd, activity, rosters }),
+    [lines, cwd, activity, rosters],
   )
   const commands = useChatCommands({ opened, model, connection, items, draft, setDraft })
   const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS

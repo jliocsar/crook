@@ -1,0 +1,7 @@
+{
+  "agentType": "general-purpose",
+  "description": "Adversarial: type-evidence & Effect rules",
+  "toolUseId": "toolu_01NzJc7hZTQfbCbs9q5ogG7B",
+  "spawnDepth": 1,
+  "requestShape": "background"
+}

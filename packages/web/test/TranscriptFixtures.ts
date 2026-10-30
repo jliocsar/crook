@@ -3,7 +3,7 @@ import * as Option from 'effect/Option'
 import type * as Schema from 'effect/Schema'
 
 import { ClaudeSessionId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
-import { Subagent } from '@crook/domain/Subagent'
+import { Subagent, type SubagentStatus } from '@crook/domain/Subagent'
 import { TranscriptCaughtUp, TranscriptChunk, TranscriptOpened } from '@crook/domain/Transcript'
 import {
   AssistantMessage,
@@ -138,7 +138,7 @@ export const interrupted = (offset: number) =>
 
 export const subagent = (options: {
   readonly toolUseId: string
-  readonly finished?: boolean
+  readonly status?: SubagentStatus
   readonly id?: SubagentId
 }) =>
   new Subagent({
@@ -150,8 +150,7 @@ export const subagent = (options: {
     parent: Option.none(),
     spawnDepth: 1,
     background: true,
-    finished: options.finished ?? false,
-    stoppedByUser: false,
+    status: options.status ?? 'running',
   })
 
 export const opened = (session = SESSION) => new TranscriptOpened({ session })

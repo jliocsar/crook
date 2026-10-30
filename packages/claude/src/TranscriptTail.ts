@@ -33,6 +33,11 @@ interface CompleteLine {
 
 export type TailEvent = TranscriptChunk | TranscriptCaughtUp
 
+export type LineParser = (
+  bytes: Uint8Array,
+  offset: TranscriptOffset,
+) => readonly TranscriptMessage[]
+
 export type TailError =
   | TranscriptUnreadable
   | TranscriptOffsetBeyondEnd
@@ -97,17 +102,29 @@ const completeLines = (complete: Uint8Array, start: number): readonly CompleteLi
     ),
   )
 
-export const messagesIn = (complete: Uint8Array, start: number): readonly TranscriptMessage[] =>
+const messagesParsedWith = (
+  parse: LineParser,
+  complete: Uint8Array,
+  start: number,
+): readonly TranscriptMessage[] =>
   Arr.flatMap(completeLines(complete, start), (line) =>
-    parseLine(line.bytes, TranscriptOffset.make(line.offset)),
+    parse(line.bytes, TranscriptOffset.make(line.offset)),
   )
 
-const chunkOf = (session: ClaudeSessionId, start: number, complete: Uint8Array): TranscriptChunk =>
+export const messagesIn = (complete: Uint8Array, start: number): readonly TranscriptMessage[] =>
+  messagesParsedWith(parseLine, complete, start)
+
+const chunkOf = (
+  parse: LineParser,
+  session: ClaudeSessionId,
+  start: number,
+  complete: Uint8Array,
+): TranscriptChunk =>
   new TranscriptChunk({
     session,
     offset: TranscriptOffset.make(start),
     nextOffset: TranscriptOffset.make(start + complete.length),
-    messages: messagesIn(complete, start),
+    messages: messagesParsedWith(parse, complete, start),
   })
 
 const unreadableFile = (file: TranscriptFile) => (cause: PlatformError) =>
@@ -174,6 +191,7 @@ const make = Effect.gen(function* () {
   const open = Effect.fn('TranscriptTail.open')(function* (
     file: TranscriptFile,
     from: TranscriptOffset,
+    parse: LineParser,
   ) {
     const unreadable = unreadableFile(file)
     const { handle, size: sizeAtOpen } = yield* openWithSize(fileSystem, file)
@@ -240,7 +258,7 @@ const make = Effect.gen(function* () {
             Effect.as([
               Option.match(complete, {
                 onNone: () => [],
-                onSome: ({ start, complete: lines }) => [chunkOf(session, start, lines)],
+                onSome: ({ start, complete: lines }) => [chunkOf(parse, session, start, lines)],
               }),
               Option.some<void>(undefined),
             ] as const),
@@ -264,12 +282,12 @@ const make = Effect.gen(function* () {
     return { available, caughtUp }
   })
 
-  const drain = (file: TranscriptFile, from: TranscriptOffset) =>
-    Stream.unwrap(Effect.map(open(file, from), ({ available }) => available))
+  const drainWith = (file: TranscriptFile, from: TranscriptOffset, parse: LineParser) =>
+    Stream.unwrap(Effect.map(open(file, from, parse), ({ available }) => available))
 
-  const follow = (file: TranscriptFile, from: TranscriptOffset) =>
+  const followWith = (file: TranscriptFile, from: TranscriptOffset, parse: LineParser) =>
     Stream.unwrap(
-      Effect.map(open(file, from), ({ available, caughtUp }) =>
+      Effect.map(open(file, from, parse), ({ available, caughtUp }) =>
         fileWatch.watchReady(file.path).pipe(
           Stream.mapError(unreadableFile(file)),
           Stream.buffer({ capacity: 1, strategy: 'sliding' }),
@@ -294,7 +312,11 @@ const make = Effect.gen(function* () {
     return TranscriptOffset.make(start)
   }, Effect.scoped)
 
-  return TranscriptTail.of({ follow, drain, tailStart })
+  const drain = (file: TranscriptFile, from: TranscriptOffset) => drainWith(file, from, parseLine)
+
+  const follow = (file: TranscriptFile, from: TranscriptOffset) => followWith(file, from, parseLine)
+
+  return TranscriptTail.of({ follow, drain, followWith, drainWith, tailStart })
 })
 
 export class TranscriptTail extends Context.Service<
@@ -307,6 +329,16 @@ export class TranscriptTail extends Context.Service<
     readonly drain: (
       file: TranscriptFile,
       from: TranscriptOffset,
+    ) => Stream.Stream<TranscriptChunk, TailError>
+    readonly followWith: (
+      file: TranscriptFile,
+      from: TranscriptOffset,
+      parse: LineParser,
+    ) => Stream.Stream<TailEvent, TailError>
+    readonly drainWith: (
+      file: TranscriptFile,
+      from: TranscriptOffset,
+      parse: LineParser,
     ) => Stream.Stream<TranscriptChunk, TailError>
     readonly tailStart: (
       file: TranscriptFile,

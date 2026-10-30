@@ -1,5 +1,6 @@
 import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
+import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
@@ -25,21 +26,25 @@ export type TranscriptLine = Data.TaggedEnum<{
 
 export type TranscriptWatchFailure = WatchTranscriptRefused | HubCallDefected
 
+export type SessionRosters = HashMap.HashMap<ClaudeSessionId, readonly Subagent[]>
+
 export const TranscriptLine = Data.taggedEnum<TranscriptLine>()
 
 export class TranscriptView extends Data.Class<{
   readonly position: Option.Option<TranscriptPosition>
   readonly lines: readonly TranscriptLine[]
-  readonly subagents: readonly Subagent[]
+  readonly rosters: SessionRosters
   readonly skills: readonly SkillListing[]
   readonly catchingUp: boolean
   readonly failure: Option.Option<TranscriptWatchFailure>
 }> {}
 
+export const NO_ROSTERS: SessionRosters = HashMap.empty()
+
 export const EMPTY_TRANSCRIPT = new TranscriptView({
   position: Option.none(),
   lines: [],
-  subagents: [],
+  rosters: NO_ROSTERS,
   skills: [],
   catchingUp: false,
   failure: Option.none(),
@@ -87,14 +92,14 @@ const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly Tran
     }),
   )
 
-const subagentsAfter = (view: TranscriptView, event: TranscriptEvent): readonly Subagent[] =>
+const rostersAfter = (view: TranscriptView, event: TranscriptEvent): SessionRosters =>
   Match.value(event).pipe(
     Match.tagsExhaustive({
-      TranscriptOpened: () => [],
-      TranscriptChunk: () => view.subagents,
-      SubagentsChanged: (changed) => changed.subagents,
-      SkillsChanged: () => view.subagents,
-      TranscriptCaughtUp: () => view.subagents,
+      TranscriptOpened: () => view.rosters,
+      TranscriptChunk: () => view.rosters,
+      SubagentsChanged: (changed) => HashMap.set(view.rosters, changed.session, changed.subagents),
+      SkillsChanged: () => view.rosters,
+      TranscriptCaughtUp: () => view.rosters,
     }),
   )
 
@@ -127,7 +132,7 @@ export const applyTranscriptEvent = (
         new TranscriptView({
           position: positionAfter(view.position, fresh),
           lines: [...view.lines, ...freshLines(view, fresh)],
-          subagents: subagentsAfter(view, fresh),
+          rosters: rostersAfter(view, fresh),
           skills: skillsAfter(view, fresh),
           catchingUp: catchingUpAfter(view, fresh),
           failure: Option.none(),
@@ -151,8 +156,8 @@ export const isCatchingUp = (view: Option.Option<TranscriptView>): boolean =>
 export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
 
-export const subagentsOf = (view: Option.Option<TranscriptView>): readonly Subagent[] =>
-  Option.match(view, { onNone: () => [], onSome: (found) => found.subagents })
+export const rostersOf = (view: Option.Option<TranscriptView>): SessionRosters =>
+  Option.match(view, { onNone: () => NO_ROSTERS, onSome: (found) => found.rosters })
 
 export const skillsOf = (view: Option.Option<TranscriptView>): readonly SkillListing[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.skills })
