@@ -80,6 +80,7 @@ import {
   TranscriptReadFailed,
   TranscriptResumeRejected,
   TranscriptWatch,
+  type TranscriptUpdate,
   TranscriptWatchFailed,
   TranscriptWatchId,
 } from '@crook/protocol/Transcripts'
@@ -110,6 +111,16 @@ const roundTrip = <Codec extends Schema.Codec<unknown, unknown>>(
   return Schema.decodeSync(line)(Schema.encodeSync(line)(value))
 }
 
+const acceptUpdate = (watch: TranscriptWatchId, update: TranscriptUpdate) =>
+  Match.value(update).pipe(
+    Match.tag('TranscriptChunk', (chunk) =>
+      chunk.offset === 0
+        ? Effect.void
+        : Effect.fail(new TranscriptOutOfStep({ watch, expected: Option.some(resumeAt) })),
+    ),
+    Match.orElse(() => Effect.void),
+  )
+
 const agentLinkHandlers = AgentLink.toLayer({
   Attach: () => Stream.never,
   PublishState: ({ state }) =>
@@ -120,15 +131,9 @@ const agentLinkHandlers = AgentLink.toLayer({
         ),
   CompleteCommand: () => Effect.void,
   TranscriptDemands: () => Stream.make(demand),
-  PublishTranscript: ({ watch, update }) =>
-    Match.value(update).pipe(
-      Match.tag('TranscriptChunk', (chunk) =>
-        chunk.offset === 0
-          ? Effect.void
-          : Effect.fail(new TranscriptOutOfStep({ watch, expected: Option.some(resumeAt) })),
-      ),
-      Match.orElse(() => Effect.void),
-    ),
+  PublishTranscript: ({ watch, update }) => acceptUpdate(watch, update),
+  PublishTranscriptBatch: ({ watch, updates }) =>
+    Effect.forEach(updates, (update) => acceptUpdate(watch, update), { discard: true }),
 })
 
 const session = ClaudeSessionId.make('309f44d5-235f-4550-a0c7-1691715aad75')
@@ -219,6 +224,9 @@ layer(agentLinkHandlers)('AgentLink', (rpc) => {
       const outOfStep = yield* client.PublishTranscript({ watch, update: late }).pipe(Effect.flip)
 
       yield* client.PublishTranscript({ watch, update: firstChunk })
+      const batchOutOfStep = yield* client
+        .PublishTranscriptBatch({ watch, updates: [opened, late] })
+        .pipe(Effect.flip)
       yield* client.PublishTranscript({
         watch,
         update: new TranscriptWatchFailed({
@@ -228,6 +236,9 @@ layer(agentLinkHandlers)('AgentLink', (rpc) => {
 
       expect(demands).toEqual([demand])
       expect(outOfStep).toEqual(new TranscriptOutOfStep({ watch, expected: Option.some(resumeAt) }))
+      expect(batchOutOfStep).toEqual(
+        new TranscriptOutOfStep({ watch, expected: Option.some(resumeAt) }),
+      )
     }),
   )
 })

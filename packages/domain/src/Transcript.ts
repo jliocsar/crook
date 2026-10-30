@@ -62,6 +62,7 @@ export const TranscriptEvent = Schema.Union([
 export type TranscriptEvent = typeof TranscriptEvent.Type
 
 export const TRANSCRIPT_START = TranscriptOffset.make(0)
+export const CHUNK_READ_LIMIT = 1024 * 1024
 
 export const TranscriptTailBytes = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
   Schema.brand('TranscriptTailBytes'),

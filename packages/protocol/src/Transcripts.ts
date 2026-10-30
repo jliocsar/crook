@@ -64,6 +64,8 @@ export class TranscriptWatchFailed extends Schema.TaggedClass<TranscriptWatchFai
   { failure: TranscriptFailure },
 ) {}
 
+export const isWatchFailed = Schema.is(TranscriptWatchFailed)
+
 export const TranscriptUpdate = Schema.Union([...TranscriptEvent.members, TranscriptWatchFailed])
 export type TranscriptUpdate = typeof TranscriptUpdate.Type
 

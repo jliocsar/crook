@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import type { NonEmptyReadonlyArray } from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
@@ -7,7 +8,6 @@ import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
-import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
@@ -30,21 +30,22 @@ import {
   TranscriptOutOfStep,
   type TranscriptUpdate,
   TranscriptWatch,
+  type TranscriptWatchFailed,
   TranscriptWatchId,
+  isWatchFailed,
 } from '@crook/protocol/Transcripts'
+import { type TranscriptMailbox, makeTranscriptMailbox } from '@crook/protocol/TranscriptBatch'
 
 interface Watcher {
   readonly machine: MachineId
   readonly source: TranscriptSource
   readonly position: Option.Option<TranscriptPosition>
   readonly tail: Option.Option<TranscriptTailBytes>
-  readonly inbox: Queue.Queue<TranscriptEvent, TranscriptFailure>
+  readonly inbox: TranscriptMailbox
   readonly delivery: Semaphore.Semaphore
 }
 
 type Watchers = HashMap.HashMap<TranscriptWatchId, Watcher>
-
-const PHONE_INBOX_CAPACITY = 1
 
 const unseenOnly = (
   delivered: Option.Option<TranscriptPosition>,
@@ -54,6 +55,25 @@ const unseenOnly = (
     onNone: () => [delivered, []],
     onSome: (unseen) => [positionAfter(delivered, unseen), [unseen]],
   })
+
+const delivered = (updates: NonEmptyReadonlyArray<TranscriptUpdate>) =>
+  Stream.concat(
+    Stream.fromArray(
+      Arr.flatMap(updates, (update) =>
+        Match.value(update).pipe(
+          Match.tag('TranscriptWatchFailed', (): readonly TranscriptEvent[] => []),
+          Match.orElse((event) => [event]),
+        ),
+      ),
+    ),
+    pipe(
+      Arr.findFirst(updates, isWatchFailed),
+      Option.match({
+        onNone: () => Stream.empty,
+        onSome: (failed) => Stream.fail(failed.failure),
+      }),
+    ),
+  )
 
 const demandOf = (watchers: Watchers, machine: MachineId) =>
   new TranscriptDemand({
@@ -93,7 +113,7 @@ const make = Effect.gen(function* () {
     Stream.unwrap(
       Effect.gen(function* () {
         const id = TranscriptWatchId.make(yield* Ref.getAndUpdate(nextId, (current) => current + 1))
-        const inbox = yield* Queue.bounded<TranscriptEvent, TranscriptFailure>(PHONE_INBOX_CAPACITY)
+        const inbox = yield* makeTranscriptMailbox
         const delivery = yield* Semaphore.make(1)
 
         yield* Effect.acquireRelease(
@@ -101,14 +121,13 @@ const make = Effect.gen(function* () {
             watchers,
             HashMap.set(id, { machine, source, position: from, tail, inbox, delivery }),
           ),
-          () =>
-            Effect.andThen(
-              SubscriptionRef.update(watchers, HashMap.remove(id)),
-              Queue.shutdown(inbox),
-            ),
+          () => Effect.andThen(SubscriptionRef.update(watchers, HashMap.remove(id)), inbox.close),
         )
 
-        return Stream.fromQueue(inbox).pipe(Stream.mapAccum(() => from, unseenOnly))
+        return Stream.fromEffectRepeat(inbox.take).pipe(
+          Stream.flatMap(delivered),
+          Stream.mapAccum(() => from, unseenOnly),
+        )
       }),
     )
 
@@ -128,16 +147,16 @@ const make = Effect.gen(function* () {
     )
 
   const forward = (id: TranscriptWatchId, watcher: Watcher, event: TranscriptEvent) =>
-    Effect.andThen(Queue.offer(watcher.inbox, event), advance(id, event))
+    Effect.andThen(watcher.inbox.offer(event), advance(id, event))
 
   const append = (id: TranscriptWatchId, watcher: Watcher, chunk: TranscriptChunk) =>
     continuesFrom(watcher.position, chunk)
       ? forward(id, watcher, chunk)
       : Effect.fail(new TranscriptOutOfStep({ watch: id, expected: watcher.position }))
 
-  const fail = (id: TranscriptWatchId, watcher: Watcher, failure: TranscriptFailure) =>
+  const fail = (id: TranscriptWatchId, watcher: Watcher, failed: TranscriptWatchFailed) =>
     Effect.andThen(
-      Queue.fail(watcher.inbox, failure),
+      watcher.inbox.offer(failed),
       SubscriptionRef.update(watchers, HashMap.remove(id)),
     )
 
@@ -153,7 +172,7 @@ const make = Effect.gen(function* () {
               SubagentsChanged: (changed) => forward(id, watcher, changed),
               SkillsChanged: (changed) => forward(id, watcher, changed),
               TranscriptCaughtUp: (caughtUp) => forward(id, watcher, caughtUp),
-              TranscriptWatchFailed: (failed) => fail(id, watcher, failed.failure),
+              TranscriptWatchFailed: (failed) => fail(id, watcher, failed),
             }),
           ),
       }),
@@ -162,7 +181,7 @@ const make = Effect.gen(function* () {
   const publish = Effect.fn('TranscriptRelay.publish')(function* (
     machine: MachineId,
     id: TranscriptWatchId,
-    update: TranscriptUpdate,
+    updates: NonEmptyReadonlyArray<TranscriptUpdate>,
   ) {
     const watcher = pipe(
       HashMap.get(yield* SubscriptionRef.get(watchers), id),
@@ -174,7 +193,10 @@ const make = Effect.gen(function* () {
         Effect.logDebug(
           `Dropped an update for transcript watch ${id}: no phone on this machine watches it any more.`,
         ),
-      onSome: (found) => found.delivery.withPermit(deliver(id, update)),
+      onSome: (found) =>
+        found.delivery.withPermit(
+          Effect.forEach(updates, (update) => deliver(id, update), { discard: true }),
+        ),
     })
   })
 
@@ -194,7 +216,7 @@ export class TranscriptRelay extends Context.Service<
     readonly publish: (
       machine: MachineId,
       id: TranscriptWatchId,
-      update: TranscriptUpdate,
+      updates: NonEmptyReadonlyArray<TranscriptUpdate>,
     ) => Effect.Effect<void, TranscriptOutOfStep>
   }
 >()('@crook/hub/TranscriptRelay') {
