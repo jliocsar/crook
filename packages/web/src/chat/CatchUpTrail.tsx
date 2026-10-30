@@ -14,7 +14,7 @@ import { ROW_GAP } from '@crook/web/chat/Thread'
 import type { ThreadLayout, ThreadRow } from '@crook/web/chat/Thread'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
-import { GLIDE, SPRING } from '@crook/web/motion/Springs'
+import { GLIDE, MOMENTUM_GLIDE, SPRING } from '@crook/web/motion/Springs'
 
 interface Carrier {
   wrapper: HTMLDivElement | null
@@ -50,7 +50,6 @@ const CHIP_START_SCALE = 0.6
 const DASH_SLACK = 100
 const SETTLE_EPSILON = 0.5
 const CHIP_X = LINE_X - 1
-const RIDE_SPRING = { duration: SPRING.duration, bounce: SPRING.bounce }
 
 const clampUnit = (value: number): number => Math.min(1, Math.max(0, value))
 
@@ -255,7 +254,7 @@ function CatchUpTrail({
 }: TrailProps) {
   const path = React.useRef<SVGPathElement>(null)
   const carrier = React.useRef<Carrier>({ wrapper: null, chip: null, pill: null })
-  const bottom = useSpring(0, RIDE_SPRING)
+  const bottom = useSpring(0, MOMENTUM_GLIDE)
   const placed = React.useRef(false)
   const target = React.useRef(0)
   const ridden = React.useRef(0)
@@ -436,7 +435,7 @@ export function useCatchUp(view: Option.Option<TranscriptView>, rows: readonly T
     () =>
       Option.match(landed, {
         onNone: () => [],
-        onSome: (found) => found.keys.slice(0, shown),
+        onSome: (found) => Arr.take(found.keys, shown),
       }),
     [landed, shown],
   )

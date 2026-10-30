@@ -48,9 +48,8 @@ const stampOf = (line: TranscriptLine): Option.Option<DateTime.Utc> =>
   })
 
 export const lapseOf = (lines: readonly TranscriptLine[]): Option.Option<Lapse> =>
-  pipe(
-    Arr.flatMap(lines, (line) => Option.toArray(stampOf(line))),
-    (stamps) => Option.all({ from: Arr.head(stamps), to: Arr.last(stamps) }),
+  pipe(lines, Arr.map(stampOf), Arr.getSomes, (stamps) =>
+    Option.all({ from: Arr.head(stamps), to: Arr.last(stamps) }),
   )
 
 export const lapseLabel = (lapse: Lapse): string => {
@@ -98,7 +97,7 @@ const landedFrom = (
           onEmpty: () => Option.none<CatchUp>(),
           onNonEmpty: (keys) =>
             Option.some(
-              CatchUp.Landed({ keys, lapse: lapseOf(shown.lines.slice(cached.lines.length)) }),
+              CatchUp.Landed({ keys, lapse: lapseOf(Arr.drop(shown.lines, cached.lines.length)) }),
             ),
         }),
       ),
