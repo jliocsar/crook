@@ -48,6 +48,16 @@ const launched = chunk(0, 30, [
   toolResult(20, 'toolu_dev', 'Command running in background with ID: bdev.'),
 ])
 
+const movedByTimeout = chunk(0, 30, [
+  prompt(0, 'Bring up the dev server'),
+  toolUse(10, 'toolu_dev', 'Bash', { command: 'bun run dev' }),
+  toolResult(
+    20,
+    'toolu_dev',
+    'Command did not complete within its 120s timeout and was moved to the background (ID: bdev).',
+  ),
+])
+
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(VIEWPORT_WIDTH)
@@ -113,6 +123,28 @@ describe('background work in the chat', () => {
 
         expect(marker?.getAttribute('data-state')).toBe('stopped')
         expect(marker?.textContent).toContain('bun run dev · ran 1m 05s · stopped')
+      })
+    }),
+  )
+
+  it.effect('marks a shell its timeout moved to the background', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(
+        CHAT,
+        liveWith(herd([machine(LAPTOP, [agent('w1:p1', 'working')])])),
+      )
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        movedByTimeout,
+        new BackgroundChanged({ session: SESSION, tasks: [devServer('running')], activity: [] }),
+      ])
+
+      yield* eventually(() => {
+        const marker = document.querySelector('[data-slot="background-marker"]')
+
+        expect(marker?.getAttribute('data-state')).toBe('running')
       })
     }),
   )

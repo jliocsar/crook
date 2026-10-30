@@ -20,13 +20,17 @@ const CLAUDE_PROC_START = '248837515'
 const CLAUDE_PID = 2224797
 const SHELL_PID = 2230001
 const SERVER_PID = 2230002
+const CRASHED_PID = 2100001
 const SESSION = ClaudeSessionId.make('270d2fc3-129e-4a0d-aef3-78f495af98c9')
 
 const PidFile = Schema.fromJsonString(
   Schema.Struct({ pid: Schema.Int, sessionId: Schema.String, procStart: Schema.String }),
 )
 
-const liveness = Effect.fn('liveness')(function* (procStart: string) {
+const liveness = Effect.fn('liveness')(function* (
+  procStart: string,
+  children: Option.Option<string> = Option.some(`${SHELL_PID} ${SERVER_PID} `),
+) {
   const fileSystem = yield* FileSystem.FileSystem
   const root = yield* fileSystem.makeTempDirectoryScoped()
   const proc = `${root}/proc`
@@ -40,12 +44,19 @@ const liveness = Effect.fn('liveness')(function* (procStart: string) {
   yield* fileSystem.makeDirectory(`${claudeRoot}/projects/-home-crook`, { recursive: true })
   yield* fileSystem.makeDirectory(tasks, { recursive: true })
   yield* fileSystem.writeFileString(`${proc}/${CLAUDE_PID}/stat`, CLAUDE_STAT)
-  yield* fileSystem.writeFileString(
-    `${proc}/${CLAUDE_PID}/task/${CLAUDE_PID}/children`,
-    `${SHELL_PID} ${SERVER_PID} `,
+  yield* Effect.forEach(Option.toArray(children), (listed) =>
+    fileSystem.writeFileString(`${proc}/${CLAUDE_PID}/task/${CLAUDE_PID}/children`, listed),
   )
   yield* fileSystem.symlink(`${tasks}/bdev.output`, `${proc}/${SHELL_PID}/fd/1`)
   yield* fileSystem.symlink('/dev/null', `${proc}/${SERVER_PID}/fd/1`)
+  yield* fileSystem.writeFileString(
+    `${claudeRoot}/sessions/${CRASHED_PID}.json`,
+    yield* Schema.encodeEffect(PidFile)({
+      pid: CRASHED_PID,
+      sessionId: SESSION,
+      procStart: CLAUDE_PROC_START,
+    }),
+  )
   yield* fileSystem.writeFileString(
     `${claudeRoot}/sessions/${CLAUDE_PID}.json`,
     yield* Schema.encodeEffect(PidFile)({ pid: CLAUDE_PID, sessionId: SESSION, procStart }),
@@ -74,6 +85,12 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
     live.effect('knows nothing once the pid belongs to another process', () =>
       Effect.gen(function* () {
         expect(yield* liveness('1')).toEqual(Option.none())
+      }),
+    )
+
+    live.effect('knows nothing when the kernel does not list a process children', () =>
+      Effect.gen(function* () {
+        expect(yield* liveness(CLAUDE_PROC_START, Option.none())).toEqual(Option.none())
       }),
     )
 

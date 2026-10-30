@@ -46,14 +46,14 @@ const make = (procRoot: string) =>
           Effect.map(readText(path.join(directory, name)), Option.flatMap(decodeSessionFile)),
         { concurrency: 'unbounded' },
       )
-      const owner = pipe(
-        Arr.getSomes(sessions),
-        Arr.findFirst((session) => session.sessionId === file.session),
+      const owners = pipe(
+        sessions,
+        Arr.getSomes,
+        Arr.filter((session) => session.sessionId === file.session),
       )
-
-      return yield* Option.match(owner, {
-        onNone: () => Effect.succeedNone,
-        onSome: (session) =>
+      const live = yield* Effect.forEach(
+        owners,
+        (session) =>
           Effect.map(readText(`${procRoot}/${session.pid}/stat`), (stat) =>
             pipe(
               stat,
@@ -62,7 +62,10 @@ const make = (procRoot: string) =>
               Option.as(session.pid),
             ),
           ),
-      })
+        { concurrency: 'unbounded' },
+      )
+
+      return pipe(live, Arr.getSomes, Arr.head)
     })
 
     const childrenOf = Effect.fn('TaskLiveness.childrenOf')(function* (pid: number) {
@@ -75,11 +78,14 @@ const make = (procRoot: string) =>
         { concurrency: 'unbounded' },
       )
 
-      return pipe(Arr.getSomes(children), Arr.flatMap(childPids), Arr.dedupe)
+      return pipe(
+        Arr.getSomes(children),
+        Option.liftPredicate(Arr.isReadonlyArrayNonEmpty),
+        Option.map((readable) => pipe(readable, Arr.flatMap(childPids), Arr.dedupe)),
+      )
     })
 
-    const outputsOf = Effect.fn('TaskLiveness.outputsOf')(function* (pid: number) {
-      const children = yield* childrenOf(pid)
+    const outputsIn = Effect.fn('TaskLiveness.outputsIn')(function* (children: readonly string[]) {
       const targets = yield* Effect.forEach(
         children,
         (child) =>
@@ -102,7 +108,14 @@ const make = (procRoot: string) =>
 
       return yield* Option.match(yield* claudePid(file), {
         onNone: () => Effect.succeedNone,
-        onSome: (pid) => Effect.map(outputsOf(pid), Option.some),
+        onSome: (pid) =>
+          Effect.flatMap(
+            childrenOf(pid),
+            Option.match({
+              onNone: () => Effect.succeedNone,
+              onSome: (children) => Effect.map(outputsIn(children), Option.some),
+            }),
+          ),
       })
     })
 

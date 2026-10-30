@@ -72,6 +72,28 @@ const devServerLaunch = [
   '',
 ].join('\n')
 
+const outputRead = (id: string, second: number) =>
+  [
+    encodeJson({
+      type: 'assistant',
+      uuid: `assistant-${id}`,
+      timestamp: `2026-10-30T14:01:${String(second).padStart(2, '0')}.000Z`,
+      message: {
+        id: `msg_${id}`,
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: `toolu_${id}`,
+            name: 'Read',
+            input: { file_path: `/nowhere/tasks/${TASK}.output` },
+          },
+        ],
+      },
+    }),
+    '',
+  ].join('\n')
+
 const aliveOf = (event: TranscriptEvent): Option.Option<string> =>
   Match.value(event).pipe(
     Match.tag('BackgroundChanged', (changed) =>
@@ -113,33 +135,37 @@ const streamsWith = Effect.fn('streamsWith')(function* (root: string, open: Ref.
   return Context.get(context, TranscriptStreams)
 })
 
+const following = Effect.fn('following')(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const root = yield* fileSystem.makeTempDirectoryScoped()
+  const transcript = `${root}/projects/${PROJECT}/${SESSION}.jsonl`
+
+  yield* fileSystem.makeDirectory(`${root}/projects/${PROJECT}`, { recursive: true })
+  yield* fileSystem.writeFileString(transcript, devServerLaunch)
+
+  const open = yield* Ref.make<OpenTasks>(Option.some(HashSet.make(TASK)))
+  const streams = yield* streamsWith(root, open)
+  const states = yield* Queue.unbounded<string>()
+
+  yield* streams
+    .follow(new PaneTranscript({ pane: agentRow({}).pane }), Option.none(), Option.none())
+    .pipe(
+      Stream.map(aliveOf),
+      Stream.filter(Option.isSome),
+      Stream.map((line) => line.value),
+      Stream.runForEach((line) => Queue.offer(states, line)),
+      Effect.forkScoped,
+    )
+
+  return { open, states, transcript }
+})
+
 layer(Layer.mergeAll(BunFileSystem.layer, Path.layer))(
   'TranscriptStreams background work',
   (it) => {
     it.effect('rechecks a running shell and tells the phone once its process is gone', () =>
       Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem
-        const root = yield* fileSystem.makeTempDirectoryScoped()
-
-        yield* fileSystem.makeDirectory(`${root}/projects/${PROJECT}`, { recursive: true })
-        yield* fileSystem.writeFileString(
-          `${root}/projects/${PROJECT}/${SESSION}.jsonl`,
-          devServerLaunch,
-        )
-
-        const open = yield* Ref.make<OpenTasks>(Option.some(HashSet.make(TASK)))
-        const streams = yield* streamsWith(root, open)
-        const states = yield* Queue.unbounded<string>()
-
-        yield* streams
-          .follow(new PaneTranscript({ pane: agentRow({}).pane }), Option.none(), Option.none())
-          .pipe(
-            Stream.map(aliveOf),
-            Stream.filter(Option.isSome),
-            Stream.map((line) => line.value),
-            Stream.runForEach((line) => Queue.offer(states, line)),
-            Effect.forkScoped,
-          )
+        const { open, states } = yield* following()
 
         expect(yield* Queue.take(states)).toBe(`${TASK} alive`)
 
@@ -149,6 +175,30 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer))(
 
         expect(yield* Queue.take(states)).toBe(`${TASK} gone`)
       }),
+    )
+
+    it.effect(
+      'waits a full recheck before calling a shell gone, however often the work changes',
+      () =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem
+          const { open, states, transcript } = yield* following()
+
+          expect(yield* Queue.take(states)).toBe(`${TASK} alive`)
+
+          yield* Ref.set(open, Option.some(HashSet.empty()))
+          yield* fileSystem.writeFileString(transcript, outputRead('first', 10), { flag: 'a' })
+
+          expect(yield* Queue.take(states)).toBe(`${TASK} alive`)
+
+          yield* fileSystem.writeFileString(transcript, outputRead('second', 20), { flag: 'a' })
+
+          expect(yield* Queue.take(states)).toBe(`${TASK} alive`)
+
+          yield* TestClock.adjust(`${LIVENESS_RECHECK_SECONDS} seconds`)
+
+          expect(yield* Queue.take(states)).toBe(`${TASK} gone`)
+        }),
     )
   },
 )

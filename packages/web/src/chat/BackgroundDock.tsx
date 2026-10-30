@@ -4,6 +4,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import {
   Activity,
@@ -72,7 +73,7 @@ export const KIND_ICON = {
   monitor: Activity,
 } satisfies Record<JobKind, LucideIcon>
 
-export const HIT_AREA =
+const HIT_AREA =
   "relative touch-manipulation after:absolute after:inset-x-0 after:-inset-y-2 after:content-['']"
 
 const TINT = {
@@ -222,57 +223,47 @@ export const useBackgroundWork = (
 function JobGlyph({ job, size = 12 }: { job: BackgroundJob; size?: number }) {
   const Icon = KIND_ICON[job.kind]
 
-  if (job.state === 'failed') {
-    return <TriangleAlert aria-hidden="true" size={size} strokeWidth={2.4} />
-  }
-
-  if (job.state === 'done') {
-    return (
+  return Match.value(job.state).pipe(
+    Match.when('running', () => (
+      <Icon aria-hidden="true" size={size} strokeWidth={2.2} className="text-primary" />
+    )),
+    Match.when('failed', () => <TriangleAlert aria-hidden="true" size={size} strokeWidth={2.4} />),
+    Match.when('done', () => (
       <Check
         aria-hidden="true"
         size={size}
         strokeWidth={3}
         className="text-accent-foreground dark:text-accent"
       />
-    )
-  }
-
-  if (job.state === 'stopped') {
-    return <Square aria-hidden="true" size={size - 3} fill="currentColor" />
-  }
-
-  if (job.state === 'unconfirmed') {
-    return <CircleDashed aria-hidden="true" size={size} />
-  }
-
-  return <Icon aria-hidden="true" size={size} strokeWidth={2.2} className="text-primary" />
+    )),
+    Match.when('stopped', () => <Square aria-hidden="true" size={size - 3} fill="currentColor" />),
+    Match.when('unconfirmed', () => <CircleDashed aria-hidden="true" size={size} />),
+    Match.exhaustive,
+  )
 }
 
 function JobStateIcon({ state, size = 13 }: { state: JobState; size?: number }) {
-  if (state === 'running') {
-    return <Spinner size={size} className="text-primary" />
-  }
-
-  if (state === 'done') {
-    return <Check aria-hidden="true" size={size} strokeWidth={2.5} className="text-accent" />
-  }
-
-  if (state === 'failed') {
-    return <TriangleAlert aria-hidden="true" size={size} className="text-destructive" />
-  }
-
-  if (state === 'stopped') {
-    return (
+  return Match.value(state).pipe(
+    Match.when('running', () => <Spinner size={size} className="text-primary" />),
+    Match.when('done', () => (
+      <Check aria-hidden="true" size={size} strokeWidth={2.5} className="text-accent" />
+    )),
+    Match.when('failed', () => (
+      <TriangleAlert aria-hidden="true" size={size} className="text-destructive" />
+    )),
+    Match.when('stopped', () => (
       <Square
         aria-hidden="true"
         size={size - 3}
         fill="currentColor"
         className="text-muted-foreground"
       />
-    )
-  }
-
-  return <CircleDashed aria-hidden="true" size={size} className="text-muted-foreground" />
+    )),
+    Match.when('unconfirmed', () => (
+      <CircleDashed aria-hidden="true" size={size} className="text-muted-foreground" />
+    )),
+    Match.exhaustive,
+  )
 }
 
 function Capsule({
@@ -391,7 +382,7 @@ function EventLine({ dock }: { dock: DockModel }) {
   })
 }
 
-export function OutputTail({
+function OutputTail({
   lines,
   max,
   className,
@@ -610,7 +601,8 @@ function DockTray({
 
 export function BackgroundDock({ work }: { work: BackgroundHandle }) {
   const [ticking, setTicking] = React.useState(true)
-  const now = useNow(ticking)
+  const clock = useNow(ticking)
+  const now = ticking ? clock : DateTime.nowUnsafe()
   const jobs = React.useMemo(() => work.jobsAt(now), [work, now])
   const dock = dockOf(jobs, now)
   const shown = isShown(dock)
@@ -619,10 +611,18 @@ export function BackgroundDock({ work }: { work: BackgroundHandle }) {
   const openJob = Option.flatMap(work.openKey, (key) =>
     Arr.findFirst(jobs, (job) => job.key === key),
   )
+  const lostJob = Option.isSome(work.openKey) && Option.isNone(openJob)
+  const { close } = work
 
   if (needsClock !== ticking) {
     setTicking(needsClock)
   }
+
+  React.useEffect(() => {
+    if (lostJob) {
+      close()
+    }
+  }, [lostJob, close])
 
   return (
     <>

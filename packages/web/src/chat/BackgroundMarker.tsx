@@ -3,7 +3,6 @@ import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
-import * as Schema from 'effect/Schema'
 import * as React from 'react'
 
 import { BackgroundContext, type BackgroundHandle, KIND_ICON } from '@crook/web/chat/BackgroundDock'
@@ -29,15 +28,8 @@ const JOB_DOT = {
   unconfirmed: 'border-muted-foreground/60 border border-dashed',
 } satisfies Record<JobState, string>
 
-const BackgroundInput = Schema.Struct({ run_in_background: Schema.Literal(true) })
-
-const decodeBackgroundInput = Schema.decodeUnknownOption(BackgroundInput)
-
-const runsInBackground = (input: ToolCallModel['input']): boolean =>
-  Option.isSome(decodeBackgroundInput(input))
-
-export const isBackgroundCall = (call: ToolCallModel): boolean =>
-  call.name === MONITOR_TOOL || (call.name === BASH_TOOL && runsInBackground(call.input))
+const canRunInBackground = (call: ToolCallModel): boolean =>
+  call.name === MONITOR_TOOL || call.name === BASH_TOOL
 
 const settledText = (job: BackgroundJob, now: DateTime.Utc): string =>
   job.state === 'unconfirmed'
@@ -64,7 +56,7 @@ export const useBackgroundMarker = (call: ToolCallModel): Option.Option<React.Re
   const now = useNow(false)
 
   return pipe(
-    Option.liftPredicate(call, isBackgroundCall),
+    Option.liftPredicate(call, canRunInBackground),
     Option.flatMap(() => work),
     Option.filter((found) => Option.isSome(jobOf(found, call.id, now))),
     Option.map((found) => <Marker callId={call.id} work={found} />),

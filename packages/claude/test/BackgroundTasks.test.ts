@@ -51,12 +51,34 @@ const assistantUse = (id: string, name: string, input: Schema.Json) => ({
   message: { id: `msg-${id}`, role: 'assistant', content: [{ type: 'tool_use', id, name, input }] },
 })
 
-const userResult = (id: string, text: string) => ({
+const userResult = (id: string, text: string, isError = false) => ({
   type: 'user',
   uuid: `user-${id}`,
   timestamp: '2026-10-30T14:00:01.000Z',
-  message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text }] },
+  message: {
+    role: 'user',
+    content: [{ type: 'tool_result', tool_use_id: id, content: text, is_error: isError }],
+  },
 })
+
+const withToolUseResult = (line: ReturnType<typeof userResult>, toolUseResult: Schema.Json) => ({
+  ...line,
+  toolUseResult,
+})
+
+const devServerLines = [
+  assistantUse('toolu_dev', 'Bash', { command: 'bun run dev', run_in_background: true }),
+  withToolUseResult(
+    userResult(
+      'toolu_dev',
+      'Command running in background with ID: bdev. Output is being written to: /x/tasks/bdev.output',
+    ),
+    { backgroundTaskId: 'bdev' },
+  ),
+]
+
+const statusesOf = (lines: readonly Schema.Json[]) =>
+  Arr.map(backgroundTasks(ledgerFromLines(lines)), (task) => [task.taskId, task.status])
 
 const at = (iso: string) => Option.some(DateTime.makeUnsafe(iso))
 
@@ -226,6 +248,37 @@ describe('background lines that are not background work', () => {
     ])
 
     expect(backgroundTasks(ledger)).toEqual([])
+  })
+
+  it('ignores another tool whose result names a task id', () => {
+    expect(
+      statusesOf([
+        assistantUse('toolu_update', 'TaskUpdate', { taskId: '3', status: 'completed' }),
+        withToolUseResult(
+          userResult('toolu_update', 'Updated task #3: tail /x/tasks/bdev.output'),
+          { success: true, taskId: '3', updatedFields: ['status'] },
+        ),
+      ]),
+    ).toEqual([])
+  })
+
+  it('stops a shell only once its TaskStop succeeded', () => {
+    const stop = assistantUse('toolu_stop', 'TaskStop', { task_id: 'bdev' })
+
+    expect(
+      statusesOf([
+        ...devServerLines,
+        stop,
+        userResult('toolu_stop', '[Request interrupted by user for tool use]', true),
+      ]),
+    ).toEqual([['bdev', 'running']])
+    expect(
+      statusesOf([
+        ...devServerLines,
+        stop,
+        userResult('toolu_stop', '{"message":"Successfully stopped task: bdev (bun run dev)"}'),
+      ]),
+    ).toEqual([['bdev', 'stopped']])
   })
 
   it('ignores a TaskStop of a task it never saw start', () => {

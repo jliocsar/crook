@@ -198,7 +198,7 @@ const activityOfMessage =
       ),
     )
 
-export const activityIn = (
+const activityIn = (
   subagent: SubagentId,
   messages: readonly TranscriptMessage[],
 ): Option.Option<SubagentActivity> =>
@@ -430,18 +430,7 @@ const make = Effect.gen(function* () {
       ),
     )
 
-  const read = Effect.fn('BackgroundWork.read')(function* (file: TranscriptFile) {
-    const ledger = yield* tail.drainWith(file, TRANSCRIPT_START, backgroundLines).pipe(
-      Stream.runFold(
-        () => EMPTY_LEDGER,
-        (known, chunk) => withBackgroundLines(known, chunk.messages),
-      ),
-    )
-
-    return { tasks: backgroundTasks(ledger), activity: [] } satisfies BackgroundSnapshot
-  })
-
-  return BackgroundWork.of({ watch, read })
+  return BackgroundWork.of({ watch })
 })
 
 export class BackgroundWork extends Context.Service<
@@ -450,7 +439,6 @@ export class BackgroundWork extends Context.Service<
     readonly watch: (
       file: TranscriptFile,
     ) => Stream.Stream<BackgroundSnapshot, BackgroundWatchError>
-    readonly read: (file: TranscriptFile) => Effect.Effect<BackgroundSnapshot, TailError>
   }
 >()('@crook/claude/BackgroundWork') {
   static readonly layer = Layer.effect(this, make).pipe(

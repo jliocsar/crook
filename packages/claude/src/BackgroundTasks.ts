@@ -59,6 +59,7 @@ interface FoundTask {
 export interface BackgroundLedger {
   readonly shellCalls: HashMap.HashMap<string, ToolCall>
   readonly monitorCalls: HashMap.HashMap<string, ToolCall>
+  readonly stopCalls: HashMap.HashMap<string, string>
   readonly launches: readonly Launch[]
   readonly tasks: HashMap.HashMap<string, TaskEntry>
 }
@@ -85,6 +86,7 @@ const BACKGROUND_MARKERS = [
   'in background with ID',
   'to the background (ID',
   'Monitor started (task',
+  'Successfully stopped task',
   '<task-notification>',
 ]
 
@@ -170,15 +172,20 @@ const withMonitorCall = (ledger: BackgroundLedger, use: ToolUseBlock, at: Moment
     }),
   )
 
-const withStop = (ledger: BackgroundLedger, use: ToolUseBlock, at: Moment) =>
+const withStopCall = (ledger: BackgroundLedger, use: ToolUseBlock) =>
   Option.map(decodeStopInput(use.input), (input) =>
-    updateTask(ledger, input.task_id, (entry) =>
-      Struct.evolve(entry, {
-        stoppedByClaude: () => true,
-        status: (known) => Option.orElse(known, () => Option.some<SubagentStatus>('stopped')),
-        endedAt: (known) => Option.orElse(known, () => at),
-      }),
-    ),
+    Struct.evolve(ledger, {
+      stopCalls: (calls) => HashMap.set(calls, use.id, input.task_id),
+    }),
+  )
+
+const stopped = (ledger: BackgroundLedger, taskId: string, at: Moment): BackgroundLedger =>
+  updateTask(ledger, taskId, (entry) =>
+    Struct.evolve(entry, {
+      stoppedByClaude: () => true,
+      status: (known) => Option.orElse(known, () => Option.some<SubagentStatus>('stopped')),
+      endedAt: (known) => Option.orElse(known, () => at),
+    }),
   )
 
 const withOutputRead = (ledger: BackgroundLedger, use: ToolUseBlock, at: Moment) =>
@@ -200,7 +207,7 @@ const afterToolUse =
     Match.value(use.name).pipe(
       Match.when(SHELL_TOOL, () => withShellCall(ledger, use, at)),
       Match.when(MONITOR_TOOL, () => withMonitorCall(ledger, use, at)),
-      Match.when(STOP_TOOL, () => withStop(ledger, use, at)),
+      Match.when(STOP_TOOL, () => withStopCall(ledger, use)),
       Match.when(READ_TOOL, () => withOutputRead(ledger, use, at)),
       Match.orElse(() => Option.none<BackgroundLedger>()),
       Option.getOrElse(() => ledger),
@@ -223,14 +230,20 @@ const taskOfResult = (ledger: BackgroundLedger, result: ToolResultBlock) => {
     HashMap.has(ledger.monitorCalls, result.toolUseId) ||
     Option.isSome(firstMatch(texts, MONITOR_TASK_ID))
 
+  const launchText = Option.orElse(firstMatch(texts, SHELL_TASK_ID), () =>
+    firstMatch(texts, MONITOR_TASK_ID),
+  )
+  const isLaunch =
+    Option.isSome(launchText) ||
+    HashMap.has(ledger.shellCalls, result.toolUseId) ||
+    HashMap.has(ledger.monitorCalls, result.toolUseId)
+
   return pipe(
     Option.map(result.task, (task) => ({ taskId: task.taskId, timeoutMs: task.timeoutMs })),
     Option.orElse(() =>
-      Option.map(
-        Option.orElse(firstMatch(texts, SHELL_TASK_ID), () => firstMatch(texts, MONITOR_TASK_ID)),
-        (taskId) => ({ taskId, timeoutMs: Option.none<number>() }),
-      ),
+      Option.map(launchText, (taskId) => ({ taskId, timeoutMs: Option.none<number>() })),
     ),
+    Option.filter(() => isLaunch),
     Option.map((found): FoundTask => ({
       kind: isMonitor ? 'monitor' : 'shell',
       taskId: found.taskId,
@@ -283,14 +296,22 @@ const withoutCall = (ledger: BackgroundLedger, toolUseId: string): BackgroundLed
   ...ledger,
   shellCalls: HashMap.remove(ledger.shellCalls, toolUseId),
   monitorCalls: HashMap.remove(ledger.monitorCalls, toolUseId),
+  stopCalls: HashMap.remove(ledger.stopCalls, toolUseId),
 })
+
+const withStopResult = (ledger: BackgroundLedger, result: ToolResultBlock, at: Moment) =>
+  pipe(
+    HashMap.get(ledger.stopCalls, result.toolUseId),
+    Option.filter(() => !result.isError),
+    Option.match({ onNone: () => ledger, onSome: (taskId) => stopped(ledger, taskId, at) }),
+  )
 
 const afterResult =
   (at: Moment) =>
   (ledger: BackgroundLedger, result: ToolResultBlock): BackgroundLedger =>
     withoutCall(
       Option.match(taskOfResult(ledger, result), {
-        onNone: () => ledger,
+        onNone: () => withStopResult(ledger, result, at),
         onSome: (found) => launched(ledger, result, found, at),
       }),
       result.toolUseId,
@@ -379,6 +400,7 @@ const taskOf =
 export const EMPTY_LEDGER: BackgroundLedger = {
   shellCalls: HashMap.empty(),
   monitorCalls: HashMap.empty(),
+  stopCalls: HashMap.empty(),
   launches: [],
   tasks: HashMap.empty(),
 }

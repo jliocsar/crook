@@ -77,8 +77,10 @@ function ShellDetail({ job, now }: { job: BackgroundJob; now: DateTime.Utc }) {
         <SheetLabel>Claude</SheetLabel>
         <ul className="text-muted-foreground grid gap-1 text-sm">
           <li>Started it in the background</li>
-          {job.checkedAt.map((at) => (
-            <li key={DateTime.toEpochMillis(at)}>{`Read its output at ${timeOfDay(at)}`}</li>
+          {job.checkedAt.map((at, index) => (
+            <li
+              key={`${index}-${DateTime.toEpochMillis(at)}`}
+            >{`Read its output at ${timeOfDay(at)}`}</li>
           ))}
           {job.stoppedByClaude ? <li>Stopped it</li> : null}
           {Option.match(job.result, {

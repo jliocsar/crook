@@ -1,12 +1,14 @@
 import * as Arr from 'effect/Array'
 import type { NonEmptyReadonlyArray } from 'effect/Array'
 import * as Cause from 'effect/Cause'
+import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Equivalence from 'effect/Equivalence'
 import * as FiberMap from 'effect/FiberMap'
 import { pipe } from 'effect/Function'
+import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
@@ -62,6 +64,8 @@ import {
 import { makeTranscriptMailbox } from '@crook/protocol/TranscriptBatch'
 
 export type FollowError = LocateError | TailError | SubagentsUnreadable
+
+type FirstMisses = HashMap.HashMap<string, number>
 
 interface LiveSources {
   readonly tail: TranscriptTail['Service']
@@ -203,17 +207,40 @@ const missedShells = (snapshot: BackgroundSnapshot, open: OpenTasks): HashSet.Ha
       ),
   })
 
+const missesAfter = (
+  before: FirstMisses,
+  snapshot: BackgroundSnapshot,
+  open: OpenTasks,
+  checkedAt: number,
+): FirstMisses =>
+  HashMap.fromIterable(
+    pipe(
+      missedShells(snapshot, open),
+      Arr.fromIterable,
+      Arr.map((taskId) => [taskId, Option.getOrElse(HashMap.get(before, taskId), () => checkedAt)]),
+    ),
+  )
+
 const aliveAfter = (
   open: OpenTasks,
-  missedBefore: HashSet.HashSet<string>,
+  misses: FirstMisses,
+  checkedAt: number,
   taskId: string,
 ): Option.Option<boolean> =>
-  Option.map(open, (tasks) => HashSet.has(tasks, taskId) || !HashSet.has(missedBefore, taskId))
+  Option.map(
+    open,
+    () =>
+      !Option.exists(
+        HashMap.get(misses, taskId),
+        (firstMissedAt) => checkedAt - firstMissedAt >= Duration.toMillis(LIVENESS_RECHECK),
+      ),
+  )
 
 const withLiveness = (
   snapshot: BackgroundSnapshot,
   open: OpenTasks,
-  missedBefore: HashSet.HashSet<string>,
+  misses: FirstMisses,
+  checkedAt: number,
 ): BackgroundSnapshot => ({
   ...snapshot,
   tasks: Arr.map(snapshot.tasks, (task) =>
@@ -222,7 +249,7 @@ const withLiveness = (
         shell.status === 'running'
           ? new ShellTask(
               Struct.evolve(shell, {
-                alive: () => aliveAfter(open, missedBefore, shell.taskId),
+                alive: () => aliveAfter(open, misses, checkedAt, shell.taskId),
               }),
             )
           : shell,
@@ -230,27 +257,6 @@ const withLiveness = (
       Match.orElse((): BackgroundTask => task),
     ),
   ),
-})
-
-const finalBackground = Effect.fn('TranscriptStreams.finalBackground')(function* (
-  background: BackgroundWork['Service'],
-  file: TranscriptFile,
-) {
-  return yield* background.read(file).pipe(
-    Effect.map((snapshot) =>
-      hasBackgroundWork(snapshot)
-        ? Stream.succeed(backgroundOf(file.session)(snapshot))
-        : Stream.empty,
-    ),
-    Effect.catch((error) =>
-      Effect.as(
-        Effect.logWarning(
-          `Sent no final background work for the session the pane left: ${error.message}`,
-        ),
-        Stream.empty,
-      ),
-    ),
-  )
 })
 
 const backgroundWork = (
@@ -267,16 +273,18 @@ const backgroundWork = (
         : Stream.succeed(snapshot),
     ),
     Stream.mapEffect((snapshot) =>
-      hasRunningShell(snapshot)
-        ? Effect.map(liveness.openTasks(file), (open) => [snapshot, open] as const)
-        : Effect.succeed([snapshot, Option.none<HashSet.HashSet<string>>()] as const),
+      Effect.zipWith(
+        hasRunningShell(snapshot) ? liveness.openTasks(file) : Effect.succeedNone,
+        Clock.currentTimeMillis,
+        (open, checkedAt) => [snapshot, open, checkedAt] as const,
+      ),
     ),
     Stream.mapAccum(
-      () => HashSet.empty<string>(),
-      (missedBefore, [snapshot, open]) => {
-        const missed = missedShells(snapshot, open)
+      (): FirstMisses => HashMap.empty(),
+      (before, [snapshot, open, checkedAt]) => {
+        const misses = missesAfter(before, snapshot, open, checkedAt)
 
-        return [missed, [withLiveness(snapshot, open, missedBefore)]] as const
+        return [misses, [withLiveness(snapshot, open, misses, checkedAt)]] as const
       },
     ),
     Stream.changesWith(sameSnapshot),
@@ -414,10 +422,7 @@ const make = Effect.gen(function* () {
           onSome: (file) =>
             Stream.concat(
               fromLineNearEnd(file, position.offset, tailBytes, (from) => tail.drain(file, from)),
-              Stream.concat(
-                Stream.unwrap(finalRoster(roster, file)),
-                Stream.unwrap(finalBackground(background, file)),
-              ),
+              Stream.unwrap(finalRoster(roster, file)),
             ),
         }),
       ),

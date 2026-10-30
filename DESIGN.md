@@ -575,7 +575,8 @@ Unmeasured knobs, picked in the prototype; settle them on the phone:
   that exits normally isn't flagged in the moment before Claude's notice lands;
 - the agent sends a shell's last three output lines, the sheet shows all three and a tray row
   two;
-- a Monitor's event line spans at least 20s, so the first events don't sit on top of each other.
+- a Monitor's event line spans at least 20s, so the first events don't sit on top of each other;
+- the chip row fades over 28px at the edge it has scrolled past and 40px at the edge with more.
 
 Decided against:
 
