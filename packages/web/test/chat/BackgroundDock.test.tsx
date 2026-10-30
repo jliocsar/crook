@@ -8,7 +8,7 @@ import { vi } from 'vitest'
 import { ShellTask, SubagentActivity } from '@crook/domain/Background'
 import type { SubagentStatus } from '@crook/domain/Subagent'
 import { BackgroundChanged } from '@crook/domain/Transcript'
-import { BackgroundDock } from '@crook/web/chat/BackgroundDock'
+import { BackgroundDock, useBackgroundWorkOf } from '@crook/web/chat/BackgroundDock'
 import { backgroundJobs, type BackgroundJob, type DockRun } from '@crook/web/chat/BackgroundModel'
 
 import { click, eventually, findByRole } from '../Dom.ts'
@@ -69,7 +69,17 @@ const renderDock = (
   tasks: BackgroundChanged['tasks'],
   runs: readonly DockRun[],
   onOpenSubagent: (job: BackgroundJob) => void = () => {},
-) => render(<BackgroundDock jobsAt={jobsAt(tasks, runs)} onOpenSubagent={onOpenSubagent} />)
+) => render(<DockHarness jobs={jobsAt(tasks, runs)} onOpenSubagent={onOpenSubagent} />)
+
+function DockHarness({
+  jobs,
+  onOpenSubagent,
+}: {
+  jobs: (now: DateTime.Utc) => readonly BackgroundJob[]
+  onOpenSubagent: (job: BackgroundJob) => void
+}) {
+  return <BackgroundDock work={useBackgroundWorkOf(jobs, onOpenSubagent)} />
+}
 
 describe('BackgroundDock', () => {
   it.effect('counts the running work and shows a chip per job with the latest event', () =>
@@ -135,9 +145,7 @@ describe('BackgroundDock', () => {
     Effect.gen(function* () {
       const { rerender } = renderDock([], [reviewer])
 
-      rerender(
-        <BackgroundDock jobsAt={jobsAt([devServer()], [reviewer])} onOpenSubagent={() => {}} />,
-      )
+      rerender(<DockHarness jobs={jobsAt([devServer()], [reviewer])} onOpenSubagent={() => {}} />)
 
       const added = screen.getByRole('button', { name: 'bun run dev, running' })
 

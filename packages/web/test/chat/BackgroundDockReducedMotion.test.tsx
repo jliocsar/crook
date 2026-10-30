@@ -7,8 +7,8 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 import { ShellTask } from '@crook/domain/Background'
 import { BackgroundChanged } from '@crook/domain/Transcript'
-import { BackgroundDock } from '@crook/web/chat/BackgroundDock'
-import { backgroundJobs } from '@crook/web/chat/BackgroundModel'
+import { BackgroundDock, useBackgroundWorkOf } from '@crook/web/chat/BackgroundDock'
+import { backgroundJobs, type BackgroundJob } from '@crook/web/chat/BackgroundModel'
 
 import { stubMediaQueries } from '../MediaQueries.ts'
 import { SESSION } from '../TranscriptFixtures.ts'
@@ -47,18 +47,25 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+function DockHarness({
+  jobs,
+  onOpenSubagent,
+}: {
+  jobs: (now: DateTime.Utc) => readonly BackgroundJob[]
+  onOpenSubagent: (job: BackgroundJob) => void
+}) {
+  return <BackgroundDock work={useBackgroundWorkOf(jobs, onOpenSubagent)} />
+}
+
 describe('BackgroundDock under reduced motion', () => {
   it.effect('adds a chip at its full size, with no pop', () =>
     Effect.gen(function* () {
       const { rerender } = render(
-        <BackgroundDock jobsAt={jobsAt([shell('dev')])} onOpenSubagent={() => {}} />,
+        <DockHarness jobs={jobsAt([shell('dev')])} onOpenSubagent={() => {}} />,
       )
 
       rerender(
-        <BackgroundDock
-          jobsAt={jobsAt([shell('dev'), shell('storybook')])}
-          onOpenSubagent={() => {}}
-        />,
+        <DockHarness jobs={jobsAt([shell('dev'), shell('storybook')])} onOpenSubagent={() => {}} />,
       )
 
       const added = screen.getByRole('button', { name: 'bun run storybook, running' })

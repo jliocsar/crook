@@ -46,6 +46,13 @@ import { useTransformString } from '@crook/web/motion/TransformString'
 import { clockElapsed, shortElapsed } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
 
+export interface BackgroundWork {
+  readonly jobsAt: (now: DateTime.Utc) => readonly BackgroundJob[]
+  readonly openKey: Option.Option<string>
+  readonly open: (job: BackgroundJob) => void
+  readonly close: () => void
+}
+
 const CHIP_POP_FROM = 0.85
 const EVENT_TRAVEL = 8
 const FINISHED_CHIP_OPACITY = 0.75
@@ -161,10 +168,35 @@ const useOverflowEdges = <Element extends HTMLElement>() => {
   return { ref, edges, style: { maskImage: mask, WebkitMaskImage: mask } }
 }
 
-export const useSessionJobs = (
+export const BackgroundContext = React.createContext<Option.Option<BackgroundWork>>(Option.none())
+
+export const useBackgroundWorkOf = (
+  jobsAt: (now: DateTime.Utc) => readonly BackgroundJob[],
+  onOpenSubagent: (job: BackgroundJob) => void,
+): BackgroundWork => {
+  const [openKey, setOpenKey] = React.useState(Option.none<string>())
+  const open = React.useCallback(
+    (job: BackgroundJob) => {
+      if (job.kind === 'subagent') {
+        onOpenSubagent(job)
+      } else {
+        setOpenKey(Option.some(job.key))
+      }
+    },
+    [onOpenSubagent],
+  )
+  const close = React.useCallback(() => {
+    setOpenKey(Option.none())
+  }, [])
+
+  return React.useMemo(() => ({ jobsAt, openKey, open, close }), [jobsAt, openKey, open, close])
+}
+
+export const useBackgroundWork = (
   view: Option.Option<TranscriptView>,
   items: readonly ChatItem[],
-): ((now: DateTime.Utc) => readonly BackgroundJob[]) => {
+  onOpenSubagent: (job: BackgroundJob) => void,
+): BackgroundWork => {
   const session = Option.getOrUndefined(Option.map(Arr.last(linesOf(view)), (line) => line.session))
   const background = Option.getOrUndefined(
     Option.flatMap(Option.fromUndefinedOr(session), (current) =>
@@ -175,12 +207,13 @@ export const useSessionJobs = (
     () => Arr.filter(runsIn(items), (run) => run.session === session),
     [items, session],
   )
-
-  return React.useCallback(
+  const jobsAt = React.useCallback(
     (now: DateTime.Utc) =>
       backgroundJobs({ background: Option.fromUndefinedOr(background), runs, now }),
     [background, runs],
   )
+
+  return useBackgroundWorkOf(jobsAt, onOpenSubagent)
 }
 
 export function JobGlyph({ job, size = 12 }: { job: BackgroundJob; size?: number }) {
@@ -572,31 +605,16 @@ function DockTray({
   )
 }
 
-export function BackgroundDock({
-  jobsAt,
-  onOpenSubagent,
-}: {
-  jobsAt: (now: DateTime.Utc) => readonly BackgroundJob[]
-  onOpenSubagent: (job: BackgroundJob) => void
-}) {
+export function BackgroundDock({ work }: { work: BackgroundWork }) {
   const [ticking, setTicking] = React.useState(true)
-  const [openKey, setOpenKey] = React.useState(Option.none<string>())
   const now = useNow(ticking)
-  const jobs = React.useMemo(() => jobsAt(now), [jobsAt, now])
+  const jobs = React.useMemo(() => work.jobsAt(now), [work, now])
   const dock = dockOf(jobs, now)
   const shown = isShown(dock)
-  const needsClock = shown || hasRunningJob(jobs) || Option.isSome(openKey)
+  const needsClock = shown || hasRunningJob(jobs) || Option.isSome(work.openKey)
   const reduce = useReducedMotion() ?? false
-  const openJob = Option.flatMap(openKey, (key) => Arr.findFirst(jobs, (job) => job.key === key))
-  const onOpen = React.useCallback(
-    (job: BackgroundJob) => {
-      if (job.kind === 'subagent') {
-        onOpenSubagent(job)
-      } else {
-        setOpenKey(Option.some(job.key))
-      }
-    },
-    [onOpenSubagent],
+  const openJob = Option.flatMap(work.openKey, (key) =>
+    Arr.findFirst(jobs, (job) => job.key === key),
   )
 
   if (needsClock !== ticking) {
@@ -615,17 +633,11 @@ export function BackgroundDock({
             exit={{ height: 0, opacity: 0 }}
             transition={reduce ? INSTANT : SPRING}
           >
-            <DockTray dock={dock} now={now} onOpen={onOpen} />
+            <DockTray dock={dock} now={now} onOpen={work.open} />
           </motion.div>
         ) : null}
       </AnimatePresence>
-      <BackgroundSheet
-        job={openJob}
-        now={now}
-        onClose={() => {
-          setOpenKey(Option.none())
-        }}
-      />
+      <BackgroundSheet job={openJob} now={now} onClose={work.close} />
     </>
   )
 }

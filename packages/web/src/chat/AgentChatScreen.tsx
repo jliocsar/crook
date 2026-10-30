@@ -12,7 +12,11 @@ import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/Agent
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
-import { BackgroundDock, useSessionJobs } from '@crook/web/chat/BackgroundDock'
+import {
+  BackgroundContext,
+  BackgroundDock,
+  useBackgroundWork,
+} from '@crook/web/chat/BackgroundDock'
 import type { BackgroundJob } from '@crook/web/chat/BackgroundModel'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useCatchUp } from '@crook/web/chat/CatchUpTrail'
@@ -260,7 +264,6 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     },
     [navigate, machine, pane],
   )
-  const backgroundJobsAt = useSessionJobs(view, items)
   const openSubagentJob = React.useCallback(
     (job: BackgroundJob) => {
       const session = Option.map(Arr.last(lines), (line) => line.session)
@@ -274,6 +277,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     },
     [navigate, machine, pane, lines],
   )
+  const backgroundWork = useBackgroundWork(view, items, openSubagentJob)
+  const backgroundContext = React.useMemo(() => Option.some(backgroundWork), [backgroundWork])
   const environment = React.useMemo<ThreadEnvironment>(
     () => ({
       cwd,
@@ -356,16 +361,18 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           </>
         }
       />
-      <div className="min-h-0 flex-1">
-        <Thread
-          handle={thread}
-          rows={rows}
-          dimmed={dimmed}
-          empty={emptyThread(model, view)}
-          overlay={catchUp.overlay}
-        />
-      </div>
-      <BackgroundDock jobsAt={backgroundJobsAt} onOpenSubagent={openSubagentJob} />
+      <BackgroundContext.Provider value={backgroundContext}>
+        <div className="min-h-0 flex-1">
+          <Thread
+            handle={thread}
+            rows={rows}
+            dimmed={dimmed}
+            empty={emptyThread(model, view)}
+            overlay={catchUp.overlay}
+          />
+        </div>
+      </BackgroundContext.Provider>
+      <BackgroundDock work={backgroundWork} />
       <ChatDock
         model={model}
         closedHere={closedHere}

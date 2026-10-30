@@ -20,6 +20,7 @@ import * as React from 'react'
 import { relativeToFolder } from '@crook/domain/Ask'
 import type { ChatItem, PlanStep, SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
 import { ChatItem as ChatItems, stringField, toolTitle } from '@crook/web/chat/ChatItems'
+import { useBackgroundMarker } from '@crook/web/chat/BackgroundMarker'
 import { Thumbs } from '@crook/web/chat/Images'
 import { RowAction } from '@crook/web/chat/RowAction'
 import {
@@ -189,6 +190,21 @@ function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
 }
 
 function ToolCard({ call, environment }: { call: ToolCallModel; environment: ThreadEnvironment }) {
+  const marker = useBackgroundMarker(call)
+
+  return Option.match(marker, {
+    onNone: () => <ToolCallCard call={call} environment={environment} />,
+    onSome: (found) => found,
+  })
+}
+
+function ToolCallCard({
+  call,
+  environment,
+}: {
+  call: ToolCallModel
+  environment: ThreadEnvironment
+}) {
   const Icon = TOOL_ICON.get(call.name) ?? Wrench
   const now = useNow(call.status === 'running')
 
