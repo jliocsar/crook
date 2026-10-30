@@ -145,6 +145,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer))(
 
         yield* Ref.set(open, Option.some(HashSet.empty()))
         yield* TestClock.adjust(`${LIVENESS_RECHECK_SECONDS} seconds`)
+        yield* TestClock.adjust(`${LIVENESS_RECHECK_SECONDS} seconds`)
 
         expect(yield* Queue.take(states)).toBe(`${TASK} gone`)
       }),

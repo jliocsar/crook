@@ -5,12 +5,12 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
+import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Path from 'effect/Path'
-import type { PlatformError } from 'effect/PlatformError'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as Struct from 'effect/Struct'
@@ -89,6 +89,7 @@ export class BackgroundOutputUnreadable extends Schema.TaggedError<BackgroundOut
 const OUTPUT_TAIL_LINES = 3
 const TRANSCRIPT_EXTENSION = '.jsonl'
 const CARRIAGE_RETURN = '\r'
+const TRAILING_CARRIAGE_RETURNS = /\r+$/u
 const LINE_BREAK = '\n'
 const NO_OUTPUTS: OutputTails = HashMap.empty()
 const NO_ACTIVITY: Activities = HashMap.empty()
@@ -130,15 +131,14 @@ const shellOutputsOf = (ledger: BackgroundLedger): ShellOutputs =>
     HashMap.fromIterable,
   )
 
+const sameMoment = Option.makeEquivalence(DateTime.Equivalence)
+
 const isUnchanged = (known: Option.Option<OutputTail>, info: FileSystem.File.Info) =>
   Option.exists(
     known,
     (output) =>
       output.size === Number(info.size) &&
-      Option.makeEquivalence(DateTime.Equivalence)(
-        output.at,
-        Option.map(info.mtime, DateTime.fromDateUnsafe),
-      ),
+      sameMoment(output.at, Option.map(info.mtime, DateTime.fromDateUnsafe)),
   )
 
 const completeLinesOf = (tail: FileTail): Uint8Array => {
@@ -148,8 +148,11 @@ const completeLinesOf = (tail: FileTail): Uint8Array => {
   return end > start ? tail.bytes.subarray(start, end) : new Uint8Array(0)
 }
 
-const lastLineOf = (line: string): string =>
-  withoutAnsi(line.slice(line.lastIndexOf(CARRIAGE_RETURN) + 1)).trimEnd()
+const lastLineOf = (line: string): string => {
+  const ended = line.replace(TRAILING_CARRIAGE_RETURNS, '')
+
+  return withoutAnsi(ended.slice(ended.lastIndexOf(CARRIAGE_RETURN) + 1)).trimEnd()
+}
 
 export const outputLines = (tail: FileTail): readonly string[] =>
   pipe(
@@ -261,12 +264,7 @@ const make = Effect.gen(function* () {
   const readTail = Effect.fn('BackgroundWork.readTail')(function* (target: string) {
     return yield* openTail(target).pipe(
       Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeedNone),
-      Effect.catch((error: PlatformError) =>
-        Effect.as(
-          Effect.logWarning(`Could not read the end of ${target}: ${error.message}`),
-          Option.none<FileTail>(),
-        ),
-      ),
+      Effect.mapError((cause) => new BackgroundOutputUnreadable({ path: target, cause })),
     )
   })
 
@@ -293,12 +291,7 @@ const make = Effect.gen(function* () {
   ) {
     return yield* refreshOutput(outputFile, known).pipe(
       Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(known)),
-      Effect.catch((error: PlatformError) =>
-        Effect.as(
-          Effect.logWarning(`Could not read the end of ${outputFile}: ${error.message}`),
-          known,
-        ),
-      ),
+      Effect.mapError((cause) => new BackgroundOutputUnreadable({ path: outputFile, cause })),
     )
   })
 
@@ -318,7 +311,9 @@ const make = Effect.gen(function* () {
   const watchOutputs = (
     files: ShellOutputs,
   ): Stream.Stream<OutputTails, BackgroundOutputUnreadable> => {
-    const names = new Set(Arr.map(HashMap.toValues(files), (file) => path.basename(file)))
+    const names = HashSet.fromIterable(
+      Arr.map(HashMap.toValues(files), (file) => path.basename(file)),
+    )
     const directories = pipe(
       HashMap.toValues(files),
       Arr.map((file) => path.dirname(file)),
@@ -340,7 +335,7 @@ const make = Effect.gen(function* () {
               ),
               { concurrency: 'unbounded' },
             ).pipe(
-              Stream.filter(readyOr((name) => names.has(name))),
+              Stream.filter(readyOr((name) => HashSet.has(names, name))),
               Stream.buffer({ capacity: 1, strategy: 'sliding' }),
               Stream.scanEffect(
                 () => current,

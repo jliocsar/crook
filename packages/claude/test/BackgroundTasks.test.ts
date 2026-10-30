@@ -5,6 +5,7 @@ import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
 import {
@@ -16,6 +17,7 @@ import {
 } from '@crook/claude/BackgroundTasks'
 import { TranscriptTail } from '@crook/claude/TranscriptTail'
 import type { BackgroundTask } from '@crook/domain/Background'
+import { TranscriptOffset } from '@crook/domain/Ids'
 
 import { START, fixtureFile, services } from './Fixtures'
 
@@ -28,6 +30,32 @@ const ledgerOf = Effect.fn('ledgerOf')(function* (name: string) {
       (ledger, chunk) => withBackgroundLines(ledger, chunk.messages),
     ),
   )
+})
+
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Json))
+
+const encoder = new TextEncoder()
+
+const ledgerFromLines = (lines: readonly Schema.Json[]) =>
+  Arr.reduce(lines, EMPTY_LEDGER, (ledger, json) =>
+    withBackgroundLines(
+      ledger,
+      backgroundLines(encoder.encode(encodeJson(json)), TranscriptOffset.make(0)),
+    ),
+  )
+
+const assistantUse = (id: string, name: string, input: Schema.Json) => ({
+  type: 'assistant',
+  uuid: `assistant-${id}`,
+  timestamp: '2026-10-30T14:00:00.000Z',
+  message: { id: `msg-${id}`, role: 'assistant', content: [{ type: 'tool_use', id, name, input }] },
+})
+
+const userResult = (id: string, text: string) => ({
+  type: 'user',
+  uuid: `user-${id}`,
+  timestamp: '2026-10-30T14:00:01.000Z',
+  message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text }] },
 })
 
 const at = (iso: string) => Option.some(DateTime.makeUnsafe(iso))
@@ -184,5 +212,27 @@ describe('backgroundLines', () => {
         START,
       ),
     ).toEqual([])
+  })
+})
+
+describe('background lines that are not background work', () => {
+  it('ignores a file Claude read that quotes a background launch', () => {
+    const ledger = ledgerFromLines([
+      assistantUse('toolu_read', 'Read', { file_path: '/home/crook/transcript.jsonl' }),
+      userResult(
+        'toolu_read',
+        '1\t{"content":"Command running in background with ID: bquoted. Output is being written to: /x/tasks/bquoted.output"}',
+      ),
+    ])
+
+    expect(backgroundTasks(ledger)).toEqual([])
+  })
+
+  it('ignores a TaskStop of a task it never saw start', () => {
+    const ledger = ledgerFromLines([
+      assistantUse('toolu_stop', 'TaskStop', { task_id: 'bunknown' }),
+    ])
+
+    expect(backgroundTasks(ledger)).toEqual([])
   })
 })

@@ -1,4 +1,4 @@
-import { expect, layer } from '@effect/vitest'
+import { describe, expect, it, layer } from '@effect/vitest'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
@@ -9,7 +9,7 @@ import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
-import { BackgroundWork, type BackgroundSnapshot } from '@crook/claude/BackgroundWork'
+import { BackgroundWork, outputLines, type BackgroundSnapshot } from '@crook/claude/BackgroundWork'
 import { TranscriptFile, subagentsDirectoryOf } from '@crook/claude/TranscriptLocator'
 import { SubagentId } from '@crook/domain/Ids'
 
@@ -192,4 +192,14 @@ layer(services, { excludeTestServices: true })('BackgroundWork', (live) => {
       ])
     }),
   )
+})
+
+describe('outputLines', () => {
+  it('keeps a line that ends in a carriage return and the last redraw of one that does not', () => {
+    const bytes = new TextEncoder().encode('built in 2s\r\n10%\r50%\r100%\n')
+
+    expect(
+      outputLines({ bytes, fromStart: true, modifiedAt: Option.none(), size: bytes.byteLength }),
+    ).toEqual(['built in 2s', '100%'])
+  })
 })

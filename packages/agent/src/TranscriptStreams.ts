@@ -20,12 +20,7 @@ import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { type OpenTasks, TaskLiveness } from '@crook/agent/TaskLiveness'
-import {
-  type BackgroundSnapshot,
-  type BackgroundWatchError,
-  BackgroundWork,
-  sameSnapshot,
-} from '@crook/claude/BackgroundWork'
+import { type BackgroundSnapshot, BackgroundWork, sameSnapshot } from '@crook/claude/BackgroundWork'
 import { MANAGED_SKILL_HOMES, SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SubagentRoster, type SubagentsUnreadable } from '@crook/claude/SubagentRoster'
 import {
@@ -66,7 +61,7 @@ import {
 } from '@crook/protocol/Transcripts'
 import { makeTranscriptMailbox } from '@crook/protocol/TranscriptBatch'
 
-export type FollowError = LocateError | TailError | SubagentsUnreadable | BackgroundWatchError
+export type FollowError = LocateError | TailError | SubagentsUnreadable
 
 interface LiveSources {
   readonly tail: TranscriptTail['Service']
@@ -116,8 +111,6 @@ const toWireFailure = (error: FollowError): TranscriptFailure =>
       TranscriptUnreadable: (unreadable) =>
         new TranscriptReadFailed({ detail: unreadable.message }),
       SubagentsUnreadable: (unreadable) => new TranscriptReadFailed({ detail: unreadable.message }),
-      BackgroundOutputUnreadable: (unreadable) =>
-        new TranscriptReadFailed({ detail: unreadable.message }),
       TranscriptOffsetBeyondEnd: (rejected) =>
         new TranscriptResumeRejected({ detail: rejected.message }),
       TranscriptOffsetMidLine: (rejected) =>
@@ -194,7 +187,34 @@ const hasRunningShell = (snapshot: BackgroundSnapshot): boolean =>
     ),
   )
 
-const withLiveness = (snapshot: BackgroundSnapshot, open: OpenTasks): BackgroundSnapshot => ({
+const missedShells = (snapshot: BackgroundSnapshot, open: OpenTasks): HashSet.HashSet<string> =>
+  Option.match(open, {
+    onNone: () => HashSet.empty<string>(),
+    onSome: (tasks) =>
+      HashSet.fromIterable(
+        Arr.flatMap(snapshot.tasks, (task) =>
+          Match.value(task).pipe(
+            Match.tag('ShellTask', (shell) =>
+              shell.status === 'running' && !HashSet.has(tasks, shell.taskId) ? [shell.taskId] : [],
+            ),
+            Match.orElse(() => []),
+          ),
+        ),
+      ),
+  })
+
+const aliveAfter = (
+  open: OpenTasks,
+  missedBefore: HashSet.HashSet<string>,
+  taskId: string,
+): Option.Option<boolean> =>
+  Option.map(open, (tasks) => HashSet.has(tasks, taskId) || !HashSet.has(missedBefore, taskId))
+
+const withLiveness = (
+  snapshot: BackgroundSnapshot,
+  open: OpenTasks,
+  missedBefore: HashSet.HashSet<string>,
+): BackgroundSnapshot => ({
   ...snapshot,
   tasks: Arr.map(snapshot.tasks, (task) =>
     Match.value(task).pipe(
@@ -202,7 +222,7 @@ const withLiveness = (snapshot: BackgroundSnapshot, open: OpenTasks): Background
         shell.status === 'running'
           ? new ShellTask(
               Struct.evolve(shell, {
-                alive: () => Option.map(open, (tasks) => HashSet.has(tasks, shell.taskId)),
+                alive: () => aliveAfter(open, missedBefore, shell.taskId),
               }),
             )
           : shell,
@@ -247,11 +267,27 @@ const backgroundWork = (
         : Stream.succeed(snapshot),
     ),
     Stream.mapEffect((snapshot) =>
-      Effect.map(liveness.openTasks(file), (open) => withLiveness(snapshot, open)),
+      hasRunningShell(snapshot)
+        ? Effect.map(liveness.openTasks(file), (open) => [snapshot, open] as const)
+        : Effect.succeed([snapshot, Option.none<HashSet.HashSet<string>>()] as const),
+    ),
+    Stream.mapAccum(
+      () => HashSet.empty<string>(),
+      (missedBefore, [snapshot, open]) => {
+        const missed = missedShells(snapshot, open)
+
+        return [missed, [withLiveness(snapshot, open, missedBefore)]] as const
+      },
     ),
     Stream.changesWith(sameSnapshot),
     Stream.dropWhile((snapshot) => !hasBackgroundWork(snapshot)),
     Stream.map(backgroundOf(file.session)),
+    Stream.tapError((error) =>
+      Effect.logWarning(
+        `Stopped following the background work of ${file.session}: ${error.message}`,
+      ),
+    ),
+    Stream.ignore,
   )
 
 const liveEvents = (sources: LiveSources, file: TranscriptFile, offset: TranscriptOffset) =>
@@ -310,7 +346,8 @@ const make = Effect.gen(function* () {
   const roster = yield* SubagentRoster
   const catalog = yield* SkillCatalog
   const background = yield* BackgroundWork
-  const sources: LiveSources = { tail, roster, background, liveness: yield* TaskLiveness }
+  const liveness = yield* TaskLiveness
+  const sources: LiveSources = { tail, roster, background, liveness }
 
   const fromLineNearEnd = (
     file: TranscriptFile,

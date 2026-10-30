@@ -76,5 +76,16 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
         expect(yield* liveness('1')).toEqual(Option.none())
       }),
     )
+
+    live.effect('knows nothing on a system without /proc', () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem
+        const root = yield* fileSystem.makeTempDirectoryScoped()
+        const context = yield* Layer.build(TaskLiveness.layerAt(`${root}/proc`))
+        const file = new TranscriptFile({ session: SESSION, path: `${root}/${SESSION}.jsonl` })
+
+        expect(yield* Context.get(context, TaskLiveness).openTasks(file)).toEqual(Option.none())
+      }),
+    )
   },
 )

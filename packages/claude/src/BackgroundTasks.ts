@@ -70,8 +70,11 @@ const READ_TOOL = 'Read'
 const OUTPUT_EXTENSION = '.output'
 const TASKS_DIRECTORY = '/tasks/'
 const OUTPUT_PATH = /Output is being written to: (\S+\.output)/u
-const SHELL_TASK_ID = /(?:running in background with ID: |moved to the background \(ID: )(\w+)/u
-const MONITOR_TASK_ID = /Monitor started \(task (\w+)/u
+
+const SHELL_TASK_ID =
+  /^Command (?:running in background with ID: |[^\n]*moved to the background \(ID: )(\w+)/u
+
+const MONITOR_TASK_ID = /^Monitor started \(task (\w+)/u
 const QUOTED = /"([^"]+)"/u
 
 const BACKGROUND_MARKERS = [
