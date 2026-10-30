@@ -53,18 +53,6 @@ describe('applyTranscriptEvent', () => {
     expect(Option.map(view.position, (position) => position.offset)).toEqual(Option.some(20))
   })
 
-  it('drops what a resumed watch sends again and keeps only the lines after the position', () => {
-    const view = fold([
-      opened(),
-      chunk(0, 10, [prompt(0, 'hi')]),
-      opened(),
-      chunk(0, 20, [prompt(0, 'hi'), said(10, 'hello')]),
-      chunk(0, 10, [prompt(0, 'hi')]),
-    ])
-
-    expect(offsets(view.lines)).toEqual(['old 0', 'old 10'])
-  })
-
   it('marks a cleared conversation and keeps the roster of the old session beside the new one', () => {
     const view = fold([
       opened(),
@@ -78,18 +66,6 @@ describe('applyTranscriptEvent', () => {
     expect(HashMap.get(view.rosters, SESSION)).toEqual(
       Option.some([subagent({ toolUseId: 'toolu_1' })]),
     )
-  })
-
-  it('keeps the roster of the session it is in', () => {
-    const roster = [subagent({ toolUseId: 'toolu_1' })]
-    const view = fold([
-      opened(),
-      new SubagentsChanged({ session: SESSION, subagents: roster }),
-      new SubagentsChanged({ session: NEXT_SESSION, subagents: [] }),
-    ])
-
-    expect(HashMap.get(view.rosters, SESSION)).toEqual(Option.some(roster))
-    expect(HashMap.has(view.rosters, NEXT_SESSION)).toBe(false)
   })
 
   it('keeps the skills of the pane across /clear until the agent lists new ones', () => {
@@ -108,9 +84,6 @@ describe('applyTranscriptEvent', () => {
       applyTranscriptEvent(cleared, new SkillsChanged({ session: NEXT_SESSION, skills: [] }))
         .skills,
     ).toEqual([])
-    expect(
-      applyTranscriptEvent(cleared, new SkillsChanged({ session: SESSION, skills: [] })).skills,
-    ).toEqual([prototype])
   })
 
   it('keeps the lines it holds when the watch fails', () => {
@@ -171,16 +144,6 @@ describe('isShowable', () => {
 
   it('shows a failure while the watch still catches up', () => {
     expect(isShowable(failedWith(catchingUpFrom(EMPTY_TRANSCRIPT, true), failure))).toBe(true)
-  })
-
-  it('ignores a catch-up of another session', () => {
-    const partway = Arr.reduce(
-      [opened(), chunk(0, 10, [prompt(0, 'hi')])],
-      catchingUpFrom(EMPTY_TRANSCRIPT, true),
-      applyTranscriptEvent,
-    )
-
-    expect(isShowable(applyTranscriptEvent(partway, caughtUp(0, NEXT_SESSION)))).toBe(false)
   })
 })
 

@@ -13,7 +13,7 @@ import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import type { MachineId } from '@crook/domain/Ids'
+import type { ClaudeSessionId, MachineId } from '@crook/domain/Ids'
 import {
   type TranscriptChunk,
   type TranscriptEvent,
@@ -22,7 +22,6 @@ import {
   type TranscriptTailBytes,
   continuesFrom,
   positionAfter,
-  remainderAfter,
 } from '@crook/domain/Transcript'
 import {
   TranscriptDemand,
@@ -39,7 +38,7 @@ import { type TranscriptMailbox, makeTranscriptMailbox } from '@crook/protocol/T
 interface Watcher {
   readonly machine: MachineId
   readonly source: TranscriptSource
-  readonly position: Option.Option<TranscriptPosition>
+  readonly delivered: Ref.Ref<Option.Option<TranscriptPosition>>
   readonly tail: Option.Option<TranscriptTailBytes>
   readonly inbox: TranscriptMailbox
   readonly delivery: Semaphore.Semaphore
@@ -47,14 +46,8 @@ interface Watcher {
 
 type Watchers = HashMap.HashMap<TranscriptWatchId, Watcher>
 
-const unseenOnly = (
-  delivered: Option.Option<TranscriptPosition>,
-  event: TranscriptEvent,
-): readonly [Option.Option<TranscriptPosition>, readonly TranscriptEvent[]] =>
-  Option.match(remainderAfter(delivered, event), {
-    onNone: () => [delivered, []],
-    onSome: (unseen) => [positionAfter(delivered, unseen), [unseen]],
-  })
+const inSession = (position: Option.Option<TranscriptPosition>, session: ClaudeSessionId) =>
+  Option.exists(position, (current) => current.session === session)
 
 const delivered = (updates: NonEmptyReadonlyArray<TranscriptUpdate>) =>
   Stream.concat(
@@ -75,23 +68,27 @@ const delivered = (updates: NonEmptyReadonlyArray<TranscriptUpdate>) =>
     ),
   )
 
-const demandOf = (watchers: Watchers, machine: MachineId) =>
-  new TranscriptDemand({
-    watches: pipe(
+const byWatchId = Order.mapInput(Order.Number, ([id]: readonly [TranscriptWatchId, Watcher]) => id)
+
+const demandOf = Effect.fn('TranscriptRelay.demandOf')(function* (
+  watchers: Watchers,
+  machine: MachineId,
+) {
+  const watches = yield* Effect.forEach(
+    pipe(
       Arr.fromIterable(watchers),
       Arr.filter(([, watcher]) => watcher.machine === machine),
-      Arr.map(
-        ([id, watcher]) =>
-          new TranscriptWatch({
-            id,
-            source: watcher.source,
-            from: watcher.position,
-            tail: watcher.tail,
-          }),
-      ),
-      Arr.sort(Order.mapInput(Order.Number, (watch: TranscriptWatch) => watch.id)),
+      Arr.sort(byWatchId),
     ),
-  })
+    ([id, watcher]) =>
+      Effect.map(
+        Ref.get(watcher.delivered),
+        (from) => new TranscriptWatch({ id, source: watcher.source, from, tail: watcher.tail }),
+      ),
+  )
+
+  return new TranscriptDemand({ watches })
+})
 
 const sameWatchIds = Arr.makeEquivalence(
   (left: TranscriptWatch, right: TranscriptWatch) => left.id === right.id,
@@ -115,44 +112,47 @@ const make = Effect.gen(function* () {
         const id = TranscriptWatchId.make(yield* Ref.getAndUpdate(nextId, (current) => current + 1))
         const inbox = yield* makeTranscriptMailbox
         const delivery = yield* Semaphore.make(1)
+        const position = yield* Ref.make(from)
 
         yield* Effect.acquireRelease(
           SubscriptionRef.update(
             watchers,
-            HashMap.set(id, { machine, source, position: from, tail, inbox, delivery }),
+            HashMap.set(id, { machine, source, delivered: position, tail, inbox, delivery }),
           ),
           () => Effect.andThen(SubscriptionRef.update(watchers, HashMap.remove(id)), inbox.close),
         )
 
-        return Stream.fromEffectRepeat(inbox.take).pipe(
-          Stream.flatMap(delivered),
-          Stream.mapAccum(() => from, unseenOnly),
-        )
+        return Stream.fromEffectRepeat(inbox.take).pipe(Stream.flatMap(delivered))
       }),
     )
 
   const demands = (machine: MachineId) =>
     SubscriptionRef.changes(watchers).pipe(
-      Stream.map((current) => demandOf(current, machine)),
+      Stream.mapEffect((current) => demandOf(current, machine)),
       Stream.changesWith(sameWatches),
     )
 
-  const advance = (id: TranscriptWatchId, event: TranscriptEvent) =>
-    SubscriptionRef.update(
-      watchers,
-      HashMap.modify(id, (watcher) => ({
-        ...watcher,
-        position: positionAfter(watcher.position, event),
-      })),
+  const forward = (watcher: Watcher, event: TranscriptEvent) =>
+    Effect.andThen(
+      watcher.inbox.offer(event),
+      Ref.update(watcher.delivered, (position) => positionAfter(position, event)),
     )
 
-  const forward = (id: TranscriptWatchId, watcher: Watcher, event: TranscriptEvent) =>
-    Effect.andThen(watcher.inbox.offer(event), advance(id, event))
+  const forwardInSession = (
+    watcher: Watcher,
+    position: Option.Option<TranscriptPosition>,
+    event: Exclude<TranscriptEvent, TranscriptChunk>,
+  ) => (inSession(position, event.session) ? forward(watcher, event) : Effect.void)
 
-  const append = (id: TranscriptWatchId, watcher: Watcher, chunk: TranscriptChunk) =>
-    continuesFrom(watcher.position, chunk)
-      ? forward(id, watcher, chunk)
-      : Effect.fail(new TranscriptOutOfStep({ watch: id, expected: watcher.position }))
+  const append = (
+    id: TranscriptWatchId,
+    watcher: Watcher,
+    position: Option.Option<TranscriptPosition>,
+    chunk: TranscriptChunk,
+  ) =>
+    continuesFrom(position, chunk)
+      ? forward(watcher, chunk)
+      : Effect.fail(new TranscriptOutOfStep({ watch: id, expected: position }))
 
   const fail = (id: TranscriptWatchId, watcher: Watcher, failed: TranscriptWatchFailed) =>
     Effect.andThen(
@@ -160,22 +160,19 @@ const make = Effect.gen(function* () {
       SubscriptionRef.update(watchers, HashMap.remove(id)),
     )
 
-  const deliver = (id: TranscriptWatchId, update: TranscriptUpdate) =>
-    Effect.flatMap(SubscriptionRef.get(watchers), (current) =>
-      Option.match(HashMap.get(current, id), {
-        onNone: () => Effect.void,
-        onSome: (watcher) =>
-          Match.value(update).pipe(
-            Match.tagsExhaustive({
-              TranscriptOpened: (opened) => forward(id, watcher, opened),
-              TranscriptChunk: (chunk) => append(id, watcher, chunk),
-              SubagentsChanged: (changed) => forward(id, watcher, changed),
-              SkillsChanged: (changed) => forward(id, watcher, changed),
-              TranscriptCaughtUp: (caughtUp) => forward(id, watcher, caughtUp),
-              TranscriptWatchFailed: (failed) => fail(id, watcher, failed),
-            }),
-          ),
-      }),
+  const deliver = (id: TranscriptWatchId, watcher: Watcher, update: TranscriptUpdate) =>
+    Effect.flatMap(Ref.get(watcher.delivered), (position) =>
+      Match.value(update).pipe(
+        Match.tagsExhaustive({
+          TranscriptOpened: (opened) =>
+            inSession(position, opened.session) ? Effect.void : forward(watcher, opened),
+          TranscriptChunk: (chunk) => append(id, watcher, position, chunk),
+          SubagentsChanged: (changed) => forwardInSession(watcher, position, changed),
+          SkillsChanged: (changed) => forwardInSession(watcher, position, changed),
+          TranscriptCaughtUp: (caughtUp) => forwardInSession(watcher, position, caughtUp),
+          TranscriptWatchFailed: (failed) => fail(id, watcher, failed),
+        }),
+      ),
     )
 
   const publish = Effect.fn('TranscriptRelay.publish')(function* (
@@ -195,7 +192,7 @@ const make = Effect.gen(function* () {
         ),
       onSome: (found) =>
         found.delivery.withPermit(
-          Effect.forEach(updates, (update) => deliver(id, update), { discard: true }),
+          Effect.forEach(updates, (update) => deliver(id, found, update), { discard: true }),
         ),
     })
   })
