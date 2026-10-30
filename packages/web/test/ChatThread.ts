@@ -3,13 +3,12 @@ import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import { expect } from 'vitest'
 
-import { eventually, present } from './Dom.ts'
+import { bottomOf, eventually, present } from './Dom.ts'
 import { chunk, said } from './TranscriptFixtures.ts'
 
 const MANY_LINES = 120
 const LINE_BYTES = 10
-
-export const TALL_SCROLL_HEIGHT = 100_000
+const TALL_SCROLL_HEIGHT = 100_000
 
 export const tallViewport = () => {
   const viewport = present(
@@ -24,7 +23,7 @@ export const tallViewport = () => {
 
 export const followedToBottom = Effect.fn('followedToBottom')(function* (viewport: HTMLElement) {
   yield* eventually(() => {
-    expect(viewport.scrollTop).toBe(TALL_SCROLL_HEIGHT)
+    expect(viewport.scrollTop).toBe(bottomOf(viewport))
   })
   fireEvent.scroll(viewport)
 })

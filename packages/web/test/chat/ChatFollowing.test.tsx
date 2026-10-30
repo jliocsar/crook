@@ -19,10 +19,9 @@ import {
   followedToBottom,
   isFollowing,
   manyLines,
-  TALL_SCROLL_HEIGHT,
   tallViewport,
 } from '../ChatThread.ts'
-import { click, eventually, findByRole, present } from '../Dom.ts'
+import { bottomOf, click, eventually, findByRole, present } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
@@ -78,7 +77,7 @@ describe('the chat thread following the end', () => {
 
       yield* Effect.promise(() => userEvent.type(field(), 'Run the tests{Enter}'))
 
-      expect(viewport.scrollTop).toBe(TALL_SCROLL_HEIGHT)
+      expect(viewport.scrollTop).toBe(bottomOf(viewport))
       expect(isFollowing(viewport)).toBe(true)
     }),
   )
@@ -122,7 +121,7 @@ describe('the chat thread following the end', () => {
         expect(router.state.location.pathname).toBe(CHAT)
       })
 
-      expect(viewport.scrollTop).toBe(TALL_SCROLL_HEIGHT)
+      expect(viewport.scrollTop).toBe(bottomOf(viewport))
       expect(isFollowing(viewport)).toBe(true)
     }),
   )

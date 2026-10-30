@@ -21,6 +21,9 @@ export const eventually = (assertion: () => void) => Effect.promise(() => waitFo
 export const present = <Value>(value: Value | null | undefined, what: string): NonNullable<Value> =>
   Option.getOrThrowWith(Option.fromNullishOr(value), () => new Error(`${what} is not on the page.`))
 
+export const bottomOf = (viewport: HTMLElement): number =>
+  viewport.scrollHeight - viewport.clientHeight
+
 export const afterSpring = (assertion: () => void) =>
   Effect.promise(() => waitFor(assertion, { timeout: SPRING_SETTLED_MS }))
 

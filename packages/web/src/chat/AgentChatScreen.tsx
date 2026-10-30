@@ -1,4 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
+import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import { Ellipsis } from 'lucide-react'
@@ -22,6 +23,7 @@ import {
   chatItems,
   firstRunningTreeKey,
   hasToolRunning,
+  lastTurnEvidence,
   runningCount,
 } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
@@ -30,6 +32,7 @@ import {
   chatStatus,
   cwdOf,
   edgeKindOf,
+  herdrTurnOf,
   isWatching,
   machineLabelOf,
   placeOf,
@@ -45,8 +48,16 @@ import { useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
-import { isCatchingUp, linesOf, rostersOf, skillsOf } from '@crook/web/chat/TranscriptState'
+import {
+  hasFailed,
+  isCatchingUp,
+  linesOf,
+  rostersOf,
+  skillsOf,
+} from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
+import { holdingSince, nextWorkingHold, NO_HOLD, sameHold } from '@crook/web/chat/WorkingHold'
+import type { WorkingSignals } from '@crook/web/chat/WorkingHold'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
@@ -92,6 +103,17 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
 
 const hasActions = (model: ChatScreenModel): boolean =>
   Option.isSome(model.row) && (model.presence === 'live' || model.presence === 'away')
+
+const useWorkingHold = (signals: WorkingSignals): Option.Option<DateTime.Utc> => {
+  const [heldSince, setHeldSince] = React.useState(NO_HOLD)
+  const next = nextWorkingHold(heldSince, signals)
+
+  if (!sameHold(next, heldSince)) {
+    setHeldSince(next)
+  }
+
+  return holdingSince(next, signals.evidence)
+}
 
 function ChatDock({
   model,
@@ -187,10 +209,15 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
   const [draft, setDraft] = React.useState('')
-  const activity = activityOf(model)
   const cwd = cwdOf(model)
   const rosters = rostersOf(view)
   const lines = linesOf(view)
+  const evidence = React.useMemo(() => lastTurnEvidence(lines), [lines])
+  const workingSince = useWorkingHold({
+    herdr: herdrTurnOf(model, hasFailed(view)),
+    evidence,
+  })
+  const activity = Option.isSome(workingSince) ? 'working' : activityOf(model)
   const items = React.useMemo(
     () => chatItems(lines, { cwd, activity, rosters }),
     [lines, cwd, activity, rosters],
@@ -254,10 +281,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     [items, commands.alwaysNotes, askedCall, environment],
   )
 
-  const working = Option.filter(
-    model.row,
-    () => model.presence === 'live' && activity === 'working' && !hasToolRunning(items),
-  )
+  const working = Option.filter(workingSince, () => !hasToolRunning(items))
   const rows: readonly ThreadRow[] =
     model.presence === 'notClaude'
       ? []
@@ -265,9 +289,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           ...conversationRows,
           ...pendingPromptRows(commands.pendingPrompts),
           ...Option.toArray(
-            Option.map(working, (row) =>
-              workingRow((now) => shortElapsed(now, row.statusChangedAt)),
-            ),
+            Option.map(working, (since) => workingRow((now) => shortElapsed(now, since))),
           ),
           ...(isWatching(model) ? failureRows(latest, transcript.onRetry) : []),
         ]

@@ -2,6 +2,7 @@ import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 
 import { agentTitleOrPane } from '@crook/domain/AgentRow'
@@ -13,6 +14,7 @@ import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { panePresence } from '@crook/domain/MachineState'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import type { AgentActivity } from '@crook/web/chat/ChatItems'
+import { HerdrTurn } from '@crook/web/chat/WorkingHold'
 import { findAgent } from '@crook/web/herd/HerdLayout'
 
 type ChatPresence = 'loading' | 'live' | 'away' | 'exited' | 'closed' | 'notClaude'
@@ -148,6 +150,22 @@ export const activityOf = (model: ChatScreenModel): AgentActivity => {
     },
   })
 }
+
+export const herdrTurnOf = (model: ChatScreenModel, watchFailed: boolean): HerdrTurn =>
+  pipe(
+    model.row,
+    Option.filter(() => model.presence === 'live' && !watchFailed),
+    Option.match({
+      onNone: () => HerdrTurn.Elsewhere(),
+      onSome: (row) =>
+        Match.value(row.status).pipe(
+          Match.when('working', () => HerdrTurn.Working({ since: row.statusChangedAt })),
+          Match.whenOr('idle', 'done', () => HerdrTurn.Idle()),
+          Match.whenOr('blocked', 'unknown', () => HerdrTurn.Elsewhere()),
+          Match.exhaustive,
+        ),
+    }),
+  )
 
 export const workspaceLabelOf = (model: ChatScreenModel): Option.Option<string> =>
   Option.flatMap(Option.all({ entry: model.machine, row: model.row }), ({ entry, row }) =>

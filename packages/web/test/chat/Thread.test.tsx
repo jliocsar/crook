@@ -10,9 +10,9 @@ import {
   ghost,
   historyOpen,
   liftOf,
+  fades,
   openedOn,
   phoneViewport,
-  revealOf,
   scrollsUnderLift,
   rowsShrinkAfterOpen,
   SETTLE_MS,
@@ -38,19 +38,20 @@ afterEach(() => {
 })
 
 describe('Thread', () => {
-  it.effect('morphs the working row into the answer and staggers its blocks in order', () =>
-    Effect.gen(function* () {
-      yield* answerGrows(ANSWER_HEIGHT)
+  it.effect(
+    'fades the working row out over the answer, which lands without a fade of its own',
+    () =>
+      Effect.gen(function* () {
+        yield* answerGrows(ANSWER_HEIGHT)
 
-      expect(present(ghost(), 'the working ghost').textContent).toBe('Working')
-      expect(revealOf('text')).toBe('0')
-      expect(revealOf('tool')).toBe('0.05')
-      expect(revealOf('prompt')).toBeNull()
+        expect(present(ghost(), 'the working ghost').textContent).toBe('Working')
+        expect(fades('text')).toBe(false)
+        expect(fades('tool')).toBe(false)
 
-      yield* afterSpring(() => {
-        expect(ghost()).toBeNull()
-      })
-    }),
+        yield* afterSpring(() => {
+          expect(ghost()).toBeNull()
+        })
+      }),
   )
 
   it.effect('slides the thread up by what the answer added, then settles it in place', () =>
@@ -261,8 +262,8 @@ describe('Thread', () => {
     Effect.sync(() => {
       openedOn(['prompt', 'text'])
 
-      expect(revealOf('prompt')).toBeNull()
-      expect(revealOf('text')).toBeNull()
+      expect(fades('prompt')).toBe(false)
+      expect(fades('text')).toBe(false)
     }),
   )
 })

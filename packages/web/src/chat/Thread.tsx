@@ -6,24 +6,15 @@ import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import { ArrowDown } from 'lucide-react'
-import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'motion/react'
+import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react'
 import * as React from 'react'
 
-import {
-  EMPTY_REVEAL_PLAN,
-  liftFor,
-  nextRevealPlan,
-  revealOf,
-  revealWindow,
-  withoutReveal,
-  withoutReveals,
-} from '@crook/web/chat/Reveal'
-import type { RevealTiming, RowReveal } from '@crook/web/chat/Reveal'
+import { EMPTY_REVEAL_PLAN, liftFor, nextRevealPlan } from '@crook/web/chat/Reveal'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { RenderCacheScope } from '@crook/web/components/RenderCache'
 import { RowMemoryScope } from '@crook/web/components/RowMemory'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
-import { GLIDE } from '@crook/web/motion/Springs'
+import { MOMENTUM_GLIDE } from '@crook/web/motion/Springs'
 import { translate } from '@crook/web/motion/TransformString'
 
 export interface ThreadRow {
@@ -48,9 +39,7 @@ const OVERSCAN = 8
 const ROW_GAP = 12
 const EDGE_PADDING = 16
 const FOLLOW_THRESHOLD = 48
-const RISE = 8
 const JUMP_ICON_SIZE = 13
-const STAGGER_STEP_SECONDS = 0.05
 
 const ThreadRowBody = React.memo(RowBody)
 
@@ -184,11 +173,6 @@ const useSettled = (rowCount: number): boolean => {
   return settled
 }
 
-const revealTiming = (): RevealTiming => ({
-  step: STAGGER_STEP_SECONDS,
-  spread: Option.getOrElse(Option.fromUndefinedOr(motionTokens().fade.duration), () => 0),
-})
-
 const useRevealPlan = (rows: readonly ThreadRow[], animates: boolean) => {
   const signature = pipe(
     rows,
@@ -200,31 +184,10 @@ const useRevealPlan = (rows: readonly ThreadRow[], animates: boolean) => {
 
   if (!Option.contains(planned, signature)) {
     setPlanned(Option.some(signature))
-    setPlan(nextRevealPlan(plan, rows, { animate: animates, timing: revealTiming() }))
+    setPlan(nextRevealPlan(plan, rows, { animate: animates }))
   }
 
-  const shown = React.useCallback((key: string) => {
-    setPlan((current) => withoutReveal(current, key))
-  }, [])
-
-  React.useEffect(() => {
-    if (plan.reveals.size === 0) {
-      return undefined
-    }
-
-    const timer = window.setTimeout(
-      () => {
-        setPlan(withoutReveals)
-      },
-      Duration.toMillis(revealWindow(revealTiming())),
-    )
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [plan])
-
-  return { plan, shown }
+  return plan
 }
 
 const placeholderFrames = (
@@ -273,22 +236,16 @@ const useGhost = (
 }
 
 const useLift = () => {
-  const lift = useMotionValue(0)
-  const transform = useTransform(lift, (value) => translate('Y', value))
+  const resting = useMotionValue(0)
+  const trailing = useSpring(resting, MOMENTUM_GLIDE)
+  const transform = useTransform(() => translate('Y', resting.get() - trailing.get()))
   const liftedFrom = React.useRef<Option.Option<number>>(Option.none())
-  const current = React.useCallback(() => lift.get(), [lift])
-
-  React.useEffect(
-    () => () => {
-      lift.stop()
-    },
-    [lift],
-  )
+  const current = React.useCallback(() => resting.get() - trailing.get(), [resting, trailing])
 
   const firstIndex = (range: Range): number =>
     pipe(
       liftedFrom.current,
-      Option.filter(() => lift.get() > 0),
+      Option.filter(() => current() > 0),
       Option.match({
         onNone: () => range.startIndex,
         onSome: (index) => Math.min(index, range.startIndex),
@@ -302,18 +259,23 @@ const useLift = () => {
       readonly content: HTMLElement | null
       readonly indexAt: (lifted: number) => Option.Option<number>
     }) => {
-      const next = liftFor(options.grown, lift.get(), options.ceiling)
+      const before = current()
+      const next = liftFor(options.grown, before, options.ceiling)
+      const rest = resting.get() + options.grown
 
       liftedFrom.current = options.indexAt(next)
-      lift.jump(next)
+
+      if (next < before + options.grown) {
+        trailing.jump(rest - next)
+      }
+
+      resting.set(rest)
 
       if (options.content !== null) {
         options.content.style.transform = translate('Y', next)
       }
-
-      animate(lift, 0, GLIDE)
     },
-    [lift],
+    [current, resting, trailing],
   )
 
   return { transform, firstIndex, raise, current }
@@ -329,58 +291,18 @@ const ghostsOf = (
     Arr.head,
   )
 
-function Appear({
-  rowKey,
-  reveal,
-  onShown,
-  children,
-}: {
-  rowKey: string
-  reveal: RowReveal
-  onShown: (rowKey: string) => void
-  children: React.ReactNode
-}) {
-  const [entrance] = React.useState(reveal)
-
-  React.useEffect(() => {
-    onShown(rowKey)
-  }, [rowKey, onShown])
-
-  return (
-    <motion.div
-      className="min-w-0"
-      data-reveal={entrance.enters ? entrance.delay : undefined}
-      initial={
-        entrance.enters
-          ? { opacity: 0, transform: translate('Y', entrance.rise ? RISE : 0) }
-          : false
-      }
-      animate={{ opacity: 1, transform: translate('Y', 0) }}
-      transition={{ ...motionTokens().fade, delay: entrance.delay }}
-    >
-      {children}
-    </motion.div>
-  )
-}
-
 function RowBody({
   rowKey,
-  reveal,
   memory,
-  onShown,
   children,
 }: {
   rowKey: string
-  reveal: RowReveal
   memory: Map<string, boolean>
-  onShown: (rowKey: string) => void
   children: React.ReactNode
 }) {
   return (
     <RowMemoryScope store={memory} rowKey={rowKey}>
-      <Appear rowKey={rowKey} reveal={reveal} onShown={onShown}>
-        {children}
-      </Appear>
+      {children}
     </RowMemoryScope>
   )
 }
@@ -402,8 +324,7 @@ function ThreadGhost({
       className="pointer-events-none absolute inset-x-0 top-0 px-4"
       style={{ transform: translate('Y', start) }}
       initial={{ opacity: 1 }}
-      animate={{ opacity: 0 }}
-      transition={motionTokens().fade}
+      animate={motionTokens().exit}
       onAnimationComplete={onGone}
     >
       {children}
@@ -451,7 +372,7 @@ export function Thread({
   const reduce = useReducedMotion() ?? false
   const settled = useSettled(rows.length)
   const animates = settled && !reduce
-  const { plan, shown } = useRevealPlan(rows, animates)
+  const plan = useRevealPlan(rows, animates)
   const lift = useLift()
   const { raise, current: liftNow } = lift
 
@@ -460,7 +381,8 @@ export function Thread({
   const toBottom = React.useCallback(() => {
     if (viewport.current !== null) {
       askedPin()
-      viewport.current.scrollTop = viewport.current.scrollHeight - liftNow()
+      viewport.current.scrollTop =
+        viewport.current.scrollHeight - liftNow() - viewport.current.clientHeight
     }
   }, [liftNow, askedPin])
 
@@ -613,12 +535,7 @@ export function Thread({
                     className="absolute inset-x-0 top-0 px-4"
                     style={{ transform: translate('Y', virtual.start) }}
                   >
-                    <ThreadRowBody
-                      rowKey={row.key}
-                      reveal={revealOf(plan, row.key)}
-                      memory={memory}
-                      onShown={shown}
-                    >
+                    <ThreadRowBody rowKey={row.key} memory={memory}>
                       {row.content}
                     </ThreadRowBody>
                   </div>

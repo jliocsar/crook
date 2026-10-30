@@ -541,6 +541,16 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   end, stayed at 0.6 with nothing running (measured on motion 14.4.0, 2 of 12 reloads of a chat
   whose socket was cold for a moment). A state fade that can flip back quickly is a CSS
   transition, which retargets from wherever it stands; with one, 15 of 15 reloads came back.
+- Motion drops any inherited velocity on a spring defined by `duration` and `bounce`, and a
+  motion value's `jump` zeroes it (both read in motion-dom 14.4.0), so a glide restarted that way
+  for every batch started each one from rest. A spring with stiffness 341 and critical damping
+  traces the same curve as `duration: 0.5, bounce: 0` (measured, every sample to the pixel) and
+  keeps the speed it is given. The thread's lift is that spring following where the content
+  rests: each batch moves the target, and the follower is retargeted in place from its own
+  position and speed, folding every set made within one frame into one retarget (read in its
+  source).
+- A live batch lands without a fade of its own: the lift that carries it into view is the one
+  animation, and the Working row it replaces leaves as a ghost on the exit token.
 - A blocked agent reads "needs you" wherever its status is put in words, the same words the tab
   badge and the machine counts use; "blocked" is herdr's word, not the user's.
 - A one-shot Bun script keeps `Effect.provide` at its entry and disables
@@ -689,6 +699,16 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   answer landed as one line about 9 s after its request, 118 ms after its stamp; no write ever
   left a partial line. Nothing can stream text to the phone, so the chat reveals each landed
   batch instead of pretending to type it.
+- Claude Code always says in the transcript that a turn is over. Over 60 local transcripts, 559 of
+  the 569 turns that got an answer ended with a `turn_duration` system entry, an assistant entry
+  whose stop reason is not `tool_use`, or an interruption, and the other 10 were still running
+  (measured). `turn_duration` alone was in 549 of all 728 turns, unanswered ones included, and the
+  answer's own line carries its final stop reason, so the end lands with the answer. The Working row
+  therefore leaves on that evidence when it is stamped after herdr's flip to working (both stamps
+  come from the laptop's clock), and stays after herdr goes idle while the turn is still open in the
+  transcript. With herdr's idle flip reaching the phone before the answer, the row used to leave on
+  the flip and the answer land on its own afterwards; now both change in one frame (measured in
+  Chromium at 4x CPU throttling).
 - A background task that finishes while Claude is busy reaches the transcript as an `attachment`
   entry of type `queued_command` whose `commandMode` and `origin.kind` are `task-notification`,
   carrying the same `<task-notification>` text a `user` entry carries when Claude was idle. A
@@ -713,6 +733,12 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   reveal's lift is up, the thread subtracts it before it judges whether it sits at the bottom or
   scrolls there; otherwise the slide read as the user scrolling away and the thread stopped
   following on every batch taller than the follow threshold.
+  Scrolling there means `scrollHeight` minus the lift minus `clientHeight`. Asking for
+  `scrollHeight` minus the lift alone lets the browser clamp at the lifted bottom, so a batch
+  landing mid-glide counted the lift still up as growth, doubled it, and the scroll was clamped
+  down under the shrinking lift for 37 to 38 frames of a six-batch burst, the glide stopping short
+  instead of easing out. With `clientHeight` subtracted it was 2 to 3 frames (measured in Chromium
+  at 4x CPU throttling, batches 100 ms apart, two runs each).
 - TanStack Virtual corrects `scrollTop` itself when a row above the top first measures away
   from its estimate, and writes the correction before React commits the new heights. A thread
   that read every upward move as the user leaving lost the end on open: 299 rows of 20 px (every
@@ -968,6 +994,12 @@ happy-dom, measured:
   code), so a test cannot tell keyboard focus from a tap through it.
 - It has no `window.visualViewport`. A keyboard test defines one, an `EventTarget` carrying
   `height`, `offsetTop` and `scale`, and dispatches `resize` or `scroll` on it.
+- A motion value that an animation moves reads a `getVelocity` of 0 every frame: the value is
+  set twice per frame at different times, so its previous frame value equals its current one
+  (measured). Test a glide by where it goes, not by the speed it reports.
+- It does not clamp `scrollTop`: a viewport whose `scrollHeight` a test fixed at 100000 kept a
+  `scrollTop` of 100000 when set to it (measured). A test reads the bottom as `scrollHeight` minus
+  `clientHeight`, which is where a browser clamps.
 - Its `ResizeObserver` never reports, and TanStack Virtual measures a row through its ref only
   while it is not scrolling, so a row mounted by a scroll keeps its estimate for good. A test of
   the virtualizer's own corrections stubs `ResizeObserver` with one that reports when told, and

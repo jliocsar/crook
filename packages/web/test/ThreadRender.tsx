@@ -7,7 +7,7 @@ import { vi } from 'vitest'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 
-import { present, wait } from './Dom.ts'
+import { bottomOf, present, wait } from './Dom.ts'
 
 const VIEWPORT_WIDTH = 375
 const HISTORY_HEIGHT = 1000
@@ -31,10 +31,10 @@ export const phoneViewport = (): void => {
   vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT)
 }
 
-export const revealOf = (key: string): string | null =>
-  present(document.querySelector(`[data-row="${key}"] .min-w-0`), `the ${key} row`).getAttribute(
-    'data-reveal',
-  )
+export const fades = (key: string): boolean =>
+  present(document.querySelector(`[data-row="${key}"]`), `the ${key} row`).querySelector(
+    '[style*="opacity"]',
+  ) !== null
 
 export const ghost = (): Element | null => document.querySelector('[data-slot="thread-ghost"]')
 
@@ -44,6 +44,33 @@ export const liftOf = (): string =>
     'the thread content',
   ).style.transform
 
+export const lifted = (): number => {
+  const pixels = Number.parseFloat(liftOf().replace('translateY(', ''))
+
+  return Number.isNaN(pixels) ? 0 : pixels
+}
+
+export const liftsWritten = (): (() => readonly number[]) => {
+  const seen: number[] = []
+  const observer = new MutationObserver(() => {
+    seen.push(lifted())
+  })
+
+  observer.observe(
+    present(
+      document.querySelector<HTMLElement>('[data-slot="conversation-content"]'),
+      'the thread content',
+    ),
+    { attributes: true, attributeFilter: ['style'] },
+  )
+
+  return () => {
+    observer.disconnect()
+
+    return seen
+  }
+}
+
 export const following = (): boolean => viewport().hasAttribute('data-following')
 
 export const openedOn = (keys: readonly string[]) => {
@@ -52,7 +79,7 @@ export const openedOn = (keys: readonly string[]) => {
 
 export const scrollsUnderLift = (added: number): void => {
   const scrolling = viewport()
-  const lift = Number.parseFloat(liftOf().replace('translateY(', ''))
+  const lift = lifted()
 
   Object.defineProperty(scrolling, 'scrollHeight', {
     configurable: true,
@@ -65,12 +92,15 @@ const scrollable = (scrolling: HTMLElement) => {
   let height = HISTORY_HEIGHT
   let top = 0
 
-  Object.defineProperty(scrolling, 'scrollHeight', { configurable: true, get: () => height })
+  Object.defineProperty(scrolling, 'scrollHeight', {
+    configurable: true,
+    get: () => height + lifted(),
+  })
   Object.defineProperty(scrolling, 'scrollTop', {
     configurable: true,
     get: () => top,
     set: (next: number) => {
-      top = Math.max(0, Math.min(next, height - scrolling.clientHeight))
+      top = Math.max(0, Math.min(next, bottomOf(scrolling)))
     },
   })
   scrolling.scrollTop = HISTORY_HEIGHT
@@ -83,13 +113,24 @@ const scrollable = (scrolling: HTMLElement) => {
   }
 }
 
-export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
+export const liveTail = Effect.fn('liveTail')(function* () {
   const { rerender } = render(thread([row('prompt'), WORKING], null))
   const { grow } = scrollable(viewport())
 
   yield* wait(SETTLE_MS)
-  grow(added)
-  rerender(thread([row('prompt'), row('text'), row('tool')], null))
+
+  return {
+    lands: (keys: readonly string[], added: number) => {
+      grow(added)
+      rerender(thread([row('prompt'), ...keys.map(row)], null))
+    },
+  }
+})
+
+export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
+  const tail = yield* liveTail()
+
+  tail.lands(['text', 'tool'], added)
 })
 
 export const historyOpen = () => {
@@ -231,7 +272,7 @@ export const rowsShrinkAfterOpen = (
 
   const corrections = vi.spyOn(scrolling, 'scrollTo')
 
-  scrolling.scrollTop = scrolling.scrollHeight
+  scrolling.scrollTop = bottomOf(scrolling)
   fireEvent.scroll(scrolling)
 
   return {
@@ -243,6 +284,6 @@ export const rowsShrinkAfterOpen = (
     },
     corrections: () => corrections.mock.calls.length,
     top: () => scrolling.scrollTop,
-    bottom: () => scrolling.scrollHeight,
+    bottom: () => bottomOf(scrolling),
   }
 }
