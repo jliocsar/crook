@@ -15,19 +15,17 @@ import { liveWith, renderApp } from '../AppRender.tsx'
 import { eventually, findByRole } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
+import { phoneViewport } from '../ThreadRender.tsx'
 import { answered, chunk, opened, prompt } from '../TranscriptFixtures.ts'
 
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
-const VIEWPORT_WIDTH = 375
-const VIEWPORT_HEIGHT = 812
 
 const live = (rows: readonly AgentRow[]) => liveWith(herd([machine(LAPTOP, rows)]))
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(VIEWPORT_WIDTH)
-  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(VIEWPORT_HEIGHT)
+  phoneViewport()
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(DateTime.addDuration(START, Duration.minutes(5)).epochMilliseconds)
 })

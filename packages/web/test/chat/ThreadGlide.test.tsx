@@ -1,10 +1,11 @@
 import { describe, expect, it } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { afterSpring } from '../Dom.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
-import { lifted, liveTail, phoneViewport, VIEWPORT_HEIGHT } from '../ThreadRender.tsx'
+import { lifted, liftsWritten, liveTail, phoneViewport, VIEWPORT_HEIGHT } from '../ThreadRender.tsx'
 
 const ANSWER_HEIGHT = 300
 const NEXT_BATCH_HEIGHT = 120
@@ -45,17 +46,19 @@ describe('Thread glide', () => {
     Effect.gen(function* () {
       const tail = yield* liveTail()
       const keys = ['first', 'second', 'third', 'fourth', 'fifth']
+      const written = liftsWritten()
 
-      for (const [index] of keys.entries()) {
-        tail.lands(keys.slice(0, index + 1), ANSWER_HEIGHT)
+      for (const count of Arr.range(1, keys.length)) {
+        tail.lands(keys.slice(0, count), ANSWER_HEIGHT)
 
         expect(lifted()).toBeGreaterThan(0)
-        expect(lifted()).toBeLessThanOrEqual(VIEWPORT_HEIGHT)
       }
 
       yield* afterSpring(() => {
         expect(lifted()).toBe(0)
       })
+
+      expect(Math.max(...written())).toBeCloseTo(VIEWPORT_HEIGHT)
     }),
   )
 })

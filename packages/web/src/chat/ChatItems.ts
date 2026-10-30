@@ -729,7 +729,7 @@ const userEnds = (message: UserMessage): Option.Option<boolean> =>
     Option.liftPredicate(message, (found) => !found.isMeta),
     Option.map((found) => pipe(found.blocks, Arr.map(userBlockEnds), Arr.getSomes)),
     Option.filter((signs) => signs.length > 0),
-    Option.map((signs) => signs.includes(true)),
+    Option.map((signs) => Arr.contains(signs, true)),
   )
 
 const assistantEnds = (message: AssistantMessage): boolean =>

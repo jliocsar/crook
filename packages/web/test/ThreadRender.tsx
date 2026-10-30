@@ -7,7 +7,7 @@ import { vi } from 'vitest'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 
-import { present, wait } from './Dom.ts'
+import { bottomOf, present, wait } from './Dom.ts'
 
 const VIEWPORT_WIDTH = 375
 const HISTORY_HEIGHT = 1000
@@ -50,6 +50,27 @@ export const lifted = (): number => {
   return Number.isNaN(pixels) ? 0 : pixels
 }
 
+export const liftsWritten = (): (() => readonly number[]) => {
+  const seen: number[] = []
+  const observer = new MutationObserver(() => {
+    seen.push(lifted())
+  })
+
+  observer.observe(
+    present(
+      document.querySelector<HTMLElement>('[data-slot="conversation-content"]'),
+      'the thread content',
+    ),
+    { attributes: true, attributeFilter: ['style'] },
+  )
+
+  return () => {
+    observer.disconnect()
+
+    return seen
+  }
+}
+
 export const following = (): boolean => viewport().hasAttribute('data-following')
 
 export const openedOn = (keys: readonly string[]) => {
@@ -58,7 +79,7 @@ export const openedOn = (keys: readonly string[]) => {
 
 export const scrollsUnderLift = (added: number): void => {
   const scrolling = viewport()
-  const lift = Number.parseFloat(liftOf().replace('translateY(', ''))
+  const lift = lifted()
 
   Object.defineProperty(scrolling, 'scrollHeight', {
     configurable: true,
@@ -79,7 +100,7 @@ const scrollable = (scrolling: HTMLElement) => {
     configurable: true,
     get: () => top,
     set: (next: number) => {
-      top = Math.max(0, Math.min(next, scrolling.scrollHeight - scrolling.clientHeight))
+      top = Math.max(0, Math.min(next, bottomOf(scrolling)))
     },
   })
   scrolling.scrollTop = HISTORY_HEIGHT
@@ -251,7 +272,7 @@ export const rowsShrinkAfterOpen = (
 
   const corrections = vi.spyOn(scrolling, 'scrollTo')
 
-  scrolling.scrollTop = scrolling.scrollHeight - scrolling.clientHeight
+  scrolling.scrollTop = bottomOf(scrolling)
   fireEvent.scroll(scrolling)
 
   return {
@@ -263,6 +284,6 @@ export const rowsShrinkAfterOpen = (
     },
     corrections: () => corrections.mock.calls.length,
     top: () => scrolling.scrollTop,
-    bottom: () => scrolling.scrollHeight - scrolling.clientHeight,
+    bottom: () => bottomOf(scrolling),
   }
 }

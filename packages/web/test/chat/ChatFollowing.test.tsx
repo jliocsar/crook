@@ -19,10 +19,9 @@ import {
   followedToBottom,
   isFollowing,
   manyLines,
-  bottomOf,
   tallViewport,
 } from '../ChatThread.ts'
-import { click, eventually, findByRole, present } from '../Dom.ts'
+import { bottomOf, click, eventually, findByRole, present } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'

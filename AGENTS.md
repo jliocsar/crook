@@ -644,16 +644,16 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   answer landed as one line about 9 s after its request, 118 ms after its stamp; no write ever
   left a partial line. Nothing can stream text to the phone, so the chat reveals each landed
   batch instead of pretending to type it.
-- Claude Code always says in the transcript that a turn is over. Over 60 local transcripts, 559
-  of the 569 turns that got an answer ended with a `turn_duration` system entry, an assistant
-  entry whose stop reason is not `tool_use`, or an interruption, and the other 10 were still
-  running (measured). `turn_duration` alone was in 549 of 728 turns, and the answer's own line
-  carries its final stop reason, so the end lands with the answer. The Working row therefore
-  leaves on that evidence when it is stamped after herdr's flip to working (both stamps come
-  from the laptop's clock), and stays after herdr goes idle while the turn is still open in the
-  transcript. With herdr's idle flip reaching the phone before the answer, the row used to
-  leave on the flip and the answer land on its own afterwards; now both change in one frame
-  (measured in Chromium at 4x CPU throttling).
+- Claude Code always says in the transcript that a turn is over. Over 60 local transcripts, 559 of
+  the 569 turns that got an answer ended with a `turn_duration` system entry, an assistant entry
+  whose stop reason is not `tool_use`, or an interruption, and the other 10 were still running
+  (measured). `turn_duration` alone was in 549 of all 728 turns, unanswered ones included, and the
+  answer's own line carries its final stop reason, so the end lands with the answer. The Working row
+  therefore leaves on that evidence when it is stamped after herdr's flip to working (both stamps
+  come from the laptop's clock), and stays after herdr goes idle while the turn is still open in the
+  transcript. With herdr's idle flip reaching the phone before the answer, the row used to leave on
+  the flip and the answer land on its own afterwards; now both change in one frame (measured in
+  Chromium at 4x CPU throttling).
 - A background task that finishes while Claude is busy reaches the transcript as an `attachment`
   entry of type `queued_command` whose `commandMode` and `origin.kind` are `task-notification`,
   carrying the same `<task-notification>` text a `user` entry carries when Claude was idle. A

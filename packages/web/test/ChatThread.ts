@@ -3,15 +3,12 @@ import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import { expect } from 'vitest'
 
-import { eventually, present } from './Dom.ts'
+import { bottomOf, eventually, present } from './Dom.ts'
 import { chunk, said } from './TranscriptFixtures.ts'
 
 const MANY_LINES = 120
 const LINE_BYTES = 10
 const TALL_SCROLL_HEIGHT = 100_000
-
-export const bottomOf = (viewport: HTMLElement): number =>
-  viewport.scrollHeight - viewport.clientHeight
 
 export const tallViewport = () => {
   const viewport = present(
