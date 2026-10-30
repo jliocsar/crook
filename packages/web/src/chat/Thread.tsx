@@ -4,6 +4,7 @@ import { cn } from 'cn'
 import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
+import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 import { ArrowDown } from 'lucide-react'
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react'
@@ -29,6 +30,11 @@ interface Ghost {
   readonly content: React.ReactNode
 }
 
+export interface ThreadLayout {
+  readonly startOf: (key: string) => Option.Option<number>
+  readonly width: () => number
+}
+
 export interface ThreadHandle {
   readonly scrollToKey: (key: string) => void
   readonly scrollToEnd: () => void
@@ -36,10 +42,11 @@ export interface ThreadHandle {
 
 const ESTIMATED_ROW_HEIGHT = 84
 const OVERSCAN = 8
-const ROW_GAP = 12
 const EDGE_PADDING = 16
 const FOLLOW_THRESHOLD = 48
 const JUMP_ICON_SIZE = 13
+
+export const ROW_GAP = 12
 
 const ThreadRowBody = React.memo(RowBody)
 
@@ -267,6 +274,34 @@ const useLift = () => {
   return { transform, firstIndex, raise, current }
 }
 
+const useThreadLayout = (
+  rows: readonly ThreadRow[],
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+  content: React.RefObject<HTMLDivElement | null>,
+  used: boolean,
+): ThreadLayout => {
+  const rowIndex = React.useMemo(
+    () =>
+      used
+        ? HashMap.fromIterable(Arr.map(rows, (row, index) => [row.key, index] as const))
+        : HashMap.empty<string, number>(),
+    [rows, used],
+  )
+
+  return React.useMemo(
+    (): ThreadLayout => ({
+      startOf: (key) =>
+        pipe(
+          HashMap.get(rowIndex, key),
+          Option.flatMap((index) => Arr.get(virtualizer.measurementsCache, index)),
+          Option.map((item) => item.start),
+        ),
+      width: () => content.current?.clientWidth ?? 0,
+    }),
+    [rowIndex, virtualizer],
+  )
+}
+
 const ghostsOf = (
   departed: readonly string[],
   frames: ReadonlyMap<string, Ghost>,
@@ -342,11 +377,13 @@ export function Thread({
   dimmed,
   empty,
   handle,
+  overlay,
 }: {
   rows: readonly ThreadRow[]
   dimmed: boolean
   empty: React.ReactNode
   handle?: React.Ref<ThreadHandle>
+  overlay?: ((layout: ThreadLayout) => React.ReactNode) | undefined
 }) {
   const viewport = React.useRef<HTMLDivElement>(null)
   const content = React.useRef<HTMLDivElement>(null)
@@ -394,6 +431,7 @@ export function Thread({
   const totalSize = virtualizer.getTotalSize()
   const virtualItems = virtualizer.getVirtualItems()
   const { ghost, gone } = useGhost(rows, virtualItems, animates)
+  const layout = useThreadLayout(rows, virtualizer, content, overlay !== undefined)
 
   const follow = (next: boolean) => {
     if (next !== followingRef.current) {
@@ -534,6 +572,7 @@ export function Thread({
                   </ThreadGhost>
                 ),
               })}
+              {overlay?.(layout)}
             </motion.div>
           )}
         </div>

@@ -13,7 +13,7 @@ import { omittedUpTo, PaneTranscript } from '@crook/domain/Transcript'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
-import { click, eventually, findByRole } from '../Dom.ts'
+import { click, eventually, findByRole, present } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 import { caughtUp, chunk, opened, said, SESSION } from '../TranscriptFixtures.ts'
@@ -96,6 +96,48 @@ describe('a chat catching up', () => {
         expect(catchingUpPill()).toBeNull()
       })
     }),
+  )
+
+  it.effect(
+    'lands a laptop catch-up at once, its divider already drawn, when motion is reduced',
+    () =>
+      Effect.gen(function* () {
+        const { link, router } = yield* renderApp(CHAT, current())
+
+        yield* Queue.offerAll(yield* link.transcriptFor(source), [
+          opened(),
+          chunk(0, 10, [said(0, 'Seen before.')]),
+          caughtUp(10),
+        ])
+        yield* Effect.promise(() => screen.findByText('Seen before.'))
+        yield* Effect.promise(() => router.navigate({ to: '/' }))
+        yield* eventually(() => {
+          expect(screen.queryByText('Seen before.')).toBeNull()
+        })
+        yield* Effect.promise(() =>
+          router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+        )
+        yield* Effect.promise(() => screen.findByText('Seen before.'))
+        yield* Queue.offerAll(yield* link.transcriptFor(source), [
+          opened(),
+          chunk(10, 30, [said(10, 'First missed.'), said(20, 'Second missed.')]),
+          caughtUp(30),
+        ])
+        yield* Effect.promise(() => screen.findByText('Second missed.'))
+
+        const divider = present(
+          document.querySelector('[data-slot="catch-up-divider"]'),
+          'the catch-up divider',
+        )
+
+        expect(screen.getByText('First missed.')).toBeDefined()
+        expect(divider.textContent).toContain('On laptop')
+        expect(divider.querySelector('.invisible')).toBeNull()
+        expect(document.querySelector('[data-slot="catch-up-chip"]')).toBeNull()
+        expect(
+          document.querySelector('[data-slot="catch-up-trail"] path')?.getAttribute('d'),
+        ).toMatch(/^M7 \d+ V\d+ A8 8 0 0 0 15 \d+ H\d+$/u)
+      }),
   )
 
   it.effect('marks Show earlier as loading until the whole chat has caught up', () =>

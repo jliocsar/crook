@@ -910,6 +910,22 @@ a turn of its own, enqueued as a task notification.
   link holds and coalesces the updates that land while a write is out, with no time debounce, like
   the transcript pipe. Logout clears the cache and forgets the herd while holding that writer's
   permit, so a write still out lands before the clear and none can start after it.
+- A laptop catch-up is judged once per open, from the view the chat first showed while catching
+  up: the view that ends the catch-up counts as one only if the cached view's last line sits at
+  the same index in it (lines are appended, so the same object), and its new rows are the row
+  keys the cached view did not show. A chat that opened current, a cold open, a watch that failed
+  or started over, and a catch-up that added no row get nothing. A resume that sends an open of
+  the session the phone already holds appends a session-cleared line, so a test fake that does
+  so shows a divider for a row the real hub never sends: the hub drops that open (measured: a
+  test of a catch-up with nothing new saw a divider until its fake stopped sending the open).
+- The catch-up's line spans rows the virtualizer may have unmounted, so it is drawn in the
+  thread's content layer from the virtualizer's measurement cache, which holds a start and end
+  for every row, the estimate for one never measured. The content layer carries the glide's
+  lift, so the line and the chip move with the rows without reading it.
+- The catch-up shows nothing while it waits for the fresher view: the header's "Catching up"
+  pill covers that, and a reopen that brings nothing new would otherwise show a chip that leaves
+  with no divider. A catch-up of more than 22 rows, the most the design's long catch-up released
+  one at a time, lands the rows before the last 22 at once, where they are off screen anyway.
 
 :::tip
 Checking the web app against real data, measured:

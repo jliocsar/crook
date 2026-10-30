@@ -50,6 +50,7 @@ describe('readMotionTokens', () => {
 
     expect(tokens.tap).toStrictEqual({ duration: 0.12, ease: [0.22, 0.61, 0.36, 1] })
     expect(tokens.fade).toStrictEqual({ duration: 0.18, ease: [0.22, 0.61, 0.36, 1] })
+    expect(tokens.slow).toStrictEqual({ duration: 0.28, ease: [0.22, 0.61, 0.36, 1] })
     expect(tokens.exit).toStrictEqual({
       opacity: 0,
       transition: { duration: 0.12, ease: [0.22, 0.61, 0.36, 1] },

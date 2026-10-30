@@ -11,6 +11,7 @@ type CubicBezier = readonly [number, number, number, number]
 export type MotionTokens = {
   readonly tap: Transition
   readonly fade: Transition
+  readonly slow: Transition
   readonly exit: TargetAndTransition
 }
 
@@ -40,11 +41,13 @@ export const readMotionTokens = (read: (property: string) => string): Option.Opt
   Option.all({
     fast: parseCssTime(read('--motion-fast')),
     base: parseCssTime(read('--motion')),
+    slow: parseCssTime(read('--motion-slow')),
     ease: parseCubicBezier(read('--ease-out')),
   }).pipe(
-    Option.map(({ fast, base, ease }) => ({
+    Option.map(({ fast, base, slow, ease }) => ({
       tap: { duration: fast, ease },
       fade: { duration: base, ease },
+      slow: { duration: slow, ease },
       exit: { opacity: 0, transition: { duration: fast, ease } },
     })),
   )
@@ -56,7 +59,7 @@ const fromDocument = (): MotionTokens => {
     readMotionTokens((property) => style.getPropertyValue(property)),
     () =>
       new Error(
-        'index.css must define --motion-fast and --motion as CSS times and --ease-out as a cubic-bezier() on :root.',
+        'index.css must define --motion-fast, --motion and --motion-slow as CSS times and --ease-out as a cubic-bezier() on :root.',
       ),
   )
 }
