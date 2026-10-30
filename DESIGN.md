@@ -571,7 +571,7 @@ Unmeasured knobs, picked in the prototype; settle them on the phone:
   chips get their long labels, and a shell nobody can check turns unconfirmed after 15 quiet
   minutes;
 - the agent rechecks a running shell's process every 5s (one check measured 0.32 ms of wall
-  time and 1.17 ms of CPU), and calls it gone only after two checks in a row miss it, so a shell
+  time and 1.17 ms of CPU), and calls it gone only once its first miss is 5s old, so a shell
   that exits normally isn't flagged in the moment before Claude's notice lands;
 - the agent sends a shell's last three output lines, the sheet shows all three and a tray row
   two;

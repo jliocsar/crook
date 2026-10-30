@@ -2,6 +2,7 @@ import { cn } from 'cn'
 import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
+import * as HashSet from 'effect/HashSet'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
@@ -53,12 +54,11 @@ const jobOf = (
 
 export const useBackgroundMarker = (call: ToolCallModel): Option.Option<React.ReactNode> => {
   const work = React.useContext(BackgroundContext)
-  const now = useNow(false)
 
   return pipe(
     Option.liftPredicate(call, canRunInBackground),
     Option.flatMap(() => work),
-    Option.filter((found) => Option.isSome(jobOf(found, call.id, now))),
+    Option.filter((found) => HashSet.has(found.keys, call.id)),
     Option.map((found) => <Marker callId={call.id} work={found} />),
   )
 }

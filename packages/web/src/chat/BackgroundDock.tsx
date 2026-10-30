@@ -4,6 +4,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
+import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import {
@@ -54,6 +55,7 @@ import { useNow } from '@crook/web/time/Now'
 
 export interface BackgroundHandle {
   readonly jobsAt: (now: DateTime.Utc) => readonly BackgroundJob[]
+  readonly keys: HashSet.HashSet<string>
   readonly openKey: Option.Option<string>
   readonly open: (job: BackgroundJob) => void
   readonly close: () => void
@@ -193,7 +195,15 @@ export const useBackgroundWorkOf = (
     setOpenKey(Option.none())
   }, [])
 
-  return React.useMemo(() => ({ jobsAt, openKey, open, close }), [jobsAt, openKey, open, close])
+  const keys = React.useMemo(
+    () => HashSet.fromIterable(Arr.map(jobsAt(DateTime.nowUnsafe()), (job) => job.key)),
+    [jobsAt],
+  )
+
+  return React.useMemo(
+    () => ({ jobsAt, keys, openKey, open, close }),
+    [jobsAt, keys, openKey, open, close],
+  )
 }
 
 export const useBackgroundWork = (
@@ -601,9 +611,9 @@ function DockTray({
 
 export function BackgroundDock({ work }: { work: BackgroundHandle }) {
   const [ticking, setTicking] = React.useState(true)
-  const clock = useNow(ticking)
-  const now = ticking ? clock : DateTime.nowUnsafe()
-  const jobs = React.useMemo(() => work.jobsAt(now), [work, now])
+  useNow(ticking)
+  const now = DateTime.nowUnsafe()
+  const jobs = work.jobsAt(now)
   const dock = dockOf(jobs, now)
   const shown = isShown(dock)
   const needsClock = shown || Option.isSome(work.openKey)
