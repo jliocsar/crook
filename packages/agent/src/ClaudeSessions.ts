@@ -32,8 +32,8 @@ export class ClaudeSessionFileUnreadable extends Schema.TaggedError<ClaudeSessio
   }
 }
 
-const SessionFile = Schema.fromJsonString(
-  Schema.Struct({ sessionId: ClaudeSessionId, procStart: Schema.String }),
+export const SessionFile = Schema.fromJsonString(
+  Schema.Struct({ pid: Schema.Int, sessionId: ClaudeSessionId, procStart: Schema.String }),
 )
 
 const reportedSession = (agent: AgentInfo) =>

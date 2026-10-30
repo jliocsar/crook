@@ -17,6 +17,7 @@ import type {
 import type { SubagentId } from '@crook/domain/Ids'
 import type { SubagentStatus } from '@crook/domain/Subagent'
 import type { BackgroundChanged } from '@crook/domain/Transcript'
+import { firstLine } from '@crook/domain/ToolSubject'
 import { clockElapsed, shortElapsed } from '@crook/web/time/Elapsed'
 
 export type JobKind = 'subagent' | 'shell' | 'monitor'
@@ -43,7 +44,6 @@ const UNHEARD_AFTER = Duration.minutes(15)
 const ROOMY_CHIPS = 2
 const COMMAND_SEPARATOR = /\s*(?:&&|\|\||;|\|)\s*/u
 const WHITESPACE = /\s+/u
-const LINE_BREAK = /\r?\n/u
 const CHANGE_DIRECTORY = /^cd(?:\s|$)/u
 
 export class JobEvent extends Data.Class<{
@@ -78,7 +78,7 @@ export class DockEvent extends Data.Class<{
   readonly event: JobEvent
 }> {}
 
-export class BackgroundDock extends Data.Class<{
+export class DockModel extends Data.Class<{
   readonly chips: readonly BackgroundJob[]
   readonly rows: readonly BackgroundJob[]
   readonly running: number
@@ -87,13 +87,6 @@ export class BackgroundDock extends Data.Class<{
   readonly until: Option.Option<DateTime.Utc>
   readonly latest: Option.Option<DockEvent>
 }> {}
-
-const firstLine = (text: string): string =>
-  pipe(
-    text.trim().split(LINE_BREAK),
-    Arr.head,
-    Option.getOrElse(() => text),
-  )
 
 const firstWord = (text: string): string =>
   pipe(
@@ -119,7 +112,7 @@ export const commandLabel = (command: string): string =>
     Option.getOrElse(() => command),
   )
 
-const isAfter = (moment: DateTime.Utc, now: DateTime.Utc, hold: Duration.Duration): boolean =>
+const withinHold = (moment: DateTime.Utc, now: DateTime.Utc, hold: Duration.Duration): boolean =>
   DateTime.isGreaterThan(DateTime.addDuration(moment, hold), now)
 
 const ofStatus = (status: SubagentStatus): JobState =>
@@ -154,7 +147,7 @@ const earliestMoment = (
   )
 
 const unheardSince = (lastSeenAt: Option.Option<DateTime.Utc>, now: DateTime.Utc): boolean =>
-  Option.exists(lastSeenAt, (seen) => !isAfter(seen, now, UNHEARD_AFTER))
+  Option.exists(lastSeenAt, (seen) => !withinHold(seen, now, UNHEARD_AFTER))
 
 const shellState = (
   shell: ShellTask,
@@ -171,10 +164,17 @@ const shellState = (
     Match.orElse((state) => state),
   )
 
-const monitorState = (monitor: MonitorTask, now: DateTime.Utc): JobState =>
+const monitorState = (
+  monitor: MonitorTask,
+  lastSeenAt: Option.Option<DateTime.Utc>,
+  now: DateTime.Utc,
+): JobState =>
   Match.value(ofStatus(monitor.status)).pipe(
     Match.when('running', (): JobState =>
-      Option.exists(monitor.expiresAt, (expiry) => DateTime.isLessThan(expiry, now))
+      Option.match(monitor.expiresAt, {
+        onNone: () => unheardSince(lastSeenAt, now),
+        onSome: (expiry) => DateTime.isLessThan(expiry, now),
+      })
         ? 'unconfirmed'
         : 'running',
     ),
@@ -240,12 +240,16 @@ const shellJob = (shell: ShellTask, now: DateTime.Utc): BackgroundJob => {
 }
 
 const monitorJob = (monitor: MonitorTask, now: DateTime.Utc): BackgroundJob => {
-  const state = monitorState(monitor, now)
   const events = Arr.flatMap(monitor.events, (event) =>
     Option.toArray(
       Option.map(event.at, (at) => new JobEvent({ at, text: event.text, tone: 'plain' })),
     ),
   )
+  const lastSeenAt = Option.orElse(
+    latestMoment(Arr.map(events, (event) => Option.some(event.at))),
+    () => monitor.startedAt,
+  )
+  const state = monitorState(monitor, lastSeenAt, now)
 
   return new BackgroundJob({
     key: monitor.toolUseId,
@@ -255,10 +259,7 @@ const monitorJob = (monitor: MonitorTask, now: DateTime.Utc): BackgroundJob => {
     state,
     startedAt: monitor.startedAt,
     endedAt: monitor.endedAt,
-    lastSeenAt: Option.orElse(
-      latestMoment(Arr.map(events, (event) => Option.some(event.at))),
-      () => monitor.startedAt,
-    ),
+    lastSeenAt,
     doing: Option.map(Arr.last(events), (event) => event.text),
     output: [],
     events: [...events, ...endEvent(state, monitor.endedAt, monitor.summary)],
@@ -333,7 +334,7 @@ const isFinished = (job: BackgroundJob): boolean =>
   job.state !== 'running' && job.state !== 'unconfirmed'
 
 const endedWithin = (job: BackgroundJob, now: DateTime.Utc, hold: Duration.Duration): boolean =>
-  isFinished(job) && Option.exists(job.endedAt, (ended) => isAfter(ended, now, hold))
+  isFinished(job) && Option.exists(job.endedAt, (ended) => withinHold(ended, now, hold))
 
 const startOrder = Order.mapInput(
   Option.makeOrder(DateTime.Order),
@@ -420,19 +421,20 @@ export const backgroundJobs = (options: {
   ]
 }
 
-export const dockOf = (jobs: readonly BackgroundJob[], now: DateTime.Utc): BackgroundDock => {
+export const dockOf = (jobs: readonly BackgroundJob[], now: DateTime.Utc): DockModel => {
   const running = Arr.filter(jobs, (job) => job.state === 'running')
   const settled = Arr.filter(jobs, (job) => endedWithin(job, now, SETTLE_HOLD))
   const episodeStart = earliestMoment(Arr.map([...running, ...settled], (job) => job.startedAt))
   const settling = running.length === 0 && settled.length > 0
+  const active = running.length > 0 || settling
   const rows = pipe(
     jobs,
-    Arr.filter((job) => (running.length > 0 || settling ? isInEpisode(episodeStart)(job) : false)),
+    Arr.filter((job) => active && isInEpisode(episodeStart)(job)),
     Arr.sort(shownOrder),
   )
   const timed = Arr.filter(rows, (job) => job.state !== 'unconfirmed')
 
-  return new BackgroundDock({
+  return new DockModel({
     chips: Arr.filter(rows, isChip(now)),
     rows,
     running: running.length,
@@ -443,10 +445,4 @@ export const dockOf = (jobs: readonly BackgroundJob[], now: DateTime.Utc): Backg
   })
 }
 
-export const isShown = (dock: BackgroundDock): boolean => dock.running > 0 || dock.settling
-
-export const lastSeenAgo = (
-  job: BackgroundJob,
-  now: DateTime.Utc,
-): Option.Option<Duration.Duration> =>
-  Option.map(job.lastSeenAt, (seen) => DateTime.distance(seen, now))
+export const isShown = (dock: DockModel): boolean => dock.running > 0 || dock.settling

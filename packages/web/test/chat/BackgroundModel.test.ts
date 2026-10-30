@@ -46,7 +46,7 @@ const shell = (options: {
     alive: options.alive ?? Option.some(true),
   })
 
-const monitor = (expiresAt: number) =>
+const monitor = (expiresAt: Option.Option<number>) =>
   new MonitorTask({
     taskId: 'bmon',
     toolUseId: 'toolu_mon',
@@ -57,7 +57,7 @@ const monitor = (expiresAt: number) =>
     endedAt: Option.none(),
     description: 'CI on #212',
     command: Option.none(),
-    expiresAt: Option.some(at(expiresAt)),
+    expiresAt: Option.map(expiresAt, at),
     events: [new MonitorEvent({ at: Option.some(at(30)), text: 'lint passed' })],
   })
 
@@ -110,8 +110,19 @@ describe('backgroundJobs', () => {
   })
 
   it('cannot confirm a Monitor still running past its timeout', () => {
-    expect(stateOf(jobsOf([monitor(60)], [], at(30)), 'toolu_mon')).toEqual(Option.some('running'))
-    expect(stateOf(jobsOf([monitor(60)], [], at(90)), 'toolu_mon')).toEqual(
+    expect(stateOf(jobsOf([monitor(Option.some(60))], [], at(30)), 'toolu_mon')).toEqual(
+      Option.some('running'),
+    )
+    expect(stateOf(jobsOf([monitor(Option.some(60))], [], at(90)), 'toolu_mon')).toEqual(
+      Option.some('unconfirmed'),
+    )
+  })
+
+  it('cannot confirm a Monitor with no timeout once it has been quiet for a long time', () => {
+    const persistent = monitor(Option.none())
+
+    expect(stateOf(jobsOf([persistent], [], at(60)), 'toolu_mon')).toEqual(Option.some('running'))
+    expect(stateOf(jobsOf([persistent], [], at(60 * 60)), 'toolu_mon')).toEqual(
       Option.some('unconfirmed'),
     )
   })

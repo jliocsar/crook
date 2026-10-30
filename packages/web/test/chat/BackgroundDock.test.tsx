@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import * as Struct from 'effect/Struct'
 import { vi } from 'vitest'
 
 import { ShellTask, SubagentActivity } from '@crook/domain/Background'
@@ -34,6 +35,21 @@ const devServer = (status: SubagentStatus = 'running') =>
     lastOutputAt: Option.some(ago(2)),
     alive: Option.some(true),
   })
+
+const finishedServer = new ShellTask(
+  Struct.evolve(devServer('completed'), { endedAt: () => Option.some(ago(3)) }),
+)
+
+const lostE2e = new ShellTask(
+  Struct.evolve(devServer(), {
+    taskId: () => 'be2e',
+    toolUseId: () => 'toolu_e2e',
+    command: () => Option.some('bunx playwright test'),
+    startedAt: () => Option.some(ago(3 * 60 * 60)),
+    lastOutputAt: () => Option.some(ago(2 * 60 * 60)),
+    alive: () => Option.some(false),
+  }),
+)
 
 const reviewer: DockRun = {
   toolUseId: 'toolu_agent',
@@ -150,6 +166,30 @@ describe('BackgroundDock', () => {
       const added = screen.getByRole('button', { name: 'bun run dev, running' })
 
       expect(added.style.transform).toContain('scale(0.85)')
+    }),
+  )
+
+  it.effect('says everything finished while the last work settles', () =>
+    Effect.gen(function* () {
+      renderDock([finishedServer], [])
+
+      expect(screen.getByText('All background work finished')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'bun run dev, done' })).toBeTruthy()
+    }),
+  )
+
+  it.effect('marks work it cannot confirm with a dashed chip and when it was last seen', () =>
+    Effect.gen(function* () {
+      renderDock([devServer(), lostE2e], [])
+
+      const lost = screen.getByRole('button', {
+        name: "bunx playwright test, can't confirm it's running",
+      })
+
+      expect(screen.getByText('1 running')).toBeTruthy()
+      expect(lost.dataset.state).toBe('unconfirmed')
+      expect(lost.className).toContain('border-dashed')
+      expect(lost.textContent).toContain('2h ago')
     }),
   )
 })

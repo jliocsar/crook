@@ -459,7 +459,8 @@ screen" on the Ask.
     "crook can't tell whether this is still running".
   - **Unconfirmed** is crook's word for work nothing said ended but nothing can vouch for
     either: a shell whose process no longer holds its output file, a shell nobody can check
-    that has been quiet for 15 minutes, or a Monitor past its timeout.
+    that has been quiet for 15 minutes, a Monitor past its timeout, or a Monitor with no timeout
+    that has been quiet for 15 minutes.
 - **The dock** sits at the bottom, on `bg-card`, above the home indicator: the Ask over the
   composer. When the keyboard opens, the dock rises above it from the visual viewport. The
   thread gives way first, then the Ask scrolls inside what is left, so neither the composer nor
@@ -570,7 +571,11 @@ Unmeasured knobs, picked in the prototype; settle them on the phone:
   chips get their long labels, and a shell nobody can check turns unconfirmed after 15 quiet
   minutes;
 - the agent rechecks a running shell's process every 5s (one check measured 0.32 ms of wall
-  time and 1.17 ms of CPU).
+  time and 1.17 ms of CPU), and calls it gone only after two checks in a row miss it, so a shell
+  that exits normally isn't flagged in the moment before Claude's notice lands;
+- the agent sends a shell's last three output lines, the sheet shows all three and a tray row
+  two;
+- a Monitor's event line spans at least 20s, so the first events don't sit on top of each other.
 
 Decided against:
 
@@ -957,3 +962,5 @@ Agents read and write it through its MCP server, the `paper-desktop@paper` Claud
 ## Open
 
 - The machine sections follow the hub's machine order; no order has been decided.
+- The thread has no "Background work finished" summary row yet. The prototype ends an episode
+  with one; the background dock's settle state says it for now.

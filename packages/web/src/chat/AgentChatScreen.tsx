@@ -1,5 +1,4 @@
 import { useNavigate } from '@tanstack/react-router'
-import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
@@ -51,6 +50,7 @@ import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import {
+  currentSessionOf,
   hasFailed,
   isCatchingUp,
   linesOf,
@@ -266,7 +266,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   )
   const openSubagentJob = React.useCallback(
     (job: BackgroundJob) => {
-      const session = Option.map(Arr.last(lines), (line) => line.session)
+      const session = currentSessionOf(lines)
 
       if (Option.isSome(job.subagent) && Option.isSome(session)) {
         void navigate({

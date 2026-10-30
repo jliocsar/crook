@@ -6,7 +6,7 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 
-import { BackgroundContext, type BackgroundWork, KIND_ICON } from '@crook/web/chat/BackgroundDock'
+import { BackgroundContext, type BackgroundHandle, KIND_ICON } from '@crook/web/chat/BackgroundDock'
 import {
   type BackgroundJob,
   jobStateWord,
@@ -54,7 +54,7 @@ const settledText = (job: BackgroundJob, now: DateTime.Utc): string =>
       )
 
 const jobOf = (
-  work: BackgroundWork,
+  work: BackgroundHandle,
   key: string,
   now: DateTime.Utc,
 ): Option.Option<BackgroundJob> => Arr.findFirst(work.jobsAt(now), (job) => job.key === key)
@@ -71,17 +71,17 @@ export const useBackgroundMarker = (call: ToolCallModel): Option.Option<React.Re
   )
 }
 
-function Marker({ callId, work }: { callId: string; work: BackgroundWork }) {
+function Marker({ callId, work }: { callId: string; work: BackgroundHandle }) {
   const [ticking, setTicking] = React.useState(true)
   const now = useNow(ticking)
 
   return Option.match(jobOf(work, callId, now), {
     onNone: () => null,
     onSome: (job) => {
-      const running = job.state === 'running'
+      const changing = job.state === 'running' || job.state === 'unconfirmed'
 
-      if (running !== ticking) {
-        setTicking(running)
+      if (changing !== ticking) {
+        setTicking(changing)
       }
 
       return <MarkerButton job={job} now={now} onOpen={work.open} />

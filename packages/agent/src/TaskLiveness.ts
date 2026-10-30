@@ -9,7 +9,7 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
 
-import { PROC_ROOT, startTime } from '@crook/agent/ClaudeSessions'
+import { PROC_ROOT, SessionFile, startTime } from '@crook/agent/ClaudeSessions'
 import { taskIdOfOutput } from '@crook/claude/BackgroundTasks'
 import type { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import type { ClaudeSessionId } from '@crook/domain/Ids'
@@ -19,10 +19,6 @@ export type OpenTasks = Option.Option<HashSet.HashSet<string>>
 const SESSIONS_DIRECTORY = 'sessions'
 const SESSION_FILE_EXTENSION = '.json'
 const STANDARD_OUTPUT = '1'
-
-const SessionFile = Schema.fromJsonString(
-  Schema.Struct({ pid: Schema.Int, sessionId: Schema.String, procStart: Schema.String }),
-)
 
 const decodeSessionFile = Schema.decodeUnknownOption(SessionFile)
 

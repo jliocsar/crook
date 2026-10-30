@@ -1,3 +1,4 @@
+import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
@@ -162,6 +163,10 @@ export const hasFailed = (view: Option.Option<TranscriptView>): boolean =>
 
 export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
+
+export const currentSessionOf = (
+  lines: readonly TranscriptLine[],
+): Option.Option<ClaudeSessionId> => Option.map(Arr.last(lines), (line) => line.session)
 
 export const rostersOf = (view: Option.Option<TranscriptView>): SessionRosters =>
   Option.match(view, { onNone: () => NO_ROSTERS, onSome: (found) => found.rosters })

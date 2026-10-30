@@ -12,6 +12,8 @@ export const useNow = (ticking = true): DateTime.Utc => {
       return undefined
     }
 
+    setNow(DateTime.nowUnsafe())
+
     const timer = window.setInterval(() => {
       setNow(DateTime.nowUnsafe())
     }, Duration.toMillis(LABEL_RESOLUTION))

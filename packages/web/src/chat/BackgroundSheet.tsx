@@ -102,9 +102,9 @@ function MonitorDetail({ job, now }: { job: BackgroundJob; now: DateTime.Utc }) 
       <div>
         <SheetLabel>Events</SheetLabel>
         <ul className="grid gap-1.5 text-sm">
-          {job.events.map((event) => (
+          {job.events.map((event, index) => (
             <li
-              key={`${DateTime.toEpochMillis(event.at)}-${event.text}`}
+              key={`${index}-${DateTime.toEpochMillis(event.at)}`}
               className="flex items-baseline gap-2.5"
             >
               <span className="text-muted-foreground w-12 shrink-0 font-mono text-xs tabular-nums">

@@ -21,13 +21,18 @@ import * as React from 'react'
 
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { runsIn } from '@crook/web/chat/ChatItems'
-import { backgroundsOf, linesOf, type TranscriptView } from '@crook/web/chat/TranscriptState'
+import {
+  backgroundsOf,
+  currentSessionOf,
+  linesOf,
+  type TranscriptView,
+} from '@crook/web/chat/TranscriptState'
 
 import {
-  type BackgroundDock as Dock,
   backgroundJobs,
   type BackgroundJob,
   dockOf,
+  type DockModel,
   isRoomy,
   isShown,
   jobStateWord,
@@ -46,7 +51,7 @@ import { useTransformString } from '@crook/web/motion/TransformString'
 import { clockElapsed, shortElapsed } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
 
-export interface BackgroundWork {
+export interface BackgroundHandle {
   readonly jobsAt: (now: DateTime.Utc) => readonly BackgroundJob[]
   readonly openKey: Option.Option<string>
   readonly open: (job: BackgroundJob) => void
@@ -87,7 +92,7 @@ const chipTime = (job: BackgroundJob, now: DateTime.Utc): string =>
       })
     : Option.getOrElse(ranFor(job, now), () => '')
 
-const dockSpan = (dock: Dock, now: DateTime.Utc): string =>
+const dockSpan = (dock: DockModel, now: DateTime.Utc): string =>
   Option.match(dock.since, {
     onNone: () => '',
     onSome: (since) =>
@@ -98,8 +103,6 @@ const dockSpan = (dock: Dock, now: DateTime.Utc): string =>
   })
 
 const isLive = (job: BackgroundJob): boolean => job.state === 'running'
-
-const hasRunningJob = (jobs: readonly BackgroundJob[]): boolean => Arr.some(jobs, isLive)
 
 const useChipMotion = () => {
   const reduce = useReducedMotion() ?? false
@@ -168,12 +171,12 @@ const useOverflowEdges = <Element extends HTMLElement>() => {
   return { ref, edges, style: { maskImage: mask, WebkitMaskImage: mask } }
 }
 
-export const BackgroundContext = React.createContext<Option.Option<BackgroundWork>>(Option.none())
+export const BackgroundContext = React.createContext<Option.Option<BackgroundHandle>>(Option.none())
 
 export const useBackgroundWorkOf = (
   jobsAt: (now: DateTime.Utc) => readonly BackgroundJob[],
   onOpenSubagent: (job: BackgroundJob) => void,
-): BackgroundWork => {
+): BackgroundHandle => {
   const [openKey, setOpenKey] = React.useState(Option.none<string>())
   const open = React.useCallback(
     (job: BackgroundJob) => {
@@ -196,8 +199,8 @@ export const useBackgroundWork = (
   view: Option.Option<TranscriptView>,
   items: readonly ChatItem[],
   onOpenSubagent: (job: BackgroundJob) => void,
-): BackgroundWork => {
-  const session = Option.getOrUndefined(Option.map(Arr.last(linesOf(view)), (line) => line.session))
+): BackgroundHandle => {
+  const session = Option.getOrUndefined(currentSessionOf(linesOf(view)))
   const background = Option.getOrUndefined(
     Option.flatMap(Option.fromUndefinedOr(session), (current) =>
       HashMap.get(backgroundsOf(view), current),
@@ -216,7 +219,7 @@ export const useBackgroundWork = (
   return useBackgroundWorkOf(jobsAt, onOpenSubagent)
 }
 
-export function JobGlyph({ job, size = 12 }: { job: BackgroundJob; size?: number }) {
+function JobGlyph({ job, size = 12 }: { job: BackgroundJob; size?: number }) {
   const Icon = KIND_ICON[job.kind]
 
   if (job.state === 'failed') {
@@ -245,7 +248,7 @@ export function JobGlyph({ job, size = 12 }: { job: BackgroundJob; size?: number
   return <Icon aria-hidden="true" size={size} strokeWidth={2.2} className="text-primary" />
 }
 
-export function JobStateIcon({ state, size = 13 }: { state: JobState; size?: number }) {
+function JobStateIcon({ state, size = 13 }: { state: JobState; size?: number }) {
   if (state === 'running') {
     return <Spinner size={size} className="text-primary" />
   }
@@ -359,7 +362,7 @@ function ChipRow({
   )
 }
 
-function EventLine({ dock }: { dock: Dock }) {
+function EventLine({ dock }: { dock: DockModel }) {
   const transform = useTransformString()
 
   return Option.match(dock.latest, {
@@ -438,9 +441,9 @@ function MonitorTicks({ job, now }: { job: BackgroundJob; now: DateTime.Utc }) {
       {isLive(job) ? (
         <span className="bg-primary/50 absolute top-1/2 right-0 h-px w-6 -translate-y-1/2 animate-pulse motion-reduce:animate-none" />
       ) : null}
-      {job.events.map((event) => (
+      {job.events.map((event, index) => (
         <motion.span
-          key={`${DateTime.toEpochMillis(event.at)}-${event.text}`}
+          key={`${index}-${DateTime.toEpochMillis(event.at)}`}
           className={cn(
             'absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-[var(--background)]',
             event.tone === 'bad' ? 'bg-destructive' : 'bg-muted-foreground/50',
@@ -559,7 +562,7 @@ function DockTray({
   now,
   onOpen,
 }: {
-  dock: Dock
+  dock: DockModel
   now: DateTime.Utc
   onOpen: (job: BackgroundJob) => void
 }) {
@@ -605,13 +608,13 @@ function DockTray({
   )
 }
 
-export function BackgroundDock({ work }: { work: BackgroundWork }) {
+export function BackgroundDock({ work }: { work: BackgroundHandle }) {
   const [ticking, setTicking] = React.useState(true)
   const now = useNow(ticking)
   const jobs = React.useMemo(() => work.jobsAt(now), [work, now])
   const dock = dockOf(jobs, now)
   const shown = isShown(dock)
-  const needsClock = shown || hasRunningJob(jobs) || Option.isSome(work.openKey)
+  const needsClock = shown || Option.isSome(work.openKey)
   const reduce = useReducedMotion() ?? false
   const openJob = Option.flatMap(work.openKey, (key) =>
     Arr.findFirst(jobs, (job) => job.key === key),
