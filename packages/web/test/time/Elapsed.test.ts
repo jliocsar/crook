@@ -3,7 +3,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
 
-import { runningSpan, shortElapsed } from '@crook/web/time/Elapsed'
+import { clockElapsed, runningSpan, shortElapsed } from '@crook/web/time/Elapsed'
 
 import { START } from '../HerdFixtures.ts'
 
@@ -20,6 +20,22 @@ describe('shortElapsed', () => {
 
   it('never goes negative when the clocks disagree', () => {
     expect(shortElapsed(START, DateTime.addDuration(START, Duration.seconds(5)))).toBe('0s')
+  })
+})
+
+describe('clockElapsed', () => {
+  const clockAgo = (elapsed: Duration.Duration) =>
+    clockElapsed(START, DateTime.subtractDuration(START, elapsed))
+
+  it('reads like a clock, with the smaller unit padded to two digits', () => {
+    expect(clockAgo(Duration.seconds(42))).toBe('42s')
+    expect(clockAgo(Duration.seconds(665))).toBe('11m 05s')
+    expect(clockAgo(Duration.minutes(125))).toBe('2h 05m')
+    expect(clockAgo(Duration.hours(50))).toBe('2d')
+  })
+
+  it('never goes negative when the clocks disagree', () => {
+    expect(clockElapsed(START, DateTime.addDuration(START, Duration.seconds(5)))).toBe('0s')
   })
 })
 

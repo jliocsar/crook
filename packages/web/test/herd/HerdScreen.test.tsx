@@ -24,6 +24,9 @@ const busyLaptop = machine(LAPTOP, [
 const cardTitles = () =>
   Array.from(document.querySelectorAll('[data-slot="agent-title"]'), (title) => title.textContent)
 
+const statusPills = () =>
+  Array.from(document.querySelectorAll('[data-slot="agent-status"]'), (pill) => pill.textContent)
+
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
   vi.useFakeTimers({ toFake: ['Date'] })
@@ -47,8 +50,7 @@ describe('HerdScreen', () => {
         'Port the herd screen',
       ])
       expect(screen.getByText('feat/jc-93')).toBeDefined()
-      expect(screen.getByText('3m')).toBeDefined()
-      expect(screen.getByText('2h')).toBeDefined()
+      expect(statusPills()).toEqual(['Needs you3m 00s', 'Done2h', 'Working42s'])
     }),
   )
 
@@ -75,9 +77,60 @@ describe('HerdScreen', () => {
       const card = summary.closest('[data-slot="agent-card"]')
 
       expect(summary.getAttribute('data-slot')).toBe('ask-summary')
-      expect(summary.previousElementSibling?.textContent).toBe('claude asks')
-      expect(card?.querySelector('[data-slot="agent-place"]')?.textContent).toBe('crook›web')
-      expect(card?.textContent).not.toContain('·')
+      expect(summary.previousElementSibling?.getAttribute('data-slot')).toBe('agent-status')
+      expect(summary.previousElementSibling?.textContent).toBe('Needs you0s')
+      expect(card?.querySelector('[data-slot="agent-place"]')?.textContent).toBe('crook/web')
+      expect(summary.closest('[data-slot="swipe-card"]')?.className).toContain(
+        'border-[color-mix(in_oklab,var(--warning)_45%,var(--border))]',
+      )
+    }),
+  )
+
+  it.effect('marks each card with its status icon, breathing only while it works', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/', liveWith(herd([busyLaptop])))
+      yield* findByRole('button', 'laptop online 2 need you')
+      const icons = Array.from(document.querySelectorAll('[data-slot="status-icon"] > *'))
+      const working = document.querySelector(
+        '[data-slot="status-icon"] [data-status="working"] svg',
+      )
+
+      expect(icons.map((icon) => icon.getAttribute('data-status'))).toEqual([
+        'blocked',
+        'done',
+        'working',
+      ])
+      expect(working?.getAttribute('class')).toContain('animate-breathe')
+      expect(working?.getAttribute('class')).toContain('motion-reduce:animate-none')
+    }),
+  )
+
+  it.effect('counts the subagents an agent runs beside its branch, and nothing when none run', () =>
+    Effect.gen(function* () {
+      yield* renderApp(
+        '/',
+        liveWith(
+          herd([
+            machine(LAPTOP, [
+              agent('w1:p1', 'working', {
+                title: 'Port the herd screen',
+                branch: 'feat/jc-139',
+                runningSubagents: 2,
+              }),
+              agent('w1:p2', 'idle', { title: 'Wire the hub link', runningSubagents: 0 }),
+              agent('w1:p3', 'idle', { title: 'Write the banner' }),
+            ]),
+          ]),
+        ),
+      )
+      const title = yield* Effect.promise(() => screen.findByText('Port the herd screen'))
+      const counts = document.querySelectorAll('[data-slot="running-subagents"]')
+
+      expect(counts).toHaveLength(1)
+      expect(title.closest('[data-slot="agent-card"]')?.textContent).toContain(
+        'feat/jc-1392 subagents running',
+      )
+      expect(counts[0]?.querySelectorAll('[aria-hidden="true"] > span')).toHaveLength(2)
     }),
   )
 

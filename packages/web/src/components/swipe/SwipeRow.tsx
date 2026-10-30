@@ -22,7 +22,7 @@ type SwipeRelease = {
 
 export type SwipeTone = 'secondary' | 'destructive' | 'accent' | 'primary'
 
-export type SwipeSurface = 'card' | 'plain'
+export type SwipeSurface = 'card' | 'agent'
 
 export type SwipeAction = {
   readonly label: string
@@ -40,7 +40,7 @@ const ELASTIC_PAST_CLOSED = 0.05
 
 const SURFACE = {
   card: { frame: 'bg-card border-border border', padding: 'p-3' },
-  plain: { frame: 'bg-background', padding: 'px-2 py-3' },
+  agent: { frame: 'bg-card border-border border', padding: 'px-3.5 pt-2.5 pb-3' },
 } satisfies Record<SwipeSurface, { frame: string; padding: string }>
 
 const TONE = {
@@ -88,6 +88,7 @@ export function SwipeRow({
   row,
   actions,
   surface = 'card',
+  frameClassName,
   onTap,
   onLongPress,
   children,
@@ -96,6 +97,7 @@ export function SwipeRow({
   row: OpenRow
   actions: readonly SwipeAction[]
   surface?: SwipeSurface
+  frameClassName?: string
   onTap: (opener: HTMLElement) => void
   onLongPress?: () => void
   children: React.ReactNode
@@ -174,7 +176,7 @@ export function SwipeRow({
       </motion.div>
       <motion.div
         data-slot="swipe-card"
-        className={cn('relative rounded-xl', SURFACE[surface].frame)}
+        className={cn('relative rounded-xl', SURFACE[surface].frame, frameClassName)}
         style={{ x: offsetX, touchAction: 'pan-y' }}
         drag="x"
         dragConstraints={{ left: -actionsWidth, right: 0 }}

@@ -34,9 +34,9 @@ export function MachineSection({
           type="button"
           aria-expanded={open}
           onClick={onToggle}
-          className="flex min-h-11 w-full items-center gap-2 px-4 text-left"
+          className="flex min-h-11 w-full items-center gap-2.5 px-4 text-left"
         >
-          <span className="font-display shrink-0 text-xl leading-7 font-semibold tracking-[-0.015em] whitespace-nowrap">
+          <span className="font-display shrink-0 text-lg leading-6 font-semibold tracking-[-0.015em] whitespace-nowrap">
             {machine.label}
           </span>
           <MachineBadge machine={machine} now={now} plain />
@@ -54,7 +54,7 @@ export function MachineSection({
           </motion.span>
         </button>
       </h2>
-      <Collapse open={open}>
+      <Collapse open={open} className="pt-1">
         <Dimmed dimmed={machine.connection === 'reconnecting'}>{children}</Dimmed>
       </Collapse>
     </section>
