@@ -55,6 +55,7 @@ const rowAt = (
     statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
     beforeHandoff: Option.none(),
     ask: Option.none(),
+    runningSubagents: Option.none(),
   })
 
 describe('Command', () => {

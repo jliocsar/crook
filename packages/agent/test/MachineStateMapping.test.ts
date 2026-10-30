@@ -1,8 +1,10 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as DateTime from 'effect/DateTime'
+import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Option from 'effect/Option'
 
+import { NO_RUNNING_COUNTS } from '@crook/agent/RunningSubagents'
 import {
   type HerdReading,
   herdContents,
@@ -10,6 +12,7 @@ import {
   initialMachineState,
   nextMachineState,
   withCreatedPanes,
+  withRunningSubagents,
 } from '@crook/agent/MachineStateMapping'
 import { AgentRow, StatusBeforeHandoff, seenMarkOf } from '@crook/domain/AgentRow'
 import { UnknownAsk } from '@crook/domain/Ask'
@@ -52,6 +55,7 @@ const reading = (agents: HerdReading['agents'], herdrVersion = HERDR_VERSION): H
   ),
   agents,
   createdPanes: HashSet.empty(),
+  runningSubagents: NO_RUNNING_COUNTS,
 })
 
 const initialState = (connection: HerdrConnectionId, herd: HerdReading, now: DateTime.Utc) =>
@@ -203,6 +207,7 @@ describe('MachineStateMapping', () => {
         statusChangedAt: STARTED,
         beforeHandoff: Option.none(),
         ask: Option.none(),
+        runningSubagents: Option.none(),
       }),
     ])
   })
@@ -301,6 +306,38 @@ describe('MachineStateMapping', () => {
     expect(withCreatedPanes(state, created)).toEqual(Option.none())
     expect(forgotten.version).toBe(1)
     expect(forgotten.agents.map((row) => row.createdByCrook)).toEqual([false, false])
+  })
+
+  it('publishes the running subagents of each Claude session, and only a changed count', () => {
+    const agents = [
+      {
+        info: agentInfo(),
+        claudeSession: Option.some(SESSION),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+      {
+        info: agentInfo({ pane_id: 'w1:p2', terminal_id: 'term_2' }),
+        claudeSession: Option.none(),
+        branch: Option.none(),
+        ask: Option.none(),
+      },
+    ]
+    const counted = HashMap.make([SESSION, 2])
+    const state = initialState(
+      CONNECTION,
+      { ...reading(agents), runningSubagents: counted },
+      STARTED,
+    )
+    const settled = Option.getOrThrow(withRunningSubagents(state, HashMap.make([SESSION, 0])))
+
+    expect(state.agents.map((row) => row.runningSubagents)).toEqual([Option.some(2), Option.none()])
+    expect(withRunningSubagents(state, counted)).toEqual(Option.none())
+    expect(settled.version).toBe(1)
+    expect(settled.agents.map((row) => row.runningSubagents)).toEqual([
+      Option.some(0),
+      Option.none(),
+    ])
   })
 
   it('publishes an ask only while the agent it belongs to is blocked', () => {

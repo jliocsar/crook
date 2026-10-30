@@ -55,6 +55,7 @@ const rowWith = (
     statusChangedAt: DateTime.makeUnsafe(0),
     beforeHandoff: Option.none(),
     ask: Option.none(),
+    runningSubagents: Option.none(),
     ...fields,
   })
 

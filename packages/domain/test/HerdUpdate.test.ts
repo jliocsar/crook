@@ -54,6 +54,7 @@ const agentRow = (status: AgentStatus) =>
     statusChangedAt: observedAt,
     beforeHandoff: Option.none(),
     ask: Option.none(),
+    runningSubagents: Option.none(),
   })
 
 const entry = (machine: MachineId, status: AgentStatus) =>

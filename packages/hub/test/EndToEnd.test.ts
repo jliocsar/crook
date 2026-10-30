@@ -20,6 +20,7 @@ import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { PaneScreens } from '@crook/agent/PaneScreens'
 import { PendingAsks } from '@crook/agent/PendingAsks'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
+import { RunningSubagents } from '@crook/agent/RunningSubagents'
 import { emptyHookLedger } from '@crook/claude/HookLedger'
 import { LastTurn } from '@crook/claude/LastTurn'
 import { spikeScreen } from '@crook/claude/SpikeScreens'
@@ -161,6 +162,7 @@ const syncingFoundation = Effect.fn('syncingFoundation')(function* (
     pendingAsks,
     ClaudeSessions.layerTest(new Map()),
     RecentPlaces.layerTest(),
+    RunningSubagents.layerAt([]),
   ])
 
   return Layer.provideMerge(sync, host)

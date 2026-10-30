@@ -28,11 +28,13 @@ import {
   initialMachineState,
   nextMachineState,
   withCreatedPanes,
+  withRunningSubagents,
   workingDirectoryOf,
 } from '@crook/agent/MachineStateMapping'
 import { PendingAsks } from '@crook/agent/PendingAsks'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
+import { RunningSubagents } from '@crook/agent/RunningSubagents'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
@@ -72,6 +74,9 @@ const mintConnection = Effect.map(Random.nextInt, (value) => HerdrConnectionId.m
 const agentPanes = (state: MachineState) =>
   HashSet.fromIterable(state.agents.map((row) => row.pane))
 
+const claudeSessionsOf = (state: MachineState) =>
+  HashSet.fromIterable(Arr.flatMap(state.agents, (row) => Option.toArray(row.claudeSession)))
+
 const STATE_SUBSCRIPTIONS = Arr.map(STATE_EVENT_KINDS, (type): Subscription => ({ type }))
 
 const subscriptionsFor = (panes: HashSet.HashSet<string>) =>
@@ -94,6 +99,7 @@ const make = Effect.gen(function* () {
   const createdPanes = yield* CreatedPanes
   const asks = yield* PendingAsks
   const recentPlaces = yield* RecentPlaces
+  const runningSubagents = yield* RunningSubagents
   const machine = yield* CrookMachineId
 
   const sessionOf = (info: AgentInfo) =>
@@ -151,6 +157,7 @@ const make = Effect.gen(function* () {
       panes: snapshot.panes,
       agents,
       createdPanes: yield* createdPanes.current,
+      runningSubagents: yield* runningSubagents.current,
     } satisfies HerdReading
   })
 
@@ -257,6 +264,20 @@ const make = Effect.gen(function* () {
   yield* createdPanes.changes.pipe(
     Stream.runForEach((created) =>
       SubscriptionRef.updateSome(state, (previous) => withCreatedPanes(previous, created)),
+    ),
+    Effect.forkScoped,
+  )
+
+  yield* SubscriptionRef.changes(state).pipe(
+    Stream.map(claudeSessionsOf),
+    Stream.changes,
+    Stream.runForEach(runningSubagents.follow),
+    Effect.forkScoped,
+  )
+
+  yield* runningSubagents.changes.pipe(
+    Stream.runForEach((counts) =>
+      SubscriptionRef.updateSome(state, (previous) => withRunningSubagents(previous, counts)),
     ),
     Effect.forkScoped,
   )
