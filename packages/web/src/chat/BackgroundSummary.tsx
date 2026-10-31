@@ -6,7 +6,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
-import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
+import type { TranscriptMessage, UserBlock } from '@crook/domain/TranscriptMessage'
 import { JOB_DOT } from '@crook/web/chat/BackgroundMarker'
 import {
   type BackgroundJob,
@@ -21,18 +21,16 @@ import { clockElapsed } from '@crook/web/time/Elapsed'
 
 const SUMMARY_KEY = 'background-summary'
 
+const isTyped = (block: UserBlock): boolean =>
+  Match.value(block).pipe(
+    Match.tags({ Text: () => true, Image: () => true, LocalCommand: () => true }),
+    Match.orElse(() => false),
+  )
+
 const promptTimeOf = (message: TranscriptMessage): Option.Option<DateTime.Utc> =>
   Match.value(message).pipe(
     Match.tag('User', (user) =>
-      !user.isMeta &&
-      Arr.some(user.blocks, (block) =>
-        Match.value(block).pipe(
-          Match.tag('Text', () => true),
-          Match.orElse(() => false),
-        ),
-      )
-        ? user.timestamp
-        : Option.none(),
+      !user.isMeta && Arr.some(user.blocks, isTyped) ? user.timestamp : Option.none(),
     ),
     Match.orElse(() => Option.none()),
   )
@@ -43,7 +41,7 @@ const lineMessage = (line: TranscriptLine): Option.Option<TranscriptMessage> =>
     Match.orElse(() => Option.none()),
   )
 
-const lastPromptAt = (lines: readonly TranscriptLine[]): Option.Option<DateTime.Utc> =>
+export const lastPromptAt = (lines: readonly TranscriptLine[]): Option.Option<DateTime.Utc> =>
   pipe(
     Arr.findLast(lines, (line) => Option.isSome(Option.flatMap(lineMessage(line), promptTimeOf))),
     Option.flatMap(lineMessage),
@@ -146,9 +144,9 @@ function BackgroundSummaryRow({
           </span>
         </span>
         <span className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-          {summary.parts.map((part) => (
+          {summary.parts.map((part, index) => (
             <span
-              key={part.text}
+              key={`${index}-${part.text}`}
               className={cn(
                 'flex items-center gap-1.5',
                 part.state === 'failed' && 'text-destructive',

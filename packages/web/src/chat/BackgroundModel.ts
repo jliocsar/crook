@@ -450,8 +450,8 @@ export const isShown = (dock: DockModel): boolean => dock.running > 0 || dock.se
 const spanOf = (job: BackgroundJob): Option.Option<Span> =>
   pipe(
     Option.liftPredicate(job, isFinished),
-    Option.flatMap((finished) => Option.all({ start: finished.startedAt, end: finished.endedAt })),
-    Option.map(({ start, end }) => ({ job, start, end })),
+    Option.flatMap((finished) => finished.endedAt),
+    Option.map((end) => ({ job, start: Option.getOrElse(job.startedAt, () => end), end })),
   )
 
 const episodeFrom = (spans: readonly Span[], start: DateTime.Utc): readonly Span[] => {

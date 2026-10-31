@@ -462,7 +462,10 @@ screen" on the Ask.
     a line of dotted parts, "1 subagent done · 1 failed · dev stopped · CI done", a failure in
     `destructive`. An episode is the run of work whose times overlap the last job's. Tapping it
     opens the failed job, or the one that ended last. It sits below the conversation like
-    Working does, and goes when the user sends the next prompt or new work starts.
+    Working does, and goes when the user sends the next prompt, a prompt sent from the phone
+    is waiting, or new work starts. Unconfirmed work is left out of it and does not hold it
+    back. A chat opened long after its last work ended still ends with the summary, since
+    nothing came after it.
   - **Unconfirmed** is crook's word for work nothing said ended though something says it
     should have: a shell whose process no longer holds its output file, or a Monitor past its
     timeout. Silence alone is not that signal, so a shell nobody can check, as on a Mac with no

@@ -2,6 +2,7 @@ import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
+import * as Struct from 'effect/Struct'
 
 import { MonitorEvent, MonitorTask, ShellTask, SubagentActivity } from '@crook/domain/Background'
 import type { SubagentStatus } from '@crook/domain/Subagent'
@@ -14,6 +15,7 @@ import {
   type DockRun,
   isShown,
   settledEpisode,
+  summaryDueAt,
 } from '@crook/web/chat/BackgroundModel'
 
 import { REVIEWER, SESSION } from '../TranscriptFixtures.ts'
@@ -267,5 +269,51 @@ describe('settledEpisode', () => {
         }),
       ),
     ).toBe(true)
+  })
+})
+
+describe('the end of an episode', () => {
+  it('joins work whose times overlap one after another', () => {
+    const chain = [
+      shell({ key: 'old', status: 'completed', startedAt: -600, endedAt: -500 }),
+      shell({ key: 'first', status: 'completed', startedAt: 0, endedAt: 20 }),
+      shell({ key: 'second', status: 'completed', startedAt: 15, endedAt: 40 }),
+      shell({ key: 'third', status: 'stopped', startedAt: 35, endedAt: 50 }),
+    ]
+    const summary = settledEpisode({
+      jobs: jobsOf(chain, [], at(70)),
+      now: at(70),
+      promptedAt: Option.none(),
+    })
+
+    expect(Option.map(summary, (found) => [found.since, found.until, found.parts.length])).toEqual(
+      Option.some([at(0), at(50), 3]),
+    )
+  })
+
+  it('sums up work that never said when it started', () => {
+    const unstamped = new ShellTask(
+      Struct.evolve(shell({ key: 'dev', status: 'completed', endedAt: 10 }), {
+        startedAt: () => Option.none(),
+      }),
+    )
+    const summary = settledEpisode({
+      jobs: jobsOf([unstamped], [], at(30)),
+      now: at(30),
+      promptedAt: Option.none(),
+    })
+
+    expect(Option.map(summary, (found) => [found.since, found.until])).toEqual(
+      Option.some([at(10), at(10)]),
+    )
+  })
+
+  it('is due when the dock leaves, and not while anything runs', () => {
+    const ended = shell({ key: 'dev', status: 'completed', endedAt: 30 })
+
+    expect(summaryDueAt(jobsOf([ended], [], at(31)))).toEqual(Option.some(at(44)))
+    expect(summaryDueAt(jobsOf([ended, shell({ key: 'serve' })], [], at(31)))).toEqual(
+      Option.none(),
+    )
   })
 })

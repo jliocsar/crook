@@ -310,7 +310,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         ? []
         : [
             ...catchUp.rows,
-            ...summaryRows(episodeSummary, backgroundWork.open),
+            ...(commands.pendingPrompts.length === 0
+              ? summaryRows(episodeSummary, backgroundWork.open)
+              : []),
             ...pendingPromptRows(commands.pendingPrompts),
             ...(workingAt === undefined ? [] : [workingRow((now) => shortElapsed(now, workingAt))]),
             ...(watching
