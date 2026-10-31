@@ -7,9 +7,10 @@ import { MotionGlobalConfig, rootProjectionNode, useInstantLayoutTransition } fr
 import * as React from 'react'
 
 const UNCOVERING_ATTRIBUTE = 'data-uncovering'
-const NEVER_COVERED = Atom.make(false)
 
-const CoveredContext = React.createContext<Atom.Atom<boolean>>(NEVER_COVERED)
+const neverCoveredAtom = Atom.make(false)
+
+const CoveredContext = React.createContext<Atom.Atom<boolean>>(neverCoveredAtom)
 
 const shownWhileUncovered = <Value,>(
   covered: Atom.Atom<boolean>,
@@ -64,10 +65,15 @@ export function CoveredScope({
     }
 
     uncovering.current = !covered
-    MotionGlobalConfig.instantAnimations = uncovering.current
     scope.current?.toggleAttribute(UNCOVERING_ATTRIBUTE, uncovering.current)
     registry.set(coveredAtom, covered)
   }, [covered, registry, coveredAtom])
+
+  React.useInsertionEffect(() => {
+    if (uncovering.current) {
+      MotionGlobalConfig.instantAnimations = true
+    }
+  }, [shownCovered])
 
   React.useLayoutEffect(() => {
     if (uncovering.current && rootProjectionNode.current?.isUpdating === true) {
@@ -94,6 +100,15 @@ export function CoveredScope({
       settle()
     }
   }, [shownCovered])
+
+  React.useEffect(
+    () => () => {
+      if (uncovering.current) {
+        MotionGlobalConfig.instantAnimations = false
+      }
+    },
+    [],
+  )
 
   return (
     <div ref={scope} data-slot="covered-scope" className="contents">

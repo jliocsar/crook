@@ -3,7 +3,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
-import { MotionGlobalConfig } from 'motion/react'
+import { MotionGlobalConfig, rootProjectionNode } from 'motion/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import type { AgentStatus } from '@crook/domain/AgentStatus'
@@ -95,6 +95,33 @@ describe('the herd under a pushed screen', () => {
     }),
   )
 
+  it.effect('ticks every elapsed time on the page together while shown', () =>
+    Effect.gen(function* () {
+      yield* renderApp(
+        '/',
+        liveWith(
+          herd([
+            machine(LAPTOP, [
+              agent('w1:p1', 'working', { title: 'Port the herd screen', secondsAgo: 42 }),
+              agent('w1:p2', 'working', { title: 'Wire the hub link', secondsAgo: 7 }),
+            ]),
+          ]),
+        ),
+      )
+
+      yield* eventually(() => {
+        expect(pillText('Wire the hub link')).toBe('Working 7s')
+      })
+      vi.setSystemTime(DateTime.addDuration(START, Duration.seconds(5)).epochMilliseconds)
+      yield* wait(LONGER_THAN_A_TICK_MS)
+
+      expect([pillText('Port the herd screen'), pillText('Wire the hub link')]).toEqual([
+        'Working 47s',
+        'Working 12s',
+      ])
+    }),
+  )
+
   it.effect('stops its clocks while covered and shows the current time once uncovered', () =>
     Effect.gen(function* () {
       const { router } = yield* renderApp('/', liveWith(herd([laptop])))
@@ -141,6 +168,7 @@ describe('the herd under a pushed screen', () => {
       expect(iconsOf('Desk waits')).toEqual(['blocked'])
       expect(herdTitles()).not.toContain('Desk leaves')
       expect(MotionGlobalConfig.instantAnimations).toBe(false)
+      expect(rootProjectionNode.current?.isUpdateBlocked()).toBe(false)
     }),
   )
 })
