@@ -52,6 +52,30 @@ const iconsOf = (title: string) =>
     icon.getAttribute('data-status'),
   )
 
+const PUSHED_SCREEN = '[data-slot="pushed-screen"]'
+
+const watchInstantAnimations = () => {
+  const pushedScreenShownAtEachStart: boolean[] = []
+  let instant = false
+
+  Object.defineProperty(MotionGlobalConfig, 'instantAnimations', {
+    configurable: true,
+    get: () => instant,
+    set: (next: boolean) => {
+      if (next) {
+        pushedScreenShownAtEachStart.push(document.querySelector(PUSHED_SCREEN) !== null)
+      }
+
+      instant = next
+    },
+  })
+
+  return {
+    pushedScreenShownAtEachStart,
+    stop: Effect.sync(() => Reflect.deleteProperty(MotionGlobalConfig, 'instantAnimations')),
+  }
+}
+
 const openChat = Effect.fn('openChat')(function* (title: string) {
   yield* click(present(cardOf(title), title))
   yield* findByRole('button', 'Back to Agents')
@@ -171,4 +195,21 @@ describe('the herd under a pushed screen', () => {
       expect(rootProjectionNode.current?.isUpdateBlocked()).toBe(false)
     }),
   )
+
+  it.effect('turns animations instant only once the chat has slid away', () => {
+    const watch = watchInstantAnimations()
+
+    return Effect.gen(function* () {
+      yield* renderApp('/', liveWith(herd([laptop])))
+      yield* openChat('Port the herd screen')
+      yield* click(yield* findByRole('button', 'Back to Agents'))
+      yield* eventually(() => {
+        expect(herdScreen().inert).toBe(false)
+      })
+      yield* wait(SHORTER_THAN_AN_EXIT_MS)
+
+      expect(watch.pushedScreenShownAtEachStart).toEqual([false])
+      expect(document.querySelector(PUSHED_SCREEN)).toBeNull()
+    }).pipe(Effect.ensuring(watch.stop))
+  })
 })

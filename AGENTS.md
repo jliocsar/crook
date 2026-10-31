@@ -956,6 +956,13 @@ a turn of its own, enqueued as a task notification.
   the projection root's next update is blocked instead, and only when one is pending: a block with
   nothing to consume it skips the next real reorder (read in Motion's source). The block is
   global, so any other layout animation updating in that same commit lands instantly too.
+- Those global switches reach nothing outside the herd, because the herd is uncovered only once the
+  pushed screen has gone: a back tap and a swipe released past the threshold both slide the screen
+  out in full and navigate when the slide completes, and a swipe released short never navigates.
+  At 4x throttling the chat's slide-out took 30 and 32 frames, about 500 ms, the same curve as its
+  slide-in. The flag came on about 180 and 240 ms after the chat sat fully off screen, stayed on for 26
+  to 30 ms, and no frame showed the chat after that (measured in Chromium at 390x844, one run of
+  each). The tab bar runs no Motion animation.
 - CSS transitions still played on uncover (the status pill's colours, measured), so the scope
   disables transitions for its descendants until the second animation frame after: the first
   frame's callbacks run before that frame computes the new styles (reasoned, not measured). With
