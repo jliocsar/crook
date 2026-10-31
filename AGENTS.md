@@ -946,15 +946,16 @@ a turn of its own, enqueued as a task notification.
   react-dom's source), and the herd shows under a chat while it slides in and under the back swipe.
 - Uncovering shows the current herd without its animations. Remounting the list was ruled out: the
   chat returns focus to the card that opened it as it unmounts, and a remount replaces that card.
-  Setting the covered atom re-renders its readers in a second synchronous commit. Motion's global
-  instant flag is held from that commit's insertion effects to its passive effects: Motion starts
-  exits in layout effects and other value animations in passive ones, and only syncs props in its
-  insertion effects (read in its source). Motion's own instant transition holds the flag two
+  Setting the covered atom re-renders its readers in a second synchronous commit (reasoned, not
+  measured). Motion's global instant flag is held from that commit's insertion effects to the
+  scope's own passive effect, which runs after its descendants' (reasoned, not measured): Motion
+  starts exits in layout effects and other value animations in passive ones, and only syncs props
+  in its insertion effects (read in its source). Motion's own instant transition holds the flag two
   frames, and the toast a close from the chat shows once the herd is back would land inside them
-  (reasoned, not measured). Layout animations start a frame later, so the projection root's next
-  update is blocked instead, and only when one is pending: a block with nothing to consume it
-  skips the next real reorder (read in Motion's source). The block is global, so any other layout
-  animation updating in that same commit lands instantly too.
+  (reasoned, not measured). Layout animations start a frame later (reasoned, not measured), so
+  the projection root's next update is blocked instead, and only when one is pending: a block with
+  nothing to consume it skips the next real reorder (read in Motion's source). The block is
+  global, so any other layout animation updating in that same commit lands instantly too.
 - CSS transitions still played on uncover (the status pill's colours, measured), so the scope
   disables transitions for its descendants until the second animation frame after: the first
   frame's callbacks run before that frame computes the new styles (reasoned, not measured). With
