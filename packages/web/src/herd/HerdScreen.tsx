@@ -1,4 +1,4 @@
-import { useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
+import { useAtomSet } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
 import * as Option from 'effect/Option'
 import { Plus } from 'lucide-react'
@@ -6,6 +6,7 @@ import * as React from 'react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { useOpenAgentActions } from '@crook/web/actions/AgentActions'
+import type { OpenAgentActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdLayoutAtom, resyncAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
@@ -15,9 +16,9 @@ import type { OpenAgent } from '@crook/web/herd/HerdList'
 import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
 import { PullToResync } from '@crook/web/herd/PullToResync'
 import { AddMachineSheet } from '@crook/web/machines/AddMachineSheet'
+import { useShownAtomValue } from '@crook/web/navigation/Covered'
 import { openedFrom } from '@crook/web/navigation/Opener'
 import { TabScreen } from '@crook/web/navigation/TabScreen'
-import { useNow } from '@crook/web/time/Now'
 
 const useCollapsedMachines = () => {
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<MachineId>>(new Set())
@@ -38,19 +39,15 @@ const useCollapsedMachines = () => {
   }
 }
 
-function NewAgentButton({
-  disabled,
-  onOpen,
-}: {
-  disabled: boolean
-  onOpen: (opener: HTMLElement) => void
-}) {
+function NewAgentButton({ onOpen }: { onOpen: (opener: HTMLElement) => void }) {
+  const connection = useShownAtomValue(connectionAtom)
+
   return (
     <Button
       variant="ghost"
       size="icon-touch"
       aria-label="New agent"
-      disabled={disabled}
+      disabled={!connection.controlsEnabled}
       onClick={(event) => {
         onOpen(event.currentTarget)
       }}
@@ -60,12 +57,48 @@ function NewAgentButton({
   )
 }
 
-export function HerdScreen() {
-  const connection = useAtomValue(connectionAtom)
-  const layout = useAtomValue(herdLayoutAtom)
+function HerdBody({
+  isOpen,
+  onToggle,
+  onOpenAgent,
+  onOpenActions,
+  onNewAgent,
+  onAddMachine,
+}: {
+  isOpen: (machine: MachineId) => boolean
+  onToggle: (machine: MachineId) => void
+  onOpenAgent: OpenAgent
+  onOpenActions: OpenAgentActions
+  onNewAgent: (opener: HTMLElement) => void
+  onAddMachine: () => void
+}) {
+  const connection = useShownAtomValue(connectionAtom)
+  const layout = useShownAtomValue(herdLayoutAtom)
   const resync = useAtomSet(resyncAtom, { mode: 'promise' })
+
+  return Option.match(layout, {
+    onNone: () => (connection.ready ? <HerdSkeleton label="Loading your agents" /> : null),
+    onSome: (herdLayout) => (
+      <PullToResync enabled={connection.controlsEnabled} onResync={() => resync(undefined)}>
+        <Dimmed dimmed={connection.stale}>
+          <HerdList
+            layout={herdLayout}
+            controlsEnabled={connection.controlsEnabled}
+            isOpen={isOpen}
+            onToggle={onToggle}
+            onOpenAgent={onOpenAgent}
+            onOpenActions={onOpenActions}
+            onNewAgent={onNewAgent}
+            onAddMachine={onAddMachine}
+          />
+        </Dimmed>
+      </PullToResync>
+    ),
+  })
+}
+
+export function HerdScreen() {
   const navigate = useNavigate()
-  const now = useNow()
   const sections = useCollapsedMachines()
   const [addingMachine, setAddingMachine] = React.useState(false)
   const openActions = useOpenAgentActions()
@@ -83,32 +116,17 @@ export function HerdScreen() {
   }
 
   return (
-    <TabScreen
-      title="crook"
-      action={<NewAgentButton disabled={!connection.controlsEnabled} onOpen={openNewAgent} />}
-    >
-      {Option.match(layout, {
-        onNone: () => (connection.ready ? <HerdSkeleton label="Loading your agents" /> : null),
-        onSome: (herdLayout) => (
-          <PullToResync enabled={connection.controlsEnabled} onResync={() => resync(undefined)}>
-            <Dimmed dimmed={connection.stale}>
-              <HerdList
-                layout={herdLayout}
-                now={now}
-                controlsEnabled={connection.controlsEnabled}
-                isOpen={sections.isOpen}
-                onToggle={sections.toggle}
-                onOpenAgent={openAgent}
-                onOpenActions={openActions}
-                onNewAgent={openNewAgent}
-                onAddMachine={() => {
-                  setAddingMachine(true)
-                }}
-              />
-            </Dimmed>
-          </PullToResync>
-        ),
-      })}
+    <TabScreen title="crook" action={<NewAgentButton onOpen={openNewAgent} />}>
+      <HerdBody
+        isOpen={sections.isOpen}
+        onToggle={sections.toggle}
+        onOpenAgent={openAgent}
+        onOpenActions={openActions}
+        onNewAgent={openNewAgent}
+        onAddMachine={() => {
+          setAddingMachine(true)
+        }}
+      />
       <AddMachineSheet
         open={addingMachine}
         onClose={() => {

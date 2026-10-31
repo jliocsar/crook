@@ -2,6 +2,7 @@ import { Outlet } from '@tanstack/react-router'
 import type * as React from 'react'
 
 import { HeaderBanner } from '@crook/web/connection/ConnectionBanner'
+import { CoveredScope } from '@crook/web/navigation/Covered'
 import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 
 export const TAB_SCROLLER_SELECTOR = '[data-slot="tab-scroller"]'
@@ -36,8 +37,10 @@ export function TabScreen({
         data-slot="tab-scroller"
         className="no-scrollbar h-dvh overflow-y-auto overscroll-y-none pb-[calc(var(--tab-bar-height)+var(--safe-bottom)+1rem)]"
       >
-        <TabHeader title={title} action={action} />
-        {children}
+        <CoveredScope covered={covered}>
+          <TabHeader title={title} action={action} />
+          {children}
+        </CoveredScope>
       </div>
       <Outlet />
     </>

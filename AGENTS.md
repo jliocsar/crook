@@ -923,9 +923,33 @@ a turn of its own, enqueued as a task notification.
   the chat shows, and reading only whether it can act and whether it is stale from the
   connection brought that to 0 of 10 (measured by counting component renders through React's
   devtools hook).
-- The Agents page stays mounted under a pushed chat and re-renders its cards on every herd update
-  and every clock second, at about 64 ms of React work per herd update at 4x throttling (measured
-  with the chat itself rendering nothing).
+- The Agents page stays mounted under a pushed chat. It used to re-render whole on every herd
+  update and every clock second: with fifteen cards on three machines and a chat open, each herd
+  render was about 680 component renders, and the page cost 373 to 394 ms of main-thread task
+  time per herd update and 144 to 186 ms per idle second at 4x throttling. A tab screen covered
+  by a pushed screen now holds what it shows, and its clocks stop: 0 herd-page renders per herd
+  update from another machine and per clock second, and the task time per herd update fell to 17
+  to 31 ms, the rest of the app (all measured on the dev server with a fake hub, counting renders
+  through React's devtools hook, two to six runs each).
+- A covered screen reads atoms through a derived atom that returns its own previous value while
+  the covered flag is set and reads nothing else, so a herd update wakes none of its components.
+  The flag is an atom set in a layout effect, not a context value: a context change re-renders
+  every reader on cover, and the cover lands as the chat starts its slide. A clock follows the
+  flag through the registry, so covering it costs no render, and uncovering ticks it at once.
+- React's hidden `Activity` was ruled out: it hides its tree with `display: none` (read in
+  react-dom's source), and the herd shows under a chat while it slides in and under the back swipe.
+- Uncovering shows the current herd without its animations. Remounting the list was ruled out: the
+  chat returns focus to the card that opened it as it unmounts, and a remount replaces that card.
+  Motion's global instant flag is held only from the uncovering commit's layout effects until the
+  passive effects of the commit that shows the new data, since value and exit animations start
+  inside that window; Motion's own instant transition holds it two frames, and the toast a close
+  from the chat shows once the herd is back would land inside them (reasoned, not measured).
+  Layout animations start a frame later, so the projection root's next update is blocked instead,
+  and only when one is pending: a block with nothing to consume it skips the next real reorder
+  (read in Motion's source).
+  CSS transitions still played on uncover (the status pill's colours, measured), so the scope
+  disables transitions for its descendants until two frames later; 3 of 3 uncovers then ran no
+  transition, and later reorders still played their springs (measured in Chromium).
 - An atom subscription made without `immediate` does not compute the atom, so it depends on
   nothing and never fires until something else reads the atom: a test that counted wakes that way
   counted none, whatever the atom did (measured).

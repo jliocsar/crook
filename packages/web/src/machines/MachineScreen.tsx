@@ -1,6 +1,5 @@
 import { useAtomValue } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
-import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
@@ -33,14 +32,12 @@ const BACK_LABEL = 'Back to machines'
 
 function MachineAgents({
   model,
-  now,
   stale,
   controlsEnabled,
   onOpenAgent,
   onOpenActions,
 }: {
   model: MachineScreenModel
-  now: DateTime.Utc
   stale: boolean
   controlsEnabled: boolean
   onOpenAgent: OpenAgent
@@ -58,7 +55,6 @@ function MachineAgents({
             <AgentCards
               machine={card.machine.id}
               agents={agents}
-              now={now}
               row={row}
               controlsEnabled={controlsEnabled}
               onOpenAgent={onOpenAgent}
@@ -139,7 +135,6 @@ function MachineDetail({
         <div className="grid gap-6">
           <MachineAgents
             model={model}
-            now={now}
             stale={connection.stale}
             controlsEnabled={connection.controlsEnabled}
             onOpenAgent={onOpenAgent}

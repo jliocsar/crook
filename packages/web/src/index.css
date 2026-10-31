@@ -161,6 +161,10 @@ a:focus-visible {
   color: var(--accent-foreground);
 }
 
+[data-uncovering] * {
+  transition: none !important;
+}
+
 @utility no-scrollbar {
   &::-webkit-scrollbar {
     display: none;
