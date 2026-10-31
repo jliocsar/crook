@@ -13,7 +13,7 @@
 
 ## Canonical pattern — class with `make` (preferred)
 
-Deps resolved via `yield*` inside `make`; layer wired by hand.
+Deps resolved via `yield*` inside `make`; `layer` written by hand and left open, so its requirements are exactly what `make` yields.
 
 ```ts
 export class Rollup extends Context.Service<Rollup>()(
@@ -43,6 +43,27 @@ export class Fixtures extends Context.Service<Fixtures>()(
   static readonly layer = Layer.effect(this, this.make)
 }
 ```
+
+## Testing: fake what the service depends on
+
+Because `layer` leaves its dependencies open, code that uses a service gets a fake of the service, and the service itself gets fakes of what it depends on. Neither needs the transport faked underneath.
+
+```ts
+const ProfilesTest = Layer.succeed(Profiles, Profiles.of({ load: () => Effect.succeed({ tags: [], servers: [] }) }))
+const ProfilesMock = Layer.mock(Profiles, { load: () => Effect.succeed({ tags: ["x"], servers: [] }) })
+
+const ProfilesOverFakes = Profiles.layer.pipe(
+  Layer.provide(Layer.mergeAll(
+    FileSystem.layerNoop({ readFileString: () => Effect.succeed("{}") }),
+    Path.layer,
+    ConfigProvider.layer(ConfigProvider.fromUnknown({ HOME: "/home/test" }))
+  ))
+)
+```
+
+- A fake service that records calls keeps them in a `Ref` (or `Queue`) service, `provideMerge`d beside it so the test can read it back.
+- Fake the transport at the platform: `Layer.succeed(HttpClient.HttpClient, HttpClient.make(handler))`, `Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, ChildProcessSpawner.make(handler))`.
+- DON'T `Layer.provide` dependencies inside a service's own `layer`: a dependency provided inside a layer is never replaced by one provided around it, so the test is left faking the outside world (binaries on disk, a patched `fetch`, env vars that exist only for tests).
 
 ## Scoped resource via `make`
 

@@ -1,6 +1,6 @@
 # Layers
 
-Compose services with `merge`/`provide`/`provideMerge`. Layers are memoized by default. Attach as `static readonly layer` on the service class.
+Compose services with `merge`/`provide`/`provideMerge`. Layers are memoized by default. Attach as `static readonly layer` on the service class, leaving the service's own dependencies open: the edge wires them, and a test provides fakes instead.
 
 ## Combinator selection
 
@@ -11,9 +11,11 @@ Compose services with `merge`/`provide`/`provideMerge`. Layers are memoized by d
 | `self.pipe(Layer.provideMerge(dep))` | `self` ROut + `dep` ROut both exposed | Feed dep into self AND keep dep visible downstream. |
 
 ```ts
-static readonly layer = this.layerNoDeps.pipe(Layer.provide(SqlClientLayer))
-static readonly layerWithSqlClient = this.layerNoDeps.pipe(Layer.provideMerge(SqlClientLayer))
+const UserRepositoryLayer = UserRepository.layer.pipe(Layer.provide(SqlClientLayer))
+const UserRepositoryWithSqlClientLayer = UserRepository.layer.pipe(Layer.provideMerge(SqlClientLayer))
 ```
+
+That wiring lives at the edge, never in the service's own `layer`. A dependency provided inside a layer is never replaced by one provided around it (measured: a test's fake `Dep` lost to the real one a closed layer provided itself), so a closed layer leaves a test nothing to fake but the outside world.
 
 ## Layer.effect
 
@@ -62,6 +64,17 @@ const MainLayer = Layer.mergeAll(Fixtures.layer, Reporter.layer)
   .pipe(Layer.provideMerge(NodeServices.layer))
 Command.run(cli, { version }).pipe(Effect.provide(MainLayer), NodeRuntime.runMain)
 ```
+
+When services depend on each other, wire them in named stages from the leaves up:
+
+```ts
+const PaymentsLayer = Payments.layer.pipe(Layer.provide(FetchHttpClient.layer))
+const LeafServicesLayer = Layer.mergeAll(Settings.layer, Storage.layer, Process.layer)
+const PaymentsAndMailerLayer = Layer.provideMerge(Layer.mergeAll(PaymentsLayer, Mailer.layer), LeafServicesLayer)
+const AppLayer = Layer.provideMerge(Layer.mergeAll(Orders.layer, Accounts.layer), PaymentsAndMailerLayer)
+```
+
+A layer used by several stages is still built once: memoization is by reference. A stage a test reuses is exported from the edge module, so the test wires the same graph with fakes swapped in.
 
 ## Memoization + Layer.fresh
 

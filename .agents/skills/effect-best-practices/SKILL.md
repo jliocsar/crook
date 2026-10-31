@@ -21,7 +21,8 @@ Start at `references/index.md` and navigate to the relevant pillar. Each folder'
 | Failing in gen | `return yield* new SomeError(...)` | bare `yield*` of an error mid-block |
 | Services | `Context.Service<X>()("id", { make })` + hand-written `static layer` | `Effect.Service` (gone); assuming `.Default` |
 | Deps | resolve via `yield*` inside `make` | `Service.use` everywhere |
-| Layers | `mergeAll` (independent), `provide` (hide dep), `provideMerge` (expose) | deep `Layer.provide` chains |
+| Layers | `static readonly layer = Layer.effect(this, this.make)`, deps left open; wire once at the edge with `mergeAll` (independent), `provide` (hide dep), `provideMerge` (expose), one named stage per `provide` | `Layer.provide` inside a service's own `layer`; an open twin (`layerWithoutDependencies`) beside a closed `layer`; deep `Layer.provide` chains |
+| Testing | build the real service from its open `layer` over fakes: `Layer.succeed`, `Layer.mock`, `HttpClient.make`, `ChildProcessSpawner.make` | fake binaries on disk, a patched `fetch`, env vars that exist only for tests |
 | Errors | `Schema.TaggedErrorClass<Self>()("Tag", {...})`, one per failure reason | `Schema.TaggedError`; generic shared errors |
 | Catch | `Effect.catch` / `catchTag` / `catchTags` / `catchCause` | `catchAll` / `catchSome` (renamed) |
 | Result type | `Result` (yieldable) | `Either` (gone) |
@@ -36,7 +37,7 @@ Start at `references/index.md` and navigate to the relevant pillar. Each folder'
 
 ## Canonical shapes
 
-Service with traced methods and a hand-wired layer:
+Service with traced methods and a layer that leaves its dependencies open:
 
 ```ts
 import { Context, Effect, Layer, Option, Schema } from "effect"
@@ -61,9 +62,17 @@ export class UserService extends Context.Service<UserService>()("app/UserService
     return UserService.of({ findById })
   })
 }) {
-  static readonly layer = Layer.effect(this)(this.make).pipe(Layer.provide(UserRepo.layer))
+  static readonly layer = Layer.effect(this)(this.make)
 }
 ```
+
+`UserService.layer` is `Layer<UserService, never, UserRepo>`. The edge wires it, once:
+
+```ts
+const MainLayer = UserService.layer.pipe(Layer.provide(UserRepo.layer))
+```
+
+A test provides a fake `UserRepo` instead. A dependency provided inside a layer is never replaced by one provided around it, so a `layer` that wires its own dependencies can't be tested over fakes. Effect's ai-docs keep an open `layerNoDeps` beside each wired layer, and its janitor app keeps only the open one, as `layer`, and wires everything at the edge.
 
 App entrypoint (Bun):
 
