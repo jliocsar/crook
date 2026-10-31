@@ -923,9 +923,51 @@ a turn of its own, enqueued as a task notification.
   the chat shows, and reading only whether it can act and whether it is stale from the
   connection brought that to 0 of 10 (measured by counting component renders through React's
   devtools hook).
-- The Agents page stays mounted under a pushed chat and re-renders its cards on every herd update
-  and every clock second, at about 64 ms of React work per herd update at 4x throttling (measured
-  with the chat itself rendering nothing).
+- The Agents page stays mounted under a pushed chat. It used to re-render whole on every herd
+  update and every clock second: with fifteen cards on three machines and a chat open, each herd
+  render was about 680 component renders, and the page cost 373 to 394 ms of main-thread task
+  time per herd update and 144 to 186 ms per idle second at 4x throttling. Covered, it now holds
+  what it shows and its clocks stop: 0 herd-page renders per herd update from another machine and
+  per clock second, and the task time per herd update fell to 17 to 31 ms, the rest of the app.
+  Shown and idle, it commits once a second with only the elapsed times re-rendering, 105
+  component renders and 38 to 41 ms per second (all measured on the dev server with a fake hub,
+  counting renders through React's devtools hook, two to eight runs each). The Machines tab is not
+  frozen yet: it reads its atoms and its clock above the covered scope.
+- A covered screen reads atoms through a derived atom that returns its own previous value while
+  the covered flag is set and reads nothing else, so a herd update wakes none of its components.
+  The flag is an atom set in a layout effect rather than a context value, since a context change
+  re-renders every reader on cover, as the chat starts its slide (reasoned, not measured).
+  Elapsed times follow one shared ticker atom, so every label on a page changes in one commit,
+  and stop following it while covered; uncovering sets each to the current time at once.
+- A screen that first mounts already covered, such as the herd under a chat opened cold from a
+  link, holds the first value it read until it is uncovered, even an empty one (reasoned, not
+  measured).
+- React's hidden `Activity` was ruled out: it hides its tree with `display: none` (read in
+  react-dom's source), and the herd shows under a chat while it slides in and under the back swipe.
+- Uncovering shows the current herd without its animations. Remounting the list was ruled out: the
+  chat returns focus to the card that opened it as it unmounts, and a remount replaces that card.
+  Setting the covered atom re-renders its readers in a second synchronous commit (reasoned, not
+  measured). Motion's global instant flag is held from that commit's insertion effects to the
+  scope's own passive effect, which runs after its descendants' (reasoned, not measured): Motion
+  starts exits in layout effects and other value animations in passive ones, and only syncs props
+  in its insertion effects (read in its source). Motion's own instant transition holds the flag two
+  frames, and the toast a close from the chat shows once the herd is back would land inside them
+  (reasoned, not measured). Layout animations start a frame later (reasoned, not measured), so
+  the projection root's next update is blocked instead, and only when one is pending: a block with
+  nothing to consume it skips the next real reorder (read in Motion's source). The block is
+  global, so any other layout animation updating in that same commit lands instantly too.
+- Those global switches reach nothing outside the herd, because the herd is uncovered only once the
+  pushed screen has gone: a back tap and a swipe released past the threshold both slide the screen
+  out in full and navigate when the slide completes, and a swipe released short never navigates.
+  At 4x throttling the chat's slide-out took 30 and 32 frames, about 500 ms, the same curve as its
+  slide-in. The flag came on about 180 and 240 ms after the chat sat fully off screen, stayed on for 26
+  to 30 ms, and no frame showed the chat after that (measured in Chromium at 390x844, one run of
+  each). The tab bar runs no Motion animation.
+- CSS transitions still played on uncover (the status pill's colours, measured), so the scope
+  disables transitions for its descendants until the second animation frame after: the first
+  frame's callbacks run before that frame computes the new styles (reasoned, not measured). With
+  it, 3 of 3 uncovers ran no transition and no frame of layout animation, while a reorder once
+  shown still played its spring, 99 card frames of it (measured in Chromium).
 - An atom subscription made without `immediate` does not compute the atom, so it depends on
   nothing and never fires until something else reads the atom: a test that counted wakes that way
   counted none, whatever the atom did (measured).

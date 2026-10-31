@@ -1,4 +1,3 @@
-import { useAtomValue } from '@effect/atom-react/Hooks'
 import { cn } from 'cn'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
@@ -12,6 +11,7 @@ import { Swap } from '@crook/web/components/Swap'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { failedNotice } from '@crook/web/connection/ConnectionView'
 import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
+import { useShownAtomValue } from '@crook/web/navigation/Covered'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
 
@@ -65,7 +65,7 @@ function LastSynced({ at }: { at: DateTime.Utc }) {
 }
 
 export function HeaderBanner() {
-  const { notice, syncedAt } = useAtomValue(connectionAtom)
+  const { notice, syncedAt } = useShownAtomValue(connectionAtom)
 
   return (
     <Collapse open={Option.isSome(notice)}>

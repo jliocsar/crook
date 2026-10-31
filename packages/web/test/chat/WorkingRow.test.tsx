@@ -21,6 +21,7 @@ import { answered, chunk, opened, prompt } from '../TranscriptFixtures.ts'
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
 const WORKING_ROW = { selector: '[data-slot="thinking-state-label"]' }
+const WORKING_ELAPSED = { selector: '[data-slot="thinking-state-elapsed"]' }
 
 const live = (rows: readonly AgentRow[]) => liveWith(herd([machine(LAPTOP, rows)]))
 
@@ -52,7 +53,7 @@ describe('the Working row', () => {
       yield* findByRole('button', 'Send')
 
       expect(screen.getByText('Working', WORKING_ROW)).toBeDefined()
-      expect(screen.getByText('7m')).toBeDefined()
+      expect(screen.getByText('7m', WORKING_ELAPSED)).toBeDefined()
 
       yield* Queue.offer(transcript, chunk(10, 20, [answered(10, 'Fixed the herd', 5)]))
       yield* Effect.promise(() => screen.findByText('Fixed the herd'))

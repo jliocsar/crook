@@ -1,5 +1,4 @@
 import { cn } from 'cn'
-import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import { Pin, PinOff, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -62,7 +61,6 @@ const closeAction = (run: () => void, disabled: boolean): SwipeAction => ({
 function AgentCardRow({
   machine,
   card,
-  now,
   row,
   controlsEnabled,
   onOpenAgent,
@@ -70,7 +68,6 @@ function AgentCardRow({
 }: {
   machine: MachineId
   card: AgentCardModel
-  now: DateTime.Utc
   row: OpenRow
   controlsEnabled: boolean
   onOpenAgent: OpenAgent
@@ -110,7 +107,7 @@ function AgentCardRow({
         }}
         onLongPress={openActions}
       >
-        <AgentCard card={card} now={now} />
+        <AgentCard card={card} />
       </SwipeRow>
       <ActionFailure message={pin.failure} />
     </motion.li>
@@ -120,7 +117,6 @@ function AgentCardRow({
 export function AgentCards({
   machine,
   agents,
-  now,
   row,
   controlsEnabled,
   onOpenAgent,
@@ -128,7 +124,6 @@ export function AgentCards({
 }: {
   machine: MachineId
   agents: readonly AgentCardModel[]
-  now: DateTime.Utc
   row: OpenRow
   controlsEnabled: boolean
   onOpenAgent: OpenAgent
@@ -144,7 +139,6 @@ export function AgentCards({
             key={card.row.pane}
             machine={machine}
             card={card}
-            now={now}
             row={row}
             controlsEnabled={controlsEnabled}
             onOpenAgent={onOpenAgent}
@@ -158,7 +152,6 @@ export function AgentCards({
 
 export function HerdList({
   layout,
-  now,
   controlsEnabled,
   isOpen,
   onToggle,
@@ -168,7 +161,6 @@ export function HerdList({
   onAddMachine,
 }: {
   layout: HerdLayout
-  now: DateTime.Utc
   controlsEnabled: boolean
   isOpen: (machine: MachineId) => boolean
   onToggle: (machine: MachineId) => void
@@ -189,7 +181,6 @@ export function HerdList({
         <MachineSection
           key={section.machine.id}
           section={section}
-          now={now}
           open={isOpen(section.machine.id)}
           onToggle={() => {
             onToggle(section.machine.id)
@@ -200,7 +191,6 @@ export function HerdList({
               <AgentCards
                 machine={section.machine.id}
                 agents={agents}
-                now={now}
                 row={row}
                 controlsEnabled={controlsEnabled}
                 onOpenAgent={onOpenAgent}
@@ -208,7 +198,7 @@ export function HerdList({
               />
             ),
             NoAgents: () => <NoAgentsLine />,
-            Offline: () => <OfflineLine lastSeenAt={section.machine.lastSeenAt} now={now} />,
+            Offline: () => <OfflineLine lastSeenAt={section.machine.lastSeenAt} />,
           })}
         </MachineSection>
       ))}

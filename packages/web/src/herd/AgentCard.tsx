@@ -1,6 +1,5 @@
 import { cn } from 'cn'
 import * as Arr from 'effect/Array'
-import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import { Pin } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
@@ -54,12 +53,12 @@ function RunningSubagents({ count }: { count: number }) {
   )
 }
 
-function AgentMeta({ card, now }: { card: AgentCardModel; now: DateTime.Utc }) {
+function AgentMeta({ card }: { card: AgentCardModel }) {
   const { row } = card
 
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <AgentStatusPill status={row.status} since={row.statusChangedAt} now={now} />
+      <AgentStatusPill status={row.status} since={row.statusChangedAt} />
       {Option.match(row.branch, {
         onNone: () => null,
         onSome: (branch) => (
@@ -79,18 +78,10 @@ function AgentMeta({ card, now }: { card: AgentCardModel; now: DateTime.Utc }) {
   )
 }
 
-function AgentAsk({
-  card,
-  now,
-  summary,
-}: {
-  card: AgentCardModel
-  now: DateTime.Utc
-  summary: string
-}) {
+function AgentAsk({ card, summary }: { card: AgentCardModel; summary: string }) {
   return (
     <span className="flex flex-col items-start gap-1.5">
-      <AgentStatusPill status={card.row.status} since={card.row.statusChangedAt} now={now} />
+      <AgentStatusPill status={card.row.status} since={card.row.statusChangedAt} />
       <span
         data-slot="ask-summary"
         className="text-foreground inline-block max-w-full truncate rounded-[12px_12px_12px_4px] bg-[color-mix(in_oklab,var(--warning)_14%,var(--card))] px-2.5 py-1.5 font-mono text-[12px] leading-4"
@@ -101,7 +92,7 @@ function AgentAsk({
   )
 }
 
-export function AgentCard({ card, now }: { card: AgentCardModel; now: DateTime.Utc }) {
+export function AgentCard({ card }: { card: AgentCardModel }) {
   const { row, needsYou } = card
 
   return (
@@ -139,12 +130,12 @@ export function AgentCard({ card, now }: { card: AgentCardModel; now: DateTime.U
       {Option.match(card.askSummary, {
         onNone: () => (
           <Reveal id="meta">
-            <AgentMeta card={card} now={now} />
+            <AgentMeta card={card} />
           </Reveal>
         ),
         onSome: (summary) => (
           <Reveal id="ask">
-            <AgentAsk card={card} now={now} summary={summary} />
+            <AgentAsk card={card} summary={summary} />
           </Reveal>
         ),
       })}

@@ -4,6 +4,7 @@ import { Bot, ServerOff } from 'lucide-react'
 import { Button } from '@crook/web/components/ui/button'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { shortElapsed } from '@crook/web/time/Elapsed'
+import { useNow } from '@crook/web/time/Now'
 
 export function NothingRunning({
   controlsEnabled,
@@ -48,7 +49,9 @@ export function NoAgentsLine() {
   return <p className="text-muted-foreground px-4 pt-1 pb-1 text-sm">No agents</p>
 }
 
-export function OfflineLine({ lastSeenAt, now }: { lastSeenAt: DateTime.Utc; now: DateTime.Utc }) {
+export function OfflineLine({ lastSeenAt }: { lastSeenAt: DateTime.Utc }) {
+  const now = useNow()
+
   return (
     <p className="text-muted-foreground px-4 pt-1 pb-2 text-sm">
       Last seen {shortElapsed(now, lastSeenAt)} ago. Its agents come back when it reconnects.

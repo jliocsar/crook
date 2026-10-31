@@ -6,6 +6,7 @@ import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { STATUS_WORD } from '@crook/web/components/StatusWord'
 import { Swap } from '@crook/web/components/Swap'
 import { clockElapsed, shortElapsed } from '@crook/web/time/Elapsed'
+import { useNow } from '@crook/web/time/Now'
 
 const STATUS_PILL_TONE = {
   working: 'bg-primary/12 text-[color-mix(in_oklab,var(--primary)_88%,var(--foreground))]',
@@ -17,15 +18,9 @@ const STATUS_PILL_TONE = {
 
 const isLive = (status: AgentStatus): boolean => status === 'working' || status === 'blocked'
 
-export function AgentStatusPill({
-  status,
-  since,
-  now,
-}: {
-  status: AgentStatus
-  since: DateTime.Utc
-  now: DateTime.Utc
-}) {
+export function AgentStatusPill({ status, since }: { status: AgentStatus; since: DateTime.Utc }) {
+  const now = useNow()
+
   return (
     <span
       data-slot="agent-status"
