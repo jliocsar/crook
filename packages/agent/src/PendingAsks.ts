@@ -190,11 +190,7 @@ export class PendingAsks extends Context.Service<
     readonly changes: Stream.Stream<void>
   }
 >()('@crook/agent/PendingAsks') {
-  static readonly layerFromServices = Layer.effect(this, make)
-
-  static readonly layer = this.layerFromServices.pipe(
-    Layer.provide([HookInbox.layer, TranscriptLocator.layer, LastTurn.layer, PaneScreens.layer]),
-  )
+  static readonly layer = Layer.effect(this, make)
 
   static readonly layerTest = (asks: ReadonlyMap<string, Ask> = new Map()) =>
     Layer.succeed(

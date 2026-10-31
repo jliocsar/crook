@@ -12,6 +12,7 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
@@ -24,7 +25,6 @@ import { RunningSubagents } from '@crook/agent/RunningSubagents'
 import { emptyHookLedger } from '@crook/claude/HookLedger'
 import { LastTurn } from '@crook/claude/LastTurn'
 import { spikeScreen } from '@crook/claude/SpikeScreens'
-import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
@@ -152,17 +152,19 @@ const syncingFoundation = Effect.fn('syncingFoundation')(function* (
     Path.layer,
     ConfigProvider.layer(ConfigProvider.fromUnknown({ CROOK_MACHINE_ID: machine })),
   )
-  const pendingAsks = Layer.provide(PendingAsks.layerFromServices, [
+  const transcriptReaders = AgentDaemon.transcriptReadersAt([])
+  const pendingAsks = Layer.provide(PendingAsks.layer, [
     HookInbox.layerTest(ledger),
-    TranscriptLocator.layerAt([]),
+    transcriptReaders,
     LastTurn.layer,
     PaneScreens.layer,
   ])
+  const runningSubagents = Layer.provide(RunningSubagents.layer, transcriptReaders)
   const sync = Layer.provide(MachineStateSync.layer, [
     pendingAsks,
     ClaudeSessions.layerTest(new Map()),
     RecentPlaces.layerTest(),
-    RunningSubagents.layerAt([]),
+    runningSubagents,
   ])
 
   return Layer.provideMerge(sync, host)

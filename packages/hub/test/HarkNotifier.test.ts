@@ -103,9 +103,7 @@ const withNotifier = Effect.fn('withNotifier')(function* (
   const hark = yield* fakeHark(script)
   const database = yield* Layer.build(Database.layerAt(IN_MEMORY))
   const start = Effect.map(
-    Layer.build(
-      harkServicesUnder(HarkNotifier.layerWithoutDependencies, hark.layer, token, database),
-    ),
+    Layer.build(harkServicesUnder(HarkNotifier.layer, hark.layer, token, database)),
     (context) => ({
       herd: Context.get(context, Herd),
       notifier: Context.get(context, HarkNotifier),

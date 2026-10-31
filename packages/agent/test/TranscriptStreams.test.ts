@@ -17,10 +17,12 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TaskLiveness } from '@crook/agent/TaskLiveness'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { BackgroundWork } from '@crook/claude/BackgroundWork'
+import { FileWatch } from '@crook/claude/FileWatch'
 import { SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
@@ -126,7 +128,7 @@ const streamsAt = Effect.fn('streamsAt')(function* (
   state: SubscriptionRef.SubscriptionRef<MachineState>,
 ) {
   const context = yield* Layer.build(
-    Layer.provide(TranscriptStreams.layerAt([root]), MachineStateSync.layerTest(state)),
+    Layer.provide(AgentDaemon.transcriptStreamingAt([root]), MachineStateSync.layerTest(state)),
   )
 
   return Context.get(context, TranscriptStreams)
@@ -143,13 +145,14 @@ const defectiveStreams = Effect.fn('defectiveStreams')(function* (
       awaitSubagent: () => Effect.die(new Error(LOCATOR_BUG)),
     }),
   )
+  const watchedTail = Layer.provideMerge(TranscriptTail.layer, FileWatch.layer)
+  const subagentRoster = Layer.provideMerge(SubagentRoster.layer, watchedTail)
+  const backgroundWork = Layer.provideMerge(BackgroundWork.layer, subagentRoster)
   const context = yield* Layer.build(
-    Layer.provide(TranscriptStreams.layerWithoutDependencies, [
+    Layer.provide(TranscriptStreams.layer, [
       brokenLocator,
-      TranscriptTail.layer,
-      SubagentRoster.layer,
+      backgroundWork,
       SkillCatalog.layerAt([], []),
-      BackgroundWork.layer,
       TaskLiveness.layerTest(() => Option.none()),
       MachineStateSync.layerTest(state),
     ]),

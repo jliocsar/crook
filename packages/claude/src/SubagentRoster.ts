@@ -217,7 +217,5 @@ export class SubagentRoster extends Context.Service<
     ) => Effect.Effect<readonly Subagent[], SubagentsUnreadable>
   }
 >()('@crook/claude/SubagentRoster') {
-  static readonly layer = Layer.effect(this, make).pipe(
-    Layer.provide([FileWatch.layer, TranscriptTail.layer]),
-  )
+  static readonly layer = Layer.effect(this, make)
 }

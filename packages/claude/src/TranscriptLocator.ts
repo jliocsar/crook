@@ -185,8 +185,7 @@ export class TranscriptLocator extends Context.Service<
     ) => Effect.Effect<TranscriptFile, TranscriptDirectoryUnreadable>
   }
 >()('@crook/claude/TranscriptLocator') {
-  static readonly layerAt = (roots: readonly string[]) =>
-    Layer.effect(this, make(roots)).pipe(Layer.provide(FileWatch.layer))
+  static readonly layerAt = (roots: readonly string[]) => Layer.effect(this, make(roots))
 
   static readonly layer = Layer.unwrap(Effect.map(claudeRoots, (roots) => this.layerAt(roots)))
 }

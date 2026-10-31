@@ -7,6 +7,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 
+import { FileWatch } from '@crook/claude/FileWatch'
 import {
   TranscriptFile,
   TranscriptLocator,
@@ -44,7 +45,9 @@ const writeSession = Effect.fn('writeSession')(function* (
 })
 
 const locatorAt = Effect.fn('locatorAt')(function* (paths: readonly string[]) {
-  const context = yield* Layer.build(TranscriptLocator.layerAt(paths))
+  const context = yield* Layer.build(
+    Layer.provide(TranscriptLocator.layerAt(paths), FileWatch.layer),
+  )
 
   return Context.get(context, TranscriptLocator)
 })

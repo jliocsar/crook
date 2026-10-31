@@ -346,5 +346,5 @@ export class TranscriptTail extends Context.Service<
     ) => Effect.Effect<TranscriptOffset, TranscriptUnreadable>
   }
 >()('@crook/claude/TranscriptTail') {
-  static readonly layer = Layer.effect(this, make).pipe(Layer.provide(FileWatch.layer))
+  static readonly layer = Layer.effect(this, make)
 }

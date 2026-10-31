@@ -15,7 +15,6 @@ import * as Option from 'effect/Option'
 import type * as Redacted from 'effect/Redacted'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
-import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as Headers from 'effect/http/Headers'
 import * as HttpClient from 'effect/http/HttpClient'
 import * as HttpClientRequest from 'effect/http/HttpClientRequest'
@@ -618,7 +617,5 @@ export class HarkClient extends Context.Service<
     ) => Effect.Effect<void, HarkFailure>
   }
 >()('@crook/hub/HarkClient') {
-  static readonly layerWithoutDependencies = Layer.effect(this, make)
-
-  static readonly layer = this.layerWithoutDependencies.pipe(Layer.provide(FetchHttpClient.layer))
+  static readonly layer = Layer.effect(this, make)
 }

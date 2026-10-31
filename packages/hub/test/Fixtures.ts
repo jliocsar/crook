@@ -23,14 +23,13 @@ import type * as RpcGroup from 'effect/rpc/RpcGroup'
 import type * as Rpc from 'effect/rpc/Rpc'
 import type * as SqlClient from 'effect/sql/SqlClient'
 
+import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { AuditLog } from '@crook/agent/AuditLog'
-import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { HubConnectionStatus } from '@crook/agent/HubConnection'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
 import { herdViews } from '@crook/domain/HerdUpdate'
@@ -156,18 +155,22 @@ export const harkServicesUnder = <Services, Failure, Needs>(
   http: Layer.Layer<HttpClient.HttpClient>,
   token: Option.Option<string>,
   database: Context.Context<SqlClient.SqlClient>,
-) =>
-  Layer.provideMerge(
-    services,
+) => {
+  const herdServices = Layer.provideMerge(
     Layer.mergeAll(
       Herd.layer,
-      HarkClient.layerWithoutDependencies,
+      HarkClient.layer,
       NotificationStore.layer,
-      HerdStore.layer,
       CommandRouter.layer,
       AuditTrail.layer,
     ),
-  ).pipe(Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]))
+    HerdStore.layer,
+  )
+
+  return Layer.provideMerge(services, herdServices).pipe(
+    Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]),
+  )
+}
 
 export const configFor = (origin: string) =>
   ConfigProvider.layer(
@@ -252,8 +255,8 @@ export const agentOver = Effect.fn('agentOver')(function* <Failure>(
     HubLink.layerWith(yield* hubDialFor(machine), hello),
     Layer.provideMerge(
       Layer.mergeAll(
-        CommandExecutor.layer,
-        TranscriptStreams.layerAt(claudeRoots),
+        AgentDaemon.commandExecution,
+        AgentDaemon.transcriptStreamingAt(claudeRoots),
         HubConnectionStatus.layer,
       ),
       foundation,

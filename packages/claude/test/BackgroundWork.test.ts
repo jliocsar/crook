@@ -13,7 +13,7 @@ import { BackgroundWork, outputLines, type BackgroundSnapshot } from '@crook/cla
 import { TranscriptFile, subagentsDirectoryOf } from '@crook/claude/TranscriptLocator'
 import { SubagentId } from '@crook/domain/Ids'
 
-import { SESSION, WATCHERS_SETTLED, platform } from './Fixtures'
+import { SESSION, WATCHERS_SETTLED, services as transcriptServices } from './Fixtures'
 
 const TASK = 'bq8qlvs1g'
 const SHELL_TOOL_USE = 'toolu_01Gh5VNRXuFcVHuXR7pdXaBH'
@@ -69,7 +69,7 @@ const noticeLine = line({
 const subagentStep = (timestamp: string, block: Schema.Json) =>
   line({ type: 'assistant', timestamp, message: { content: [block] } })
 
-const services = Layer.provideMerge(BackgroundWork.layer, platform)
+const services = Layer.provideMerge(BackgroundWork.layer, transcriptServices)
 
 const scratch = Effect.fn('scratch')(function* () {
   const fileSystem = yield* FileSystem.FileSystem

@@ -5,6 +5,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Match from 'effect/Match'
 import * as Stream from 'effect/Stream'
+import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import type * as Rpc from 'effect/rpc/Rpc'
@@ -158,12 +159,16 @@ const routes = Effect.gen(function* () {
   ]
 })
 
-const notifications = Layer.provideMerge(
-  HerdActivity.layerWithoutDependencies,
-  HarkNotifier.layerWithoutDependencies,
-).pipe(Layer.provide([HarkClient.layer, NotificationStore.layer, HerdStore.layer]))
+const harkClient = Layer.provide(HarkClient.layer, FetchHttpClient.layer)
 
-const herdServices = Layer.mergeAll(Herd.layer, CommandRouter.layer, AuditTrail.layer)
+const notifications = Layer.provideMerge(HerdActivity.layer, HarkNotifier.layer).pipe(
+  Layer.provide([harkClient, NotificationStore.layer, HerdStore.layer]),
+)
+
+const herdServices = Layer.provideMerge(
+  Layer.mergeAll(Herd.layer, CommandRouter.layer, AuditTrail.layer),
+  HerdStore.layer,
+)
 
 export const layer = HttpRouter.addAll(routes).pipe(
   Layer.provide([

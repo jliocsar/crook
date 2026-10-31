@@ -8,6 +8,7 @@ import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
+import { FileWatch } from '@crook/claude/FileWatch'
 import { HookPayload } from '@crook/claude/HookPayload'
 import { LastTurn } from '@crook/claude/LastTurn'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
@@ -25,9 +26,13 @@ export const WATCHERS_SETTLED = Duration.times(SLOWEST_MEASURED_WATCH_INSTALL, 1
 
 export const platform = Layer.mergeAll(BunFileSystem.layer, Path.layer)
 
+export const watchedPlatform = Layer.provideMerge(FileWatch.layer, platform)
+
+const transcriptTail = Layer.provideMerge(TranscriptTail.layer, watchedPlatform)
+
 export const services = Layer.provideMerge(
-  Layer.mergeAll(TranscriptTail.layer, SubagentRoster.layer, LastTurn.layer),
-  platform,
+  Layer.mergeAll(SubagentRoster.layer, LastTurn.layer),
+  transcriptTail,
 )
 
 export const encodeMessages = Schema.encodeSync(Schema.Array(TranscriptMessage))

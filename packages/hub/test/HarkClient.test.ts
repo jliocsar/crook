@@ -59,7 +59,7 @@ const withHarkClient = Effect.fn('withHarkClient')(function* (
 ) {
   const hark = yield* fakeHark(script)
   const context = yield* Layer.build(
-    HarkClient.layerWithoutDependencies.pipe(Layer.provide([hark.layer, tokenConfig(token)])),
+    HarkClient.layer.pipe(Layer.provide([hark.layer, tokenConfig(token)])),
   )
 
   return { calls: hark.calls, client: Context.get(context, HarkClient) }

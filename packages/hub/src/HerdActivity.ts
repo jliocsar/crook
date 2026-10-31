@@ -187,4 +187,4 @@ const make = Effect.gen(function* () {
   yield* Effect.forkScoped(Effect.forever(stepOnce))
 })
 
-export const layerWithoutDependencies = Layer.effectDiscard(make)
+export const layer = Layer.effectDiscard(make)

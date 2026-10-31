@@ -161,6 +161,20 @@ A fixture that another member's tests read stays in the member that owns it, exp
 `new URL(import.meta.resolve('@crook/<member>/fixtures/…')).pathname`, which resolves under
 `bun --bun vitest` (measured). A copy drifts from the capture it was taken from.
 
+:::warning
+A service's own `layer` leaves what the service depends on open: no service wires another one in.
+Each app wires its graph once, at its edge, in named stages, and exports the stages its tests
+reuse, so a test builds a real service over fakes of exactly what that service needs. A layer that
+takes values rather than services, such as a root path or a store, still sits beside its service,
+since it configures the service and wires nothing.
+
+Services used to come in pairs: a `layer` that provided its own dependencies, and an open twin for
+the tests that needed a fake. A dependency provided inside a layer stays the one it gets even when
+a test provides another around it (measured), so every service a test wanted to fake grew a twin,
+and one nobody had faked yet could only be tested over the real thing. Effect's own janitor app
+keeps every layer open and wires once at the edge, and the twins went with that.
+:::
+
 ## Rules
 
 Leaf imports only: `effect/Effect`, `effect/cli/Command`.

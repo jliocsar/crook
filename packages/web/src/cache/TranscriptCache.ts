@@ -343,7 +343,7 @@ export class TranscriptCache extends Context.Service<
 >()('@crook/web/TranscriptCache') {
   static readonly layerOver = (store: TranscriptStore) => Layer.effect(this, makeOver(store))
 
-  static readonly layerWithoutBrowser = Layer.effect(
+  static readonly layer = Layer.effect(
     this,
     Effect.flatMap(
       Effect.cached(
@@ -355,6 +355,4 @@ export class TranscriptCache extends Context.Service<
       (database) => makeOver(indexedDbStore(database)),
     ),
   )
-
-  static readonly layer = Layer.provide(this.layerWithoutBrowser, PageSignals.layer)
 }

@@ -286,5 +286,5 @@ export class HarkNotifier extends Context.Service<
     readonly sendTest: Effect.Effect<void, TestNotificationFailure>
   }
 >()('@crook/hub/HarkNotifier') {
-  static readonly layerWithoutDependencies = Layer.effect(this, make)
+  static readonly layer = Layer.effect(this, make)
 }

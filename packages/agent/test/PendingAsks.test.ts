@@ -100,7 +100,7 @@ const startAsks = Effect.fn('startAsks')(function* (
   const ledger = yield* SubscriptionRef.make(ledgerOf(payloads))
   const { read, reads } = yield* scriptedScreens(screens)
   const context = yield* Layer.build(
-    Layer.provide(PendingAsks.layerFromServices, [
+    Layer.provide(PendingAsks.layer, [
       HookInbox.layerTest(ledger),
       Layer.mock(PaneScreens, { read }),
       Layer.mock(TranscriptLocator, { locate: () => Effect.succeedNone }),

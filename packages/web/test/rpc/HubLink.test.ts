@@ -51,7 +51,7 @@ const isLive = LinkStatus.$is('Live')
 
 const start = Effect.fn('start')(function* (cached: Option.Option<HerdSnapshot> = Option.none()) {
   const browser = yield* makeFakeBrowser(cached)
-  const context = yield* Layer.build(Layer.provide(HubLink.layerWithoutBrowser, browser.layer))
+  const context = yield* Layer.build(Layer.provide(HubLink.layer, browser.layer))
   const link = Context.get(context, HubLink)
   const latest = yield* Ref.make(Option.none<HubLinkState>())
 

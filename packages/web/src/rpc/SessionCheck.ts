@@ -92,8 +92,7 @@ export class SessionCheck extends Context.Service<
 >()('@crook/web/SessionCheck') {
   static readonly layerOnPage = (page: URL) => Layer.effect(this, makeSessionCheck(page))
 
-  static readonly layer = Layer.provide(
-    Layer.unwrap(Effect.sync(() => SessionCheck.layerOnPage(new URL(window.location.href)))),
-    FetchHttpClient.layer,
+  static readonly layer = Layer.unwrap(
+    Effect.sync(() => SessionCheck.layerOnPage(new URL(window.location.href))),
   )
 }

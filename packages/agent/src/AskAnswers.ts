@@ -263,5 +263,5 @@ export class AskAnswers extends Context.Service<
     ) => Effect.Effect<void, DeclineMessageUndelivered>
   }
 >()('@crook/agent/AskAnswers') {
-  static readonly layer = Layer.effect(this, make).pipe(Layer.provide(PaneScreens.layer))
+  static readonly layer = Layer.effect(this, make)
 }

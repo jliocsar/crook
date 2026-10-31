@@ -124,10 +124,7 @@ const withActivity = Effect.fn('withActivity')(function* (
   const start = Effect.map(
     Layer.build(
       harkServicesUnder(
-        Layer.provideMerge(
-          HerdActivity.layerWithoutDependencies,
-          HarkNotifier.layerWithoutDependencies,
-        ),
+        Layer.provideMerge(HerdActivity.layer, HarkNotifier.layer),
         hark.layer,
         token,
         database,

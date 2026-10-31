@@ -375,12 +375,5 @@ export class HubLink extends Context.Service<
     ) => Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallDefected>
   }
 >()('@crook/web/HubLink') {
-  static readonly layerWithoutBrowser = Layer.effect(this, make)
-
-  static readonly layer = Layer.provide(this.layerWithoutBrowser, [
-    HubConnection.layer,
-    HerdCache.layer,
-    PageSignals.layer,
-    SessionCheck.layer,
-  ])
+  static readonly layer = Layer.effect(this, make)
 }

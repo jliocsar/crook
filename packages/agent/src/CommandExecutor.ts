@@ -282,7 +282,5 @@ export class CommandExecutor extends Context.Service<
     ) => Effect.Effect<CommandReceipt, AgentCommandFailure>
   }
 >()('@crook/agent/CommandExecutor') {
-  static readonly layer = Layer.effect(this, make).pipe(
-    Layer.provide([CommandPolicy.layer, AskAnswers.layer, AgentLauncher.layer]),
-  )
+  static readonly layer = Layer.effect(this, make)
 }

@@ -23,7 +23,7 @@ import type { RpcClientError } from 'effect/rpc/RpcClientError'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { type OpenTasks, TaskLiveness } from '@crook/agent/TaskLiveness'
 import { type BackgroundSnapshot, BackgroundWork, sameSnapshot } from '@crook/claude/BackgroundWork'
-import { MANAGED_SKILL_HOMES, SkillCatalog } from '@crook/claude/SkillCatalog'
+import { SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SubagentRoster, type SubagentsUnreadable } from '@crook/claude/SubagentRoster'
 import {
   type LocateError,
@@ -571,28 +571,5 @@ export class TranscriptStreams extends Context.Service<
     ) => Effect.Effect<never, TranscriptDemandsEnded | RpcClientError>
   }
 >()('@crook/agent/TranscriptStreams') {
-  static readonly layerWithoutDependencies = Layer.effect(this, make)
-
-  static readonly layerAt = (roots: readonly string[]) =>
-    this.layerWithoutDependencies.pipe(
-      Layer.provide([
-        TranscriptLocator.layerAt(roots),
-        TranscriptTail.layer,
-        SubagentRoster.layer,
-        SkillCatalog.layerAt(roots, MANAGED_SKILL_HOMES),
-        BackgroundWork.layer,
-        TaskLiveness.layer,
-      ]),
-    )
-
-  static readonly layer = this.layerWithoutDependencies.pipe(
-    Layer.provide([
-      TranscriptLocator.layer,
-      TranscriptTail.layer,
-      SubagentRoster.layer,
-      SkillCatalog.layer,
-      BackgroundWork.layer,
-      TaskLiveness.layer,
-    ]),
-  )
+  static readonly layer = Layer.effect(this, make)
 }

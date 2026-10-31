@@ -120,13 +120,15 @@ const attach = Effect.fn('attach')(function* (id: MachineId, greeting: Hello = h
 
 const withFreshHerd = <Success, Failure, Requirements>(
   test: Effect.Effect<Success, Failure, Requirements>,
-) =>
-  Effect.scoped(
-    Effect.flatMap(
-      Layer.build(Layer.provideMerge(Herd.layer, Database.layerAt(IN_MEMORY))),
-      (context) => Effect.provide(test, context),
+) => {
+  const storage = Layer.provideMerge(HerdStore.layer, Database.layerAt(IN_MEMORY))
+
+  return Effect.scoped(
+    Effect.flatMap(Layer.build(Layer.provideMerge(Herd.layer, storage)), (context) =>
+      Effect.provide(test, context),
     ),
   )
+}
 
 const storageRefused = new SqlError({
   reason: new UnknownError({ cause: DISK_FULL, message: DISK_FULL }),
@@ -163,7 +165,7 @@ const withRefusingMachineSaves = <Success, Failure, Requirements>(
     Effect.flatMap(
       Layer.build(
         Layer.provideMerge(
-          Herd.layerWithoutDependencies,
+          Herd.layer,
           Layer.provide(refusingMachineSaves, Database.layerAt(IN_MEMORY)),
         ),
       ),
@@ -175,21 +177,20 @@ const withRefusingStorage = <Success, Failure, Requirements>(
   test: Effect.Effect<Success, Failure, Requirements>,
 ) =>
   Effect.scoped(
-    Effect.flatMap(
-      Layer.build(Layer.provide(Herd.layerWithoutDependencies, refusingStorage)),
-      (context) => Effect.provide(test, context),
+    Effect.flatMap(Layer.build(Layer.provide(Herd.layer, refusingStorage)), (context) =>
+      Effect.provide(test, context),
     ),
   )
 
 const restartingHerd = Effect.fn('restartingHerd')(function* () {
   const database = yield* Layer.build(Database.layerAt(IN_MEMORY))
+  const storage = Layer.provide(HerdStore.layer, Layer.succeedContext(database))
   const run = <Success, Failure, Requirements>(
     test: Effect.Effect<Success, Failure, Requirements>,
   ) =>
     Effect.scoped(
-      Effect.flatMap(
-        Layer.build(Layer.provide(Herd.layer, Layer.succeedContext(database))),
-        (herd) => Effect.provide(test, herd),
+      Effect.flatMap(Layer.build(Layer.provide(Herd.layer, storage)), (herd) =>
+        Effect.provide(test, herd),
       ),
     )
 

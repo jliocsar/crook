@@ -15,14 +15,12 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
+import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { type OpenTasks, TaskLiveness } from '@crook/agent/TaskLiveness'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { BackgroundWork } from '@crook/claude/BackgroundWork'
 import { SkillCatalog } from '@crook/claude/SkillCatalog'
-import { SubagentRoster } from '@crook/claude/SubagentRoster'
-import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
-import { TranscriptTail } from '@crook/claude/TranscriptTail'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 import { PaneTranscript, type TranscriptEvent } from '@crook/domain/Transcript'
 
@@ -120,13 +118,14 @@ const streamsWith = Effect.fn('streamsWith')(function* (root: string, open: Ref.
     machineStateWith([agentRow({ claudeSession: Option.some(SESSION) })]),
   )
   const liveness = Layer.succeed(TaskLiveness, TaskLiveness.of({ openTasks: () => Ref.get(open) }))
+  const backgroundWork = Layer.provideMerge(
+    BackgroundWork.layer,
+    AgentDaemon.transcriptReadersAt([root]),
+  )
   const context = yield* Layer.build(
-    Layer.provide(TranscriptStreams.layerWithoutDependencies, [
-      TranscriptLocator.layerAt([root]),
-      TranscriptTail.layer,
-      SubagentRoster.layer,
+    Layer.provide(TranscriptStreams.layer, [
+      backgroundWork,
       SkillCatalog.layerAt([root], []),
-      BackgroundWork.layer,
       liveness,
       MachineStateSync.layerTest(state),
     ]),

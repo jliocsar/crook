@@ -468,7 +468,5 @@ export class Herd extends Context.Service<
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {
-  static readonly layerWithoutDependencies = Layer.effect(this, make)
-
-  static readonly layer = this.layerWithoutDependencies.pipe(Layer.provide(HerdStore.layer))
+  static readonly layer = Layer.effect(this, make)
 }

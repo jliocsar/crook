@@ -6,12 +6,11 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import type * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { AuditLog } from '@crook/agent/AuditLog'
-import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
-import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrLink } from '@crook/domain/HerdrLink'
 import {
@@ -88,7 +87,7 @@ export const executorWith = (
   state: SubscriptionRef.SubscriptionRef<MachineState>,
   options: ExecutorOptions = {},
 ) =>
-  Layer.provideMerge(CommandExecutor.layer, [
+  Layer.provideMerge(AgentDaemon.commandExecution, [
     MachineStateSync.layerTest(state, options.invalidate),
     CreatedPanes.layerTest(options.created),
     options.audit ?? discardingAudit,
@@ -103,12 +102,15 @@ export const linkedAgentWith = (
   state: SubscriptionRef.SubscriptionRef<MachineState>,
   options: ExecutorOptions = {},
 ) =>
-  Layer.provideMerge(Layer.mergeAll(CommandExecutor.layer, TranscriptStreams.layerAt([])), [
-    MachineStateSync.layerTest(state, options.invalidate),
-    CreatedPanes.layerTest(options.created),
-    options.audit ?? discardingAudit,
-    herdr,
-    gitBranchesOnDisk,
-    BunFileSystem.layer,
-    Path.layer,
-  ])
+  Layer.provideMerge(
+    Layer.mergeAll(AgentDaemon.commandExecution, AgentDaemon.transcriptStreamingAt([])),
+    [
+      MachineStateSync.layerTest(state, options.invalidate),
+      CreatedPanes.layerTest(options.created),
+      options.audit ?? discardingAudit,
+      herdr,
+      gitBranchesOnDisk,
+      BunFileSystem.layer,
+      Path.layer,
+    ],
+  )

@@ -441,7 +441,5 @@ export class BackgroundWork extends Context.Service<
     ) => Stream.Stream<BackgroundSnapshot, BackgroundWatchError>
   }
 >()('@crook/claude/BackgroundWork') {
-  static readonly layer = Layer.effect(this, make).pipe(
-    Layer.provide([FileWatch.layer, TranscriptTail.layer, SubagentRoster.layer]),
-  )
+  static readonly layer = Layer.effect(this, make)
 }

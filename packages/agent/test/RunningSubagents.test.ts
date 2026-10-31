@@ -11,6 +11,7 @@ import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
+import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { type RunningCounts, RunningSubagents } from '@crook/agent/RunningSubagents'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 
@@ -67,7 +68,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem
         const { root, transcript } = yield* sessionWithRunningSubagent()
-        const context = yield* Layer.build(RunningSubagents.layerAt([root]))
+        const context = yield* Layer.build(
+          Layer.provide(RunningSubagents.layer, AgentDaemon.transcriptReadersAt([root])),
+        )
         const running = Context.get(context, RunningSubagents)
 
         yield* running.follow(HashSet.make(SESSION))

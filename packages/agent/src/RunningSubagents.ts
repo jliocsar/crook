@@ -80,16 +80,7 @@ export class RunningSubagents extends Context.Service<
     readonly follow: FollowSessions
   }
 >()('@crook/agent/RunningSubagents') {
-  static readonly layerWithoutDependencies = Layer.effect(this, make)
-
-  static readonly layerAt = (roots: readonly string[]) =>
-    this.layerWithoutDependencies.pipe(
-      Layer.provide([TranscriptLocator.layerAt(roots), SubagentRoster.layer]),
-    )
-
-  static readonly layer = this.layerWithoutDependencies.pipe(
-    Layer.provide([TranscriptLocator.layer, SubagentRoster.layer]),
-  )
+  static readonly layer = Layer.effect(this, make)
 
   static readonly fromRef = (
     counts: SubscriptionRef.SubscriptionRef<RunningCounts>,
