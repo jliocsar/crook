@@ -394,6 +394,13 @@ screen" on the Ask.
     shows Diff View, Write its content in a Code Block, Bash its command in a Code Block and
     then its output, Read its output highlighted for the file, and any other tool its input as
     JSON and then its output.
+  - **Background work** started in the thread (a Bash run in the background, or a Monitor) is
+    one 44px line instead of a tool card: the kind's icon, then "Started `bun run dev` · live
+    below" or "Watching CI on #212 · live below" while it runs, and what became of it once it
+    ends ("bun run dev · ran 1m 05s · stopped", "CI on #212 · 3 events · ran 4m 10s · done").
+    A state dot sits on the right. Running, it sits on `bg-card` with a border; ended, on
+    `bg-muted/40`; unconfirmed, dashed. Tapping it opens the job's sheet. A call the agent sent
+    no background work for keeps its tool card.
   - **Images Claude read** (a `Read` of a png) show as thumbnails on the tool card, visible
     without expanding it. Images you pasted show in your bubble.
   - **The plan** (TodoWrite) is a checklist titled "Plan" with "2/5 done" on the right. It
@@ -425,6 +432,44 @@ screen" on the Ask.
   - Before anything arrives the thread reads "Loading the conversation", then "No messages yet".
     A pane that isn't running Claude has no transcript: its chat reads "Not a Claude pane" and
     nothing else, with no dock.
+- **The background dock** sits between the thread and the dock, on `bg-background` with a
+  hairline above, while any subagent, background shell or Monitor of the session runs, and
+  for a moment after the last one ends. It reads "3 running" (or "All background work finished"),
+  the time since the first one started in mono on the right, and a chevron.
+  - **Chips** (Tint): one 28px capsule per job, 44px to hit, in a row that scrolls sideways and
+    fades at the edge that has more. The kind's icon (Bot, SquareTerminal, Activity), a short
+    label (the subagent's first word, the shell's command, the Monitor's first word; the whole
+    description or command when there are at most two chips), and its running time in mono.
+    The capsule is tinted by state: running `primary` at 7%, failed `destructive` with a
+    warning glyph, done `accent` with a check, stopped `muted` with a square, unconfirmed a
+    dashed outline with a dashed circle and "2h ago" instead of a time.
+  - Done and stopped chips leave 7s after they end, at 75% opacity until then. A failed chip
+    stays while the tray shows. The tray goes 14s after the last job ends.
+  - Under the chips, the latest event of all the work in mono 11px: "Audit ›
+    Grep("useLayoutEffect", src/)", a shell's last output line, a Monitor's last event, or
+    "Repro › failed: exit code 1" in `destructive`.
+  - Tapping the header opens the tray: one row per job, with the shell's last two output lines,
+    what a subagent is doing now ("bg" marks a background one, "Claude waits on it" a foreground
+    one that runs), or a Monitor's events as dots on a line. Unconfirmed work reads "bun run
+    storybook · can't confirm it's running" with "last seen 2h ago".
+  - Tapping a chip or a row opens the job: a subagent pushes its screen, a shell or Monitor
+    opens a sheet. A shell's sheet shows its last output lines, then "Claude": "Started it in
+    the background", "Read its output at 14:22", "Stopped it", and how it ended. A Monitor's
+    shows its events with their times and "watching" while it runs. Unconfirmed work says
+    "crook can't tell whether this is still running".
+  - **The summary row** takes over when the dock leaves, 14s after the last job ends: the
+    thread ends with "Background work finished", the episode's span in mono on the right, and
+    a line of dotted parts, "1 subagent done · 1 failed · dev stopped · CI done", a failure in
+    `destructive`. An episode is the run of work whose times overlap the last job's. Tapping it
+    opens the failed job, or the one that ended last. It sits below the conversation like
+    Working does, and goes when the user sends the next prompt, a prompt sent from the phone
+    is waiting, or new work starts. Unconfirmed work is left out of it and does not hold it
+    back. A chat opened long after its last work ended still ends with the summary, since
+    nothing came after it.
+  - **Unconfirmed** is crook's word for work nothing said ended though something says it
+    should have: a shell whose process no longer holds its output file, or a Monitor past its
+    timeout. Silence alone is not that signal, so a shell nobody can check, as on a Mac with no
+    `/proc`, runs until Claude says it ended, however quiet it is.
 - **The dock** sits at the bottom, on `bg-card`, above the home indicator: the Ask over the
   composer. When the keyboard opens, the dock rises above it from the visual viewport. The
   thread gives way first, then the Ask scrolls inside what is left, so neither the composer nor
@@ -515,6 +560,11 @@ Motion:
 - Under reduced motion a batch just appears: no stagger, fade, morph or slide. The history
   already there when you open the chat doesn't animate.
 - **The Ask** opens and closes as a height collapse on the `bounce: 0.2` spring.
+- **The background dock** opens and closes the same way. A new chip pops in from 0.85 on the
+  same spring and others slide aside; a chip that leaves fades out the same way. Its tint changes
+  on a 180ms colour transition. The event line slides in 8px from the right. A marker's text
+  swaps the way the status word does. Under reduced motion chips and the tray appear and go
+  at once, with no pop or slide.
 - **The status word** swaps the way it does on the herd.
 - **The viewer** fades in on `--motion` while the picture grows from 0.96.
 
@@ -525,7 +575,16 @@ Unmeasured knobs, picked in the prototype; settle them on the phone:
 - thumbnails are 96px tall on a tool card and 160px in a bubble;
 - double-tap zooms 2.5x within 300ms, and pinch stops at 4x;
 - swipe-down closes past 96px, or at 500px/s over the last 80ms once it has moved 24px;
-- the backdrop fades out over 320px of drag.
+- the backdrop fades out over 320px of drag;
+- a finished background chip stays 7s and the tray 14s after the last job ends, and at most
+  two chips get their long labels;
+- the agent rechecks a running shell's process every 5s (one check measured 0.32 ms of wall
+  time and 1.17 ms of CPU), and calls it gone only once its first miss is 5s old, so a shell
+  that exits normally isn't flagged in the moment before Claude's notice lands;
+- the agent sends a shell's last three output lines, the sheet shows all three and a tray row
+  two;
+- a Monitor's event line spans at least 20s, so the first events don't sit on top of each other;
+- the chip row fades over 28px at the edge it has scrolled past and 40px at the edge with more.
 
 Decided against:
 

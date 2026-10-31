@@ -2,6 +2,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
+import { BackgroundTask, SubagentActivity } from '@crook/domain/Background'
 import { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
 import { SkillListing } from '@crook/domain/Skill'
 import { Subagent } from '@crook/domain/Subagent'
@@ -45,6 +46,15 @@ export class SkillsChanged extends Schema.TaggedClass<SkillsChanged>()('SkillsCh
   skills: Schema.Array(SkillListing),
 }) {}
 
+export class BackgroundChanged extends Schema.TaggedClass<BackgroundChanged>()(
+  'BackgroundChanged',
+  {
+    session: ClaudeSessionId,
+    tasks: Schema.Array(BackgroundTask),
+    activity: Schema.Array(SubagentActivity),
+  },
+) {}
+
 export class TranscriptCaughtUp extends Schema.TaggedClass<TranscriptCaughtUp>()(
   'TranscriptCaughtUp',
   { session: ClaudeSessionId, offset: TranscriptOffset },
@@ -55,6 +65,7 @@ export const TranscriptEvent = Schema.Union([
   TranscriptChunk,
   SubagentsChanged,
   SkillsChanged,
+  BackgroundChanged,
   TranscriptCaughtUp,
 ])
 export type TranscriptEvent = typeof TranscriptEvent.Type
@@ -103,6 +114,7 @@ export const positionAfter = (
         Option.some(new TranscriptPosition({ session: chunk.session, offset: chunk.nextOffset })),
       SubagentsChanged: () => position,
       SkillsChanged: () => position,
+      BackgroundChanged: () => position,
       TranscriptCaughtUp: () => position,
     }),
   )

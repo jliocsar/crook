@@ -11,6 +11,12 @@ import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/Agent
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
+import {
+  BackgroundContext,
+  BackgroundDock,
+  useBackgroundWork,
+} from '@crook/web/chat/BackgroundDock'
+import type { BackgroundJob } from '@crook/web/chat/BackgroundModel'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
 import { useCatchUp } from '@crook/web/chat/CatchUpTrail'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
@@ -34,6 +40,7 @@ import {
   titleOf,
 } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
+import { summaryRows, useEpisodeSummary } from '@crook/web/chat/BackgroundSummary'
 import { failureRows, TranscriptEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { Composer } from '@crook/web/chat/Composer'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
@@ -44,6 +51,7 @@ import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import {
+  currentSessionOf,
   hasFailed,
   isCatchingUp,
   linesOf,
@@ -257,6 +265,22 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     },
     [navigate, machine, pane],
   )
+  const openSubagentJob = React.useCallback(
+    (job: BackgroundJob) => {
+      const session = currentSessionOf(lines)
+
+      if (Option.isSome(job.subagent) && Option.isSome(session)) {
+        void navigate({
+          to: '/m/$machine/p/$pane/sub/$session/$subagent',
+          params: { machine, pane, session: session.value, subagent: job.subagent.value },
+        })
+      }
+    },
+    [navigate, machine, pane, lines],
+  )
+  const backgroundWork = useBackgroundWork(view, items, openSubagentJob)
+  const backgroundContext = React.useMemo(() => Option.some(backgroundWork), [backgroundWork])
+  const episodeSummary = useEpisodeSummary(backgroundWork, lines)
   const environment = React.useMemo<ThreadEnvironment>(
     () => ({
       cwd,
@@ -286,6 +310,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         ? []
         : [
             ...catchUp.rows,
+            ...(commands.pendingPrompts.length === 0
+              ? summaryRows(episodeSummary, backgroundWork.open)
+              : []),
             ...pendingPromptRows(commands.pendingPrompts),
             ...(workingAt === undefined ? [] : [workingRow((now) => shortElapsed(now, workingAt))]),
             ...(watching
@@ -295,6 +322,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     [
       notClaude,
       catchUp.rows,
+      episodeSummary,
+      backgroundWork.open,
       commands.pendingPrompts,
       workingAt,
       watching,
@@ -339,15 +368,18 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           </>
         }
       />
-      <div className="min-h-0 flex-1">
-        <Thread
-          handle={thread}
-          rows={rows}
-          dimmed={dimmed}
-          empty={emptyThread(model, view)}
-          overlay={catchUp.overlay}
-        />
-      </div>
+      <BackgroundContext.Provider value={backgroundContext}>
+        <div className="min-h-0 flex-1">
+          <Thread
+            handle={thread}
+            rows={rows}
+            dimmed={dimmed}
+            empty={emptyThread(model, view)}
+            overlay={catchUp.overlay}
+          />
+        </div>
+      </BackgroundContext.Provider>
+      <BackgroundDock work={backgroundWork} />
       <ChatDock
         model={model}
         closedHere={closedHere}

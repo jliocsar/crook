@@ -24,6 +24,7 @@ import {
   PatchHunk,
   SubagentLaunch,
   SystemMessage,
+  TaskLaunch,
   TaskNotificationBlock,
   TextBlock,
   ThinkingBlock,
@@ -47,6 +48,8 @@ const TASK_TOOL_USE_ID_TAG = 'tool-use-id'
 const TASK_STATUS_TAG = 'status'
 const TASK_SUMMARY_TAG = 'summary'
 const TASK_RESULT_TAG = 'result'
+const TASK_EVENT_TAG = 'event'
+const TASK_OUTPUT_FILE_TAG = 'output-file'
 const TOOL_RESULT_KIND = 'tool_result'
 const COMMAND_NAME_TAG = 'command-name'
 const COMMAND_ARGS_TAG = 'command-args'
@@ -57,6 +60,14 @@ const ANSI_ESCAPE = String.fromCodePoint(0x1b)
 const ANSI_SEQUENCE = new RegExp(`${ANSI_ESCAPE}\\[[0-9;]*[A-Za-z]`, 'gu')
 const RECORD_OPENER = '{'.charCodeAt(0)
 const RECORD_STARTS = ['{"parentUuid"', '{"type"']
+
+const XML_ENTITIES: readonly (readonly [string, string])[] = [
+  ['&lt;', '<'],
+  ['&gt;', '>'],
+  ['&quot;', '"'],
+  ['&#39;', "'"],
+  ['&amp;', '&'],
+]
 
 const METADATA_ENTRY_TYPES = HashSet.make(
   'last-prompt',
@@ -239,6 +250,14 @@ const RawPatch = Schema.Struct({
 
 const RawLaunch = Schema.Struct({ agentId: SubagentId, status: Schema.String })
 
+const RawShellLaunch = Schema.Struct({ backgroundTaskId: Schema.String })
+
+const RawMonitorLaunch = Schema.Struct({
+  taskId: Schema.String,
+  timeoutMs: Schema.optionalKey(Schema.Int),
+  persistent: Schema.optionalKey(Schema.Boolean),
+})
+
 type RawUser = typeof RawUser.Type
 
 const decodeKind = Schema.decodeUnknownOption(Kind)
@@ -251,6 +270,8 @@ const decodeToolReference = Schema.decodeUnknownOption(RawToolReference)
 const decodeToolResult = Schema.decodeUnknownOption(RawToolResult)
 const decodePatch = Schema.decodeUnknownOption(RawPatch)
 const decodeLaunch = Schema.decodeUnknownOption(RawLaunch)
+const decodeShellLaunch = Schema.decodeUnknownOption(RawShellLaunch)
+const decodeMonitorLaunch = Schema.decodeUnknownOption(RawMonitorLaunch)
 const decodeCompactTrigger = Schema.decodeUnknownOption(CompactTrigger)
 const decodeEnvelope = Schema.decodeUnknownOption(Envelope)
 const decodeUser = Schema.decodeUnknownOption(RawUser)
@@ -267,7 +288,15 @@ const kindOf = (value: Schema.Json) =>
 const taggedText = (text: string, tag: string) =>
   Option.fromNullishOr(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'u').exec(text)?.[1])
 
-const withoutAnsi = (text: string) => text.replaceAll(ANSI_SEQUENCE, '')
+const unescapedXml = (text: string) =>
+  Arr.reduce(XML_ENTITIES, text, (unescaped, [entity, character]) =>
+    unescaped.replaceAll(entity, character),
+  )
+
+const taggedPlainText = (text: string, tag: string) =>
+  Option.map(taggedText(text, tag), unescapedXml)
+
+export const withoutAnsi = (text: string) => text.replaceAll(ANSI_SEQUENCE, '')
 
 const textBlock = (text: string) => new TextBlock({ text })
 
@@ -321,6 +350,25 @@ const launchOf = (result: Option.Option<Schema.Json>) =>
     Option.map((raw) => new SubagentLaunch({ subagent: raw.agentId, status: raw.status })),
   )
 
+const taskLaunchOf = (details: Option.Option<Schema.Json>) =>
+  pipe(
+    Option.flatMap(details, decodeShellLaunch),
+    Option.map((raw) => new TaskLaunch({ taskId: raw.backgroundTaskId, timeoutMs: Option.none() })),
+    Option.orElse(() =>
+      Option.map(
+        Option.flatMap(details, decodeMonitorLaunch),
+        (raw) =>
+          new TaskLaunch({
+            taskId: raw.taskId,
+            timeoutMs: Option.filter(
+              Option.fromUndefinedOr(raw.timeoutMs),
+              () => raw.persistent !== true,
+            ),
+          }),
+      ),
+    ),
+  )
+
 const toolResultBlock =
   (details: Option.Option<Schema.Json>) =>
   (raw: typeof RawToolResult.Type): UserBlock =>
@@ -330,6 +378,7 @@ const toolResultBlock =
       content: toolResultContent(Option.fromUndefinedOr(raw.content)),
       patch: patchOf(details),
       subagent: launchOf(details),
+      task: taskLaunchOf(details),
     })
 
 const userTextBlock = (text: string): UserBlock =>
@@ -354,8 +403,10 @@ const taskNotificationBlock = (text: string) =>
         taskId,
         toolUseId: taggedText(text, TASK_TOOL_USE_ID_TAG),
         status: taggedText(text, TASK_STATUS_TAG),
-        summary: taggedText(text, TASK_SUMMARY_TAG),
+        summary: taggedPlainText(text, TASK_SUMMARY_TAG),
         result: taggedText(text, TASK_RESULT_TAG),
+        event: taggedPlainText(text, TASK_EVENT_TAG),
+        outputFile: taggedText(text, TASK_OUTPUT_FILE_TAG),
       }),
   )
 

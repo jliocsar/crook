@@ -198,7 +198,9 @@ const make = Effect.gen(function* () {
     return settledRoster(roster, notices)
   })
 
-  return SubagentRoster.of({ watch, read })
+  const readMetas = (file: TranscriptFile) => readRoster(subagentsDirectoryOf(path, file))
+
+  return SubagentRoster.of({ watch, read, readMetas })
 })
 
 export class SubagentRoster extends Context.Service<
@@ -210,6 +212,9 @@ export class SubagentRoster extends Context.Service<
     readonly read: (
       file: TranscriptFile,
     ) => Effect.Effect<readonly Subagent[], SubagentsUnreadable | TailError>
+    readonly readMetas: (
+      file: TranscriptFile,
+    ) => Effect.Effect<readonly Subagent[], SubagentsUnreadable>
   }
 >()('@crook/claude/SubagentRoster') {
   static readonly layer = Layer.effect(this, make).pipe(

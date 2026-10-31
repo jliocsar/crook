@@ -11,6 +11,7 @@ import { ClaudeSessionId, SubagentId, TranscriptOffset } from '@crook/domain/Ids
 import { SkillListing } from '@crook/domain/Skill'
 import { Subagent } from '@crook/domain/Subagent'
 import {
+  BackgroundChanged,
   CHUNK_READ_LIMIT,
   SkillsChanged,
   SubagentsChanged,
@@ -94,10 +95,14 @@ const describe = (update: TranscriptUpdate) =>
       SubagentsChanged: (changed) =>
         `subagents ${changed.session} ${changed.subagents.map((subagent) => subagent.id).join(',')}`,
       SkillsChanged: (changed) => `skills ${changed.session} ${changed.skills.length}`,
+      BackgroundChanged: (changed) => `background ${changed.session} ${changed.tasks.length}`,
       TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.session} ${caughtUp.offset}`,
       TranscriptWatchFailed: (failed) => `failed ${failed.failure.message}`,
     }),
   )
+
+const backgroundOf = (session: ClaudeSessionId) =>
+  new BackgroundChanged({ session, tasks: [], activity: [] })
 
 const batchOf = (updates: readonly TranscriptUpdate[]) =>
   Arr.reduce(updates, EMPTY_BATCH, batchWith)
@@ -138,6 +143,23 @@ it('joins chunks that continue each other and keeps only the latest skills and r
     `caught up ${LEFT} 20`,
     `skills ${LEFT} 2`,
     `subagents ${LEFT} a1,a2`,
+  ])
+})
+
+it('keeps only the latest background work of each session', () => {
+  expect(
+    described([
+      backgroundOf(LEFT),
+      chunkIn(LEFT, 10, 20),
+      backgroundOf(LEFT),
+      new TranscriptOpened({ session: CLEARED }),
+      backgroundOf(CLEARED),
+    ]),
+  ).toEqual([
+    `chunk ${LEFT} 10-20 1`,
+    `background ${LEFT} 0`,
+    `opened ${CLEARED}`,
+    `background ${CLEARED} 0`,
   ])
 })
 

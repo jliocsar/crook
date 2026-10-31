@@ -6,10 +6,18 @@ const LABEL_RESOLUTION = Duration.seconds(1)
 
 export const useNow = (ticking = true): DateTime.Utc => {
   const [now, setNow] = React.useState(DateTime.nowUnsafe)
+  const wasTicking = React.useRef(ticking)
 
   React.useEffect(() => {
     if (!ticking) {
+      wasTicking.current = false
+
       return undefined
+    }
+
+    if (!wasTicking.current) {
+      wasTicking.current = true
+      setNow(DateTime.nowUnsafe())
     }
 
     const timer = window.setInterval(() => {

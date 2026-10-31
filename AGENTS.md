@@ -191,6 +191,11 @@ A data-last combinator stored in a variable before it meets its input — `const
 — infers `unknown` for the error, and `effecttsgo/any-unknown-in-error-context` reports every effect it
 touches. Apply it inline (measured).
 
+`Stream.zipLatestAll` emits nothing until every input has emitted once, so an input that waits
+for something to exist, such as a folder Claude has not made yet, silences the whole stream
+(measured: a watch of background work hung until it read the current state up front and emitted
+it).
+
 `Effect.filter` with an effectful predicate and a `concurrency` option returns what it keeps in
 the order the predicates finished, not in input order (read in `effect@4.0.5`'s source; a test
 saw a sorted list come back shuffled). Where order matters, `Effect.forEach` into `Option`s and
@@ -722,6 +727,27 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Scanning a whole transcript for notifications parses only the lines that carry the tag: a
   118 MB transcript of 24363 lines took 40 to 87 ms that way and 280 to 315 ms parsing every
   line (measured in Bun on the laptop).
+- Claude Code 2.1.312 names background work in the transcript like this (measured in local
+  transcripts and a probe session). A background Bash's tool result opens with `Command running
+  in background with ID: <id>. Output is being written to: <…>/tasks/<id>.output`, and its
+  `toolUseResult` carries `backgroundTaskId`; one moved there by its timeout opens with `Command
+  did not complete within its 120s timeout and was moved to the background (ID: <id>)`. A
+  Monitor's result opens with `Monitor started (task <id>, expires in …`, with `taskId`,
+  `timeoutMs` and `persistent` in `toolUseResult` (18 such results locally, none persistent). A
+  successful TaskStop answers `{"message":"Successfully stopped task: <id> (<command>)", …}`. A
+  shell started from a plugin's tool call has no Bash tool use in the transcript: only its result
+  text and its notice name it. Each Monitor event arrives as a `<task-notification>` carrying the
+  task id, a summary and an `<event>`, with no tool-use id and no status; the notice that ends it
+  carries a status like a shell's. Every launch text opens its tool result, so a match anywhere
+  else is a quote, such as a Read of a transcript.
+- A running background Bash is a child of the Claude process, found through
+  `/proc/<pid>/task/*/children`, and its standard output is the task's output file; a Monitor's
+  process holds no such file. One liveness check from the session's pid file to the open output
+  files took 0.32 ms of wall time and 1.17 ms of CPU (measured on the laptop). A kernel without
+  those `children` files cannot say which shells run, so their absence means unknown, not gone
+  (reasoned, not measured). The agent calls a shell gone only once its first miss is a full
+  recheck old, so a shell that exits normally is not flagged in the moment before Claude's
+  notice lands, however often its other work changes.
 - The agent counts the running subagents of every Claude pane all the time, not only while a chat
   is open: it follows each session's subagent roster, settled by its notices the same way the
   chat's roster is, and puts the count on the agent's row only when it changes, so a roster change

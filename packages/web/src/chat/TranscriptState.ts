@@ -1,3 +1,4 @@
+import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
@@ -9,6 +10,7 @@ import type { ClaudeSessionId } from '@crook/domain/Ids'
 import type { SkillListing } from '@crook/domain/Skill'
 import type { Subagent } from '@crook/domain/Subagent'
 import {
+  type BackgroundChanged,
   positionAfter,
   type TranscriptEvent,
   type TranscriptPosition,
@@ -27,23 +29,28 @@ export type TranscriptWatchFailure = WatchTranscriptRefused | HubCallDefected
 
 export type SessionRosters = HashMap.HashMap<ClaudeSessionId, readonly Subagent[]>
 
+export type SessionBackgrounds = HashMap.HashMap<ClaudeSessionId, BackgroundChanged>
+
 export const TranscriptLine = Data.taggedEnum<TranscriptLine>()
 
 export class TranscriptView extends Data.Class<{
   readonly position: Option.Option<TranscriptPosition>
   readonly lines: readonly TranscriptLine[]
   readonly rosters: SessionRosters
+  readonly backgrounds: SessionBackgrounds
   readonly skills: readonly SkillListing[]
   readonly catchingUp: boolean
   readonly failure: Option.Option<TranscriptWatchFailure>
 }> {}
 
 export const NO_ROSTERS: SessionRosters = HashMap.empty()
+export const NO_BACKGROUNDS: SessionBackgrounds = HashMap.empty()
 
 export const EMPTY_TRANSCRIPT = new TranscriptView({
   position: Option.none(),
   lines: [],
   rosters: NO_ROSTERS,
+  backgrounds: NO_BACKGROUNDS,
   skills: [],
   catchingUp: false,
   failure: Option.none(),
@@ -88,6 +95,7 @@ const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly Tran
       SubagentsChanged: () => [],
       SkillsChanged: () => [],
       TranscriptCaughtUp: () => [],
+      BackgroundChanged: () => [],
     }),
   )
 
@@ -99,7 +107,16 @@ const rostersAfter = (view: TranscriptView, event: TranscriptEvent): SessionRost
       SubagentsChanged: (changed) => HashMap.set(view.rosters, changed.session, changed.subagents),
       SkillsChanged: () => view.rosters,
       TranscriptCaughtUp: () => view.rosters,
+      BackgroundChanged: () => view.rosters,
     }),
+  )
+
+const backgroundsAfter = (view: TranscriptView, event: TranscriptEvent): SessionBackgrounds =>
+  Match.value(event).pipe(
+    Match.tag('BackgroundChanged', (changed) =>
+      HashMap.set(view.backgrounds, changed.session, changed),
+    ),
+    Match.orElse(() => view.backgrounds),
   )
 
 const skillsAfter = (view: TranscriptView, event: TranscriptEvent): readonly SkillListing[] =>
@@ -122,6 +139,7 @@ export const applyTranscriptEvent = (
     position: positionAfter(view.position, event),
     lines: [...view.lines, ...freshLines(view, event)],
     rosters: rostersAfter(view, event),
+    backgrounds: backgroundsAfter(view, event),
     skills: skillsAfter(view, event),
     catchingUp: catchingUpAfter(view, event),
     failure: Option.none(),
@@ -146,8 +164,15 @@ export const hasFailed = (view: Option.Option<TranscriptView>): boolean =>
 export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
 
+export const currentSessionOf = (
+  lines: readonly TranscriptLine[],
+): Option.Option<ClaudeSessionId> => Option.map(Arr.last(lines), (line) => line.session)
+
 export const rostersOf = (view: Option.Option<TranscriptView>): SessionRosters =>
   Option.match(view, { onNone: () => NO_ROSTERS, onSome: (found) => found.rosters })
+
+export const backgroundsOf = (view: Option.Option<TranscriptView>): SessionBackgrounds =>
+  Option.match(view, { onNone: () => NO_BACKGROUNDS, onSome: (found) => found.backgrounds })
 
 export const skillsOf = (view: Option.Option<TranscriptView>): readonly SkillListing[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.skills })

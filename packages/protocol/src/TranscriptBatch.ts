@@ -8,6 +8,7 @@ import * as TxRef from 'effect/TxRef'
 
 import type { ClaudeSessionId } from '@crook/domain/Ids'
 import {
+  type BackgroundChanged,
   CHUNK_READ_LIMIT,
   type SkillsChanged,
   type SubagentsChanged,
@@ -30,6 +31,7 @@ interface SessionUpdates {
   readonly caughtUp: Option.Option<TranscriptCaughtUp>
   readonly skills: Option.Option<SkillsChanged>
   readonly subagents: Option.Option<SubagentsChanged>
+  readonly background: Option.Option<BackgroundChanged>
 }
 
 export interface TranscriptBatch {
@@ -53,6 +55,7 @@ const updatesFor = (session: ClaudeSessionId): SessionUpdates => ({
   caughtUp: Option.none(),
   skills: Option.none(),
   subagents: Option.none(),
+  background: Option.none(),
 })
 
 const joined = (earlier: TranscriptChunk, later: TranscriptChunk) =>
@@ -121,6 +124,10 @@ const withEvent = (
         intoSession(sessions, changed.session, (updates) =>
           Struct.evolve(updates, { subagents: () => Option.some(changed) }),
         ),
+      BackgroundChanged: (changed) =>
+        intoSession(sessions, changed.session, (updates) =>
+          Struct.evolve(updates, { background: () => Option.some(changed) }),
+        ),
     }),
   )
 
@@ -142,6 +149,7 @@ const eventsOf = (updates: SessionUpdates): readonly TranscriptEvent[] => [
   ...Option.toArray(updates.caughtUp),
   ...Option.toArray(updates.skills),
   ...Option.toArray(updates.subagents),
+  ...Option.toArray(updates.background),
 ]
 
 export const updatesOf = (batch: TranscriptBatch): readonly TranscriptUpdate[] =>

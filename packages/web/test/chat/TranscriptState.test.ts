@@ -5,7 +5,8 @@ import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
 import { SkillListing } from '@crook/domain/Skill'
-import { SkillsChanged, SubagentsChanged } from '@crook/domain/Transcript'
+import { SubagentActivity } from '@crook/domain/Background'
+import { BackgroundChanged, SkillsChanged, SubagentsChanged } from '@crook/domain/Transcript'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
 import { MachineNotInHerd } from '@crook/protocol/ClientApi'
 import { LAPTOP } from '../HerdFixtures.ts'
@@ -25,6 +26,7 @@ import {
   NEXT_SESSION,
   opened,
   prompt,
+  REVIEWER,
   said,
   SESSION,
   subagent,
@@ -66,6 +68,28 @@ describe('applyTranscriptEvent', () => {
     expect(HashMap.get(view.rosters, SESSION)).toEqual(
       Option.some([subagent({ toolUseId: 'toolu_1' })]),
     )
+  })
+
+  it('keeps the latest background work of each session across /clear', () => {
+    const before = new BackgroundChanged({
+      session: SESSION,
+      tasks: [],
+      activity: [
+        new SubagentActivity({
+          subagent: REVIEWER,
+          tool: Option.some('Read'),
+          subject: Option.some('src/Herd.ts'),
+          text: Option.none(),
+          at: Option.none(),
+        }),
+      ],
+    })
+    const latest = new BackgroundChanged({ session: SESSION, tasks: [], activity: [] })
+    const view = fold([opened(), before, latest, opened(NEXT_SESSION)])
+
+    expect(HashMap.get(view.backgrounds, SESSION)).toEqual(Option.some(latest))
+    expect(HashMap.has(view.backgrounds, NEXT_SESSION)).toBe(false)
+    expect(offsets(view.lines)).toEqual(['cleared'])
   })
 
   it('keeps the skills of the pane across /clear until the agent lists new ones', () => {

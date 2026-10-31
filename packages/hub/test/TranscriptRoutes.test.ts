@@ -64,6 +64,7 @@ const describeEvent = (event: TranscriptEvent) =>
         `chunk ${chunk.session} ${chunk.offset}-${chunk.nextOffset} ${chunk.messages.length}`,
       SubagentsChanged: (changed) => `subagents ${changed.session} ${changed.subagents.length}`,
       SkillsChanged: (changed) => `skills ${changed.session}`,
+      BackgroundChanged: (changed) => `background ${changed.session}`,
       TranscriptCaughtUp: (caughtUp) => `caught up ${caughtUp.session} ${caughtUp.offset}`,
     }),
   )

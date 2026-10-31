@@ -1,21 +1,28 @@
 import * as Arr from 'effect/Array'
 import type { NonEmptyReadonlyArray } from 'effect/Array'
 import * as Cause from 'effect/Cause'
+import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Equivalence from 'effect/Equivalence'
 import * as FiberMap from 'effect/FiberMap'
 import { pipe } from 'effect/Function'
+import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
+import * as Schedule from 'effect/Schedule'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
+import * as Struct from 'effect/Struct'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
+import { type OpenTasks, TaskLiveness } from '@crook/agent/TaskLiveness'
+import { type BackgroundSnapshot, BackgroundWork, sameSnapshot } from '@crook/claude/BackgroundWork'
 import { MANAGED_SKILL_HOMES, SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SubagentRoster, type SubagentsUnreadable } from '@crook/claude/SubagentRoster'
 import {
@@ -25,8 +32,10 @@ import {
 } from '@crook/claude/TranscriptLocator'
 import { type TailError, TranscriptTail } from '@crook/claude/TranscriptTail'
 import type { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
+import { type BackgroundTask, ShellTask } from '@crook/domain/Background'
 import type { Subagent } from '@crook/domain/Subagent'
 import {
+  BackgroundChanged,
   SkillsChanged,
   SubagentsChanged,
   TRANSCRIPT_START,
@@ -56,6 +65,15 @@ import { makeTranscriptMailbox } from '@crook/protocol/TranscriptBatch'
 
 export type FollowError = LocateError | TailError | SubagentsUnreadable
 
+type FirstMisses = HashMap.HashMap<string, number>
+
+interface LiveSources {
+  readonly tail: TranscriptTail['Service']
+  readonly roster: SubagentRoster['Service']
+  readonly background: BackgroundWork['Service']
+  readonly liveness: TaskLiveness['Service']
+}
+
 interface PaneSession {
   readonly session: ClaudeSessionId
   readonly cwd: string
@@ -77,6 +95,8 @@ export class TranscriptDemandsEnded extends Schema.TaggedError<TranscriptDemands
     return 'The hub ended the stream of transcripts it wants from this machine, so open chats would stop updating. crook reconnects on its own; if this keeps happening, check the hub logs.'
   }
 }
+
+const LIVENESS_RECHECK = Duration.seconds(5)
 
 const sameSession = Option.makeEquivalence(
   Equivalence.mapInput(
@@ -155,6 +175,139 @@ const finalRoster = Effect.fn('TranscriptStreams.finalRoster')(function* (
   )
 })
 
+const backgroundOf =
+  (session: ClaudeSessionId) =>
+  (snapshot: BackgroundSnapshot): TranscriptEvent =>
+    new BackgroundChanged({ session, tasks: snapshot.tasks, activity: snapshot.activity })
+
+const hasBackgroundWork = (snapshot: BackgroundSnapshot) =>
+  snapshot.tasks.length > 0 || snapshot.activity.length > 0
+
+const hasRunningShell = (snapshot: BackgroundSnapshot): boolean =>
+  Arr.some(snapshot.tasks, (task) =>
+    Match.value(task).pipe(
+      Match.tag('ShellTask', (shell) => shell.status === 'running'),
+      Match.orElse(() => false),
+    ),
+  )
+
+const missedShells = (snapshot: BackgroundSnapshot, open: OpenTasks): HashSet.HashSet<string> =>
+  Option.match(open, {
+    onNone: () => HashSet.empty<string>(),
+    onSome: (tasks) =>
+      HashSet.fromIterable(
+        Arr.flatMap(snapshot.tasks, (task) =>
+          Match.value(task).pipe(
+            Match.tag('ShellTask', (shell) =>
+              shell.status === 'running' && !HashSet.has(tasks, shell.taskId) ? [shell.taskId] : [],
+            ),
+            Match.orElse(() => []),
+          ),
+        ),
+      ),
+  })
+
+const missesAfter = (
+  before: FirstMisses,
+  snapshot: BackgroundSnapshot,
+  open: OpenTasks,
+  checkedAt: number,
+): FirstMisses =>
+  HashMap.fromIterable(
+    pipe(
+      missedShells(snapshot, open),
+      Arr.fromIterable,
+      Arr.map((taskId) => [taskId, Option.getOrElse(HashMap.get(before, taskId), () => checkedAt)]),
+    ),
+  )
+
+const aliveAfter = (
+  open: OpenTasks,
+  misses: FirstMisses,
+  checkedAt: number,
+  taskId: string,
+): Option.Option<boolean> =>
+  Option.map(
+    open,
+    () =>
+      !Option.exists(
+        HashMap.get(misses, taskId),
+        (firstMissedAt) => checkedAt - firstMissedAt >= Duration.toMillis(LIVENESS_RECHECK),
+      ),
+  )
+
+const withLiveness = (
+  snapshot: BackgroundSnapshot,
+  open: OpenTasks,
+  misses: FirstMisses,
+  checkedAt: number,
+): BackgroundSnapshot => ({
+  ...snapshot,
+  tasks: Arr.map(snapshot.tasks, (task) =>
+    Match.value(task).pipe(
+      Match.tag('ShellTask', (shell): BackgroundTask =>
+        shell.status === 'running'
+          ? new ShellTask(
+              Struct.evolve(shell, {
+                alive: () => aliveAfter(open, misses, checkedAt, shell.taskId),
+              }),
+            )
+          : shell,
+      ),
+      Match.orElse((): BackgroundTask => task),
+    ),
+  ),
+})
+
+const backgroundWork = (
+  background: BackgroundWork['Service'],
+  liveness: TaskLiveness['Service'],
+  file: TranscriptFile,
+) =>
+  background.watch(file).pipe(
+    Stream.switchMap((snapshot) =>
+      hasRunningShell(snapshot)
+        ? Stream.as(Stream.fromSchedule(Schedule.spaced(LIVENESS_RECHECK)), snapshot).pipe(
+            Stream.prepend([snapshot]),
+          )
+        : Stream.succeed(snapshot),
+    ),
+    Stream.mapEffect((snapshot) =>
+      Effect.zipWith(
+        Clock.currentTimeMillis,
+        hasRunningShell(snapshot) ? liveness.openTasks(file) : Effect.succeedNone,
+        (checkedAt, open) => [snapshot, open, checkedAt] as const,
+      ),
+    ),
+    Stream.mapAccum(
+      (): FirstMisses => HashMap.empty(),
+      (before, [snapshot, open, checkedAt]) => {
+        const misses = missesAfter(before, snapshot, open, checkedAt)
+
+        return [misses, [withLiveness(snapshot, open, misses, checkedAt)]] as const
+      },
+    ),
+    Stream.changesWith(sameSnapshot),
+    Stream.dropWhile((snapshot) => !hasBackgroundWork(snapshot)),
+    Stream.map(backgroundOf(file.session)),
+    Stream.tapError((error) =>
+      Effect.logWarning(
+        `Stopped following the background work of ${file.session}: ${error.message}`,
+      ),
+    ),
+    Stream.ignore,
+  )
+
+const liveEvents = (sources: LiveSources, file: TranscriptFile, offset: TranscriptOffset) =>
+  Stream.mergeAll(
+    [
+      sources.tail.follow(file, offset),
+      Stream.map(sources.roster.watch(file), rosterOf(file.session)),
+      backgroundWork(sources.background, sources.liveness, file),
+    ],
+    { concurrency: 'unbounded' },
+  )
+
 const opened = (session: ClaudeSessionId) =>
   Stream.succeed<TranscriptEvent>(new TranscriptOpened({ session }))
 
@@ -200,6 +353,9 @@ const make = Effect.gen(function* () {
   const tail = yield* TranscriptTail
   const roster = yield* SubagentRoster
   const catalog = yield* SkillCatalog
+  const background = yield* BackgroundWork
+  const liveness = yield* TaskLiveness
+  const sources: LiveSources = { tail, roster, background, liveness }
 
   const fromLineNearEnd = (
     file: TranscriptFile,
@@ -226,16 +382,13 @@ const make = Effect.gen(function* () {
       }),
     )
 
-  const live = (file: TranscriptFile, offset: TranscriptOffset) =>
-    Stream.merge(tail.follow(file, offset), Stream.map(roster.watch(file), rosterOf(file.session)))
-
   const openSession = (
     { session, cwd }: PaneSession,
     offset: TranscriptOffset,
     tailBytes: Option.Option<TranscriptTailBytes>,
   ) => {
     const following = (file: TranscriptFile) =>
-      fromLineNearEnd(file, offset, tailBytes, (from) => live(file, from))
+      fromLineNearEnd(file, offset, tailBytes, (from) => liveEvents(sources, file, from))
 
     return Stream.concat(
       opened(session),
@@ -427,6 +580,8 @@ export class TranscriptStreams extends Context.Service<
         TranscriptTail.layer,
         SubagentRoster.layer,
         SkillCatalog.layerAt(roots, MANAGED_SKILL_HOMES),
+        BackgroundWork.layer,
+        TaskLiveness.layer,
       ]),
     )
 
@@ -436,6 +591,8 @@ export class TranscriptStreams extends Context.Service<
       TranscriptTail.layer,
       SubagentRoster.layer,
       SkillCatalog.layer,
+      BackgroundWork.layer,
+      TaskLiveness.layer,
     ]),
   )
 }
