@@ -283,10 +283,7 @@ const make = Effect.gen(function* () {
   )
 
   const scope = yield* Effect.scope
-  const invalidate = refresh.pipe(
-    Effect.matchEffect({ onFailure: logHerdrFailure, onSuccess: () => Effect.void }),
-    Effect.forkIn(scope),
-  )
+  const invalidate = refresh.pipe(Effect.catch(logHerdrFailure), Effect.forkIn(scope))
 
   yield* asks.changes.pipe(
     Stream.runForEach(() => invalidate),
