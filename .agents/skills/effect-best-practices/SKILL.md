@@ -53,10 +53,7 @@ export class UserService extends Context.Service<UserService>()("app/UserService
 
     const findById = Effect.fn("UserService.findById")(function*(id: UserId) {
       const user = yield* repo.findById(id)
-      return yield* Option.match(user, {
-        onNone: () => new UserNotFound({ userId: id, message: "not found" }),
-        onSome: Effect.succeed
-      })
+      return yield* Effect.fromOption(user, () => new UserNotFound({ userId: id, message: "not found" }))
     })
 
     return UserService.of({ findById })
