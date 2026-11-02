@@ -70,7 +70,10 @@
       }
     ],
 
-    "promise/prefer-await-to-then": "error",
+    // Off until oxc stops treating a namespace import as a possible Promise: it reports every
+    // `Effect.catch` and `Stream.catch` that isn't under a `yield` or `await`. `effect-native`
+    // keeps Promises out of Effect code, so there's no real chain for it to catch.
+    "promise/prefer-await-to-then": "off",
 
     "id-length": ["error", { "min": 2, "exceptions": ["i", "j"], "properties": "never" }],
 
