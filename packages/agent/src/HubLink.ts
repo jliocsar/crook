@@ -100,8 +100,10 @@ const make = (connect: HubConnect, hello: Hello) =>
         Effect.flatMap((launch) =>
           Fiber.join(launch).pipe(
             Effect.flatMap((result) => client.CompleteCommand({ id: routed.id, result })),
-            Effect.tapError((error) => Effect.logWarning(error.message)),
-            Effect.ignore,
+            Effect.matchEffect({
+              onFailure: (error) => Effect.logWarning(error.message),
+              onSuccess: () => Effect.void,
+            }),
             Effect.forkScoped,
           ),
         ),

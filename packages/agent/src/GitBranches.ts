@@ -67,7 +67,7 @@ const make = Effect.gen(function* () {
 
   const ifPresent = <Success>(target: string, read: Effect.Effect<Success, PlatformError>) =>
     read.pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeedNone),
       Effect.mapError((cause) => new GitMetadataUnreadable({ path: target, cause })),
     )
@@ -93,7 +93,7 @@ const make = Effect.gen(function* () {
           info: FileSystem.File.Info,
         ): Effect.Effect<Option.Option<string>, GitMetadataUnreadable> =>
           info.type === 'Directory'
-            ? Effect.succeed(Option.some(entry))
+            ? Effect.succeedSome(entry)
             : pointedGitDirectory(directory, entry),
       ),
       Effect.map(Option.map(foundIn)),

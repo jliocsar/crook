@@ -5,6 +5,7 @@
   // require. Extends are applied in order and rules below take precedence.
   "extends": [
     "./node_modules/@effect/tsgo/oxlint-presets/recommended.json",
+    "./node_modules/@effect/tsgo/oxlint-presets/effect-native.json",
     "./node_modules/@jliocsar/begone-slop/preset.json"
   ],
 
@@ -31,6 +32,29 @@
   "jsPlugins": ["@jliocsar/begone-slop"],
 
   "rules": {
+    // Their quickfixes write `Effect.asVoid` and a log-less `Effect.ignore`, which begone-slop rejects.
+    "effecttsgo/effect-map-void": "off",
+    "effecttsgo/catch-to-ignore": "off",
+    // Native string, array and record methods read fine; `effect/String`, `effect/Array` and
+    // `effect/Record` are for what native lacks, not a rewrite of what it has.
+    "effecttsgo/prefer-effect-string": "off",
+    "effecttsgo/prefer-effect-array": "off",
+    "effecttsgo/prefer-effect-record": "off",
+    // `JSON.stringify` on plain data outside an Effect can't fail; inside one, `global-json-in-effect`
+    // still asks for a Schema codec.
+    "effecttsgo/global-json": "off",
+    // crook is built on the modules Effect tags unstable: the platform services, SQL, RPC, atoms and
+    // `@effect/vitest`. A rule that flags every use of them can't single out a risky one.
+    "effecttsgo/unstable-api-usage": "off",
+    // A sync encode of a value its type already checked can't fail on shape, and a sync decode that
+    // throws in a test fails the test, which is what a test wants.
+    "effecttsgo/schema-sync": "off",
+    // A schema's derived type shares the schema's name, which this rule reads as a redeclaration.
+    // The compiler still rejects a real one.
+    "no-redeclare": "off",
+    // `Data.TaggedEnum` spells a variant with no fields as `Record<never, never>`, which is `{}`.
+    "typescript/no-generated-empty-object-type": "off",
+
     // Leaf imports only. A barrel is the bare root, `effect/testing`, or a single
     // lowercase segment under `effect/` — every leaf module is PascalCase.
     "no-restricted-imports": [

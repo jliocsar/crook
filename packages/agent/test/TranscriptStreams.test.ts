@@ -582,7 +582,9 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
           yield* fileSystem.chmod(subagentsPath(root, FIRST_SESSION), 0o000)
           yield* Effect.addFinalizer(() =>
-            Effect.ignore(fileSystem.chmod(subagentsPath(root, FIRST_SESSION), 0o700)),
+            Effect.ignore(fileSystem.chmod(subagentsPath(root, FIRST_SESSION), 0o700), {
+              log: 'Debug',
+            }),
           )
 
           const state = yield* SubscriptionRef.make(stateOn(Option.some(CLEARED_SESSION)))

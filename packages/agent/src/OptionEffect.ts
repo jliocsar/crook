@@ -20,7 +20,4 @@ export const orElseSome =
   <SelfFailure, SelfRequirements>(
     self: Effect.Effect<Option.Option<Value>, SelfFailure, SelfRequirements>,
   ): Effect.Effect<Option.Option<Value>, SelfFailure | Failure, SelfRequirements | Requirements> =>
-    Effect.flatMap(
-      self,
-      Option.match({ onNone: fallback, onSome: (value) => Effect.succeed(Option.some(value)) }),
-    )
+    Effect.flatMap(self, Option.match({ onNone: fallback, onSome: Effect.succeedSome }))

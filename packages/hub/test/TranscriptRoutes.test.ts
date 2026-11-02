@@ -135,7 +135,7 @@ const watchOnPhone = Effect.fn('watchOnPhone')(function* (
     })
     .pipe(
       Stream.runForEach((event) => Queue.offer(events, describeEvent(event))),
-      Effect.ignore,
+      Effect.ignore({ log: 'Debug' }),
       Effect.forkScoped,
     )
 

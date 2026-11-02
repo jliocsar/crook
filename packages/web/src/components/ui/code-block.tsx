@@ -2,6 +2,7 @@ import { cn } from 'cn'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import { Check, ChevronDown, Clipboard } from 'lucide-react'
 import * as React from 'react'
 
@@ -37,6 +38,15 @@ const COPY_ANNOUNCEMENT = {
   error: 'Code could not be copied.',
 } satisfies Record<CopyState, string>
 
+class ClipboardWriteFailed extends Schema.TaggedError<ClipboardWriteFailed>()(
+  'ClipboardWriteFailed',
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return 'The browser refused to write the code to the clipboard. Check that the page has clipboard permission.'
+  }
+}
+
 const moreLinesLabel = (hidden: number): string =>
   hidden === 1 ? 'Show 1 more line' : `Show ${hidden} more lines`
 
@@ -58,7 +68,10 @@ const useCopy = (code: string) => {
     cancel()
     pending.current = Option.some(
       Effect.runCallback(
-        Effect.tryPromise(() => navigator.clipboard.writeText(code)).pipe(
+        Effect.tryPromise({
+          try: () => navigator.clipboard.writeText(code),
+          catch: (cause) => new ClipboardWriteFailed({ cause }),
+        }).pipe(
           Effect.match({
             onFailure: (): CopyState => 'error',
             onSuccess: (): CopyState => 'copied',

@@ -99,7 +99,9 @@ const attachAs = Effect.fn('attachAs')(function* (
 ) {
   const agent = yield* connect(AgentLink, AGENT_PATH, agentToken(machine), pingInterval)
 
-  yield* agent.Attach({ hello }).pipe(Stream.runDrain, Effect.ignore, Effect.forkScoped)
+  yield* agent
+    .Attach({ hello })
+    .pipe(Stream.runDrain, Effect.ignore({ log: 'Debug' }), Effect.forkScoped)
   yield* agent.PublishState({ state: stateOf(machine, 1) })
 
   return agent
@@ -125,7 +127,7 @@ const answeringAgent = Effect.fn('answeringAgent')(function* (
 
   yield* agent.Attach({ hello }).pipe(
     Stream.runForEach((routed) => agent.CompleteCommand({ id: routed.id, result: answer(routed) })),
-    Effect.ignore,
+    Effect.ignore({ log: 'Debug' }),
     Effect.forkScoped,
   )
   yield* agent.PublishState({ state: stateOf(machine, 1) })

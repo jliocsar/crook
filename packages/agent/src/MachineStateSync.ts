@@ -284,8 +284,7 @@ const make = Effect.gen(function* () {
 
   const scope = yield* Effect.scope
   const invalidate = refresh.pipe(
-    Effect.tapError(logHerdrFailure),
-    Effect.ignore,
+    Effect.matchEffect({ onFailure: logHerdrFailure, onSuccess: () => Effect.void }),
     Effect.forkIn(scope),
   )
 

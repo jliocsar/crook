@@ -272,7 +272,7 @@ const makeFiles = Effect.gen(function* () {
   const readOptional = (file: string) =>
     warned(
       fileSystem.readFileString(file).pipe(
-        Effect.map(Option.some),
+        Effect.asSome,
         Effect.catchReason('PlatformError', 'NotFound', () =>
           Effect.succeed(Option.none<string>()),
         ),

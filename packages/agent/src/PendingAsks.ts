@@ -55,7 +55,7 @@ const make = Effect.gen(function* () {
 
   const screenOf = Effect.fn('PendingAsks.screenOf')(function* (info: AgentInfo) {
     return yield* screens.read(info.pane_id).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catch((error: HerdrRequestError) =>
         Effect.as(Effect.logWarning(error.message), Option.none<PaneScreen>()),
       ),
@@ -168,7 +168,7 @@ const make = Effect.gen(function* () {
 
   const askOf = (info: AgentInfo, session: Option.Option<ClaudeSessionId>, mark: number) =>
     info.agent_status === 'blocked'
-      ? Effect.map(blockedAsk(info, session), Option.some)
+      ? Effect.asSome(blockedAsk(info, session))
       : settle(info, session, mark)
 
   const retain = (sessions: readonly ClaudeSessionId[], mark: number) =>

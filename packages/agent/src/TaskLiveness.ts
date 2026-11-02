@@ -113,7 +113,7 @@ const make = (procRoot: string) =>
             childrenOf(pid),
             Option.match({
               onNone: () => Effect.succeedNone,
-              onSome: (children) => Effect.map(outputsIn(children), Option.some),
+              onSome: (children) => Effect.asSome(outputsIn(children)),
             }),
           ),
       })

@@ -163,7 +163,7 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
 
       yield* transcripts
         .watch(LAPTOP, paneSource, Option.none(), tail)
-        .pipe(Stream.runDrain, Effect.ignore, Effect.forkScoped)
+        .pipe(Stream.runDrain, Effect.ignore({ log: 'Debug' }), Effect.forkScoped)
       yield* watchIds(transcripts, LAPTOP, 1)
       const demand = yield* transcripts.demands(LAPTOP).pipe(Stream.runHead)
 
@@ -277,7 +277,7 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
             Deferred.await(acknowledged),
           ),
         ),
-        Effect.ignore,
+        Effect.ignore({ log: 'Debug' }),
         Effect.forkScoped,
       )
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
@@ -445,7 +445,7 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
             Deferred.await(acknowledged),
           ),
         ),
-        Effect.ignore,
+        Effect.ignore({ log: 'Debug' }),
         Effect.forkScoped,
       )
       const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))

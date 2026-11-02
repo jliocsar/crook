@@ -175,7 +175,7 @@ const serveScript =
       Stream.pipeThroughChannel(Socket.toChannelString(socket)),
       Stream.splitLines,
       Stream.runForEach((line) => Queue.offer(received, line)),
-      Effect.ignore,
+      Effect.ignore({ log: 'Debug' }),
     )
 
 const fakeHerdr = Effect.fn('fakeHerdr')(function* (scripts: readonly ConnectionScript[]) {
@@ -223,7 +223,7 @@ const heldReply = Effect.fn('heldReply')(function* (reply: string) {
         Stream.splitLines,
         Stream.runForEach((line) => Queue.offer(received, line)),
         Effect.andThen(Deferred.succeed(clientHungUp, undefined)),
-        Effect.ignore,
+        Effect.ignore({ log: 'Debug' }),
       ),
     )
     .pipe(Effect.forkScoped)

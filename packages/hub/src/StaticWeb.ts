@@ -95,10 +95,7 @@ export const resolveWebRoot = Effect.fn('StaticWeb.resolveWebRoot')(function* (b
         Option.map((embedding) => path.join(embedding.directory, WEB_BUILD_DIRECTORY)),
       ),
     ),
-    Option.match({
-      onNone: () => Effect.fail(new WebRootUnset()),
-      onSome: Effect.succeed,
-    }),
+    (configuredRoot) => Effect.fromOption(configuredRoot, () => new WebRootUnset()),
   )
 
   return yield* fileSystem.exists(path.join(root, INDEX_FILE)).pipe(

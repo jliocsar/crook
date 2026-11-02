@@ -410,10 +410,8 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
       const screen = yield* spikeScreen('80-ask-blocked')
       const ask = questionAsk(screen, false)
       const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
-      const refused = yield* Effect.all(
-        ['Purple', 'Type something.'].map((label) =>
-          executor.execute(ACTION, answer(ask, new Choose({ answer: label }))).pipe(Effect.flip),
-        ),
+      const refused = yield* Effect.forEach(['Purple', 'Type something.'], (label) =>
+        executor.execute(ACTION, answer(ask, new Choose({ answer: label }))).pipe(Effect.flip),
       )
 
       expect(refused).toEqual([

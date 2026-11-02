@@ -110,9 +110,7 @@ const takeWhere = (
   snapshots: Queue.Queue<BackgroundSnapshot>,
   wanted: (snapshot: BackgroundSnapshot) => boolean,
 ): Effect.Effect<BackgroundSnapshot> =>
-  Effect.flatMap(Queue.take(snapshots), (snapshot) =>
-    wanted(snapshot) ? Effect.succeed(snapshot) : takeWhere(snapshots, wanted),
-  )
+  Effect.filterOrElse(Queue.take(snapshots), wanted, () => takeWhere(snapshots, wanted))
 
 layer(services, { excludeTestServices: true })('BackgroundWork', (live) => {
   live.effect('follows the end of a background shell output until it ends', () =>

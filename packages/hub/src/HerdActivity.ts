@@ -127,7 +127,8 @@ const make = Effect.gen(function* () {
   const awaitWake = (atMost: Option.Option<Duration.Duration>) =>
     Option.match(atMost, {
       onNone: () => Queue.take(wake),
-      onSome: (duration) => Effect.raceFirst(Effect.sleep(duration), Queue.take(wake)),
+      onSome: (duration) =>
+        Effect.timeoutOrElse(Queue.take(wake), { duration, orElse: () => Effect.void }),
     })
 
   const take = (

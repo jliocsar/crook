@@ -65,7 +65,7 @@ const make = (procRoot: string) =>
 
     const readFile = (path: string) =>
       fileSystem.readFileString(path).pipe(
-        Effect.map(Option.some),
+        Effect.asSome,
         Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeedNone),
         Effect.mapError((cause) => new ClaudeSessionFileUnreadable({ path, cause })),
       )
@@ -74,7 +74,7 @@ const make = (procRoot: string) =>
       readFile(path).pipe(
         flatMapSome((content: string) =>
           Schema.decodeEffect(SessionFile)(content).pipe(
-            Effect.map(Option.some),
+            Effect.asSome,
             Effect.mapError((cause) => new ClaudeSessionFileUnreadable({ path, cause })),
           ),
         ),
