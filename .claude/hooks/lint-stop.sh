@@ -35,6 +35,7 @@ pairs=$(sort -u "$queue" | while IFS= read -r f; do
   if [ ! -f "$f" ]; then continue; fi
   dir=$(cd "$(dirname "$f")" 2>/dev/null && pwd -P) || continue
   case "$dir/" in "$project"/*) ;; *) continue ;; esac
+  if git -C "$dir" check-ignore -q "$dir/$(basename "$f")" 2>/dev/null; then continue; fi
   root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || root=$project
   case "$root/" in "$project"/*) ;; *) root=$project ;; esac
   printf '%s\t%s/%s\n' "$root" "$dir" "$(basename "$f")"
