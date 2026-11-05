@@ -9,8 +9,11 @@ import {
   SCREEN_SELECTOR,
   STAGE_SELECTOR,
   STATE_ATTRIBUTE,
+  THREAD_CONTENT_SELECTOR,
+  THREAD_VIEWPORT_SELECTOR,
 } from '@crook/frames/Marks'
 import type { MarkDefinition } from '@crook/frames/Marks'
+import { bandsOf } from '@crook/frames/ThreadBands'
 
 interface SeenElement {
   readonly box: { x: number; y: number; width: number; height: number }
@@ -187,6 +190,30 @@ const showsContent = (stage: Element, covers: readonly Element[]): boolean => {
   return false
 }
 
+const readThread = (covers: readonly Element[]) => {
+  for (const viewport of document.querySelectorAll(THREAD_VIEWPORT_SELECTOR)) {
+    const content = viewport.querySelector(THREAD_CONTENT_SELECTOR)
+
+    if (content !== null && seenElement(viewport, covers) !== undefined) {
+      const viewportBox = viewport.getBoundingClientRect()
+      const contentBox = content.getBoundingClientRect()
+      const rows = Array.from(viewport.querySelectorAll(ROW_SELECTOR), (row) =>
+        row.getBoundingClientRect(),
+      )
+      const bands = bandsOf(viewportBox, contentBox, rows)
+
+      return {
+        lift: round(contentBox.top - viewportBox.top + viewport.scrollTop),
+        top: round(bands.top),
+        middle: round(bands.middle),
+        bottom: round(bands.bottom),
+      }
+    }
+  }
+
+  return undefined
+}
+
 const isLayoutShift = (entry: PerformanceEntry): entry is LayoutShift =>
   entry.entryType === 'layout-shift'
 
@@ -267,6 +294,7 @@ const install = (): void => {
       mounted,
       blank: mounted && !hasContentMark && !showsContent(stage, covers),
       rows: mounted ? document.querySelectorAll(ROW_SELECTOR).length : 0,
+      thread: mounted ? readThread(covers) : undefined,
       marks: Object.fromEntries(readings),
       states: mounted ? readStates() : {},
       added,

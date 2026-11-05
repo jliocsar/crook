@@ -48,7 +48,7 @@ import {
   PANE,
   TEAM,
 } from '../Fixtures.ts'
-import { manyLinesChunk } from '../ManyLines.ts'
+import { MANY_LINES_END, manyLinesChunk, MANY_TURNS_END, manyTurnsChunk } from '../ManyLines.ts'
 import { clicks, element, pause, seesSelector, seesText, types, until } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 import { BEFORE_FIRST_VALUE, browserStory, linkStory, step } from '../Story.tsx'
@@ -342,6 +342,46 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
           manyLinesChunk(GAP_END),
           caughtUp(GAP_END + 1200),
         ]),
+      ),
+    ],
+  }),
+  linkStory({
+    slug: 'long-catch-up',
+    title: 'A catch-up of short rows longer than the screen, with no hole',
+    shows: { text: CHAT_TITLE },
+    ends: {
+      all: [{ selector: '[data-following]' }, { absent: 'Catching up' }, { text: 'Line 119' }],
+    },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, CONVERSATION),
+    settle: reopenFromTheCard,
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(900, 'What was missed lands, many short rows of it', ({ link }) =>
+        feed(link, [manyLinesChunk(50), caughtUp(50 + MANY_LINES_END)]),
+      ),
+    ],
+  }),
+  linkStory({
+    slug: 'long-catch-up-turns',
+    title: 'A catch-up of whole turns longer than the screen, with no hole',
+    shows: { text: CHAT_TITLE },
+    ends: {
+      all: [{ selector: '[data-following]' }, { absent: 'Catching up' }, { text: 'Answer 15' }],
+    },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, CONVERSATION),
+    settle: reopenFromTheCard,
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(900, 'What was missed lands, many turns of it', ({ link }) =>
+        feed(link, [manyTurnsChunk(50), caughtUp(50 + MANY_TURNS_END)]),
       ),
     ],
   }),

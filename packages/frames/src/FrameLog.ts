@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 export const STARVED_P90_FRAME_MS = 30
+export const EMPTY_BAND_PIXELS = 20
 
 export const Box = Schema.Struct({
   x: Schema.Finite,
@@ -17,6 +18,17 @@ export type Box = typeof Box.Type
 export const MarkReading = Schema.Struct({ ...Box.fields, opacity: Schema.Finite })
 export type MarkReading = typeof MarkReading.Type
 
+export const ThreadReading = Schema.Struct({
+  lift: Schema.Finite,
+  top: Schema.Finite,
+  middle: Schema.Finite,
+  bottom: Schema.Finite,
+})
+export type ThreadReading = typeof ThreadReading.Type
+
+export const BandPlace = Schema.Literals(['top', 'middle', 'bottom'])
+export type BandPlace = typeof BandPlace.Type
+
 export const RecordedFrame = Schema.Struct({
   frame: Schema.Int,
   at: Schema.Finite,
@@ -25,6 +37,7 @@ export const RecordedFrame = Schema.Struct({
   mounted: Schema.Boolean,
   blank: Schema.Boolean,
   rows: Schema.Int,
+  thread: Schema.optional(ThreadReading),
   marks: Schema.Record(Schema.String, MarkReading),
   states: Schema.Record(Schema.String, Schema.String),
   added: Schema.Array(Schema.String),
@@ -70,6 +83,11 @@ export const statesOf = (frame: RecordedFrame): string =>
 
 export const shows = (frame: RecordedFrame, mark: string): boolean =>
   frame.marks[mark] !== undefined
+
+export const bandAt = (frame: RecordedFrame, place: BandPlace): number => frame.thread?.[place] ?? 0
+
+export const showsEmptyBand = (frame: RecordedFrame, place: BandPlace): boolean =>
+  bandAt(frame, place) > EMPTY_BAND_PIXELS
 
 export const p90FrameMs = (frames: readonly RecordedFrame[]): number => {
   const mounted = frames.filter((frame) => frame.mounted)
