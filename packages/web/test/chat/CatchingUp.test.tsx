@@ -15,7 +15,7 @@ import { Prompt } from '@crook/domain/Command'
 import { PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import { omittedBetween, omittedUpTo, PaneTranscript } from '@crook/domain/Transcript'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
-import { SYNC_NOTICE_DELAY } from '@crook/web/rpc/HubLink'
+import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
 import { click, eventually, findByRole, present } from '../Dom.ts'
@@ -32,7 +32,7 @@ const VIEWPORT_HEIGHT = 812
 const source = new PaneTranscript({ pane: PANE })
 
 const OLDER_AGENT = '0.0.0'
-const NOTICE_WAIT_MS = Duration.toMillis(SYNC_NOTICE_DELAY) + 200
+const NOTICE_WAIT_MS = Duration.toMillis(NOTICE_DELAY) + 200
 
 const laptopOn = (connection: 'online' | 'offline', agentVersion: string) =>
   liveWith(

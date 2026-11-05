@@ -7,7 +7,7 @@ import { RunDot } from '@crook/web/components/ui/subagent-tree'
 import { StatusDot } from '@crook/web/components/StatusDot'
 import { STATUS_WORD } from '@crook/web/components/StatusWord'
 import { Swap } from '@crook/web/components/Swap'
-import { Spinner } from '@crook/web/components/ui/spinner'
+import { SpinnerGlyph } from '@crook/web/components/ui/spinner'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { translate, useTransformString } from '@crook/web/motion/TransformString'
 
@@ -96,7 +96,7 @@ export function CatchingUpPill({ shown }: { shown: boolean }) {
             className={cn(HEADER_PILL, 'text-muted-foreground')}
             {...pillMotion}
           >
-            <Spinner alreadyWaited size={PILL_SPINNER_SIZE} />
+            <SpinnerGlyph size={PILL_SPINNER_SIZE} />
             {CATCHING_UP}
           </motion.span>
         ) : null}

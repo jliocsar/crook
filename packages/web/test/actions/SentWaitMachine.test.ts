@@ -27,6 +27,7 @@ import { makeFakeHubLink } from '../HubFakes.ts'
 
 const AT = 1000
 const LATER = 2000
+const LONG_AGO = 0
 const BOUND_MS = 40
 const SETTLE_MS = 120
 const RECEIPT = 'receipt'
@@ -100,11 +101,15 @@ describe('a bounded progress atom', () => {
     )
   })
 
-  const driven = (shown: Atom.Atom<boolean>, result = Atom.make(AsyncResult.success(RECEIPT))) =>
+  const driven = (
+    shown: Atom.Atom<boolean>,
+    result = Atom.make(AsyncResult.success(RECEIPT)),
+    bound = Duration.millis(BOUND_MS),
+  ) =>
     boundedProgressAtom({
       result,
       progress: (get) => progressOf(get(result), () => get(shown)),
-      bound: Effect.succeed(Duration.millis(BOUND_MS)),
+      bound: Effect.succeed(bound),
     })
 
   it.live('holds Sent until its bound, and turns Done when the herd shows it late', () =>
@@ -131,6 +136,33 @@ describe('a bounded progress atom', () => {
         registry.set(shown, true)
 
         expect(seen.at(-1)).toEqual(ActionProgress.Done({ receipt: RECEIPT }))
+
+        unsubscribe()
+      }),
+    ),
+  )
+
+  it.live('counts from the answer, so a screen coming back to an old answer waits no longer', () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* registered()
+        const progress = driven(
+          Atom.make(false),
+          Atom.make(AsyncResult.success(RECEIPT, { timestamp: LONG_AGO })),
+          Duration.seconds(30),
+        )
+        const seen: ActionProgress<string>[] = []
+        const unsubscribe = registry.subscribe(
+          progress,
+          (value) => {
+            seen.push(value)
+          },
+          { immediate: true },
+        )
+
+        yield* Effect.sleep(Duration.millis(SETTLE_MS))
+
+        expect(seen.at(-1)).toEqual(ActionProgress.Unconfirmed({ receipt: RECEIPT }))
 
         unsubscribe()
       }),

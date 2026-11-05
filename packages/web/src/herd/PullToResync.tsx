@@ -6,7 +6,7 @@ import * as React from 'react'
 
 import type { Point } from '@crook/web/components/press/PressGesture'
 import { useAxisLock } from '@crook/web/components/swipe/AxisLock'
-import { Spinner } from '@crook/web/components/ui/spinner'
+import { SpinnerGlyph } from '@crook/web/components/ui/spinner'
 import { SPRING } from '@crook/web/motion/Springs'
 import { translate } from '@crook/web/motion/TransformString'
 import { TAB_SCROLLER_SELECTOR } from '@crook/web/navigation/TabScreen'
@@ -140,7 +140,7 @@ export function PullToResync({
         aria-hidden="true"
         className="text-muted-foreground pointer-events-none absolute inset-x-0 top-0 flex h-10 items-center justify-center opacity-0"
       >
-        <Spinner alreadyWaited />
+        <SpinnerGlyph />
       </div>
       <div ref={content}>{children}</div>
     </div>

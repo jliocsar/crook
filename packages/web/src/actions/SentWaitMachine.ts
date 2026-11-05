@@ -1,5 +1,6 @@
+import * as Clock from 'effect/Clock'
 import * as Data from 'effect/Data'
-import type * as Duration from 'effect/Duration'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
@@ -26,6 +27,8 @@ export const SentWaitEvent = Schema.TaggedUnion({
   BoundEnded: { answeredAt: Schema.Finite },
 })
 export type SentWaitEvent = typeof SentWaitEvent.Type
+
+const SOONEST_WAKE_MS = 1
 
 export const NOT_SENT = SentWaitState.cases.NotSent.make({})
 export const SETTLED = SentWaitEvent.cases.Settled.make({})
@@ -69,5 +72,15 @@ export const sentWaitTimer = (
   bound: Duration.Duration,
 ): ((command: SentWaitCommand) => Effect.Effect<SentWaitEvent>) =>
   SentWaitCommand.$match({
-    WaitOutBound: ({ answeredAt }) => Effect.as(Effect.sleep(bound), boundEnded(answeredAt)),
+    WaitOutBound: ({ answeredAt }) =>
+      Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        Effect.as(
+          Effect.sleep(
+            Duration.millis(
+              Math.max(SOONEST_WAKE_MS, Duration.toMillis(bound) - (now - answeredAt)),
+            ),
+          ),
+          boundEnded(answeredAt),
+        ),
+      ),
   })

@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
 import * as Equal from 'effect/Equal'
-import { absurd, pipe } from 'effect/Function'
+import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
@@ -59,8 +59,11 @@ import {
   stopRefused,
   TURN_ENDED,
 } from '@crook/web/chat/ComposerFailureMachine'
+import type {
+  ComposerFailureEvent,
+  ComposerFailureState,
+} from '@crook/web/chat/ComposerFailureMachine'
 import type { Restart } from '@crook/web/chat/EdgeCard'
-import { useMachine } from '@crook/web/machine/UseMachine'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
 export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
@@ -419,13 +422,16 @@ const useStopLock = (stop: CommandAction): boolean => {
   return isSending(stop.state) || (acknowledged && !settled)
 }
 
+const composerFailureReducer = (state: ComposerFailureState, event: ComposerFailureEvent) =>
+  composerFailureMachine.transition(state, event)[0]
+
 const useComposerFailure = (
   prompt: CommandAction,
   stop: CommandAction,
   draft: string,
   working: boolean,
 ) => {
-  const [state, dispatch] = useMachine(composerFailureMachine, absurd)
+  const [state, dispatch] = React.useReducer(composerFailureReducer, composerFailureMachine.initial)
   const promptFailure = Option.getOrUndefined(failureMessageOf(prompt.state))
   const stopFailure = Option.getOrUndefined(failureMessageOf(stop.state))
   const failedText = Option.getOrElse(lastTextWhen(prompt, isFailed), () => '')

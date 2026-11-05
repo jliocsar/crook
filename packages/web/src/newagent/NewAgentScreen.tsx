@@ -52,7 +52,7 @@ function LaunchStatus({ text }: { text: string }) {
       role="status"
       className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-5"
     >
-      <Spinner size={STATUS_SPINNER_SIZE} />
+      <Spinner holdsRoom size={STATUS_SPINNER_SIZE} />
       {text}
     </p>
   )

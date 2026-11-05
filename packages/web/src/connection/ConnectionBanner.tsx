@@ -10,7 +10,7 @@ import { useAtomValue } from '@effect/atom-react/Hooks'
 import { connectionAtom, linkMarkAtom } from '@crook/web/atoms/Connection'
 import { Collapse } from '@crook/web/components/Collapse'
 import { Swap } from '@crook/web/components/Swap'
-import { Spinner } from '@crook/web/components/ui/spinner'
+import { SpinnerGlyph } from '@crook/web/components/ui/spinner'
 import { noticeOf, syncedAtOf } from '@crook/web/connection/ConnectionView'
 import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
 import { useShownAtomValue } from '@crook/web/navigation/Covered'
@@ -52,8 +52,8 @@ const NOTICE_COPY = {
 >
 
 const NOTICE_ICON = {
-  syncing: <Spinner alreadyWaited size={NOTICE_SPINNER_SIZE} />,
-  connecting: <Spinner alreadyWaited size={NOTICE_SPINNER_SIZE} />,
+  syncing: <SpinnerGlyph size={NOTICE_SPINNER_SIZE} />,
+  connecting: <SpinnerGlyph size={NOTICE_SPINNER_SIZE} />,
   unreachable: <ServerOff aria-hidden="true" className="size-3.5 shrink-0" />,
   offline: <WifiOff aria-hidden="true" className="size-3.5 shrink-0" />,
   recovered: <Check aria-hidden="true" className="size-3.5 shrink-0" />,

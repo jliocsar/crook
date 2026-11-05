@@ -11,19 +11,20 @@ import {
   indicatorTimer,
   isIndicatorShown,
 } from '@crook/web/machine/IndicatorMachine'
+import type { IndicatorCommand } from '@crook/web/machine/IndicatorMachine'
 import { stateMark } from '@crook/web/machine/Machine'
 import { useMachine } from '@crook/web/machine/UseMachine'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 
 type SpinnerProps = Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> & {
   pending?: boolean
-  alreadyWaited?: boolean
+  holdsRoom?: boolean
   idle?: React.ReactNode
   size?: number
   label?: string
 }
 
-const indicatorPerform = (command: Parameters<ReturnType<typeof indicatorTimer>>[0]) =>
+const indicatorPerform = (command: IndicatorCommand) =>
   indicatorTimer(Duration.seconds(motionTokens().fade.duration))(command)
 
 const useIndicator = (pending: boolean): IndicatorState => {
@@ -36,14 +37,14 @@ const useIndicator = (pending: boolean): IndicatorState => {
   return state
 }
 
-function SpinnerGlyph({
-  size,
+export function SpinnerGlyph({
+  size = 16,
   label,
   className,
   ...rootProps
 }: Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> & {
-  size: number
-  label: string | undefined
+  size?: number
+  label?: string | undefined
 }) {
   return (
     <span
@@ -83,25 +84,17 @@ function SpinnerGlyph({
 
 export function Spinner({
   pending = true,
-  alreadyWaited = false,
+  holdsRoom = false,
   idle = null,
   size = 16,
   label,
   className,
   ...rootProps
 }: SpinnerProps) {
-  const state = useIndicator(pending && !alreadyWaited)
-
-  if (alreadyWaited) {
-    return pending ? (
-      <SpinnerGlyph size={size} label={label} className={className} {...rootProps} />
-    ) : (
-      idle
-    )
-  }
+  const state = useIndicator(pending)
 
   if (!isIndicatorShown(state)) {
-    return pending && idle === null ? (
+    return pending && holdsRoom ? (
       <span
         data-slot="spinner-slot"
         aria-hidden="true"

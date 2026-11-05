@@ -1,6 +1,7 @@
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Fiber from 'effect/Fiber'
 import { constVoid } from 'effect/Function'
 import * as React from 'react'
 
@@ -12,7 +13,7 @@ export const useMachine = <State, Event, Command>(
 ): readonly [State, (event: Event) => void] => {
   const [state, setState] = React.useState(machine.initial)
   const current = React.useRef(machine.initial)
-  const running = React.useRef(new Set<() => void>())
+  const running = React.useRef(new Set<Fiber.Fiber<Event>>())
 
   const dispatch = React.useCallback(
     (event: Event) => {
@@ -21,17 +22,20 @@ export const useMachine = <State, Event, Command>(
       current.current = next
       setState(next)
       Arr.forEach(commands, (command) => {
-        const finish = Effect.runCallback(perform(command), {
-          onExit: (exit) => {
-            running.current.delete(finish)
-            Exit.match(exit, {
-              onSuccess: dispatch,
-              onFailure: constVoid,
-            })
-          },
-        })
+        const fiber = Effect.runFork(
+          perform(command).pipe(
+            Effect.tapDefect((defect) => Effect.logError('A machine command died', defect)),
+          ),
+        )
 
-        running.current.add(finish)
+        running.current.add(fiber)
+        fiber.addObserver((exit) => {
+          running.current.delete(fiber)
+          Exit.match(exit, {
+            onSuccess: dispatch,
+            onFailure: constVoid,
+          })
+        })
       })
     },
     [machine, perform],
@@ -39,11 +43,10 @@ export const useMachine = <State, Event, Command>(
 
   React.useEffect(
     () => () => {
-      Arr.forEach(Array.from(running.current), (cancel) => {
-        cancel()
-      })
+      Effect.runFork(Fiber.interruptAll(Array.from(running.current)))
       running.current.clear()
       current.current = machine.initial
+      setState(machine.initial)
     },
     [machine],
   )

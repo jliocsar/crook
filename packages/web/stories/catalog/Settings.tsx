@@ -111,7 +111,7 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
     slug: 'test-sent-clears',
     title: 'Settings, test notification Sent, back to Send a test once it has had its time',
     shows: { text: 'Send a test' },
-    ends: { text: 'Send a test' },
+    ends: { absent: 'Sent to your phone' },
     timeline: [
       step<LinkStage>(400, 'Tap Send a test', () => clicks(TEST_BUTTON)),
       step<LinkStage>(600, 'It went out', () => seesText('Sent to your phone')),

@@ -121,7 +121,7 @@ function MonitorDetail({ job, now }: { job: BackgroundJob; now: DateTime.Utc }) 
         {live ? (
           <p className="text-muted-foreground mt-1.5 flex items-center gap-2.5 text-sm">
             <span className="w-12" />
-            <Spinner size={12} className="text-primary" />
+            <Spinner holdsRoom size={12} className="text-primary" />
             <span className="font-mono text-xs">watching</span>
           </p>
         ) : null}

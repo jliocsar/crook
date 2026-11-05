@@ -9,6 +9,7 @@ import { NOTICE_DELAY, NOTICE_HOLD } from '@crook/web/machine/NoticeTiming'
 
 const SPINNER = '[data-slot="spinner"]'
 const IDLE = '[data-testid="idle"]'
+const SLOT = '[data-slot="spinner-slot"]'
 const MARGIN = Duration.millis(150)
 const FADE = Duration.millis(250)
 
@@ -39,18 +40,40 @@ describe('the indicator', () => {
     }),
   )
 
-  it.live('never shows for a wait that ends before its delay, and holds its room meanwhile', () =>
+  it.live('never shows for a wait that ends before its delay, and takes no room meanwhile', () =>
     Effect.gen(function* () {
       const { container, rerender } = render(<Spinner size={14} />)
-      const slot = container.querySelector<HTMLElement>('[data-slot="spinner-slot"]')
 
-      expect(slot?.style.width).toBe('14px')
+      expect(container.querySelector(SLOT)).toBeNull()
 
       rerender(<Spinner pending={false} size={14} />)
 
-      expect(container.querySelector('[data-slot="spinner-slot"]')).toBeNull()
-
       yield* Effect.sleep(Duration.sum(NOTICE_DELAY, MARGIN))
+
+      expect(shownIn(container)).toBe(false)
+    }),
+  )
+
+  it.live('holds its room while it waits when its host asks', () =>
+    Effect.sync(() => {
+      const { container, rerender } = render(<Spinner holdsRoom size={14} />)
+
+      expect(container.querySelector<HTMLElement>(SLOT)?.style.width).toBe('14px')
+
+      rerender(<Spinner holdsRoom pending={false} size={14} />)
+
+      expect(container.querySelector(SLOT)).toBeNull()
+    }),
+  )
+
+  it.live('starts its delay over when a wait ends and another begins inside it', () =>
+    Effect.gen(function* () {
+      const { container, rerender } = render(<Spinner />)
+
+      yield* Effect.sleep(Duration.subtract(NOTICE_DELAY, Duration.times(MARGIN, 2)))
+      rerender(<Spinner pending={false} />)
+      rerender(<Spinner />)
+      yield* Effect.sleep(Duration.times(MARGIN, 3))
 
       expect(shownIn(container)).toBe(false)
     }),
@@ -72,18 +95,6 @@ describe('the indicator', () => {
 
       expect(shownIn(container)).toBe(false)
       expect(container.querySelector(IDLE)).not.toBeNull()
-    }),
-  )
-
-  it.live('shows at once for a state that did its own waiting, and goes with it', () =>
-    Effect.sync(() => {
-      const { container, rerender } = render(<Spinner alreadyWaited />)
-
-      expect(shownIn(container)).toBe(true)
-
-      rerender(<Spinner alreadyWaited pending={false} />)
-
-      expect(shownIn(container)).toBe(false)
     }),
   )
 })
