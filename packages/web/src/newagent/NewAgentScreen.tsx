@@ -226,15 +226,6 @@ function NewAgentFlow() {
             ),
           },
         )}
-        {launch.pending || Option.isSome(launch.opening) ? (
-          <div className="grid gap-1">
-            <LaunchStatus text={launch.pending ? 'Starting Claude…' : 'Opening the chat…'} />
-            {Option.match(launch.opening, {
-              onNone: () => null,
-              onSome: (open) => <OpenChatButton onOpen={open} />,
-            })}
-          </div>
-        ) : null}
         {Option.match(launch.failure, {
           onNone: () => null,
           onSome: (message) => (
@@ -254,17 +245,27 @@ function NewAgentFlow() {
             start(task)
           }}
         />
-        <Button
-          variant="ghost"
-          size="touch"
-          disabled={!ready}
-          className="text-muted-foreground text-sm"
-          onClick={() => {
-            start('')
-          }}
-        >
-          Start without a task
-        </Button>
+        {busy ? (
+          <div className="flex h-11 items-center justify-center gap-3">
+            <LaunchStatus text={launch.pending ? 'Starting Claude…' : 'Opening the chat…'} />
+            {Option.match(launch.opening, {
+              onNone: () => null,
+              onSome: (open) => <OpenChatButton onOpen={open} />,
+            })}
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="touch"
+            disabled={!ready}
+            className="text-muted-foreground text-sm"
+            onClick={() => {
+              start('')
+            }}
+          >
+            Start without a task
+          </Button>
+        )}
       </div>
       {Option.match(shown, {
         onNone: () => null,

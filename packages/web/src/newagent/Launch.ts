@@ -100,7 +100,10 @@ export const useLaunch = (): Launch => {
 
   return {
     pending: isSending(progress),
-    opening: Option.flatMap(paneOf(isSent), openPane),
+    opening: Option.flatMap(
+      paneOf((state) => isSent(state) || isDone(state)),
+      openPane,
+    ),
     failure: Option.orElse(failureMessageOf(progress), () => Option.as(notShown, NOT_SHOWN_NOTE)),
     blocksRestart: Option.isSome(leftRunning) || Option.isSome(notShown),
     openChatAfterFailure: Option.flatMap(

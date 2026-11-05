@@ -98,7 +98,7 @@ describe('NewAgentScreen', () => {
       expect(Ref.getUnsafe(link.sent).map((sent) => sent.command)).toEqual([
         startInCrook(Option.some(TASK)),
       ])
-      expect(withoutTask()).toHaveProperty('disabled', true)
+      expect(screen.queryByRole('button', { name: 'Start without a task' })).toBeNull()
 
       yield* link.commandAnswers.open
       yield* Effect.promise(() => screen.findByText('Opening the chat…'))

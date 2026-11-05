@@ -631,8 +631,9 @@ apart from a summary.
   machine moves to its most recent folder.
 - **The task comes first.** The worktree branch is suggested from the task's first line, as a
   lowercase slug, and you can edit it.
-- **Starting** reads "Starting Claude…". The chat replaces this screen once the pane is in the
-  herd, so Back goes to Agents. Until then it reads "Opening the chat…" with "Open the chat". A
+- **Starting** reads "Starting Claude…" where "Start without a task" sat, so the dock holds still.
+  The chat replaces this screen once the pane is in the herd, so Back goes to Agents. Until then it
+  reads "Opening the chat…" with "Open the chat" on that same line. A
   pane the herd has not shown after 15 s says so in a line of its own, keeps "Open the chat", and
   the chat still replaces the screen if the pane lands later.
 - **Empty cases**, each in the summary's place:

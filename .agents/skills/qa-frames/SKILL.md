@@ -17,7 +17,7 @@ behind it is not a result.
 
 ```sh
 bun run frames transition/reconnect-chat-open   # one or more stories
-bun run frames --all                            # every timeline story, about 2 minutes
+bun run frames --all                            # every timeline story a sweep plays, about 2 minutes
 bun run frames --no-baseline <story>            # every finding reads NEW, the baseline ignored
 bun run frames --output tmp/frames/mine <story>
 bun run stories:list                            # every story id
