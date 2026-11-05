@@ -14,6 +14,7 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { ClaudeSessionId, MachineId, PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import {
+  CHUNK_READ_LIMIT,
   PaneTranscript,
   type TranscriptEvent,
   TranscriptPosition,
@@ -142,6 +143,51 @@ const watchOnPhone = Effect.fn('watchOnPhone')(function* (
   return events
 })
 
+const watchRawOnPhone = Effect.fn('watchRawOnPhone')(function* (
+  machine: MachineId,
+  from: Option.Option<TranscriptPosition>,
+  tail: Option.Option<TranscriptTailBytes>,
+) {
+  const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
+  const events = yield* Queue.unbounded<TranscriptEvent>()
+
+  yield* phone
+    .WatchTranscript({ machine, source: new PaneTranscript({ pane: PANE }), from, tail })
+    .pipe(
+      Stream.runForEach((event) => Queue.offer(events, event)),
+      Effect.ignore({ log: 'Debug' }),
+      Effect.forkScoped,
+    )
+
+  return events
+})
+
+const isCaughtUpEvent = (event: TranscriptEvent) =>
+  Match.value(event).pipe(
+    Match.tag('TranscriptCaughtUp', () => true),
+    Match.orElse(() => false),
+  )
+
+const untilCaughtUp = (events: Queue.Queue<TranscriptEvent>) =>
+  Stream.fromQueue(events).pipe(Stream.takeUntil(isCaughtUpEvent), Stream.runCollect)
+
+const linesIn = (events: readonly TranscriptEvent[]) =>
+  Arr.flatMap(events, (event) =>
+    Match.value(event).pipe(
+      Match.tag('TranscriptChunk', (chunk) =>
+        Arr.map(
+          chunk.messages,
+          (message) =>
+            `${Match.value(message).pipe(
+              Match.tag('Omitted', () => 'Omitted'),
+              Match.orElse(() => 'User'),
+            )} ${message.offset}`,
+        ),
+      ),
+      Match.orElse(() => []),
+    ),
+  )
+
 const takeAll = (events: Queue.Queue<string>, count: number) =>
   Effect.forEach(
     Arr.makeBy(count, () => events),
@@ -212,6 +258,55 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
         `chunk ${FIRST_SESSION} 0-${bytesOf(skipped + recent)} 2`,
         `caught up ${FIRST_SESSION} ${bytesOf(skipped + recent)}`,
         `skills ${FIRST_SESSION}`,
+      ])
+    }),
+  )
+
+  live.effect('skips a big gap as a chunk the relay accepts, and a whole watch reads it all', () =>
+    Effect.gen(function* () {
+      const machine = MachineId.make('transcript-big-gap')
+      const root = yield* claudeRoot()
+      const seen = userLine('seen')
+      const missed = userLine('x'.repeat(CHUNK_READ_LIMIT))
+      const recent = userLine('recent')
+      const later = userLine('later')
+      const all = seen + missed + recent
+      const position = Option.some(
+        new TranscriptPosition({
+          session: FIRST_SESSION,
+          offset: TranscriptOffset.make(bytesOf(seen)),
+        }),
+      )
+
+      yield* append(root, FIRST_SESSION, all)
+
+      const state = yield* SubscriptionRef.make(stateOn(machine, 1, FIRST_SESSION))
+
+      yield* startAgent(machine, root, state)
+      const skipping = yield* watchOnPhone(
+        machine,
+        position,
+        Option.some(TranscriptTailBytes.make(bytesOf(recent))),
+      )
+      const events = yield* watchRawOnPhone(machine, Option.none(), Option.none())
+
+      expect(yield* takeAll(skipping, 3)).toEqual([
+        `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(all)} 2`,
+        `caught up ${FIRST_SESSION} ${bytesOf(all)}`,
+        `skills ${FIRST_SESSION}`,
+      ])
+
+      const whole = yield* untilCaughtUp(events)
+
+      yield* append(root, FIRST_SESSION, later)
+
+      expect(yield* Queue.take(skipping)).toBe(
+        `chunk ${FIRST_SESSION} ${bytesOf(all)}-${bytesOf(all + later)} 1`,
+      )
+      expect(linesIn(whole)).toEqual([
+        'User 0',
+        `User ${bytesOf(seen)}`,
+        `User ${bytesOf(seen + missed)}`,
       ])
     }),
   )
