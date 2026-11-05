@@ -84,9 +84,10 @@ export const activityWalk: WalkSpec<ActivityState, ActivityEvent, never> = {
   ],
   arrowRules: [
     {
-      name: 'only a turn seen working holds after herdr goes quiet, and it keeps its start',
+      name: 'a turn seen working holds as it is after herdr goes quiet, and no other turn does',
       holds: ({ from, event, to }) =>
-        !ActivityEvent.guards.QuietTurnOpen(event) || !isTurnUnderway(to) || sameActivity(from, to),
+        !ActivityEvent.guards.QuietTurnOpen(event) ||
+        (isTurnUnderway(from) ? sameActivity(from, to) : !isTurnUnderway(to)),
     },
     {
       name: 'a turn that is over never holds',
