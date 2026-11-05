@@ -99,7 +99,12 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     slug: 'cached-reopen-catch-up',
     title: 'Cached reopen, then a catch-up',
     shows: { text: CHAT_TITLE },
-    ends: { text: 'Yes, the notice waits a second now.' },
+    ends: {
+      all: [
+        { text: 'Yes, the notice waits a second now.' },
+        { selector: '[data-row="catch-up"] + [data-row]:has([data-role="user"])' },
+      ],
+    },
     path: CHAT_PATH,
     link: liveWith(chatHerd()),
     arrange: ({ link }) => feed(link, CONVERSATION),

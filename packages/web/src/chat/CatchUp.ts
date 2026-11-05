@@ -2,7 +2,6 @@ import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
-import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -133,23 +132,22 @@ export const nextCatchUp = (
 export const landedOf = (catchUp: CatchUp): Option.Option<Landed> =>
   Option.liftPredicate(catchUp, CatchUp.$is('Landed'))
 
-export const releasedRows = (
+export const withCatchUpDivider = (
   rows: readonly ThreadRow[],
   keys: readonly string[],
-  shown: number,
-  marker: ThreadRow,
+  divider: ThreadRow,
 ): readonly ThreadRow[] => {
-  const indexOf = HashMap.fromIterable(Arr.map(rows, (row, index) => [row.key, index] as const))
-  const [released, held] = Arr.splitAt(keys, shown)
-  const visible = Option.match(
-    Arr.findFirst(held, (key) => HashMap.get(indexOf, key)),
-    { onNone: () => rows, onSome: (index) => Arr.take(rows, index) },
-  )
-  const markerAt = Option.match(
-    Arr.findLast(released, (key) => HashMap.get(indexOf, key)),
-    { onNone: () => visible.length, onSome: (index) => index + 1 },
-  )
-  const [before, after] = Arr.splitAt(visible, markerAt)
+  const fresh = HashSet.fromIterable(keys)
 
-  return [...before, marker, ...after]
+  return Option.match(
+    Arr.findFirstIndex(rows, (row) => HashSet.has(fresh, row.key)),
+    {
+      onNone: () => rows,
+      onSome: (index) => {
+        const [before, after] = Arr.splitAt(rows, index)
+
+        return [...before, divider, ...after]
+      },
+    },
+  )
 }

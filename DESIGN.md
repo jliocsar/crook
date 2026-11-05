@@ -415,20 +415,14 @@ screen" on the Ask.
   - **Working** is Thinking State, "Working", timed from the status change. It shows only while
     no tool is running, so there's never a second spinner.
   - The tool call an open Ask is about is hidden, so its diff isn't shown twice.
-  - **A laptop catch-up** (the Hook) marks what was written since this phone last looked. A
-    reopened chat shows its cached thread at once. When the fresher view lands, its new rows
-    release one at a time, 170ms apart, below the last cached row, and the thread follows them
-    down. A `primary` "laptop" chip with hopping dots rides the left gutter under the newest
-    row, on a 2px `primary`/45% line that grows from the first new row. 700ms after the last row
-    the chip turns the corner and runs along the rule, drawing the line behind it, and becomes
-    the pill: laptop glyph, **On laptop**, then `· 2:14 → 2:25` in mono 11px, the times of the
-    first and last new entries. The line, the curve and the run are one path, which meets the
-    centered pill from the left and stops 8px short of it. There is no count. The divider stays
-    in the thread while the chat is open and resets on the next open. Prompts sent from the
-    phone, and anything that arrives after the catch-up, never get it, and neither does a cold
-    open, which shows the skeleton and then the conversation. A catch-up longer than 22 rows
-    lands the earlier rows at once and releases the last 22. Reduced motion lands every row at
-    once with the divider already drawn.
+  - **A laptop catch-up** marks what was written since this phone last looked. A reopened chat
+    shows its cached thread at once. When the fresher view lands, its new rows land together, in
+    one commit under one ordinary lift capped at a screen, and the chat opens at its end. A static
+    divider sits above the first new row: the pill, with a laptop glyph, **On laptop**, then
+    `· 2:14 → 2:25` in mono 11px, the times of the first and last new entries. There is no count.
+    The divider stays in the thread while the chat is open and resets on the next open. Prompts
+    sent from the phone, and anything that arrives after the catch-up, never get it, and neither
+    does a cold open, which shows the skeleton and then the conversation.
   - Before anything arrives the thread reads "Loading the conversation", then "No messages yet".
     A pane that isn't running Claude has no transcript: its chat reads "Not a Claude pane" and
     nothing else, with no dock.

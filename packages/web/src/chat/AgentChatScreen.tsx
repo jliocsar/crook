@@ -19,7 +19,7 @@ import {
 } from '@crook/web/chat/BackgroundDock'
 import type { BackgroundJob } from '@crook/web/chat/BackgroundModel'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
-import { useCatchUp } from '@crook/web/chat/CatchUpTrail'
+import { useCatchUp } from '@crook/web/chat/CatchUpDivider'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
 import type {
   AskDockCommands,
@@ -313,7 +313,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     [items, commands.alwaysNotes, askedCall],
   )
   const conversationRows = useItemRows(shownItems, environment)
-  const catchUp = useCatchUp(view, conversationRows)
+  const landedRows = useCatchUp(view, conversationRows)
   const workingAt = Option.getOrUndefined(Option.filter(workingSince, () => !hasToolRunning(items)))
   const watching = isWatching(model)
   const notClaude = model.presence === 'notClaude'
@@ -322,7 +322,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       notClaude
         ? []
         : [
-            ...catchUp.rows,
+            ...landedRows,
             ...(commands.pendingPrompts.length === 0
               ? summaryRows(episodeSummary, backgroundWork.open)
               : []),
@@ -334,7 +334,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           ],
     [
       notClaude,
-      catchUp.rows,
+      landedRows,
       episodeSummary,
       backgroundWork.open,
       commands.pendingPrompts,
@@ -389,7 +389,6 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
             rows={rows}
             dimmed={dimmed}
             empty={emptyThread(model, view)}
-            overlay={catchUp.overlay}
           />
         </div>
       </BackgroundContext.Provider>

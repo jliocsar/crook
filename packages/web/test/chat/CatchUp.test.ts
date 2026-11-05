@@ -3,7 +3,13 @@ import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 import { describe, expect, it } from 'vitest'
 
-import { CatchUp, lapseLabel, lapseOf, nextCatchUp, releasedRows } from '@crook/web/chat/CatchUp'
+import {
+  CatchUp,
+  lapseLabel,
+  lapseOf,
+  nextCatchUp,
+  withCatchUpDivider,
+} from '@crook/web/chat/CatchUp'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import { TranscriptOffset } from '@crook/domain/Ids'
 import { UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
@@ -125,36 +131,39 @@ describe('nextCatchUp', () => {
   })
 })
 
-describe('releasedRows', () => {
-  const all = rows('a', 'b', 'c', 'd', 'later')
+describe('withCatchUpDivider', () => {
   const fresh = ['c', 'd']
 
-  it('holds every new row back before the first release, with the divider under the cache', () => {
-    expect(keysOf(releasedRows(all, fresh, 0, MARKER))).toStrictEqual(['a', 'b', 'catch-up'])
-  })
-
-  it('puts the divider right under the last released row', () => {
-    expect(keysOf(releasedRows(all, fresh, 1, MARKER))).toStrictEqual(['a', 'b', 'c', 'catch-up'])
-  })
-
-  it('lets what came after the catch-up follow the divider once every row is out', () => {
-    expect(keysOf(releasedRows(all, fresh, 2, MARKER))).toStrictEqual([
+  it('puts the divider above the first new row', () => {
+    expect(keysOf(withCatchUpDivider(rows('a', 'b', 'c', 'd'), fresh, MARKER))).toStrictEqual([
       'a',
       'b',
+      'catch-up',
       'c',
       'd',
+    ])
+  })
+
+  it('stays above the first new row when later rows follow', () => {
+    expect(keysOf(withCatchUpDivider(rows('a', 'c', 'd', 'later'), fresh, MARKER))).toStrictEqual([
+      'a',
       'catch-up',
+      'c',
+      'd',
       'later',
     ])
   })
 
-  it('keeps the divider when a released row is no longer shown', () => {
-    expect(keysOf(releasedRows(rows('a', 'b', 'c'), fresh, 2, MARKER))).toStrictEqual([
+  it('moves down to the next new row when the first is no longer shown', () => {
+    expect(keysOf(withCatchUpDivider(rows('a', 'd'), fresh, MARKER))).toStrictEqual([
       'a',
-      'b',
-      'c',
       'catch-up',
+      'd',
     ])
+  })
+
+  it('shows no divider once no new row is shown', () => {
+    expect(keysOf(withCatchUpDivider(rows('a', 'b'), fresh, MARKER))).toStrictEqual(['a', 'b'])
   })
 })
 

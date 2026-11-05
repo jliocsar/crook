@@ -1077,14 +1077,21 @@ a turn of its own, enqueued as a task notification.
   the same index in it (lines are appended, so the same object), and its new rows are the row
   keys the cached view did not show. A chat that opened current, a cold open, a watch that failed
   or started over, and a catch-up that added no row get nothing.
-- The catch-up's line spans rows the virtualizer may have unmounted, so it is drawn in the
-  thread's content layer from the virtualizer's measurement cache, which holds a start and end
-  for every row, the estimate for one never measured. The content layer carries the glide's
-  lift, so the line and the chip move with the rows without reading it.
 - The catch-up shows nothing while it waits for the fresher view: the header's "Catching up"
-  pill covers that, and a reopen that brings nothing new would otherwise show a chip that leaves
-  with no divider. A catch-up of more than 22 rows, the most the design's long catch-up released
-  one at a time, lands the rows before the last 22 at once, where they are off screen anyway.
+  pill covers that. Its rows then land in one commit under one ordinary lift capped at a screen,
+  with a static divider above the first new row. Releasing them one row at a time, with a chip
+  carried down a trail, held a reopen back from its end: reopening a thread of 120 lines with 40
+  new ones took 267 to 273 frames, 5.1 to 5.5 s of lift, and ran past a story's wait for its last
+  line. Landed at once it takes one lift of 25 to 26 frames, about 490 ms, of at most the 660 px
+  screen (all measured in Chromium at 390x844 and 4x CPU throttling, four runs each).
+- A thread starts lifting only once its rows are rendered and its height has held still for a
+  fade's length. A fixed fade's length from the first row armed it while the first measures were
+  still arriving, so a thread opened already holding 120 lines glided 151 to 156 px for about
+  400 ms, 219 to 271 ms after it first showed: on its first mount in 4 of 4 runs, and on a reopen in
+  2 of 4. With the wait restarting on each change of height no open lifted in 16 of 16 runs, long or
+  short, cold or cached, and a catch-up landing after it still lifted (measured as above). A cold
+  open tapped from a card did not lift with the fixed wait either, in 8 of 8 runs, so the race
+  belongs to a thread that mounts holding its rows.
 
 :::tip
 Checking the web app against real data, measured:
@@ -1344,9 +1351,10 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
 - Vite discovers the highlighter's languages only when a chat first renders, and reloads the page
   once on each fresh server (measured), so the first story of a run can restart, and a sweep
   started in that page dies with it. Load a chat first and wait for the reload.
-- A timeline's end witness has to hold at every playback speed. The catch-up's trail showed at
-  full length, where the missed rows land 900 ms after the tap, and not at twice the speed, where
-  they land 450 ms after it, so its transition ends on the rows instead (measured in Chromium).
+- A timeline's end witness has to hold at every playback speed. A catch-up's trail, since removed,
+  showed at full length, where the missed rows land 900 ms after the tap, and not at twice the
+  speed, where they land 450 ms after it, so that transition ended on the rows instead (measured in
+  Chromium).
 
 :::warning
 A production build must get nothing from the catalog, and Tailwind is what would leak it. Its

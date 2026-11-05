@@ -53,7 +53,7 @@ export const MARKS: readonly MarkDefinition[] = [
   { mark: 'toast', track: 'toast', selector: '[data-slot="toast"]' },
   { mark: 'sheet', track: 'sheet', selector: '[data-slot="sheet"]' },
   { mark: 'alert', track: 'alert', selector: '[role="alert"]' },
-  { mark: 'catch-up-chip', track: 'catch-up', selector: '[data-slot="catch-up-chip"]' },
+  { mark: 'catch-up-divider', track: 'catch-up', selector: '[data-slot="catch-up-divider"]' },
   { mark: 'background-dock', track: 'background', selector: '[data-slot="background-dock"]' },
   {
     mark: 'background-summary',

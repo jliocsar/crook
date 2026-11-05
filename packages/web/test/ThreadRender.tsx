@@ -220,13 +220,13 @@ const heldMeasurements = (rowHeight: number) => {
 
   return {
     HeldResizeObserver,
-    deliver: () => {
+    deliver: (height = rowHeight) => {
       const entries = Arr.map(rows(), (target) => ({
         target,
-        borderBoxSize: [{ blockSize: rowHeight, inlineSize: VIEWPORT_WIDTH }],
+        borderBoxSize: [{ blockSize: height, inlineSize: VIEWPORT_WIDTH }],
         contentBoxSize: [],
         devicePixelContentBoxSize: [],
-        contentRect: new DOMRect(0, 0, VIEWPORT_WIDTH, rowHeight),
+        contentRect: new DOMRect(0, 0, VIEWPORT_WIDTH, height),
       }))
 
       for (const report of reports) {
@@ -276,9 +276,9 @@ export const rowsShrinkAfterOpen = (
   fireEvent.scroll(scrolling)
 
   return {
-    measured: () => {
+    measured: (height = measuredHeight) => {
       act(() => {
-        measurements.deliver()
+        measurements.deliver(height)
       })
       fireEvent.scroll(scrolling)
     },
