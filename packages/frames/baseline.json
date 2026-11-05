@@ -2,9 +2,6 @@
   "ask/next-ask": {
     "always": ["shift:div[chat-dock]"]
   },
-  "background/dock-to-summary": {
-    "always": ["empty:middle"]
-  },
   "machine/forgotten-while-open": {
     "always": ["shift:div[swipe-card]"]
   },
@@ -27,11 +24,5 @@
   },
   "transition/reconnect-chat-open": {
     "always": ["flash:thread-skeleton"]
-  },
-  "transition/show-earlier-at-hole": {
-    "always": ["empty:middle"]
-  },
-  "transition/show-earlier-at-hole-long": {
-    "always": ["empty:middle"]
   }
 }
