@@ -84,7 +84,7 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'working',
     title: 'Composer, Stop while Claude works',
-    row: chatAgent('working'),
+    row: chatAgent('working', 0),
     events: CONVERSATION,
     shows: { selector: `button[aria-label="${STOP}"]` },
   }),
@@ -92,7 +92,7 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
     slug: 'working-with-draft',
     title: 'Composer, a draft typed while Claude works',
     shows: { selector: SEND_READY },
-    row: chatAgent('working'),
+    row: chatAgent('working', 0),
     events: CONVERSATION,
     settle: () => typesDraft(DRAFT),
   }),
@@ -100,7 +100,7 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
     slug: 'stopping',
     title: 'Composer, Stop pressed',
     shows: { selector: '[data-slot="prompt-input-stop"][aria-busy="true"]' },
-    row: chatAgent('working'),
+    row: chatAgent('working', 0),
     events: CONVERSATION,
     arrange: ({ link }) =>
       Effect.andThen(
@@ -128,7 +128,7 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'queued',
     title: 'Composer, a prompt queued while Claude works',
-    row: chatAgent('working'),
+    row: chatAgent('working', 0),
     events: CONVERSATION,
     arrange: (stage) => delivered(stage, DRAFT),
     settle: () => Effect.andThen(typesDraft(DRAFT), clicks(SEND)),

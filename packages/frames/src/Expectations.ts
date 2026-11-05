@@ -143,6 +143,21 @@ export const TIMELINE_EXPECTATIONS = {
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
   }),
+  'subagent/turn-with-tools': story({
+    thread: inSequence('thread-rows'),
+  }),
+  'transition/turn-with-tools': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'transition/idle-before-answer': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'transition/compact-ends-the-turn': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
   'transition/herd-first-load-from-cache': story(
     { herd: inSequence('herd-list') },
     { shiftBudget: BANNER_SHIFT_BUDGET },

@@ -2,7 +2,6 @@ import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
-import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 
@@ -14,9 +13,9 @@ import type { HerdMachine } from '@crook/domain/HerdView'
 import type { Machine } from '@crook/domain/Machine'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
-import type { AgentActivity } from '@crook/web/chat/ChatItems'
-import { isPresent, LOADING, PresenceState, showsComposer } from '@crook/web/chat/PresenceMachine'
-import { HerdrTurn } from '@crook/web/chat/WorkingHold'
+import { activityView } from '@crook/web/chat/ActivityMachine'
+import type { ActivityState } from '@crook/web/chat/ActivityMachine'
+import { LOADING, PresenceState, showsComposer } from '@crook/web/chat/PresenceMachine'
 import { findAgent } from '@crook/web/herd/HerdLayout'
 
 export type EdgeKind = 'away' | 'exited' | 'closed'
@@ -92,56 +91,23 @@ export const machineLabelOf = (model: ChatScreenModel): string =>
     onSome: (machine) => machine.label,
   })
 
-const agentStatus = (model: ChatScreenModel): ChatStatus =>
-  Option.match(model.row, {
+const agentStatus = (activity: ActivityState): ChatStatus =>
+  Option.match(activityView(activity).status, {
     onNone: () => ChatStatus.Quiet(),
-    onSome: (row) => ChatStatus.Agent({ status: row.status }),
+    onSome: (status) => ChatStatus.Agent({ status }),
   })
 
-export const chatStatus = (model: ChatScreenModel): ChatStatus =>
+export const chatStatus = (model: ChatScreenModel, activity: ActivityState): ChatStatus =>
   PresenceState.match<ChatStatus>(model.presence, {
-    Loading: () => agentStatus(model),
-    Live: () => agentStatus(model),
-    Redialing: () => agentStatus(model),
+    Loading: () => agentStatus(activity),
+    Live: () => agentStatus(activity),
+    Redialing: () => agentStatus(activity),
     Reconnecting: () => ChatStatus.Ended({ label: `${machineLabelOf(model)} reconnecting` }),
     Away: () => ChatStatus.Ended({ label: `${machineLabelOf(model)} offline` }),
     Exited: () => ChatStatus.Ended({ label: 'exited' }),
     Closed: () => ChatStatus.Ended({ label: 'closed' }),
-    NotClaude: () => agentStatus(model),
+    NotClaude: () => agentStatus(activity),
   })
-
-export const activityOf = (model: ChatScreenModel): AgentActivity => {
-  if (!isPresent(model.presence) && !PresenceState.guards.Away(model.presence)) {
-    return 'still'
-  }
-
-  return Option.match(model.row, {
-    onNone: (): AgentActivity => 'still',
-    onSome: (row): AgentActivity => {
-      if (row.status === 'working') {
-        return 'working'
-      }
-
-      return row.status === 'blocked' ? 'blocked' : 'still'
-    },
-  })
-}
-
-export const herdrTurnOf = (model: ChatScreenModel, watchFailed: boolean): HerdrTurn =>
-  pipe(
-    model.row,
-    Option.filter(() => isPresent(model.presence) && !watchFailed),
-    Option.match({
-      onNone: () => HerdrTurn.Elsewhere(),
-      onSome: (row) =>
-        Match.value(row.status).pipe(
-          Match.when('working', () => HerdrTurn.Working({ since: row.statusChangedAt })),
-          Match.whenOr('idle', 'done', () => HerdrTurn.Idle()),
-          Match.whenOr('blocked', 'unknown', () => HerdrTurn.Elsewhere()),
-          Match.exhaustive,
-        ),
-    }),
-  )
 
 export const cwdOf = (model: ChatScreenModel): string =>
   Option.match(model.row, { onNone: () => '', onSome: (row) => row.cwd })

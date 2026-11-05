@@ -12,19 +12,27 @@ import {
   transcriptAtom,
   transcriptStateOf,
 } from '@crook/web/atoms/Transcript'
-import { hasToolRunning, isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
+import { activityMachine, activityView } from '@crook/web/chat/ActivityMachine'
+import { isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import { CatchingUpPill } from '@crook/web/chat/ChatHeader'
-import { activityOf, cwdOf, isWatching, titleOf } from '@crook/web/chat/ChatModel'
+import { cwdOf, isWatching, titleOf } from '@crook/web/chat/ChatModel'
 import { failureRows, ThreadEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { ImageViewer } from '@crook/web/chat/Images'
-import { useChatItems, useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
+import {
+  useChatActivity,
+  useChatItems,
+  useOpenedChat,
+  useRunActivity,
+  useTranscriptThread,
+} from '@crook/web/chat/OpenedChat'
 import { PresenceState } from '@crook/web/chat/PresenceMachine'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import { runStatusShown, runTicks } from '@crook/web/chat/ToolView'
 import {
+  hasFailed,
   isLoadingEarlier,
   saysCatchingUp,
   shownOf,
@@ -96,7 +104,8 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
     () => new SubagentTranscriptKey({ machine, session, subagent }),
     [machine, session, subagent],
   )
-  const parent = shownOf(transcriptStateOf(useAtomValue(transcriptAtom(parentKey))))
+  const parentState = transcriptStateOf(useAtomValue(transcriptAtom(parentKey)))
+  const parent = shownOf(parentState)
   const transcript = useTranscriptThread(key)
   const { state } = transcript
   const view = React.useMemo(() => shownOf(state), [state])
@@ -105,20 +114,25 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const paneClosed = PresenceState.guards.Closed(model.presence)
   const parentLines = linesOf(parent)
   const parentRosters = rostersOf(parent)
-  const parentActivity = activityOf(model)
+  const parentActivity = useChatActivity(model, parentLines, hasFailed(parentState))
   const parentItems = useChatItems(parentLines, {
     cwd,
-    activity: parentActivity,
+    activity: activityView(parentActivity).itemActivity,
     rosters: parentRosters,
   })
   const run = React.useMemo(() => findRun(runsIn(parentItems), subagent), [parentItems, subagent])
-  const ticking = Option.exists(run, (found) => runTicks(found, paneClosed))
   const lines = linesOf(view)
-  const items = useChatItems(lines, {
-    cwd,
-    activity: ticking ? 'working' : 'still',
-    rosters: NO_ROSTERS,
-  })
+  const activity = useRunActivity(
+    pipe(
+      run,
+      Option.filter((found) => runTicks(found, paneClosed)),
+      Option.flatMap((found) => found.startedAt),
+    ),
+    lines,
+    hasFailed(state),
+  )
+  const { workingSince, itemActivity } = activityView(activity)
+  const items = useChatItems(lines, { cwd, activity: itemActivity, rosters: NO_ROSTERS })
   const firstPrompt = Arr.findFirst(items, isUserPrompt)
   const prompt = Option.orElse(
     Option.flatMap(run, (found) => Option.liftPredicate(found.prompt, (text) => text !== '')),
@@ -147,14 +161,9 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const rows: readonly ThreadRow[] = [
     ...Option.toArray(Option.map(prompt, askedRow)),
     ...conversationRows,
-    ...(ticking && !hasToolRunning(shownItems)
-      ? Option.toArray(
-          Option.map(
-            Option.flatMap(run, (found) => found.startedAt),
-            (from) => workingRow((now) => spanDuration(from, now)),
-          ),
-        )
-      : []),
+    ...Option.toArray(
+      Option.map(workingSince, (since) => workingRow((now) => spanDuration(since, now))),
+    ),
     ...failureRows(state, transcript.onRetry),
   ]
 
@@ -169,10 +178,13 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
           subtitle={Option.match(run, {
             onNone: () => undefined,
             onSome: (found) => (
-              <>
+              <span
+                {...stateMark(activityMachine, activity)}
+                className="flex min-w-0 items-center gap-1.5"
+              >
                 <RunDot status={runStatusShown(found, paneClosed)} />
                 <RunLine run={found} paneClosed={paneClosed} />
-              </>
+              </span>
             ),
           })}
           backLabel={`Back to ${parentTitle}`}

@@ -14,6 +14,7 @@ import {
   said,
   SESSION,
   subagent,
+  toolResult,
   toolUse,
 } from '../../test/TranscriptFixtures.ts'
 import { chatHerd, opensWith } from '../ChatFixtures.ts'
@@ -25,7 +26,7 @@ import {
   SUBAGENT_PATH,
   SUBAGENT_SOURCE,
 } from '../Fixtures.ts'
-import { linkStory } from '../Story.tsx'
+import { linkStory, step } from '../Story.tsx'
 import type { LinkStage, LinkStorySpec, StoryMaker } from '../Story.tsx'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
 import { role, seesText } from '../StageDom.ts'
@@ -91,6 +92,58 @@ export const SUBAGENT_STORIES: readonly StoryMaker[] = [
       toolUse(10, 'toolu_grep', 'Grep', { pattern: 'beginAttempt' }),
     ]),
     shows: { selector: '[data-slot="tool-call"]' },
+  }),
+  story({
+    slug: 'turn-with-tools',
+    title: 'Subagent, a run of tool calls, the Working row holding its place',
+    own: opensWith([prompt(0, 'Read the diff', 1)]),
+    shows: { text: 'Read the diff and list the risks.' },
+    ends: {
+      all: [
+        { text: 'That is the whole review.' },
+        { selector: '[data-machine="activity"][data-state="NoAgent"]' },
+      ],
+    },
+    timeline: [
+      step<LinkStage>(500, 'Grep starts', ({ link }) =>
+        feed(
+          link,
+          [chunk(10, 20, [toolUse(10, 'toolu_grep', 'Grep', { pattern: 'attempt' }, 2)])],
+          SUBAGENT_SOURCE,
+        ),
+      ),
+      step<LinkStage>(800, 'Grep ends', ({ link }) =>
+        feed(
+          link,
+          [chunk(20, 30, [toolResult(20, 'toolu_grep', 'src/rpc/HubLink.ts:64', { seconds: 3 })])],
+          SUBAGENT_SOURCE,
+        ),
+      ),
+      step<LinkStage>(300, 'Bash starts', ({ link }) =>
+        feed(
+          link,
+          [chunk(30, 40, [toolUse(30, 'toolu_bash', 'Bash', { command: 'git diff' }, 4)])],
+          SUBAGENT_SOURCE,
+        ),
+      ),
+      step<LinkStage>(800, 'Bash ends', ({ link }) =>
+        feed(
+          link,
+          [chunk(40, 50, [toolResult(40, 'toolu_bash', 'two files', { seconds: 5 })])],
+          SUBAGENT_SOURCE,
+        ),
+      ),
+      step<LinkStage>(800, 'Its answer lands', ({ link }) =>
+        feed(
+          link,
+          [chunk(50, 60, [answered(50, 'That is the whole review.', 6)])],
+          SUBAGENT_SOURCE,
+        ),
+      ),
+      step<LinkStage>(500, 'The parent says the run finished', ({ link }) =>
+        feed(link, [finishedRoster]),
+      ),
+    ],
   }),
   story({
     slug: 'finished',

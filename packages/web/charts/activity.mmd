@@ -1,0 +1,14 @@
+stateDiagram-v2
+  [*] --> NoAgent
+  state "from any state" as Anywhere
+  NoAgent --> Still: QuietTurnOpen
+  Blocked --> Still: QuietTurnOpen
+  Working --> Holding: QuietTurnOpen
+  Finished --> Holding: QuietTurnOpen
+  Away --> Still: QuietTurnOpen
+  Anywhere --> NoAgent: AgentMissing
+  Anywhere --> Still: StatusUnknown<br/>QuietTurnOver
+  Anywhere --> Blocked: AgentAsks
+  Anywhere --> Working: AgentWorks
+  Anywhere --> Finished: AnswerLanded
+  Anywhere --> Away: MachineAway

@@ -1,15 +1,12 @@
 import * as Arr from 'effect/Array'
-import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
-import * as Struct from 'effect/Struct'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { AgentRow } from '@crook/domain/AgentRow'
 import { Prompt } from '@crook/domain/Command'
 import { TranscriptOffset } from '@crook/domain/Ids'
 import { omittedBetween, omittedUpTo } from '@crook/domain/Transcript'
@@ -51,6 +48,7 @@ import {
 import { manyLinesChunk } from '../ManyLines.ts'
 import { clicks, element, pause, seesSelector, seesText, types, until } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
+import { IDLE_HERD, QUESTION, TURN_STORIES, WORKING_HERD } from './Turns.tsx'
 import { BEFORE_FIRST_VALUE, browserStory, linkStory, step } from '../Story.tsx'
 import type { BrowserStage, LinkStage, StoryMaker, StoryStepFailed } from '../Story.tsx'
 
@@ -58,7 +56,6 @@ const CARD_BUTTON = new RegExp(CHAT_TITLE, 'u')
 const COMPOSER = /Message|Reply/u
 const SEND = 'Send'
 const BACK = 'Back to Agents'
-const QUESTION = 'Now check the toast too'
 const HELD_PROMPT = 'Sent while crook was dialing'
 const LIVE_HERD = '[data-slot="herd-list"] [data-state="clear"]'
 const RETRY = 'Try again'
@@ -71,12 +68,10 @@ const LONG_ABOVE_LINES = 6
 const LONG_LINE_BYTES = 10
 const LONG_SETTLE_MS = 1000
 const VIEWPORT = '[data-slot="conversation-viewport"]'
+const STILL_ACTIVITY = '[data-machine="activity"][data-state="Still"]'
 
 const HELD_THREAD =
   '[data-machine="transcript"][data-state="Holding"], [data-machine="transcript"][data-state="CatchingUp"]'
-
-const FLIPS_WORKING_AT = DateTime.add(START, { seconds: CLOCK_AFTER_START_SECONDS })
-const FLIPS_IDLE_AT = DateTime.add(FLIPS_WORKING_AT, { seconds: 10 })
 
 const GAP_THEN_TAIL = [
   omittedBetween(SESSION, TranscriptOffset.make(50), TranscriptOffset.make(GAP_END)),
@@ -175,19 +170,6 @@ const showEarlierAtHoleStory = (
     ],
   })
 }
-
-const WORKING_HERD = liveWith(
-  chatHerd(
-    new AgentRow(
-      Struct.evolve(chatAgent('working', 0), { statusChangedAt: () => FLIPS_WORKING_AT }),
-    ),
-  ),
-)
-const IDLE_HERD = liveWith(
-  chatHerd(
-    new AgentRow(Struct.evolve(chatAgent('idle', 0), { statusChangedAt: () => FLIPS_IDLE_AT })),
-  ),
-)
 
 const OLDER_AGENT_HERD = liveWith(
   herd([
@@ -813,7 +795,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     slug: 'prompt-to-answer',
     title: 'Prompt, Sent, working, tool, answer',
     shows: { selector: SEND_READY },
-    ends: { text: 'The toast is fine.' },
+    ends: { all: [{ text: 'The toast is fine.' }, { selector: STILL_ACTIVITY }] },
     events: CONVERSATION,
     arrange: ({ link }) =>
       Ref.set(
@@ -856,6 +838,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
       ),
     ],
   }),
+  ...TURN_STORIES,
   browserStory({
     slug: 'herd-first-load-from-cache',
     title: 'Herd first load from the cache, slow hub',

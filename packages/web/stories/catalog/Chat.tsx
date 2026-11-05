@@ -16,7 +16,15 @@ import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
 import { STARTED_PANE } from '../../test/HubFakes.ts'
 import { manyLinesChunk } from '../ManyLines.ts'
-import { caughtUp, chunk, opened, prompt, said, SESSION } from '../../test/TranscriptFixtures.ts'
+import {
+  answered,
+  caughtUp,
+  chunk,
+  opened,
+  prompt,
+  said,
+  SESSION,
+} from '../../test/TranscriptFixtures.ts'
 import { chatHerd, chatStory, shellOnlyHerd } from '../ChatFixtures.ts'
 import { CHAT_SOURCE, chatAgent, CONVERSATION, AGENTS_PATH } from '../Fixtures.ts'
 import { clicks, element, pause, role, seesSelector, seesText } from '../StageDom.ts'
@@ -259,6 +267,29 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
         seesText('Working'),
         SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent('idle', 0)))),
       ),
-    shows: { selector: '[data-slot="thinking-state-label"]' },
+    shows: {
+      all: [
+        { selector: '[data-slot="thinking-state-label"]' },
+        { selector: '[data-machine="activity"][data-state="Holding"]' },
+        { selector: '[data-slot="prompt-input-stop"]' },
+      ],
+    },
+  }),
+  chatStory({
+    slug: 'answer-before-idle',
+    title: 'Chat, the answer landed while herdr still says working',
+    row: chatAgent('working', 0),
+    events: [
+      opened(),
+      chunk(0, 20, [prompt(0, 'Fix the herd', 1), answered(10, 'Fixed the herd', 2)]),
+      caughtUp(20),
+    ],
+    shows: {
+      all: [
+        { text: 'Fixed the herd' },
+        { selector: '[data-machine="activity"][data-state="Finished"]' },
+        { selector: '[data-slot="prompt-input-submit"]' },
+      ],
+    },
   }),
 ]

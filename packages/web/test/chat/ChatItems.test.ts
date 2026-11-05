@@ -24,7 +24,14 @@ import {
 import type { AgentActivity, ChatContext } from '@crook/web/chat/ChatItems'
 import { applyTranscriptEvent, EMPTY_TRANSCRIPT } from '@crook/web/chat/TranscriptState'
 import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
-import { HerdrTurn, lastTurnEvidence, nextWorkingHold } from '@crook/web/chat/WorkingHold'
+import {
+  activityEventOf,
+  activityMachine,
+  holding,
+  lastTurnEvidence,
+  still,
+} from '@crook/web/chat/ActivityMachine'
+import { PANE_LIVE } from '@crook/web/chat/PresenceMachine'
 
 import {
   answered,
@@ -48,6 +55,7 @@ import {
   turnDuration,
   user,
 } from '../TranscriptFixtures.ts'
+import { agent } from '../HerdFixtures.ts'
 
 const fold = (events: readonly TranscriptEvent[]) =>
   Arr.reduce(events, EMPTY_TRANSCRIPT, applyTranscriptEvent)
@@ -260,14 +268,16 @@ describe('chatItems', () => {
   it('holds no Working row across /clear over a turn the old session left open', () => {
     const before = fold([opened(), chunk(0, 10, [prompt(0, 'unanswered')])])
     const after = applyTranscriptEvent(before, opened(NEXT_SESSION))
-    const held = at(0)
+    const since = Option.getOrThrow(at(0))
+    const idleRow = Option.some(agent('w1:p1', 'idle'))
+    const stepOver = (lines: Parameters<typeof lastTurnEvidence>[0]) =>
+      activityMachine.transition(
+        holding(since),
+        activityEventOf(PANE_LIVE, idleRow, lastTurnEvidence(lines)),
+      )[0]
 
-    expect(
-      nextWorkingHold(held, { herdr: HerdrTurn.Idle(), evidence: lastTurnEvidence(before.lines) }),
-    ).toEqual(held)
-    expect(
-      nextWorkingHold(held, { herdr: HerdrTurn.Idle(), evidence: lastTurnEvidence(after.lines) }),
-    ).toEqual(Option.none())
+    expect(stepOver(before.lines)).toEqual(holding(since))
+    expect(stepOver(after.lines)).toEqual(still('idle'))
   })
 
   it('keys every item by session, offset and block so a resumed watch keeps them', () => {
@@ -337,7 +347,7 @@ describe('lastTurnEvidence', () => {
         prompt(0, 'Fix it'),
         answered(10, 'Fixed', 3),
         user(20, [new TextBlock({ text: 'caveat' })], { isMeta: true }),
-        compactBoundary(30),
+        compactSummary(30, 'We fixed it.'),
       ]),
     ).toStrictEqual(Option.some({ ends: true, at: at(3) }))
     expect(evidence([])).toStrictEqual(Option.none())
