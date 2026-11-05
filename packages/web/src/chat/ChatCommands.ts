@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
 import * as Equal from 'effect/Equal'
-import { pipe } from 'effect/Function'
+import { absurd, pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
@@ -27,6 +27,8 @@ import {
   isFailed,
   isSending,
   isSent,
+  isUnconfirmed,
+  unconfirmedNoteOf,
 } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { alwaysNotesAtom } from '@crook/web/atoms/Chat'
@@ -48,7 +50,17 @@ import { useCommandAction } from '@crook/web/chat/CommandAction'
 import type { CommandAction } from '@crook/web/chat/CommandAction'
 import type { AskDockProps } from '@crook/web/chat/AskDock'
 import type { ComposerProps, ComposerMode } from '@crook/web/chat/Composer'
+import {
+  composerFailureMachine,
+  draftChanged,
+  PROMPT_SENT,
+  promptRefused,
+  STOP_PRESSED,
+  stopRefused,
+  TURN_ENDED,
+} from '@crook/web/chat/ComposerFailureMachine'
 import type { Restart } from '@crook/web/chat/EdgeCard'
+import { useMachine } from '@crook/web/machine/UseMachine'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
 export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
@@ -141,7 +153,8 @@ const textOf = (command: Command): Option.Option<string> =>
     Match.orElse(() => Option.none<string>()),
   )
 
-const isAcknowledged = (state: CommandProgress): boolean => isSent(state) || isDone(state)
+const isAcknowledged = (state: CommandProgress): boolean =>
+  isSent(state) || isUnconfirmed(state) || isDone(state)
 
 const lastTextWhen = (
   action: CommandAction,
@@ -406,6 +419,51 @@ const useStopLock = (stop: CommandAction): boolean => {
   return isSending(stop.state) || (acknowledged && !settled)
 }
 
+const useComposerFailure = (
+  prompt: CommandAction,
+  stop: CommandAction,
+  draft: string,
+  working: boolean,
+) => {
+  const [state, dispatch] = useMachine(composerFailureMachine, absurd)
+  const promptFailure = Option.getOrUndefined(failureMessageOf(prompt.state))
+  const stopFailure = Option.getOrUndefined(failureMessageOf(stop.state))
+  const failedText = Option.getOrElse(lastTextWhen(prompt, isFailed), () => '')
+  const typed = draft.trim()
+
+  React.useEffect(() => {
+    if (promptFailure !== undefined) {
+      dispatch(promptRefused(promptFailure, failedText))
+    }
+  }, [promptFailure, failedText, dispatch])
+
+  React.useEffect(() => {
+    if (stopFailure !== undefined) {
+      dispatch(stopRefused(stopFailure))
+    }
+  }, [stopFailure, dispatch])
+
+  React.useEffect(() => {
+    dispatch(draftChanged(typed))
+  }, [typed, dispatch])
+
+  React.useEffect(() => {
+    if (!working) {
+      dispatch(TURN_ENDED)
+    }
+  }, [working, stopFailure, dispatch])
+
+  return {
+    failure: state,
+    onPromptSent: () => {
+      dispatch(PROMPT_SENT)
+    },
+    onStopPressed: () => {
+      dispatch(STOP_PRESSED)
+    },
+  }
+}
+
 const useAlwaysNotes = (
   opened: OpenedAgent,
   answer: CommandAction,
@@ -487,6 +545,7 @@ export const useChatCommands = ({
   }
 
   const blocked = ActivityState.guards.Blocked(activity)
+  const composerFailure = useComposerFailure(prompt, stop, draft, working)
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(opened, answer, session)
   const openAsk = Option.flatMap(
@@ -502,6 +561,7 @@ export const useChatCommands = ({
   useRestartInPlace(machine, restart)
 
   const sendPrompt = (command: Command) => {
+    composerFailure.onPromptSent()
     prompted.afterSend({
       replacesFailed: isFailed(prompt.state) && Option.exists(prompt.last, awaitsAnswer),
       prompt: textOf(command),
@@ -553,6 +613,7 @@ export const useChatCommands = ({
       onSend: send,
       onStop: () => {
         if (!stopping) {
+          composerFailure.onStopPressed()
           stop.send(interrupt(pane))
         }
       },
@@ -563,7 +624,7 @@ export const useChatCommands = ({
       stopping,
       placeholder: placeholderOf(canAct, mode, blocked),
       label: mode === 'decline' ? 'Tell Claude what to do instead' : 'Message to Claude',
-      failure: Option.orElse(failureMessageOf(prompt.state), () => failureMessageOf(stop.state)),
+      failure: composerFailure.failure,
       note: Option.orElse(refusal, () => prompted.unanswered),
     },
     restart: Option.map(
@@ -574,7 +635,9 @@ export const useChatCommands = ({
         },
         starting: isInFlight(restart),
         disabled: !canAct,
-        failure: failureMessageOf(restart.state),
+        failure: Option.orElse(failureMessageOf(restart.state), () =>
+          unconfirmedNoteOf(restart.state),
+        ),
       }),
     ),
     pendingPrompts: prompted.rows,

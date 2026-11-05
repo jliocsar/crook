@@ -1,0 +1,8 @@
+stateDiagram-v2
+  [*] --> NoFailure
+  state "from any state" as Anywhere
+  PromptFailed --> NoFailure: DraftChanged
+  StopFailed --> NoFailure: StopPressed<br/>TurnEnded
+  Anywhere --> NoFailure: PromptSent
+  Anywhere --> PromptFailed: PromptRefused
+  Anywhere --> StopFailed: StopRefused
