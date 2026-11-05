@@ -106,12 +106,7 @@ const HOLDING: readonly Check[] = [
     AgentDrops: 1,
     SwitchQueueSize: 1,
   }),
-  {
-    name: 'holds/return-shows-lines-once',
-    says: 'the pane goes A, B, A, and the phone shows each line of A once and only A',
-    constants: RETURN,
-    rules: ['NoDuplicateLine', 'NoHole', 'OneSessionShown', 'NoRepeatedOpen', 'NeverRewinds'],
-  },
+  holds('holds/return-inside-switch-queue', 'the pane goes A, B, A with the first open still queued, and the phone ends with each line of A once', RETURN),
   {
     name: 'holds/every-retry-ends',
     says: 'no restart loop: the pipe always reaches a point with nothing left to do',
@@ -121,9 +116,7 @@ const HOLDING: readonly Check[] = [
   },
 ]
 
-const FINDINGS: readonly Check[] = [
-  finding('finding/F4-return-race-behind', 'a return inside the switch queue leaves the phone empty at offset 0', 'NeverBehindFile', RETURN),
-]
+const FINDINGS: readonly Check[] = []
 
 const reach = (name: string, says: string, property: string, constants: Constants): Check => ({
   name,
@@ -138,6 +131,7 @@ const reach = (name: string, says: string, property: string, constants: Constant
 
 const REACHED: readonly Check[] = [
   reach('reach/live-chunk-refused', 'a chunk that does not continue the position is refused, and the agent restarts from where the hub says', 'NoLiveChunkRefused', RETURN),
+  reach('reach/caught-up-refused', 'a caught-up mark past what the hub delivered is refused, and the agent restarts from where the hub says', 'NoCaughtUpRefused', RETURN),
   reach('reach/fenced-call-dropped', "a dead socket's call lands after a later link asked for demands, and the hub drops it", 'NoFencedCallDropped', STALE_SOCKET),
   reach('reach/dead-socket-interrupted', "the hub sees a dead socket and interrupts its call between two updates", 'NoDeadSocketSeen', STALE_SOCKET),
   reach('reach/call-on-gone-watch', 'a call lands after its watch has failed and left the map', 'NoCallOnGoneWatch', { ...STALE_SOCKET, WatchFailures: 1 }),
@@ -156,6 +150,7 @@ const CAN_FAIL: readonly Check[] = [
   mutant('omitted-not-marked', 'NoHole', { SessionPath: 'PathOne', FirstFileLines: 2 }, 'omittedUpTo without its OmittedLines'),
   mutant('open-not-filtered', 'NoRepeatedOpen', DROPS, 'deliver forwards every TranscriptOpened'),
   mutant('no-fence', 'NeverRewinds', STALE_SOCKET, "a dead socket's call counts after a later link asked for demands"),
+  mutant('caught-up-unchecked', 'NeverBehindFile', RETURN, 'passOnCaughtUp forwards a mark past the delivered position'),
   mutant('caught-up-dropped', 'NeverStuckCatchingUp', {}, 'forwardInSession drops the caught-up mark'),
   mutant('mailbox-holds-when-full', 'NeverStuckCatchingUp', BACKLOG, 'awaitsCatchUp without the isFull check'),
   mutant('no-switch', 'ShowsPaneSession', {}, 'followPane ignores a session change'),

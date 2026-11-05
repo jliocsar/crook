@@ -23,13 +23,13 @@ The command compares these files with that commit and exits 2 when any of them m
 is the file, then the functions the model stands for.
 
 ```coverage
-packages/domain/src/Transcript.ts           positionAfter continuesFrom inSession omittedUpTo
+packages/domain/src/Transcript.ts           positionAfter continuesFrom reachesPast inSession omittedUpTo
 packages/protocol/src/TranscriptBatch.ts    batchWith withChunk withOpened intoSession eventsOf updatesOf isFull awaitsCatchUp isCaughtUp takeWhen
 packages/protocol/src/Transcripts.ts        TranscriptOutOfStep TranscriptWatchFailed
 packages/claude/src/TranscriptTail.ts       open available follow tailStart
 packages/agent/src/TranscriptStreams.ts     fromLineNearEnd openSession sessionsOf followPane publishAll runWatch serve
 packages/agent/src/HubLink.ts               session transcriptLinkOf
-packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append fail deliver publish
+packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append passOnCaughtUp fail deliver publish
 packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript TranscriptDemands PublishTranscriptBatch
 packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines catchingUpAfter catchingUpFrom failedWith resumeOf isShowable isOpened
 packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
@@ -92,24 +92,29 @@ The run has five parts, each a line per check:
 
 ## What it found
 
-These are bugs in the code, kept as findings: never weaken a rule or the model to make one go
-away. Each runs as `finding/*`, so its line stops being "ok" the day the code changes.
+A bug found here is kept as a finding until it is fixed: never weaken a rule or the model to make
+one go away. Each runs as `finding/*`, so its line stops being "ok" the day the code changes. None
+is open today.
 
-**F4, `NeverBehindFile`: a return inside the switch queue leaves the phone empty at offset 0.**
-Needs the pane to go A, B, A while `opened(B)` is still in
-`mergeAll`'s queue: microseconds on an idle pipe, longer while a full mailbox holds the queue up
-behind a slow phone.
+**Settled: a return inside the switch queue.** Needs the pane to go A, B, A while `opened(B)` is
+still in `mergeAll`'s queue: microseconds on an idle pipe, longer while a full mailbox holds the
+queue up behind a slow phone.
 
 1. The pane leaves A, and `opened(B)` is queued, ahead of `Stream.tap`, so the `Ref` still says A@n,
    the end of the file.
 2. The pane returns to A. The next inner stream reads that `Ref`, and `openSession` from A@n sends
-   `opened(A)` and `caughtUp A`, with no chunk: it believes it is at the end.
-3. `deliver` forwards `opened(B)`, then `opened(A)`, since the position is in B: the position is
-   A@0, and the phone's too.
-4. The phone is caught up and holds position A@0 while the agent idles at A@n.
+   `opened(A)` and `caughtUp A@n`, with no chunk: it believes it is at the end.
+3. `deliver` forwards `opened(B)`, then `opened(A)`, since the position is in B, and the phone
+   starts over: both are at A@0, with nothing shown.
 
-Harm: an empty thread that says it is caught up, until Claude writes again and the refused line
-restarts the agent.
+It used to end there, an empty thread saying it was caught up until Claude wrote again. The mark
+names the offset the agent read to, and that offset is past the position, so the relay now refuses
+the mark with `TranscriptOutOfStep`, and the agent restarts from A@0. The fix lives at the hub only:
+every agent that sends the mark has named that offset since the mark exists, and every agent answers
+a refusal by restarting, so an agent older than the hub is covered too. A mark merged behind a later
+chunk names an offset before the position, and passes. `holds/return-inside-switch-queue` and
+`can-fail/caught-up-unchecked` show the rule holding with the refusal and failing without it, and
+`reach/caught-up-refused` walks the refusal through the real relay.
 
 **Settled: a late publish from a dead socket.** It used to rewind the hub: the agent's first
 attempt published `[opened A, chunk 0-1, caughtUp A]`, its socket died with that call undelivered,
@@ -216,9 +221,8 @@ agent.
 - An agent older than the hub (`awaitsCaughtUp` false), and several phones on one pane, whose
   watches are independent.
 - A hub restart, except as both connections dropping.
-- A `watchTranscript` stream that ends with `HubConnectionLost` while `connected` stays the same,
-  and a publish that dies of a defect: both would leave a watch nothing restarts, and neither is
-  modelled.
+- A publish that dies of a defect: the agent tells the phone the watch failed, and a test holds it.
+  If that call dies too, the watch stays dead until the next connection or re-watch.
 - `transcriptViews`' fibers are replayed by hand in `Replay.ts` from the pure functions it calls;
   the atom itself is not run.
 - A mailbox that holds a step back. The replay compares the agent's outbox fullness after each

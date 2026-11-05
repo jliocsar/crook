@@ -28,6 +28,7 @@ import {
   continuesFrom,
   inSession,
   positionAfter,
+  reachesPast,
 } from '@crook/domain/Transcript'
 import {
   TranscriptDemand,
@@ -208,6 +209,16 @@ const make = Effect.gen(function* () {
         ? forward(watcher, chunk)
         : Effect.fail(new TranscriptOutOfStep({ watch: id, expected: position }))
 
+    const passOnCaughtUp = (
+      id: TranscriptWatchId,
+      watcher: Watcher,
+      position: Option.Option<TranscriptPosition>,
+      caughtUp: TranscriptCaughtUp,
+    ) =>
+      reachesPast(position, caughtUp)
+        ? Effect.fail(new TranscriptOutOfStep({ watch: id, expected: position }))
+        : forwardInSession(watcher, position, caughtUp)
+
     const fail = (id: TranscriptWatchId, watcher: Watcher, failed: TranscriptWatchFailed) =>
       Effect.flatMap(stillCounts(machine, link), (counts) =>
         counts
@@ -228,7 +239,7 @@ const make = Effect.gen(function* () {
             SubagentsChanged: (changed) => forwardInSession(watcher, position, changed),
             SkillsChanged: (changed) => forwardInSession(watcher, position, changed),
             BackgroundChanged: (changed) => forwardInSession(watcher, position, changed),
-            TranscriptCaughtUp: (caughtUp) => forwardInSession(watcher, position, caughtUp),
+            TranscriptCaughtUp: (caughtUp) => passOnCaughtUp(id, watcher, position, caughtUp),
             TranscriptWatchFailed: (failed) => fail(id, watcher, failed),
           }),
         ),

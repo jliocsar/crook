@@ -262,6 +262,57 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
     }),
   )
 
+  it.effect('refuses a mark past what it delivered, so the agent restarts from there', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* watching(transcripts, paneSource, Option.none())
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+      const openedOther = new TranscriptOpened({ session: NEXT_SESSION })
+
+      yield* transcripts.publish(LAPTOP, id, [openedOther])
+
+      const refused = yield* transcripts
+        .publish(LAPTOP, id, [
+          opened,
+          new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(10) }),
+        ])
+        .pipe(Effect.flip)
+
+      yield* transcripts.publish(LAPTOP, id, [
+        chunkBetween(0, 10),
+        new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(10) }),
+      ])
+
+      expect(refused).toEqual(new TranscriptOutOfStep({ watch: id, expected: Option.some(at(0)) }))
+      expect(yield* Queue.takeN(events, 4)).toEqual([
+        `opened ${NEXT_SESSION}`,
+        `opened ${SESSION}`,
+        'chunk 0-10 1',
+        'caught up 10',
+      ])
+    }),
+  )
+
+  it.effect('passes on a merged mark that names an offset before the end of its chunk', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* watching(transcripts, paneSource, Option.none())
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+
+      yield* transcripts.publish(LAPTOP, id, [
+        opened,
+        chunkBetween(0, 20),
+        new TranscriptCaughtUp({ session: SESSION, offset: TranscriptOffset.make(10) }),
+      ])
+
+      expect(yield* Queue.takeN(events, 3)).toEqual([
+        `opened ${SESSION}`,
+        'chunk 0-20 1',
+        'caught up 10',
+      ])
+    }),
+  )
+
   it.effect('passes on the skills of the session it reads, and drops those of another', () =>
     Effect.gen(function* () {
       const transcripts = yield* relay

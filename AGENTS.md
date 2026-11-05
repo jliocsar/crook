@@ -676,7 +676,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   everything its mailbox holds as one call and keeps reading while it waits for the reply; the
   hub replies once the updates are in the phone's mailbox, and the phone gets everything held
   since its last acknowledgement as one message. A caught-up mark merged that way can name an
-  offset before the end of the joined chunk; nothing reads its offset. A mailbox takes no more
+  offset before the end of the joined chunk, which the hub lets through. A mailbox takes no more
   once it holds 1 MiB of read lines, so a slow phone holds the agent back instead of filling the
   hub, but always takes a failure. There is no time debounce: merging only happens while a
   message is already out, so an idle pipe adds no delay.
@@ -696,6 +696,23 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   as two steps, an agent connection dropping between them would leave the position behind what
   the phone holds, and the agent's resend from that position would reach the phone twice, with
   nothing downstream left to drop it (reasoned from the interrupt points, not measured).
+- A caught-up mark names the offset the agent read to, so the hub refuses one past the position it
+  holds, exactly as it refuses a chunk that does not continue it, and the agent restarts from there.
+  A pane going A, B, A while the open of B still sat in the agent's switch queue read its cursor as
+  the end of A and sent only the open and the mark, while the hub's position fell to the start of A:
+  an empty thread saying it was caught up (found by the model, and walked through the real relay).
+  The refusal is at the hub, since every agent that sends the mark names that offset and restarts
+  when refused, so an older agent is covered too.
+- A publish that dies of a defect ends its watch with nothing to restart it, because the agent's
+  demand stream only moves when the set of watches does (measured in a probe of the agent's real
+  serve loop). The agent tells the phone the watch failed, so the hub drops the watch and the phone
+  offers Try again, the same as a read that dies. If that call dies too, the watch waits for the next
+  connection or re-watch.
+- A watch's stream cannot end with the connection lost while the phone still reads the link as
+  connected. An RPC socket's failures, a message that will not decode included, reach every live
+  request, the herd's among them, and the link reads as connected only while that herd stream runs,
+  so the link flips and the watch restarts (read in the RPC client's and the link's source, not
+  measured).
 - A publish from an agent connection that has died can still run at the hub after its successor's.
   The RPC server forks a handler for each request frame it reads, and nothing orders two sockets.
   With a proxy holding the client's bytes, the client dead by its own ping timeout and its successor

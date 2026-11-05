@@ -95,7 +95,10 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
 
       if (update.t === 'opened') return new TranscriptOpened({ session })
       if (update.t === 'caughtUp') {
-        return new TranscriptCaughtUp({ session, offset: TranscriptOffset.make(0) })
+        return new TranscriptCaughtUp({
+          session,
+          offset: TranscriptOffset.make(update.off * lineBytes),
+        })
       }
       if (update.t === 'failed') {
         return new TranscriptWatchFailed({
@@ -138,7 +141,11 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
         case 'TranscriptOpened':
           return { s: SESSION_NAMES[update.session], t: 'opened' }
         case 'TranscriptCaughtUp':
-          return { s: SESSION_NAMES[update.session], t: 'caughtUp' }
+          return {
+            off: update.offset / lineBytes,
+            s: SESSION_NAMES[update.session],
+            t: 'caughtUp',
+          }
         case 'TranscriptWatchFailed':
           return {
             kind: update.failure._tag === 'TranscriptResumeRejected' ? 'rejected' : 'read',
@@ -330,12 +337,13 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
           stale = []
           break
         }
+        case 'HubRefusesCaughtUp':
         case 'HubRefusesChunk': {
           const link = whoseLink()
           const exit = yield* publishOne(link, takeUpdate())
           const expected = canonical(after['watcher'].delivered)
 
-          if (Exit.isSuccess(exit)) yield* fail('the code accepts a chunk the model refuses')
+          if (Exit.isSuccess(exit)) yield* fail('the code accepts what the model refuses')
           if (Exit.isFailure(exit)) {
             const found = exit.cause.reasons.flatMap((reason: any) =>
               reason._tag === 'Fail' ? [reason.error] : [],

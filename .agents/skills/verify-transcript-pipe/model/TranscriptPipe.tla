@@ -160,7 +160,7 @@ awaitsCatchUp(batch) ==
 isCaughtUp(batch) == batch.failed /= NONE \/ ~awaitsCatchUp(batch)
 
 -----------------------------------------------------------------------------
-(* @crook/agent/TranscriptStreams: followPane, fromSession, fromLineNearEnd *)
+(* @crook/agent/TranscriptStreams: followPane, openSession, fromLineNearEnd *)
 
 NEVER == [stage |-> "never", off |-> 0, tgt |-> NONE, epoch |-> 0,
           caught |-> FALSE, tail |-> TRUE]
@@ -220,7 +220,7 @@ FollowCatchesUp ==   \* tail.follow's caughtUp, or the one openSession sends bef
      /\ i.stage = "follow"
      /\ i.off >= file[i.tgt]
      /\ ~i.caught
-     /\ Emit([t |-> "caughtUp", s |-> i.tgt], [i EXCEPT !.caught = TRUE])
+     /\ Emit([t |-> "caughtUp", s |-> i.tgt, off |-> i.off], [i EXCEPT !.caught = TRUE])
 
 \* sessionsOf changes: Stream.switchMap interrupts the inner stream, and what it already put in
 \* the mergeAll queue stays there, ahead of the next one. The next inner reads Ref.get(position)
@@ -364,6 +364,27 @@ HubRefusesChunk(who) ==
   /\ UNCHANGED <<superseded, pane, file, budget, agentUp, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
+\* reachesPast: the agent says it read further than the hub ever delivered, so a chunk is missing.
+marksPastDelivered(u) ==
+  /\ Broken \notin {"caught-up-unchecked", "caught-up-dropped"}
+  /\ inSession(watcher.delivered, u.s)
+  /\ u.off > watcher.delivered.off
+
+\* passOnCaughtUp: TranscriptOutOfStep. The restart reads from the hub's position, so what the mark
+\* claimed reaches the phone, from any agent that sends the mark.
+HubRefusesCaughtUp(who) ==
+  /\ UpdatesLeft(who) /= NONE
+  /\ MayHoldPermit(who)
+  /\ watcher.alive
+  /\ LET u == Head(UpdatesLeft(who))
+     IN /\ u.t = "caughtUp"
+        /\ marksPastDelivered(u)
+        /\ SetLeft(who, NONE)
+        /\ permit' = "free"
+        /\ fiber' = IF who = "live" THEN fiberFrom(watcher.delivered) ELSE fiber
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, watcher, moving,
+                 inbox, wire, mode, view, cached, ghost>>
+
 isCaughtUpForwarded(u) ==
   IF Broken = "caught-up-dropped" THEN FALSE ELSE inSession(watcher.delivered, u.s)
 
@@ -374,6 +395,7 @@ HubForwardsCaughtUp(who) ==   \* forwardInSession
   /\ LET u == Head(UpdatesLeft(who))
      IN /\ u.t = "caughtUp"
         /\ isCaughtUpForwarded(u)
+        /\ ~marksPastDelivered(u)
         /\ ~isFull(inbox)
         /\ Forwards(u)
         /\ AfterStep(who, Tail(UpdatesLeft(who)))
@@ -630,6 +652,7 @@ HubStep ==
     \/ HubRefusesChunk(who)
     \/ HubForwardsCaughtUp(who)
     \/ HubDropsCaughtUp(who)
+    \/ HubRefusesCaughtUp(who)
     \/ HubFailsWatch(who)
     \/ HubDropsCallOfGoneWatch(who)
 
@@ -748,6 +771,7 @@ AlwaysSettles == []<>Quiescent
 NoLiveChunkRefused == [][~HubRefusesChunk("live")]_vars
 NoFencedCallDropped == [][~HubDropsFencedCall]_vars
 NoDeadSocketSeen == [][~HubSeesDeadSocket]_vars
+NoCaughtUpRefused == [][~\E who \in Who : HubRefusesCaughtUp(who)]_vars
 NoCaughtUpDropped == [][~\E who \in Who : HubDropsCaughtUp(who)]_vars
 NoCallOnGoneWatch == [][~\E who \in Who : HubDropsCallOfGoneWatch(who)]_vars
 

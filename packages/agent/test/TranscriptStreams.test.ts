@@ -48,6 +48,7 @@ import {
   type TranscriptUpdate,
   TranscriptWatch,
   TranscriptWatchId,
+  isWatchFailed,
 } from '@crook/protocol/Transcripts'
 
 import { agentRow, machineStateWith } from './Fixtures'
@@ -665,6 +666,47 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           `0 caught up ${FIRST_SESSION} ${bytesOf(seen + missed)}`,
           `0 skills ${FIRST_SESSION}`,
         ])
+      }),
+    )
+
+    it.effect('tells the phone a watch failed when its publish dies', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const first = userLine('first')
+
+        yield* append(transcriptPath(root, FIRST_SESSION), first)
+
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const demands = yield* Queue.unbounded<TranscriptDemand>()
+        const published = yield* Queue.unbounded<readonly TranscriptUpdate[]>()
+        const calls = yield* Ref.make(0)
+        const link: TranscriptLink = {
+          demands: Stream.fromQueue(demands),
+          publish: (_watch, updates) =>
+            Effect.flatMap(
+              Ref.getAndUpdate(calls, (count) => count + 1),
+              (count) =>
+                count === 0 ? Effect.die('cannot encode this') : Queue.offer(published, updates),
+            ),
+        }
+
+        yield* Effect.forkScoped(streams.serve(link))
+        yield* Queue.offer(
+          demands,
+          new TranscriptDemand({
+            watches: [
+              new TranscriptWatch({
+                id: WATCH,
+                source: new PaneTranscript({ pane: PANE }),
+                from: Option.none(),
+                tail: Option.none(),
+              }),
+            ],
+          }),
+        )
+
+        expect((yield* Queue.take(published)).map(isWatchFailed)).toEqual([true])
       }),
     )
 
