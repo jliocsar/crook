@@ -3,8 +3,10 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Equal from 'effect/Equal'
 import * as FileSystem from 'effect/FileSystem'
+import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Queue from 'effect/Queue'
@@ -69,24 +71,49 @@ const make = (roots: readonly string[]) =>
         ),
       )
 
-    const readFolder = (folder: string) =>
+    const forgetAllBut =
+      (folder: string, files: readonly string[]) =>
+      (known: SessionsByFile): readonly [boolean, SessionsByFile] => {
+        const gone = pipe(
+          Arr.fromIterable(HashMap.keys(known)),
+          Arr.filter((file) => path.dirname(file) === folder && !files.includes(file)),
+        )
+
+        return [gone.length > 0, HashMap.removeMany(known, gone)]
+      }
+
+    const sessionFilesIn = (folder: string) =>
       fileSystem.readDirectory(folder).pipe(
-        Effect.map(Arr.filter((name) => name.endsWith(SESSION_FILE_EXTENSION))),
-        Effect.flatMap(
-          Effect.forEach((name) => readSessionFile(path.join(folder, name)), {
-            concurrency: 'unbounded',
-          }),
+        Effect.catchReason('PlatformError', 'NotFound', () =>
+          Effect.succeed<readonly string[]>([]),
         ),
-        Effect.map(Arr.some((movedHere) => movedHere)),
+        Effect.map(Arr.filter((name) => name.endsWith(SESSION_FILE_EXTENSION))),
+        Effect.map(Arr.map((name) => path.join(folder, name))),
+      )
+
+    const readFolder = (folder: string) =>
+      sessionFilesIn(folder).pipe(
+        Effect.flatMap((files) =>
+          Effect.zipWith(
+            Ref.modify(sessions, forgetAllBut(folder, files)),
+            Effect.forEach(files, readSessionFile, { concurrency: 'unbounded' }),
+            (forgot, read) => forgot || Arr.some(read, (movedHere) => movedHere),
+          ),
+        ),
       )
 
     const readWhatChanged = (folder: string) =>
       Option.match({
         onNone: () => readFolder(folder),
         onSome: (name: string) =>
-          name.endsWith(SESSION_FILE_EXTENSION)
-            ? readSessionFile(path.join(folder, name))
-            : Effect.succeed(false),
+          Match.value(name).pipe(
+            Match.when(SESSIONS_FOLDER, () => readFolder(folder)),
+            Match.when(
+              (found) => found.endsWith(SESSION_FILE_EXTENSION),
+              (found) => readSessionFile(path.join(folder, found)),
+            ),
+            Match.orElse(() => Effect.succeed(false)),
+          ),
       })
 
     const followFolder = (root: string) => {

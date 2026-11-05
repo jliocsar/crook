@@ -7,6 +7,7 @@ import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
+import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
@@ -178,6 +179,37 @@ layer(services, { excludeTestServices: true })('ClaudeSessionFiles', (it) => {
 
       expect(yield* awaitMove(files)).toBe(true)
       expect(yield* files.holds(CLEARED)).toBe(true)
+    }),
+  )
+
+  it.effect('forgets the files of a folder whose own end reached it first', () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem
+      const root = yield* rootWithSession(SESSION)
+      const events = yield* Queue.unbounded<Option.Option<string>>()
+      const watch = Layer.succeed(
+        FileWatch,
+        FileWatch.of({
+          watchReady: () => Stream.fromQueue(events),
+          awaitPath: () => Effect.void,
+          watchWhenPresent: () => Stream.fromQueue(events),
+        }),
+      )
+      const context = yield* Layer.build(
+        ClaudeSessionFiles.layerAt([root]).pipe(Layer.provide(Layer.merge(watch, services))),
+      )
+      const files = Context.get(context, ClaudeSessionFiles)
+
+      yield* Queue.offer(events, Option.none())
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.holds(SESSION)).toBe(true)
+
+      yield* fileSystem.remove(`${root}/sessions`, { recursive: true })
+      yield* Queue.offer(events, Option.some('sessions'))
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.holds(SESSION)).toBe(false)
     }),
   )
 

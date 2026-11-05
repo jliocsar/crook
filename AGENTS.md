@@ -1368,6 +1368,8 @@ Bare `/model`, `/effort` and `/fast` each open a dialog over the prompt, and the
 :::tip
 Deleting a folder under a Bun `fs.watch` reports the folder's own name, and after that the watch hears nothing, though it neither closes nor fails: a folder made again under the same path stayed silent (measured on Bun 1.4.4). Renaming it away reported nothing at all. A watch that must outlive its folder opens again when it hears its own name. Claude touches its pid folder as it starts, which reports that same name, so each new Claude costs one reopen and one read of the folder.
 
+The effect file system stats each rename event in a fiber of its own before it hands the event on, so two events that arrive together reach the stream in the order their stats finish. The folder's own name overtook the deleted file's in 11 of 60 deletes, even though the raw watch reported the file first in 40 of 40 (measured). A stream that stops at the folder's name therefore never hears the file, so that name means reading the whole folder again and forgetting what it no longer holds. Before this, a session file deleted that way stayed known and the deletion woke nothing, in 8 of 60 deletes, and in none of 60 after (measured).
+
 `fs.watch` throws on a folder it may not read, and the effect file system opens its watcher inside a synchronous effect, so `EACCES` arrives as a defect rather than a `PlatformError`, and a retry alone would let it through (measured). A watch that must keep trying turns the defect into its own failure first. The retry starts from the same 100 ms as the reconnect to herdr, a guard and not a measurement: nothing measured says how soon a failed watch is worth trying again.
 :::
 
