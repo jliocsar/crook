@@ -1213,7 +1213,7 @@ a turn of its own, enqueued as a task notification.
   before and 26 to 31 after, and is left alone.
 - What a status flip costs outside the screen is too small to spend code on, so deltas stay unbuilt.
   With 15 agents the phone encoded its herd snapshot in about 1 ms and wrote it to IndexedDB in about 1
-  ms at 4x CPU throttling, 56 ms at worst, on the first write. A flip sends one machine's entry, 2440
+  ms at 4x CPU throttling, 56 ms at worst. A flip sends one machine's entry, 2440
   bytes at 5 agents, which decodes in under 1 ms at 4x. The hub's upsert took a median of 0.011 to
   0.014 ms and at most 8 ms over 6000 writes to a file (all measured, Chromium and Bun on the laptop).
 - A command's keep-alive atom costs 2.26 KB of heap per send (measured over 1000 sends, after a GC), so
