@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
 import type { Finding } from '@crook/frames/Detect'
@@ -45,10 +46,12 @@ const escapeHtml = (text: string): string =>
   text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 
 const emptyBandWords = (frame: RecordedFrame): string =>
-  BandPlace.literals
-    .filter((place) => showsEmptyBand(frame, place))
-    .map((place) => `EMPTY ${place} ${bandAt(frame, place)} px `)
-    .join('')
+  pipe(
+    BandPlace.literals,
+    Arr.filter((place) => showsEmptyBand(frame, place)),
+    Arr.map((place) => `EMPTY ${place} ${bandAt(frame, place)} px `),
+    Arr.join(''),
+  )
 
 const tileHtml = ({ frame, image, flagged }: Tile): string =>
   [

@@ -254,7 +254,17 @@ const useLift = () => {
   const trailing = useSpring(resting, MOMENTUM_GLIDE)
   const transform = useTransform(() => translate('Y', resting.get() - trailing.get()))
   const liftedFrom = React.useRef<Option.Option<number>>(Option.none())
+  const pinUnheard = React.useRef(false)
   const current = React.useCallback(() => resting.get() - trailing.get(), [resting, trailing])
+  const lifting = React.useCallback(() => pinUnheard.current || current() > 0, [current])
+
+  const pinMoved = React.useCallback((grown: number) => {
+    pinUnheard.current ||= grown !== 0
+  }, [])
+
+  const pinHeard = () => {
+    pinUnheard.current = false
+  }
 
   const firstIndex = (range: Range): number =>
     pipe(
@@ -266,12 +276,10 @@ const useLift = () => {
       }),
     )
 
-  const heldIndex = (): number | undefined => Option.getOrUndefined(liftedFrom.current)
+  const heldIndex = (): Option.Option<number> => liftedFrom.current
 
-  const holdReach = React.useCallback((reach: LiftReach): boolean => {
+  const holdReach = React.useCallback((reach: LiftReach) => {
     liftedFrom.current = Option.some(heldFrom(liftedFrom.current, reach, OVERSCAN))
-
-    return !reach.rendered
   }, [])
 
   const raise = React.useCallback(
@@ -301,7 +309,17 @@ const useLift = () => {
     [current, resting, trailing],
   )
 
-  return { transform, firstIndex, heldIndex, holdReach, raise, current }
+  return {
+    transform,
+    firstIndex,
+    heldIndex,
+    holdReach,
+    raise,
+    current,
+    lifting,
+    pinMoved,
+    pinHeard,
+  }
 }
 
 const ghostsOf = (
@@ -392,11 +410,10 @@ export function Thread({
   const followingRef = React.useRef(true)
   const lastTop = React.useRef(0)
   const holesAtPin = React.useRef(0)
-  const pinUnheard = React.useRef(false)
   const intent = useScrollIntent()
   const reduce = useReducedMotion() ?? false
   const lift = useLift()
-  const { raise, holdReach, current: liftNow } = lift
+  const { raise, holdReach, lifting, pinMoved, current: liftNow } = lift
   const [, renderReach] = React.useReducer((renders: number) => renders + 1, 0)
 
   const { askedPin } = intent
@@ -430,7 +447,7 @@ export function Thread({
         defaultRangeExtractor({ ...range, startIndex: lift.firstIndex(range) }),
         range,
         followingRef.current,
-        pinUnheard.current || liftNow() > 0 ? lift.heldIndex() : undefined,
+        Option.filter(lift.heldIndex(), lifting),
       ),
     onChange: onScrollStop,
   })
@@ -491,22 +508,34 @@ export function Thread({
 
     const grown = element.scrollTop - before
 
-    pinUnheard.current ||= grown !== 0
+    pinMoved(grown)
 
     if (animates && grown > 0 && !holeFilled) {
       raise({ grown, ceiling: element.clientHeight, content: content.current })
     }
 
-    if (
-      (pinUnheard.current || liftNow() > 0) &&
-      Option.exists(
-        reachOf(virtualizer.getVirtualItems(), liftNow(), element.clientHeight, OVERSCAN),
-        holdReach,
-      )
-    ) {
-      renderReach()
+    const reach = reachOf(virtualizer.getVirtualItems(), liftNow(), element.clientHeight, OVERSCAN)
+
+    if (lifting() && Option.isSome(reach)) {
+      holdReach(reach.value)
+
+      if (!reach.value.rendered) {
+        renderReach()
+      }
     }
-  }, [totalSize, rows.length, holes, toBottom, animates, raise, holdReach, liftNow, virtualizer])
+  }, [
+    totalSize,
+    rows.length,
+    holes,
+    toBottom,
+    animates,
+    raise,
+    holdReach,
+    lifting,
+    pinMoved,
+    liftNow,
+    virtualizer,
+  ])
 
   usePinOnResize(viewport, followingRef, toBottom)
 
@@ -523,7 +552,7 @@ export function Thread({
             const top = event.currentTarget.scrollTop
             const movedUp = top < lastTop.current
 
-            pinUnheard.current = false
+            lift.pinHeard()
             lastTop.current = top
             intent.scrolled()
 

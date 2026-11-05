@@ -115,4 +115,34 @@ describe('Thread glide', () => {
         expect(landing.rowsReachUpTo).toBeLessThanOrEqual(landing.topOfTheScreen)
       }),
   )
+
+  it.effect('has the rows the lift shows on the screen when a hole lands among them', () =>
+    Effect.gen(function* () {
+      const landing = yield* catchUpLands(
+        SHORT_ROW_HEIGHT,
+        CACHED_ROWS,
+        SHORT_ROW_HEIGHT,
+        LANDED_ROWS,
+        { holeFirst: true },
+      )
+
+      expect(lifted()).toBeCloseTo(VIEWPORT_HEIGHT)
+      expect(landing.rowsReachUpTo).toBeLessThanOrEqual(landing.topOfTheScreen)
+    }),
+  )
+
+  it.effect('keeps the lift capped and the screen filled when rows land during a lift', () =>
+    Effect.gen(function* () {
+      const landing = yield* catchUpLands(
+        SHORT_ROW_HEIGHT,
+        CACHED_ROWS,
+        SHORT_ROW_HEIGHT,
+        LANDED_ROWS,
+      )
+      const again = landing.landsAgain()
+
+      expect(lifted()).toBeCloseTo(VIEWPORT_HEIGHT)
+      expect(again.rowsReachUpTo).toBeLessThanOrEqual(again.topOfTheScreen)
+    }),
+  )
 })

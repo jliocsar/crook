@@ -53,4 +53,19 @@ describe('Thread under reduced motion', () => {
       expect(landing.rowsReachUpTo).toBeLessThanOrEqual(landing.topOfTheScreen)
     }),
   )
+
+  it.effect('lets go of the rows the first landing held when a second one lands', () =>
+    Effect.gen(function* () {
+      const landing = yield* catchUpLands(
+        SHORT_ROW_HEIGHT,
+        CACHED_ROWS,
+        SHORT_ROW_HEIGHT,
+        LANDED_ROWS,
+      )
+      const again = landing.landsAgain()
+
+      expect(again.rowsReachUpTo).toBeGreaterThan(landing.rowsReachUpTo)
+      expect(again.rowsReachUpTo).toBeLessThanOrEqual(again.topOfTheScreen)
+    }),
+  )
 })

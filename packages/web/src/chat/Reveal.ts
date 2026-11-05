@@ -35,10 +35,16 @@ export const withTheEnd = (
   indexes: readonly number[],
   range: RenderedRange,
   following: boolean,
-  liftedFrom: number = range.count,
+  liftedFrom: Option.Option<number> = Option.none(),
 ): number[] => {
   const atEnd = range.endIndex - range.startIndex + 1 + range.overscan
-  const first = Math.max((indexes.at(-1) ?? -1) + 1, Math.min(range.count - atEnd, liftedFrom))
+  const first = Math.max(
+    (indexes.at(-1) ?? -1) + 1,
+    Math.min(
+      range.count - atEnd,
+      Option.getOrElse(liftedFrom, () => range.count),
+    ),
+  )
 
   return following && first < range.count
     ? [...indexes, ...Arr.range(first, range.count - 1)]

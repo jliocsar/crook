@@ -197,6 +197,7 @@ export const catchUpLands = Effect.fn('catchUpLands')(function* (
   cachedCount: number,
   landedHeight: number,
   landedCount: number,
+  options: { readonly holeFirst: boolean } = { holeFirst: false },
 ) {
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
     function rendered(this: HTMLElement) {
@@ -211,7 +212,10 @@ export const catchUpLands = Effect.fn('catchUpLands')(function* (
   )
 
   const cached = Arr.makeBy(cachedCount, (index) => row(`cached ${index}`))
-  const landed = Arr.makeBy(landedCount, (index) => row(`landed ${index}`))
+  const landed = Arr.makeBy(landedCount, (index) => ({
+    ...row(`landed ${index}`),
+    hole: options.holeFirst && index === 0,
+  }))
   const { rerender } = render(thread(cached, null))
   const scrolling = viewport()
   let top = 0
@@ -232,11 +236,26 @@ export const catchUpLands = Effect.fn('catchUpLands')(function* (
 
   yield* wait(SETTLE_MS)
 
-  rerender(thread([...cached, ...landed], null))
-
-  return {
+  const landedOnce = [...cached, ...landed]
+  const reading = () => ({
     topOfTheScreen: scrolling.scrollTop - lifted(),
     rowsReachUpTo: startOfRowsJoinedToTheEnd(scrolling),
+  })
+
+  rerender(thread(landedOnce, null))
+
+  return {
+    ...reading(),
+    landsAgain: () => {
+      rerender(
+        thread(
+          [...landedOnce, ...Arr.makeBy(landedCount, (index) => row(`landed again ${index}`))],
+          null,
+        ),
+      )
+
+      return reading()
+    },
   }
 })
 

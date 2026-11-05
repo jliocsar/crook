@@ -57,15 +57,25 @@ describe('withTheEnd', () => {
   })
 
   it('renders down from where the lift reaches, wherever the range still sits', () => {
-    expect(withTheEnd([0, 1, 2], range, true, 60)).toEqual([0, 1, 2, ...Arr.range(60, 99)])
+    expect(withTheEnd([0, 1, 2], range, true, Option.some(60))).toEqual([
+      0,
+      1,
+      2,
+      ...Arr.range(60, 99),
+    ])
   })
 
   it('keeps the end rows it already renders when the lift reaches less far', () => {
-    expect(withTheEnd([0, 1, 2], range, true, 95)).toEqual([0, 1, 2, ...Arr.range(82, 99)])
+    expect(withTheEnd([0, 1, 2], range, true, Option.some(95))).toEqual([
+      0,
+      1,
+      2,
+      ...Arr.range(82, 99),
+    ])
   })
 
   it('renders only the range once the thread stops following, whatever the lift reaches', () => {
-    expect(withTheEnd([0, 1, 2], range, false, 60)).toEqual([0, 1, 2])
+    expect(withTheEnd([0, 1, 2], range, false, Option.some(60))).toEqual([0, 1, 2])
   })
 })
 
