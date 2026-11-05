@@ -540,6 +540,21 @@ describe('Show earlier', () => {
     })
   })
 
+  it('keeps reading whole when the chat reopens from a view read whole', () => {
+    const whole = after(
+      [
+        watchResumed(true),
+        eventArrived(opened()),
+        eventArrived(chunk(0, 4106, [said(0, 'whole')])),
+        eventArrived(caughtUp(4106)),
+      ],
+      asking,
+    )
+    const reopenedWhole = after([cacheRead(rememberedOf(whole)), watchResumed(true)])
+
+    expect(resumeOf(foldOf(reopenedWhole), Option.some(ANY_TAIL)).tail).toEqual(Option.none())
+  })
+
   it('keeps reading whole through a plain reconnect', () => {
     const whole = after(
       [

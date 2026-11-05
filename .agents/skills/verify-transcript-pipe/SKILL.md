@@ -32,7 +32,7 @@ packages/agent/src/HubLink.ts               session transcriptLinkOf
 packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append passOnCaughtUp fail deliver publish
 packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript TranscriptDemands PublishTranscriptBatch
 packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines resumeOf isOpened withOneHole
-packages/web/src/chat/TranscriptMachine.ts  transition arrived watchEnded resumed landed
+packages/web/src/chat/TranscriptMachine.ts  transition arrived watchEnded resumed landed leftSession startedOver earlierAsked
 packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
 packages/web/src/rpc/HubLink.ts             whileConnected watchTranscript
 packages/web/src/cache/TranscriptCache.ts   remember load
@@ -226,7 +226,19 @@ A resume with more than one read left to go sends an omitted-lines chunk from it
 start near the end, then reads on from there. The model gives every chunk a body of lines and
 omitted runs, because a mailbox joins chunks that continue each other and a hole can then sit in the
 middle of one. `Show earlier` restarts the watch from nothing with no tail, and the cache folds a
-view down to one hole as it hands it back.
+view down to one hole as it hands it back. To the machine a skip is one more chunk: it has no event
+or case of its own, and the machine's walk tries one from every state and holds it to the arrow a
+chunk of lines takes there.
+
+Whether a view is being read whole sits on the view, as it sits on the fold in the code, and the
+replay compares it at every step, the cached view's included. A rejected resume and a session change
+both clear it. A session read whole restarts from the tail when the next one opens, atomically here:
+the machine drops what the old watch still sends until the new one has been asked, so nothing lands
+between the two steps. The view also keeps the position that was on screen when Show earlier was
+pressed, since a read that opens another session before its first position has left it too.
+`holds/session-change-while-whole`, `reach/whole-left` and `can-fail/whole-survives-session` are
+that rule, and removing the restart from the real machine fails `reach/whole-left` at the step that
+lands the open.
 
 No rule breaks from the skip. `can-fail/skip-not-marked`, `can-fail/skip-from-start`,
 `can-fail/whole-takes-tail`, `can-fail/no-fold` and `can-fail/fold-not-marked` show the guards
@@ -236,6 +248,10 @@ model only reached two holes and said every rule holds, which proved nothing abo
 A `holds/*` line over a bound that never reaches the step it names is empty, and says so by nothing.
 `holds/return-over-big-gap` held at `Writes: 2`, where no hole ever landed; `reach/hole-on-return`
 is what showed it, so a bound for a new step gets a `reach/*` line beside it.
+
+`UserShowsEarlier` is enabled only from a view on screen, not from one held back: a press there asks
+the same of the pipe, a new watch from nothing, and the machine ignores it in the states that show no
+rows, which this model does not track. The machine's walk holds which states take it.
 
 A real-code mutation shows the replay's half: dropping the chunk that marks the skip fails
 `replay/follow` on 5 of 13 cases, skipping a gap one read covers fails it on 2, and a cache that does
