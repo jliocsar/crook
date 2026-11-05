@@ -667,7 +667,7 @@ const draftsOf = (placed: Placed): readonly Draft[] => {
         draft(ChatItem.Unreadable({ key: keyAt(0), byteLength: malformed.byteLength })),
       ],
       Omitted: (omitted) => [
-        draft(ChatItem.Omitted({ key: keyAt(0), byteLength: omitted.byteLength })),
+        draft(ChatItem.Omitted({ key: `hole ${keyAt(0)}`, byteLength: omitted.byteLength })),
       ],
     }),
   )
