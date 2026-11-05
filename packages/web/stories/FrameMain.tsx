@@ -2,6 +2,8 @@ import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 
+import { loadFontsEarly } from '@crook/web/text/Fonts'
+
 import { STORIES } from './Catalog.ts'
 import { makePlayer } from './Player.ts'
 import type { StoryApi } from './Player.ts'
@@ -55,6 +57,7 @@ const unknownStory = Effect.sync(() => {
   document.body.textContent = `No story "${Option.getOrElse(requested, () => '')}". Run bun run stories:list for every id.`
 })
 
+Effect.runFork(loadFontsEarly)
 Effect.runFork(boot.pipe(Effect.catch(() => unknownStory)))
 
 declare global {

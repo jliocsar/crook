@@ -7,10 +7,13 @@ import { createRoot } from 'react-dom/client'
 import '@crook/web/app.css'
 import { registerServiceWorker } from '@crook/web/pwa/RegisterServiceWorker'
 import { router } from '@crook/web/router/Router'
+import { loadFontsEarly } from '@crook/web/text/Fonts'
 
 const ROOT_ELEMENT_ID = 'root'
 
 const root = document.getElementById(ROOT_ELEMENT_ID)
+
+Effect.runFork(loadFontsEarly)
 
 if (root) {
   createRoot(root).render(

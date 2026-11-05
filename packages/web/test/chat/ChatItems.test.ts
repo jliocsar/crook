@@ -310,6 +310,13 @@ describe('a hole in the thread', () => {
       'claude: Still going.',
     ])
   })
+
+  it('keeps its own key, apart from the line that fills it at the same offset', () => {
+    const keysOf = (message: TranscriptMessage) =>
+      Arr.map(chatItems(linesOf([message]), context()), (item) => item.key)
+
+    expect(keysOf(hole)).not.toStrictEqual(keysOf(said(40, 'What the gap held.')))
+  })
 })
 
 describe('lastTurnEvidence', () => {
