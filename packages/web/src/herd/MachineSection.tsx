@@ -7,18 +7,9 @@ import { Dimmed } from '@crook/web/components/Dimmed'
 import { MachineBadge } from '@crook/web/components/MachineBadge'
 import type { MachineSectionModel } from '@crook/web/herd/HerdLayout'
 import { SPRING } from '@crook/web/motion/Springs'
-import { useNow } from '@crook/web/time/Now'
-import { isOffline } from '@crook/domain/Machine'
-import type { Machine } from '@crook/domain/Machine'
 import { needsYouLabel } from '@crook/domain/NeedsYouLabel'
 
 const COLLAPSED_CHEVRON_DEGREES = -90
-
-function SectionBadge({ machine }: { machine: Machine }) {
-  const now = useNow(isOffline(machine))
-
-  return <MachineBadge machine={machine} now={now} plain />
-}
 
 export function MachineSection({
   section,
@@ -45,7 +36,7 @@ export function MachineSection({
           <span className="font-display shrink-0 text-lg leading-6 font-semibold tracking-[-0.015em] whitespace-nowrap">
             {machine.label}
           </span>
-          <SectionBadge machine={machine} />
+          <MachineBadge machine={machine} plain />
           <span className="text-muted-foreground ml-auto truncate font-mono text-xs tabular-nums">
             {needsYou > 0 ? needsYouLabel(needsYou) : null}
           </span>

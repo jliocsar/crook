@@ -1,3 +1,4 @@
+import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import * as Atom from 'effect/reactivity/Atom'
 
@@ -12,13 +13,15 @@ export const machinesLayoutAtom = Atom.make((get) =>
   Option.map(get(herdAtom), (snapshot) => machinesLayout(snapshot.view)),
 )
 
+export const herdKnownAtom = Atom.make((get) => Option.isSome(get(herdAtom)))
+
 export const machineScreenAtom = Atom.family((machine: MachineId) =>
   Atom.make((get) =>
     keepWhileGone(
       Option.flatMap(get(herdAtom), (snapshot) => machineDetail(snapshot.view, machine)),
       Option.flatten(get.self<Option.Option<MachineScreenModel>>()),
     ),
-  ),
+  ).pipe(Atom.withEquality(Equal.equals)),
 )
 
 export const forgetMachineAtom = Atom.family((machine: MachineId) =>

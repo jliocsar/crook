@@ -1,10 +1,9 @@
-import type * as DateTime from 'effect/DateTime'
-
 import { InfoList } from '@crook/web/components/InfoList'
 import { StatusPill } from '@crook/web/components/ui/status-pill'
 import { aboutRows } from '@crook/web/machines/MachineLayout'
 import type { InfoRow, MachineDetailModel } from '@crook/web/machines/MachineLayout'
 import { SectionLabel } from '@crook/web/machines/SectionLabel'
+import { useNow } from '@crook/web/time/Now'
 
 function InfoValue({ row }: { row: InfoRow }) {
   if (!row.warn) {
@@ -18,7 +17,9 @@ function InfoValue({ row }: { row: InfoRow }) {
   )
 }
 
-export function MachineAbout({ detail, now }: { detail: MachineDetailModel; now: DateTime.Utc }) {
+export function MachineAbout({ detail }: { detail: MachineDetailModel }) {
+  const now = useNow()
+
   return (
     <section aria-labelledby="machine-about">
       <SectionLabel id="machine-about">About</SectionLabel>

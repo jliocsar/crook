@@ -2,9 +2,6 @@
   "ask/next-ask": {
     "always": ["shift:div[chat-dock]"]
   },
-  "machine/forgotten-while-open": {
-    "always": ["shift:div[swipe-card]"]
-  },
   "actions/toast-after-chat-close": {
     "always": [],
     "sometimes": ["flash:spinner"]

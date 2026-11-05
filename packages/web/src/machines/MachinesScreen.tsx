@@ -1,4 +1,3 @@
-import { useAtomValue } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
@@ -13,15 +12,34 @@ import { AddMachineButton, AddMachineSheet } from '@crook/web/machines/AddMachin
 import { MachineList } from '@crook/web/machines/MachineList'
 import type { OpenMachine } from '@crook/web/machines/MachineList'
 import { NoMachines } from '@crook/web/machines/NoMachines'
+import { useShownAtomValue } from '@crook/web/navigation/Covered'
 import { openedFrom } from '@crook/web/navigation/Opener'
 import { TabScreen } from '@crook/web/navigation/TabScreen'
-import { useNow } from '@crook/web/time/Now'
+
+function MachinesBody({ onOpen, onAddMachine }: { onOpen: OpenMachine; onAddMachine: () => void }) {
+  const connection = useShownAtomValue(connectionAtom)
+  const layout = useShownAtomValue(machinesLayoutAtom)
+
+  return Option.match(layout, {
+    onNone: () => <HerdSkeleton label="Loading your machines" />,
+    onSome: (machines) => (
+      <Dimmed dimmed={dimsContent(connection)}>
+        {Arr.isReadonlyArrayEmpty(machines.machines) ? (
+          <NoMachines onAddMachine={onAddMachine} />
+        ) : (
+          <MachineList
+            layout={machines}
+            controlsEnabled={allowsActions(connection)}
+            onOpen={onOpen}
+          />
+        )}
+      </Dimmed>
+    ),
+  })
+}
 
 export function MachinesScreen() {
-  const connection = useAtomValue(connectionAtom)
-  const layout = useAtomValue(machinesLayoutAtom)
   const navigate = useNavigate()
-  const now = useNow()
   const [adding, setAdding] = React.useState(false)
 
   const openMachine: OpenMachine = (machine, opener) => {
@@ -34,23 +52,7 @@ export function MachinesScreen() {
 
   return (
     <TabScreen title="Machines" action={<AddMachineButton onOpen={openSheet} />}>
-      {Option.match(layout, {
-        onNone: () => <HerdSkeleton label="Loading your machines" />,
-        onSome: (machines) => (
-          <Dimmed dimmed={dimsContent(connection)}>
-            {Arr.isReadonlyArrayEmpty(machines.machines) ? (
-              <NoMachines onAddMachine={openSheet} />
-            ) : (
-              <MachineList
-                layout={machines}
-                now={now}
-                controlsEnabled={allowsActions(connection)}
-                onOpen={openMachine}
-              />
-            )}
-          </Dimmed>
-        ),
-      })}
+      <MachinesBody onOpen={openMachine} onAddMachine={openSheet} />
       <AddMachineSheet
         open={adding}
         onClose={() => {

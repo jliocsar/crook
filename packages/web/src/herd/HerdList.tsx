@@ -1,8 +1,9 @@
 import { cn } from 'cn'
+import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import { Pin, PinOff, X } from 'lucide-react'
-import { AnimatePresence, motion } from 'motion/react'
-import type * as React from 'react'
+import { AnimatePresence, motion, PresenceContext } from 'motion/react'
+import * as React from 'react'
 
 import { toGlobalPaneId } from '@crook/domain/Ids'
 import type { MachineId } from '@crook/domain/Ids'
@@ -23,6 +24,15 @@ import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { SPRING } from '@crook/web/motion/Springs'
 
 export type OpenAgent = (machine: MachineId, card: AgentCardModel, opener: HTMLElement) => void
+
+interface AgentCardRowProps {
+  readonly machine: MachineId
+  readonly card: AgentCardModel
+  readonly row: OpenRow
+  readonly controlsEnabled: boolean
+  readonly onOpenAgent: OpenAgent
+  readonly onOpenActions: OpenAgentActions
+}
 
 interface HerdNoticeActions {
   readonly controlsEnabled: boolean
@@ -58,21 +68,14 @@ const closeAction = (run: () => void, disabled: boolean): SwipeAction => ({
   disabled,
 })
 
-function AgentCardRow({
+const AgentCardBody = React.memo(function AgentCardBody({
   machine,
   card,
   row,
   controlsEnabled,
   onOpenAgent,
   onOpenActions,
-}: {
-  machine: MachineId
-  card: AgentCardModel
-  row: OpenRow
-  controlsEnabled: boolean
-  onOpenAgent: OpenAgent
-  onOpenActions: OpenAgentActions
-}) {
+}: AgentCardRowProps) {
   const { pane } = card.row
   const pin = usePinAgent(new PaneAddress({ machine, pane }), {
     pinned: card.pinned,
@@ -84,12 +87,7 @@ function AgentCardRow({
   }
 
   return (
-    <motion.li
-      layout="position"
-      transition={SPRING}
-      exit={motionTokens().exit}
-      className="grid grid-cols-1 gap-2"
-    >
+    <>
       <SwipeRow
         id={toGlobalPaneId(machine, pane)}
         row={row}
@@ -110,6 +108,21 @@ function AgentCardRow({
         <AgentCard card={card} />
       </SwipeRow>
       <ActionFailure message={pin.failure} />
+    </>
+  )
+}, Equal.equals)
+
+function AgentCardRow(props: AgentCardRowProps) {
+  return (
+    <motion.li
+      layout="position"
+      transition={SPRING}
+      exit={motionTokens().exit}
+      className="grid grid-cols-1 gap-2"
+    >
+      <PresenceContext value={null}>
+        <AgentCardBody {...props} />
+      </PresenceContext>
     </motion.li>
   )
 }

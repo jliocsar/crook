@@ -66,7 +66,7 @@ import type { LogOutFailed } from '@crook/web/rpc/SessionCheck'
 
 type SessionFailure = HubCallFailed | HubWatchEnded
 
-type ConnectedCalls = SubscriptionRef.SubscriptionRef<Option.Option<HubCalls>>
+type HeldCalls = SubscriptionRef.SubscriptionRef<Option.Option<HubCalls>>
 
 export interface TranscriptResume {
   readonly from: Option.Option<TranscriptPosition>
@@ -104,7 +104,7 @@ const commandEvent = (command: LinkCommand): Effect.Effect<LinkEvent> =>
 
 const callsOnceReady = (
   state: SubscriptionRef.SubscriptionRef<HubLinkState>,
-  connected: ConnectedCalls,
+  connected: HeldCalls,
   isReady: (current: HubLinkState) => boolean,
 ) =>
   SubscriptionRef.changes(state).pipe(
@@ -121,7 +121,7 @@ const callsOnceReady = (
 
 const whenReady = <Success, Failure>(
   state: SubscriptionRef.SubscriptionRef<HubLinkState>,
-  connected: ConnectedCalls,
+  connected: HeldCalls,
   isReady: (current: HubLinkState) => boolean,
   call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
 ) =>
@@ -136,7 +136,7 @@ const whenReady = <Success, Failure>(
 
 const whenConnected = <Success, Failure>(
   state: SubscriptionRef.SubscriptionRef<HubLinkState>,
-  connected: ConnectedCalls,
+  connected: HeldCalls,
   call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
 ) =>
   Effect.flatMap(SubscriptionRef.get(connected), (held) =>
@@ -154,11 +154,11 @@ const machineIsThere = (current: HubLinkState, machine: MachineId): boolean =>
     }),
   )
 
-const whileConnected = <Success, Failure>(
-  connected: ConnectedCalls,
+const whileDialed = <Success, Failure>(
+  dialed: HeldCalls,
   watch: (calls: HubCalls) => Stream.Stream<Success, Failure | HubCallFailed>,
 ) =>
-  SubscriptionRef.changes(connected).pipe(
+  SubscriptionRef.changes(dialed).pipe(
     Stream.switchMap(
       Option.match({
         onNone: () => Stream.empty,
@@ -167,6 +167,21 @@ const whileConnected = <Success, Failure>(
       }),
     ),
   )
+
+const transcriptWhileDialed =
+  (dialed: HeldCalls) =>
+  (
+    machine: MachineId,
+    source: TranscriptSource,
+    resume: Effect.Effect<TranscriptResume>,
+  ): Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallDefected> =>
+    whileDialed(dialed, (calls) =>
+      Stream.unwrap(
+        Effect.map(resume, ({ from, tail }) =>
+          calls.watchTranscript({ machine, source, from, tail }),
+        ),
+      ),
+    )
 
 const make = Effect.gen(function* () {
   const connection = yield* HubConnection
@@ -178,6 +193,7 @@ const make = Effect.gen(function* () {
     new HubLinkState({ status: COLD_START, herd: cachedHerd }),
   )
   const connected = yield* SubscriptionRef.make(Option.none<HubCalls>())
+  const dialed = yield* SubscriptionRef.make(Option.none<HubCalls>())
   const resyncRequests = yield* SubscriptionRef.make(0)
   const loggedOut = yield* SubscriptionRef.make(false)
   const cacheWrites = yield* Semaphore.make(1)
@@ -243,8 +259,12 @@ const make = Effect.gen(function* () {
     const hub = yield* connection.open
 
     yield* Effect.addFinalizer(() =>
-      Effect.andThen(SubscriptionRef.set(connected, Option.none()), step(CONNECTION_DROPPED)),
+      SubscriptionRef.set(dialed, Option.none()).pipe(
+        Effect.andThen(SubscriptionRef.set(connected, Option.none())),
+        Effect.andThen(step(CONNECTION_DROPPED)),
+      ),
     )
+    yield* SubscriptionRef.set(dialed, Option.some(hub))
     yield* hub.watchHerd.pipe(Stream.runForEach((view) => receive(view, hub, liveSince)))
 
     return yield* new HubWatchEnded()
@@ -356,19 +376,6 @@ const make = Effect.gen(function* () {
     }),
   ).pipe(Effect.withSpan('HubLink.logOut'))
 
-  const watchTranscript = (
-    machine: MachineId,
-    source: TranscriptSource,
-    resume: Effect.Effect<TranscriptResume>,
-  ): Stream.Stream<TranscriptEvent, WatchTranscriptRefused | HubCallDefected> =>
-    whileConnected(connected, (calls) =>
-      Stream.unwrap(
-        Effect.map(resume, ({ from, tail }) =>
-          calls.watchTranscript({ machine, source, from, tail }),
-        ),
-      ),
-    )
-
   return HubLink.of({
     changes: Stream.merge(
       SubscriptionRef.changes(state),
@@ -390,15 +397,15 @@ const make = Effect.gen(function* () {
         (calls) => calls.sendCommand(machine, key, command),
       )
     }),
-    notificationSettings: whileConnected(connected, (calls) => calls.watchNotificationSettings),
-    account: whileConnected(connected, (calls) => Stream.fromEffect(calls.account)),
+    notificationSettings: whileDialed(dialed, (calls) => calls.watchNotificationSettings),
+    account: whileDialed(dialed, (calls) => Stream.fromEffect(calls.account)),
     setNotificationPref: connectedCall(
       'HubLink.setNotificationPref',
       (calls) => calls.setNotificationPref,
     ),
     sendTestNotification,
     logOut,
-    watchTranscript,
+    watchTranscript: transcriptWhileDialed(dialed),
   })
 })
 

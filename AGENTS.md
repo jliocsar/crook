@@ -1239,8 +1239,61 @@ a turn of its own, enqueued as a task notification.
   per clock second, and the task time per herd update fell to 17 to 31 ms, the rest of the app.
   Shown and idle, it commits once a second with only the elapsed times re-rendering, 105
   component renders and 38 to 41 ms per second (all measured on the dev server with a fake hub,
-  counting renders through React's devtools hook, two to eight runs each). The Machines tab is not
-  frozen yet: it reads its atoms and its clock above the covered scope.
+  counting renders through React's devtools hook, two to eight runs each).
+- A shown Agents page rendered every card on every herd update. A change to one card of 15 on three
+  machines went from 516 component renders and 232 to 235 ms of main-thread task time to 177 and 112
+  to 121 ms, and a status flip, which also plays that card's own animations, from 529 and 339 to
+  360 ms to 191 and 232 to 240 ms. A clock second went from 90 renders and 48 to 60 ms to 15 and 19
+  to 26 ms, once the pill's clock moved into the label that shows it (all measured with the devtools
+  hook, a fake hub and CDP's task duration, Chromium on the dev server at 4x, three runs each; a
+  production build and a phone are not measured).
+- Only a card's body is memoized, by structural equality over its props. Its motion row still renders
+  on every update, because Motion animates a layout change only for the rows that rendered; memoizing
+  the row too gained nothing against the same update, 111 to 117 ms, so it would risk the glides for
+  no measured gain.
+- A memo does not stop AnimatePresence's context. With `presenceAffectsLayout`, its default, it builds
+  a new context value on every render (read in its source), so each memoized card still rendered its
+  own nested presences, 30 of them per update. Turning that option off also stops the render that lets
+  the rows below a removed card glide up: they jumped 108 px in one frame, 2 of 2 runs, where they
+  otherwise take 28 steps. So the row keeps the option and the body under it reads a null presence
+  context, and a reorder, a removal and an added card each glide as before (measured in Chromium at 4x,
+  two runs each, reading every card's box per frame).
+- A machine's badge reads the clock only while the machine is offline, so a list of online machines
+  renders nothing on a clock second, down from 60 renders and 27 to 33 ms. The Machines tab reads its
+  atoms inside the covered scope, like the Agents page, and a machine's screen renders only for its
+  own machine: an update from another machine under that screen went from 262 renders and 110 to 113
+  ms to none, and its clock second from 235 renders and 105 to 113 ms to 12 and 13 to 18 ms (measured
+  as above, 3 machines). A herd update to the shown list itself stays about what it was, 22 to 29 ms
+  before and 26 to 31 after, and is left alone.
+- What a status flip costs outside the screen is too small to spend code on, so deltas stay unbuilt.
+  With 15 agents the phone encoded its herd snapshot in about 1 ms and wrote it to IndexedDB in about 1
+  ms at 4x CPU throttling, 56 ms at worst. A flip sends one machine's entry, 2440
+  bytes at 5 agents, which decodes in under 1 ms at 4x. The hub's upsert took a median of 0.011 to
+  0.014 ms and at most 8 ms over 6000 writes to a file (all measured, Chromium and Bun on the laptop).
+- A command's keep-alive atom costs 2.26 KB of heap per send (measured over 1000 sends, after a GC), so
+  a phone would need 10000 sends in one app lifetime to hold 22 MB. It stays until something else
+  changes that atom.
+- The memory the transcript cache keeps per chat is small enough that nothing evicts it: 0.2 MB of heap
+  for a 512 KB tail of one real transcript, 1 MB for 3 MB of it, 4 MB for the whole 13 MB, and 27.9 MB
+  for the biggest local transcript, 118 MB, read whole (measured after a GC). Evicting would also make
+  a reopen read the store, and only a reopen from memory has its rows in the first render.
+- Saving a chat encodes it and writes it on the main thread, and reading it back costs about the same.
+  At 4x, encode then write took about 4 ms for a 512 KB tail, 20 ms for 3 MB, 65 ms for a whole 13 MB
+  and 388 ms for the whole 118 MB; read then decode took about 4, 20, 63 and 294 ms (measured, medians
+  of three). Only a whole read of a huge transcript reaches a stall worth a frame, and a chat saves on
+  its caught-up mark, on leaving and on hiding, so that stays as it is.
+- A watch goes out when the socket is dialed, not when the first herd lands. The socket holds what is
+  written before it opens, and the hub admits a watch from its own state, so nothing depended on the
+  order. A resume on a fresh socket, through the real link, a local hub and agent and a proxy delaying
+  each WebSocket message 150 ms, went from 960 to 1034 ms to 746 to 780 ms from the dial to the caught-up
+  mark (five runs each). A tap on a live link was never affected, and neither are calls, which still
+  hold for the first herd. A resume reads the last herd the phone knew to decide whether the agent
+  sends the caught-up mark, so with no herd at all it still waits for the first one. Read without one,
+  a chat with nothing cached says "No messages yet" a second later and a cached chat lands with no
+  catch-up (read in the chat's machine, not measured). A dial that fails before its first herd ends the watch quietly, as any lost connection
+  does, and the next dial asks again. Each dial resumes, so a failing backoff restarts the chat's
+  notice wait, and the link's own notice dims the chat at that same second, which hides the pill
+  (reasoned, not measured).
 - A covered screen reads atoms through a derived atom that returns its own previous value while
   the covered flag is set and reads nothing else, so a herd update wakes none of its components.
   The flag is an atom set in a layout effect rather than a context value, since a context change

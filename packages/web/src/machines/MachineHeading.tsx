@@ -29,17 +29,17 @@ function HerdrLostPill({ lostAt }: { lostAt: Option.Option<DateTime.Utc> }) {
   )
 }
 
-export function MachineStatus({ card, now }: { card: MachineCardModel; now: DateTime.Utc }) {
+export function MachineStatus({ card }: { card: MachineCardModel }) {
   return (
     <>
-      <MachineBadge machine={card.machine} now={now} plain />
+      <MachineBadge machine={card.machine} plain />
       <HerdrLostPill lostAt={card.herdrLostAt} />
       <UpdatePill behindHub={card.behindHub} />
     </>
   )
 }
 
-export function MachineHeading({ card, now }: { card: MachineCardModel; now: DateTime.Utc }) {
+export function MachineHeading({ card }: { card: MachineCardModel }) {
   return (
     <span className="flex min-w-0 flex-col">
       <span
@@ -49,7 +49,7 @@ export function MachineHeading({ card, now }: { card: MachineCardModel; now: Dat
         {card.machine.label}
       </span>
       <span className="flex min-w-0 flex-wrap items-center gap-x-3">
-        <MachineStatus card={card} now={now} />
+        <MachineStatus card={card} />
       </span>
     </span>
   )

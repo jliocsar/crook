@@ -17,7 +17,7 @@ lives between three processes, where a unit test holds one still.
 
 ## Does your change touch it?
 
-Sync commit: `c877e89`
+Sync commit: `9efef45`
 
 The command compares these files with that commit and exits 2 when any of them moved. Each line
 is the file, then the functions the model stands for.
@@ -34,7 +34,7 @@ packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript Transcr
 packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines resumeOf isOpened withOneHole
 packages/web/src/chat/TranscriptMachine.ts  transition arrived watchEnded resumed landed leftSession startedOver earlierAsked
 packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
-packages/web/src/rpc/HubLink.ts             whileConnected watchTranscript
+packages/web/src/rpc/HubLink.ts             whileDialed transcriptWhileDialed
 packages/web/src/cache/TranscriptCache.ts   remember load
 ```
 
