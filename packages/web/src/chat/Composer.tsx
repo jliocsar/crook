@@ -30,6 +30,7 @@ export interface ComposerProps {
   readonly placeholder: string
   readonly label: string
   readonly failure: Option.Option<string>
+  readonly note: Option.Option<string>
   readonly skills: readonly SkillListing[]
   readonly handle?: React.Ref<ComposerHandle>
 }
@@ -61,6 +62,7 @@ export function Composer({
   placeholder,
   label,
   failure,
+  note,
   skills,
   handle,
 }: ComposerProps) {
@@ -115,6 +117,14 @@ export function Composer({
         className="bg-background"
       />
       <ActionFailure className="px-1" message={failure} />
+      {Option.match(note, {
+        onNone: () => null,
+        onSome: (text) => (
+          <p data-slot="composer-note" role="status" className="text-muted-foreground px-1 text-xs">
+            {text}
+          </p>
+        ),
+      })}
     </div>
   )
 }

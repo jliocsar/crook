@@ -220,7 +220,8 @@ const userBlockEnds = (block: UserBlock): Option.Option<boolean> =>
       ToolResult: () => Option.some(false),
       TaskNotification: () => Option.some(false),
       CompactSummary: () => Option.none<boolean>(),
-      LocalCommand: () => Option.none<boolean>(),
+      LocalCommand: (command) =>
+        command.opensTurn === true ? Option.some(false) : Option.none<boolean>(),
       LocalCommandOutput: () => Option.none<boolean>(),
       Unrecognized: () => Option.none<boolean>(),
     }),

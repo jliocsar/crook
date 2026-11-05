@@ -22,7 +22,7 @@ import {
 import { TextBlock } from '@crook/domain/TranscriptMessage'
 import { chatHerd, chatStory, delivered, opensWith, SEND_READY } from '../ChatFixtures.ts'
 import { chatAgent, CONVERSATION } from '../Fixtures.ts'
-import { clicks, seesSelector, seesText, types } from '../StageDom.ts'
+import { clicks, seesText, types } from '../StageDom.ts'
 import type { StoryMaker } from '../Story.tsx'
 
 const LONG_DRAFT =
@@ -185,17 +185,35 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
     settle: () => Effect.andThen(typesDraft('/'), clicks('/handoff')),
   }),
   chatStory({
-    slug: 'slash-sent-no-bubble',
-    title: 'Slash commands, sent with no Sent bubble',
-    shows: { absent: 'Sent' },
+    slug: 'slash-sent',
+    title: 'Slash commands, Sent until the transcript answers',
+    shows: { all: [{ text: 'Sent' }, { text: '/model opus' }] },
     events: CONVERSATION,
-    arrange: (stage) => delivered(stage, '/compact'),
-    settle: () =>
-      Effect.gen(function* () {
-        yield* typesDraft('/compact')
-        yield* clicks(SEND)
-        yield* seesSelector('[data-slot="prompt-input-submit"][disabled]:not([aria-busy="true"])')
-      }),
+    arrange: (stage) => delivered(stage, '/model opus'),
+    settle: () => Effect.andThen(typesDraft('/model opus'), clicks(SEND)),
+  }),
+  chatStory({
+    slug: 'slash-queued',
+    title: 'Slash commands, Queued while Claude works',
+    shows: { all: [{ text: 'Queued' }, { text: '/effort high' }] },
+    row: chatAgent('working', 0),
+    events: CONVERSATION,
+    arrange: (stage) => delivered(stage, '/effort high'),
+    settle: () => Effect.andThen(typesDraft('/effort high'), clicks(SEND)),
+  }),
+  chatStory({
+    slug: 'slash-refused',
+    title: 'Slash commands, a bare picker refused because it needs the laptop',
+    shows: { all: [{ text: 'needs the laptop' }, { field: '/model' }] },
+    events: CONVERSATION,
+    settle: () => Effect.andThen(typesDraft('/model'), clicks(SEND)),
+  }),
+  chatStory({
+    slug: 'slash-refused-resume',
+    title: 'Slash commands, a bare /resume refused with what would work',
+    shows: { all: [{ text: 'Name a session instead' }, { field: '/resume' }] },
+    events: CONVERSATION,
+    settle: () => Effect.andThen(typesDraft('/resume'), clicks(SEND)),
   }),
   chatStory({
     slug: 'prompts-sent-and-queued',

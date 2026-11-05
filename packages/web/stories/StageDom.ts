@@ -61,7 +61,7 @@ const witnessName = (witness: Witness): string =>
 
 export const pause = (milliseconds: number) => Effect.sleep(Duration.millis(milliseconds))
 
-export const sees = (witness: Witness) =>
+export const seesWithin = (timeout: number, witness: Witness) =>
   attempt(witnessName(witness), () =>
     waitFor(
       () => {
@@ -69,9 +69,11 @@ export const sees = (witness: Witness) =>
           throw new Error(`Still waiting: ${witnessName(witness)}.`)
         }
       },
-      { timeout: FIND_TIMEOUT_MS },
+      { timeout },
     ),
   )
+
+export const sees = (witness: Witness) => seesWithin(FIND_TIMEOUT_MS, witness)
 
 export const until = (what: string, reached: () => boolean) =>
   attempt(what, () =>

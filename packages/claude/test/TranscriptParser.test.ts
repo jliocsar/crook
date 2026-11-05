@@ -217,7 +217,7 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
   live.effect('turns /compact into a boundary, a summary and the command it ran', () =>
     Effect.gen(function* () {
       expect(yield* messagesOf('compaction-manual.jsonl')).toMatchObject([
-        { _tag: 'User', blocks: [{ _tag: 'Text', text: '/compact' }] },
+        { _tag: 'User', isMeta: true, blocks: [{ _tag: 'Text', text: '/compact' }] },
         {
           _tag: 'System',
           blocks: [
@@ -246,6 +246,97 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
         { blocks: [{ _tag: 'CompactBoundary', trigger: 'auto' }] },
         { blocks: [{ _tag: 'CompactSummary' }] },
       ])
+    }),
+  )
+
+  live.effect('reads every shape a real slash command or shell line writes', () =>
+    Effect.gen(function* () {
+      const messages = yield* messagesOf('slash-commands.jsonl')
+      const named = (name: string) =>
+        messages.filter((message) => JSON.stringify(message).includes(`"name":"${name}"`))
+
+      expect(named('/fake-skill')).toMatchObject([
+        {
+          _tag: 'User',
+          blocks: [
+            {
+              _tag: 'LocalCommand',
+              name: '/fake-skill',
+              args: 'some made up args',
+              opensTurn: true,
+            },
+          ],
+        },
+      ])
+      expect(named('/model')).toMatchObject([
+        { blocks: [{ _tag: 'LocalCommand', name: '/model', args: 'opus' }] },
+      ])
+      expect(named('/model')[0]).not.toHaveProperty('blocks.0.opensTurn')
+      expect(named('!')).toMatchObject([
+        {
+          blocks: [
+            {
+              _tag: 'LocalCommand',
+              name: '!',
+              args: 'echo out; echo err 1>&2',
+              opensTurn: true,
+            },
+          ],
+        },
+        { blocks: [{ _tag: 'LocalCommand', name: '!', args: 'true', opensTurn: true }] },
+      ])
+      expect(named('/color')).toMatchObject([
+        {
+          _tag: 'User',
+          isMeta: false,
+          blocks: [{ _tag: 'LocalCommand', name: '/color', args: '' }],
+        },
+      ])
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            _tag: 'System',
+            blocks: [expect.objectContaining({ text: 'Error: No messages to compact' })],
+          }),
+          expect.objectContaining({
+            _tag: 'User',
+            blocks: [expect.objectContaining({ text: 'out\nerr' })],
+          }),
+          expect.objectContaining({
+            _tag: 'User',
+            blocks: [expect.objectContaining({ text: '↯ Fast mode ON · $8/$40 per Mtok' })],
+          }),
+        ]),
+      )
+    }),
+  )
+
+  live.effect('takes a tag quoted inside a prompt as words, not as a command', () =>
+    Effect.sync(() => {
+      const quoted = (content: string) =>
+        parseLine(lineOf(JSON.stringify({ type: 'user', message: { content } })), LINE)
+
+      expect(quoted('Why does <command-name>/x</command-name> show?')).toMatchObject([
+        { blocks: [{ _tag: 'Text' }] },
+      ])
+      expect(quoted('Why does <bash-input>x</bash-input> show?')).toMatchObject([
+        { blocks: [{ _tag: 'Text' }] },
+      ])
+      expect(quoted('Why does <local-command-stdout>x</local-command-stdout> show?')).toMatchObject(
+        [{ blocks: [{ _tag: 'Text' }] }],
+      )
+    }),
+  )
+
+  live.effect('marks a typed /compact as meta, and nothing that only starts alike', () =>
+    Effect.sync(() => {
+      const metaOf = (content: string) =>
+        parseLine(lineOf(JSON.stringify({ type: 'user', message: { content } })), LINE)
+
+      expect(metaOf('/compact')).toMatchObject([{ isMeta: true }])
+      expect(metaOf('/compact keep the made up plan')).toMatchObject([{ isMeta: true }])
+      expect(metaOf('/compacting is slow')).toMatchObject([{ isMeta: false }])
+      expect(metaOf('why is /compact slow')).toMatchObject([{ isMeta: false }])
     }),
   )
 
@@ -315,6 +406,7 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
             },
           ],
         },
+        { _tag: 'User', blocks: [{ _tag: 'LocalCommand', name: '/resume', args: '' }] },
         {
           _tag: 'System',
           blocks: [{ _tag: 'Notice', text: 'Running scheduled task (Oct 6 11:47pm)' }],

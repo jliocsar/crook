@@ -275,7 +275,7 @@ export const alwaysNoteFor = (
   )
 
 const noteItem = (note: AlwaysNote): ChatItem =>
-  ChatItem.Note({ key: `${NOTE_KEY_PREFIX} ${note.ask}`, text: note.text })
+  ChatItem.Note({ key: `${NOTE_KEY_PREFIX} ${note.ask}`, text: note.text, answersACommand: false })
 
 export const withAlwaysNotes = (
   items: readonly ChatItem[],

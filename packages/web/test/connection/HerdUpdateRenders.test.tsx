@@ -2,12 +2,15 @@ import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { beforeEach } from 'vitest'
 
+import { Prompt } from '@crook/domain/Command'
 import { PaneId } from '@crook/domain/Ids'
 import { PaneTranscript } from '@crook/domain/Transcript'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
@@ -15,7 +18,9 @@ import { HubLinkState } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
 import { eventually, wait } from '../Dom.ts'
+import { messagesOf } from '../../stories/RealTranscriptFixtures.ts'
 import { agent, DESK, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
+import { inputDelivered } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 import { RENDER_COUNTS } from '../RenderCounter.ts'
 import { phoneViewport } from '../ThreadRender.tsx'
@@ -78,6 +83,54 @@ describe('a herd update from another machine', () => {
       )
 
       expect(subtract(counted(), before)).toEqual([0, 0, 0, 0])
+    }),
+  )
+
+  it.effect('renders nothing of an open chat holding a command, its output and a Sent row', () =>
+    Effect.gen(function* () {
+      phoneViewport()
+
+      const { link } = yield* renderApp(CHAT, liveWith(herd([laptop, deskAt(0)])))
+      const transcript = yield* link.transcriptFor(
+        new PaneTranscript({ pane: PaneId.make('w1:p1') }),
+      )
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(
+          inputDelivered(new Prompt({ pane: PaneId.make('w1:p1'), text: '/rename made up' })),
+        ),
+      )
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        chunk(
+          0,
+          20,
+          messagesOf(
+            [
+              '{"type":"user","message":{"content":"<command-name>/color</command-name>"}}',
+              '{"type":"user","message":{"content":"<local-command-stdout>Set `orange`</local-command-stdout>"}}',
+            ].join('\n'),
+          ),
+        ),
+      ])
+      yield* Effect.promise(() => screen.findByText('/color'))
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: '/rename made up' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      yield* Effect.promise(() => screen.findByText('Sent'))
+      yield* wait(SETTLE_MS)
+
+      const before = countedOf(WATCHED_IN_CHAT)
+
+      yield* Effect.forEach(
+        Arr.range(1, HERD_UPDATES),
+        (update) =>
+          setsHerd(link, [laptop, deskAt(update)], update).pipe(Effect.andThen(wait(SETTLE_MS))),
+        { discard: true },
+      )
+
+      expect(subtract(countedOf(WATCHED_IN_CHAT), before)).toEqual([0, 0])
+      expect(screen.getByText('Sent')).toBeDefined()
     }),
   )
 

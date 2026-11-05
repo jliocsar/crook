@@ -65,7 +65,7 @@ const edit = (patch: EditFile['patch'], oldString = 'a', newString = 'b') =>
 
 const approve = new AnswerAsk({ pane: PANE, ask: ASK, answer: new Approve() })
 
-const note = (text: string) => ChatItem.Note({ key: text, text })
+const note = (text: string) => ChatItem.Note({ key: text, text, answersACommand: false })
 
 describe('askTitle', () => {
   it('names what the ask would do', () => {

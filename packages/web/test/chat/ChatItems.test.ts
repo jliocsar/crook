@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
+import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
@@ -14,15 +15,19 @@ import {
   TextBlock,
 } from '@crook/domain/TranscriptMessage'
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
+import compactionManual from '@crook/claude/fixtures/compaction-manual.jsonl?raw'
+import slashCommands from '@crook/claude/fixtures/slash-commands.jsonl?raw'
 import {
   ChatItem,
   chatItems,
+  deriveChat,
+  EMPTY_CHAT,
+  isUserPrompt,
   runningCount,
-  toolSummary,
-  toolTitle,
 } from '@crook/web/chat/ChatItems'
 import type { AgentActivity, ChatContext } from '@crook/web/chat/ChatItems'
 import { applyTranscriptEvent, EMPTY_TRANSCRIPT } from '@crook/web/chat/TranscriptState'
+import { toolSummary, toolTitle } from '@crook/web/chat/ToolSummary'
 import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
 import {
   activityEventOf,
@@ -55,6 +60,7 @@ import {
   turnDuration,
   user,
 } from '../TranscriptFixtures.ts'
+import { messagesOf } from '../../stories/RealTranscriptFixtures.ts'
 import { agent } from '../HerdFixtures.ts'
 
 const fold = (events: readonly TranscriptEvent[]) =>
@@ -81,6 +87,7 @@ const describeItem = (item: ChatItem): string =>
       `subagents: ${subagents.runs.map((run) => `${run.description} ${run.status}`).join(', ')}`,
     Plan: (plan) => `plan: ${plan.steps.map((step) => step.status).join(' ')}`,
     Note: (note) => `note: ${note.text}`,
+    Command: (command) => [`command: ${command.text}`, ...command.output].join(' => '),
     Compacted: (compacted) => `compacted: ${Option.getOrElse(compacted.summary, () => '')}`,
     Cleared: () => 'cleared',
     Omitted: (omitted) => `omitted ${omitted.byteLength}`,
@@ -96,6 +103,110 @@ const reviewerInput = {
   subagent_type: 'code-reviewer',
   run_in_background: true,
 }
+
+describe('slash commands, read from real shapes through the real parser', () => {
+  const realItems = (jsonl: string) =>
+    chatItems(
+      Arr.map(messagesOf(jsonl), (message) => ({ session: SESSION, message })),
+      context('still'),
+    ).map(describeItem)
+
+  it('shows each command with its output, and the two lines it names nothing for', () => {
+    expect(realItems(slashCommands)).toEqual([
+      'note: Error: No messages to compact',
+      'note: Unknown command: /nosuchcommand',
+      'command: /plugin',
+      'command: /color => Session color set to: orange',
+      'command: /fast => Kept Fast mode OFF',
+      'command: /model opus => Set model to `Opus 5.5` and saved as your default for new sessions',
+      'command: /fast on => ↯ Fast mode ON · $8/$40 per Mtok',
+      'command: /rename probe name => Session renamed to: probe name',
+      'command: /resume 00000000-0000-4000-8000-000000000000 => Session 00000000-0000-4000-8000-000000000000 was not found.',
+      'command: ! echo out; echo err 1>&2 => out\nerr',
+      'command: ! true => (Bash completed with no output)',
+      'command: /fake-skill some made up args',
+      'compacted: This session is being continued from a previous conversation. Summary: we fixed the made up banner.',
+    ])
+  })
+
+  it('marks a shell line apart from a slash command, whose output reads differently', () => {
+    expect(
+      pipe(
+        chatItems(
+          Arr.map(messagesOf(slashCommands), (message) => ({ session: SESSION, message })),
+          context('still'),
+        ),
+        Arr.filter(ChatItem.$is('Command')),
+        Arr.filter((command) => command.shell),
+        Arr.map((command) => command.text),
+      ),
+    ).toEqual(['! echo out; echo err 1>&2', '! true'])
+  })
+
+  it('shows a real /compact as its divider alone: no bubble, no note, no ctrl+o', () => {
+    expect(realItems(compactionManual)).toEqual([
+      expect.stringMatching(/^compacted: /u),
+      'you: Reply with exactly the word after and nothing else.',
+    ])
+  })
+
+  it('counts none of them as a prompt, which a prompt row waits on', () => {
+    const items = chatItems(
+      Arr.map(messagesOf(slashCommands), (message) => ({ session: SESSION, message })),
+      context('still'),
+    )
+
+    expect(Arr.filter(items, isUserPrompt)).toEqual([])
+  })
+
+  it('joins output landing in a later batch to its command, under the same row', () => {
+    const lines = Arr.map(messagesOf(slashCommands), (message) => ({ session: SESSION, message }))
+    const command = Arr.findFirstIndex(lines, ({ message }) =>
+      JSON.stringify(message).includes('"/color"'),
+    )
+    const upTo = Option.getOrThrow(command) + 1
+    const before = deriveChat(EMPTY_CHAT, Arr.take(lines, upTo), context('still'))
+    const after = deriveChat(before, Arr.take(lines, upTo + 1), context('still'))
+
+    expect(after.items.map(describeItem).at(-1)).toBe(
+      'command: /color => Session color set to: orange',
+    )
+    expect(after.items.at(-1)?.key).toBe(before.items.at(-1)?.key)
+  })
+
+  it('starts a turn at a skill and at a shell line, so an earlier call reads as stopped', () => {
+    const earlierCall = toolUse(0, 'toolu_a', 'Read', { file_path: `${CWD}/a.ts` })
+    const calledBefore = (message: TranscriptMessage) =>
+      shown([earlierCall, message], context('working'))[0]
+
+    expect(
+      calledBefore(
+        user(10, [new LocalCommandBlock({ name: '/skill', args: '', opensTurn: true })]),
+      ),
+    ).toBe('Read(a.ts) stopped')
+    expect(
+      calledBefore(user(10, [new LocalCommandBlock({ name: '!', args: 'true', opensTurn: true })])),
+    ).toBe('Read(a.ts) stopped')
+    expect(calledBefore(user(10, [new LocalCommandBlock({ name: '/model', args: 'opus' })]))).toBe(
+      'Read(a.ts) running',
+    )
+  })
+
+  it('reads a command with no flag, from an older agent, as a command and no turn', () => {
+    expect(
+      shown([user(0, [new LocalCommandBlock({ name: '/handoff', args: 'made up' })])]),
+    ).toEqual(['command: /handoff made up'])
+  })
+
+  it('leaves output with no command before it as a note, as after a prompt', () => {
+    expect(
+      shown([
+        prompt(0, 'go'),
+        user(10, [new LocalCommandOutputBlock({ text: 'Resume cancelled' })]),
+      ]),
+    ).toEqual(['you: go', 'note: Resume cancelled'])
+  })
+})
 
 describe('chatItems', () => {
   it('shows prompts, answers and tool calls titled like the terminal', () => {

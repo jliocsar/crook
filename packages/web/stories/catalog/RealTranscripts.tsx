@@ -40,6 +40,11 @@ const REAL_FIXTURES: readonly (readonly [string, string, () => Promise<{ default
     'A manual compaction',
     () => import('@crook/claude/fixtures/compaction-manual.jsonl?raw'),
   ],
+  [
+    'slash-commands',
+    'Every shape a slash command or shell line writes',
+    () => import('@crook/claude/fixtures/slash-commands.jsonl?raw'),
+  ],
   ['odd-entries', 'Odd entries', () => import('@crook/claude/fixtures/odd-entries.jsonl?raw')],
   [
     'unknown-future-entry',

@@ -6,7 +6,7 @@ import * as Schema from 'effect/Schema'
 
 import type { PatchHunk, ToolResultBlock } from '@crook/domain/TranscriptMessage'
 import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
-import { stringField } from '@crook/web/chat/ChatItems'
+import { stringField } from '@crook/web/chat/ToolSummary'
 import type { SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
 import type { Picture } from '@crook/web/chat/Images'
 import type { DiffHunk } from '@crook/web/components/ui/diff-view'

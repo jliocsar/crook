@@ -20,6 +20,7 @@ import {
 } from '@crook/domain/Command'
 import type { AskAnswer, Command, CommandReceipt } from '@crook/domain/Command'
 import type { ClaudeSessionId, MachineId, PaneId } from '@crook/domain/Ids'
+import type { SkillListing } from '@crook/domain/Skill'
 import {
   failureMessageOf,
   isDone,
@@ -38,11 +39,11 @@ import {
   isAnswerUnderway,
 } from '@crook/web/chat/AskModel'
 import type { AlwaysNote } from '@crook/web/chat/AskModel'
-import { isOmitted, isUserPrompt } from '@crook/web/chat/ChatItems'
-import type { ChatItem } from '@crook/web/chat/ChatItems'
+import { ChatItem, isOmitted, isUserPrompt } from '@crook/web/chat/ChatItems'
 import { ActivityState, activityView } from '@crook/web/chat/ActivityMachine'
 import { isPresent } from '@crook/web/chat/PresenceMachine'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
+import { isCommandSend, laptopOnlyNote, noAnswerNote } from '@crook/web/chat/SlashCommands'
 import { useCommandAction } from '@crook/web/chat/CommandAction'
 import type { CommandAction } from '@crook/web/chat/CommandAction'
 import type { AskDockProps } from '@crook/web/chat/AskDock'
@@ -51,6 +52,16 @@ import type { Restart } from '@crook/web/chat/EdgeCard'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
 export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
+
+interface ArrivedSends {
+  readonly prompts: number
+  readonly commands: number
+}
+
+interface UnansweredCommand {
+  readonly text: string
+  readonly answersThen: number
+}
 
 export type AskDockCommands = Omit<AskDockProps, 'cwd'>
 
@@ -70,6 +81,7 @@ interface ChatCommandsInput {
   readonly items: readonly ChatItem[]
   readonly session: Option.Option<ClaudeSessionId>
   readonly threadEpoch: number
+  readonly skills: readonly SkillListing[]
   readonly draft: string
   readonly setDraft: (draft: string) => void
   readonly onPromptSent: () => void
@@ -78,6 +90,7 @@ interface ChatCommandsInput {
 export interface PendingPrompt {
   readonly text: string
   readonly queued: boolean
+  readonly command: boolean
 }
 
 export interface PendingPromptRow extends PendingPrompt {
@@ -86,6 +99,7 @@ export interface PendingPromptRow extends PendingPrompt {
 
 export interface PromptWait {
   readonly promptsAtSend: number
+  readonly commandsAtSend: number
   readonly holesAtSend: number
   readonly pending: readonly PendingPrompt[]
 }
@@ -96,11 +110,18 @@ export interface PromptSend {
   readonly working: boolean
 }
 
-const SLASH = '/'
 const PENDING_PROMPT_KEY = 'pending prompt'
-const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, holesAtSend: 0, pending: [] }
+const MANUAL_COMPACT = 'manual'
+
+const NOTHING_AWAITED: PromptWait = {
+  promptsAtSend: 0,
+  commandsAtSend: 0,
+  holesAtSend: 0,
+  pending: [],
+}
 
 export const STOP_SETTLE = Duration.millis(512)
+export const COMMAND_SILENCE = Duration.seconds(6)
 
 const decodeFolder = Schema.decodeUnknownOption(FolderPath)
 
@@ -137,18 +158,52 @@ const promptCount = (items: readonly ChatItem[]): number => Arr.filter(items, is
 const holeCount = (items: readonly ChatItem[]): number =>
   pipe(items, Arr.drop(1), Arr.filter(isOmitted)).length
 
-const arrivedSince = (wait: PromptWait, items: readonly ChatItem[]): number =>
+const answersACommand = (item: ChatItem): boolean =>
+  ChatItem.$match(item, {
+    Command: () => true,
+    Cleared: () => true,
+    Note: (note) => note.answersACommand,
+    Compacted: (compacted) => Option.contains(compacted.trigger, MANUAL_COMPACT),
+    UserPrompt: () => false,
+    AssistantText: () => false,
+    Tool: () => false,
+    Subagents: () => false,
+    Plan: () => false,
+    Omitted: () => false,
+    Unreadable: () => false,
+  })
+
+const commandAnswerCount = (items: readonly ChatItem[]): number =>
+  Arr.filter(items, answersACommand).length
+
+const arrivedSince = (wait: PromptWait, items: readonly ChatItem[]): ArrivedSends =>
   holeCount(items) > wait.holesAtSend
-    ? wait.pending.length
-    : Math.max(promptCount(items) - wait.promptsAtSend, 0)
+    ? { prompts: wait.pending.length, commands: wait.pending.length }
+    : {
+        prompts: Math.max(promptCount(items) - wait.promptsAtSend, 0),
+        commands: Math.max(commandAnswerCount(items) - wait.commandsAtSend, 0),
+      }
+
+const withoutArrived = <Send extends PendingPrompt>(
+  pending: readonly Send[],
+  arrived: ArrivedSends,
+): readonly Send[] =>
+  pipe(
+    pending,
+    Arr.mapAccum(arrived, (left, send): readonly [ArrivedSends, Option.Option<Send>] => {
+      const kind = send.command ? 'commands' : 'prompts'
+
+      return left[kind] > 0
+        ? [{ ...left, [kind]: left[kind] - 1 }, Option.none()]
+        : [left, Option.some(send)]
+    }),
+    ([, kept]) => Arr.getSomes(kept),
+  )
 
 const hasArrived = (wait: PromptWait, items: readonly ChatItem[]): boolean =>
-  arrivedSince(wait, items) >= wait.pending.length
+  Arr.isReadonlyArrayEmpty(withoutArrived(wait.pending, arrivedSince(wait, items)))
 
-const promptTextOf = (command: Command): Option.Option<string> =>
-  Option.filter(textOf(command), (text) => !text.startsWith(SLASH))
-
-const awaitsPrompt = (command: Command): boolean => Option.isSome(promptTextOf(command))
+const awaitsAnswer = (command: Command): boolean => Option.isSome(textOf(command))
 
 const carriedPrompts = (
   wait: PromptWait,
@@ -170,15 +225,32 @@ export const waitAfterSend = (
   const carried = carriedPrompts(wait, items, send)
   const waiting = Arr.isReadonlyArrayNonEmpty(carried)
   const promptsAtSend = waiting ? wait.promptsAtSend : promptCount(items)
+  const commandsAtSend = waiting ? wait.commandsAtSend : commandAnswerCount(items)
   const holesAtSend = waiting ? wait.holesAtSend : holeCount(items)
-  const aheadInLine = !hasArrived({ promptsAtSend, holesAtSend, pending: carried }, items)
+  const aheadInLine = !hasArrived(
+    { promptsAtSend, commandsAtSend, holesAtSend, pending: carried },
+    items,
+  )
   const pending = Option.match(send.prompt, {
     onNone: () => carried,
-    onSome: (text) => Arr.append(carried, { text, queued: send.working || aheadInLine }),
+    onSome: (text) =>
+      Arr.append(carried, {
+        text,
+        queued: send.working || aheadInLine,
+        command: isCommandSend(text),
+      }),
   })
 
   return Arr.isReadonlyArrayNonEmpty(pending)
-    ? { promptsAtSend, holesAtSend, pending }
+    ? { promptsAtSend, commandsAtSend, holesAtSend, pending }
+    : NOTHING_AWAITED
+}
+
+export const waitWithoutCommands = (wait: PromptWait, items: readonly ChatItem[]): PromptWait => {
+  const pending = Arr.filter(wait.pending, (send) => !send.command)
+
+  return Arr.isReadonlyArrayNonEmpty(pending)
+    ? { ...wait, commandsAtSend: commandAnswerCount(items), pending }
     : NOTHING_AWAITED
 }
 
@@ -193,11 +265,11 @@ export const pendingPromptRows = (
       key: `${PENDING_PROMPT_KEY} ${wait.promptsAtSend + index}`,
     })),
     Arr.dropRight(inFlight ? 1 : 0),
-    Arr.drop(arrivedSince(wait, items)),
+    (shown) => withoutArrived(shown, arrivedSince(wait, items)),
   )
 
 const isPromptInFlight = (action: CommandAction): boolean =>
-  !isAcknowledged(action.state) && Option.exists(action.last, awaitsPrompt)
+  !isAcknowledged(action.state) && Option.exists(action.last, awaitsAnswer)
 
 const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
   Match.value(receipt).pipe(
@@ -245,15 +317,51 @@ const useClearSentDraft = (
   }, [sent])
 }
 
-const usePromptWait = (items: readonly ChatItem[], threadEpoch: number) => {
+const lastCommandOf = (rows: readonly PendingPromptRow[]): Option.Option<string> =>
+  pipe(
+    rows,
+    Arr.findLast((row) => row.command),
+    Option.map((row) => row.text),
+  )
+
+const usePromptWait = (
+  items: readonly ChatItem[],
+  threadEpoch: number,
+  inFlight: boolean,
+  working: boolean,
+) => {
   const [wait, setWait] = React.useState<PromptWait>(NOTHING_AWAITED)
   const [waitedIn, setWaitedIn] = React.useState(threadEpoch)
+  const [unanswered, setUnanswered] = React.useState(Option.none<UnansweredCommand>())
   const arrived = hasArrived(wait, items)
+  const rows = React.useMemo(
+    () => pendingPromptRows(wait, items, inFlight),
+    [wait, items, inFlight],
+  )
+  const awaited = lastCommandOf(rows)
+  const answers = commandAnswerCount(items)
+  const awaitedCommands = Arr.filter(rows, (row) => row.command).length
 
   if (waitedIn !== threadEpoch) {
     setWaitedIn(threadEpoch)
     setWait(NOTHING_AWAITED)
+    setUnanswered(Option.none())
   }
+
+  React.useEffect(() => {
+    if (Option.isNone(awaited) || working) {
+      return undefined
+    }
+
+    const timer = window.setTimeout(() => {
+      setUnanswered(Option.some({ text: awaited.value, answersThen: answers }))
+      setWait((current) => waitWithoutCommands(current, items))
+    }, Duration.toMillis(COMMAND_SILENCE))
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [Option.getOrUndefined(awaited), awaitedCommands, answers, working])
 
   React.useEffect(() => {
     if (arrived && Arr.isReadonlyArrayNonEmpty(wait.pending)) {
@@ -262,8 +370,14 @@ const usePromptWait = (items: readonly ChatItem[], threadEpoch: number) => {
   }, [arrived, wait])
 
   return {
-    wait,
+    rows,
+    unanswered: pipe(
+      unanswered,
+      Option.filter((command) => command.answersThen === answers),
+      Option.map((command) => noAnswerNote(command.text)),
+    ),
     afterSend: (send: PromptSend) => {
+      setUnanswered(Option.none())
       setWait(waitAfterSend(wait, items, send))
     },
   }
@@ -349,6 +463,7 @@ export const useChatCommands = ({
   items,
   session,
   threadEpoch,
+  skills,
   draft,
   setDraft,
   onPromptSent,
@@ -358,13 +473,19 @@ export const useChatCommands = ({
   const stop = useCommandAction(machine)
   const restart = useCommandAction(machine)
   const answer = useCommandAction(machine)
-  const prompted = usePromptWait(items, threadEpoch)
-  const promptInFlight = isPromptInFlight(prompt)
-  const pendingPrompts = React.useMemo(
-    () => pendingPromptRows(prompted.wait, items, promptInFlight),
-    [prompted.wait, items, promptInFlight],
-  )
   const working = Option.isSome(activityView(activity).workingSince)
+  const promptInFlight = isPromptInFlight(prompt)
+  const prompted = usePromptWait(items, threadEpoch, promptInFlight, working)
+  const [refused, setRefused] = React.useState('')
+  const refusal = Option.filter(
+    laptopOnlyNote(draft.trim(), skills),
+    () => refused === draft.trim(),
+  )
+
+  if (refused !== '' && refused !== draft.trim()) {
+    setRefused('')
+  }
+
   const blocked = ActivityState.guards.Blocked(activity)
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(opened, answer, session)
@@ -382,20 +503,27 @@ export const useChatCommands = ({
 
   const sendPrompt = (command: Command) => {
     prompted.afterSend({
-      replacesFailed: isFailed(prompt.state) && Option.exists(prompt.last, awaitsPrompt),
-      prompt: promptTextOf(command),
+      replacesFailed: isFailed(prompt.state) && Option.exists(prompt.last, awaitsAnswer),
+      prompt: textOf(command),
       working,
     })
     prompt.send(command)
   }
 
   const send = (text: string) => {
-    onPromptSent()
     Option.match(openAsk, {
       onNone: () => {
+        if (Option.isSome(laptopOnlyNote(text, skills))) {
+          setRefused(text)
+
+          return
+        }
+
+        onPromptSent()
         sendPrompt(new Prompt({ pane, text }))
       },
       onSome: (ask) => {
+        onPromptSent()
         sendPrompt(
           new AnswerAsk({
             pane,
@@ -436,6 +564,7 @@ export const useChatCommands = ({
       placeholder: placeholderOf(canAct, mode, blocked),
       label: mode === 'decline' ? 'Tell Claude what to do instead' : 'Message to Claude',
       failure: Option.orElse(failureMessageOf(prompt.state), () => failureMessageOf(stop.state)),
+      note: Option.orElse(refusal, () => prompted.unanswered),
     },
     restart: Option.map(
       Option.flatMap(model.row, (row) => decodeFolder(row.cwd)),
@@ -448,6 +577,6 @@ export const useChatCommands = ({
         failure: failureMessageOf(restart.state),
       }),
     ),
-    pendingPrompts,
+    pendingPrompts: prompted.rows,
   }
 }

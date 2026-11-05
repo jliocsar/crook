@@ -88,9 +88,12 @@ export class TaskNotificationBlock extends Schema.TaggedClass<TaskNotificationBl
   },
 ) {}
 
+export const SHELL_COMMAND_NAME = '!'
+
 export class LocalCommandBlock extends Schema.TaggedClass<LocalCommandBlock>()('LocalCommand', {
   name: Schema.String,
   args: Schema.String,
+  opensTurn: Schema.optionalKey(Schema.Boolean),
 }) {}
 
 export class LocalCommandOutputBlock extends Schema.TaggedClass<LocalCommandOutputBlock>()(

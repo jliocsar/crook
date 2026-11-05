@@ -10,9 +10,13 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
 
-import { relativeToFolder } from '@crook/domain/Ask'
 import type { ClaudeSessionId, SubagentId } from '@crook/domain/Ids'
 import { type Subagent, type SubagentStatus, statusOfNotice } from '@crook/domain/Subagent'
+import {
+  LocalCommandBlock,
+  LocalCommandOutputBlock,
+  SHELL_COMMAND_NAME,
+} from '@crook/domain/TranscriptMessage'
 import type {
   AssistantMessage,
   CompactTrigger,
@@ -23,6 +27,7 @@ import type {
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
+import { toolSummary } from '@crook/web/chat/ToolSummary'
 import {
   NO_ROSTERS,
   type SessionRosters,
@@ -30,7 +35,7 @@ import {
 } from '@crook/web/chat/TranscriptState'
 import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
-import { LINE_BREAK, PARAGRAPH_BREAK } from '@crook/web/text/Lines'
+import { PARAGRAPH_BREAK } from '@crook/web/text/Lines'
 
 type ToolStatus = ToolCallStatus
 
@@ -51,7 +56,13 @@ export type ChatItem = Data.TaggedEnum<{
   Tool: { readonly key: string; readonly call: ToolCallModel }
   Subagents: { readonly key: string; readonly runs: readonly SubagentRun[] }
   Plan: { readonly key: string; readonly steps: readonly PlanStep[] }
-  Note: { readonly key: string; readonly text: string }
+  Note: { readonly key: string; readonly text: string; readonly answersACommand: boolean }
+  Command: {
+    readonly key: string
+    readonly text: string
+    readonly shell: boolean
+    readonly output: readonly string[]
+  }
   Compacted: {
     readonly key: string
     readonly trigger: Option.Option<CompactTrigger>
@@ -76,6 +87,7 @@ interface Stamped<Value> {
 interface Placement {
   readonly turn: number
   readonly boundary: Option.Option<string>
+  readonly command: Option.Option<string>
 }
 
 interface Placed extends Placement {
@@ -139,25 +151,12 @@ export interface ChatDerivation {
 const ASYNC_LAUNCH_STATUS = 'async_launched'
 const INTERRUPTED_NOTE = 'Interrupted'
 const CLEAR_COMMAND = '/clear'
-const PATH_FIELDS = new Set(['file_path', 'notebook_path', 'path'])
+const COMPACT_COMMAND = '/compact'
+const EMPTY_COMMAND_OUTPUT = '(no content)'
+const COMPACTED_OUTPUT_PREFIX = 'Compacted (ctrl+o'
+const UNKNOWN_COMMAND_PREFIX = 'Unknown command:'
 const AGENT_TOOL = 'Agent'
 const PLAN_TOOL = 'TodoWrite'
-
-const SUMMARY_FIELD = new Map([
-  ['Bash', 'command'],
-  ['Read', 'file_path'],
-  ['Edit', 'file_path'],
-  ['MultiEdit', 'file_path'],
-  ['Write', 'file_path'],
-  ['NotebookEdit', 'notebook_path'],
-  ['Grep', 'pattern'],
-  ['Glob', 'pattern'],
-  ['WebFetch', 'url'],
-  ['WebSearch', 'query'],
-  ['Agent', 'description'],
-  ['Skill', 'skill'],
-  ['ToolSearch', 'query'],
-])
 
 export const ChatItem = Data.taggedEnum<ChatItem>()
 
@@ -204,66 +203,21 @@ const AgentInput = Schema.Struct({
   run_in_background: Schema.optionalKey(Schema.Boolean),
 })
 
-const InputFields = Schema.Record(Schema.String, Schema.Unknown)
-
 const decodePlan = Schema.decodeUnknownOption(PlanInput)
 const decodeAgentInput = Schema.decodeUnknownOption(AgentInput)
-const decodeFields = Schema.decodeUnknownOption(InputFields)
-const decodeString = Schema.decodeUnknownOption(Schema.NonEmptyString)
-
-const firstLine = (text: string): string =>
-  pipe(
-    text.trim().split(LINE_BREAK),
-    Arr.head,
-    Option.getOrElse(() => ''),
-  )
-
-export const stringField = (input: Schema.Json, field: string): Option.Option<string> =>
-  pipe(
-    decodeFields(input),
-    Option.flatMap((fields) => decodeString(fields[field])),
-  )
-
-const firstStringField = (input: Schema.Json): Option.Option<readonly [string, string]> =>
-  pipe(
-    decodeFields(input),
-    Option.flatMap((fields) =>
-      Arr.findFirst(Object.entries(fields), ([field, value]) =>
-        Option.map(decodeString(value), (text): readonly [string, string] => [field, text]),
-      ),
-    ),
-  )
-
-const summaryEntry = (name: string, input: Schema.Json): Option.Option<readonly [string, string]> =>
-  pipe(
-    Option.fromUndefinedOr(SUMMARY_FIELD.get(name)),
-    Option.flatMap((field) =>
-      Option.map(stringField(input, field), (value): readonly [string, string] => [field, value]),
-    ),
-    Option.orElse(() => firstStringField(input)),
-  )
-
-export const toolSummary = (name: string, input: Schema.Json, cwd: string): Option.Option<string> =>
-  pipe(
-    summaryEntry(name, input),
-    Option.map(([field, value]) =>
-      PATH_FIELDS.has(field) ? relativeToFolder(cwd, value) : firstLine(value),
-    ),
-    Option.filter(Str.isNonEmpty),
-  )
-
-export const toolTitle = (call: Pick<ToolCallModel, 'name' | 'summary'>): string =>
-  Option.match(call.summary, {
-    onNone: () => call.name,
-    onSome: (summary) => `${call.name}(${summary})`,
-  })
+const isCommandLine = Schema.is(LocalCommandBlock)
+const isCommandOutput = Schema.is(LocalCommandOutputBlock)
 
 const isHumanPrompt = (message: UserMessage): boolean =>
   !message.isMeta &&
   !message.queued &&
   message.blocks.some((block) =>
     Match.value(block).pipe(
-      Match.tags({ Text: () => true, Image: () => true }),
+      Match.tags({
+        Text: () => true,
+        Image: () => true,
+        LocalCommand: (command) => command.opensTurn === true,
+      }),
       Match.orElse(() => false),
     ),
   )
@@ -295,14 +249,36 @@ const boundaryOf = ({ session, message }: TranscriptLine): Option.Option<string>
     Match.orElse(() => Option.none<string>()),
   )
 
+const isOwnRow = (command: LocalCommandBlock): boolean =>
+  command.name !== CLEAR_COMMAND && command.name !== COMPACT_COMMAND
+
+const commandGroupAfter = (
+  { session, message }: TranscriptLine,
+  current: Option.Option<string>,
+): Option.Option<string> =>
+  Match.value(message).pipe(
+    Match.tag('User', (user) =>
+      Option.match(Arr.findFirst(user.blocks, isCommandLine), {
+        onSome: (command) =>
+          Option.liftPredicate(`command ${session} ${message.offset}`, () => isOwnRow(command)),
+        onNone: () => (user.isMeta || user.blocks.every(isCommandOutput) ? current : Option.none()),
+      }),
+    ),
+    Match.tag('System', (system) =>
+      system.blocks.every(isCommandOutput) ? current : Option.none(),
+    ),
+    Match.orElse(() => Option.none<string>()),
+  )
+
 const place = (lines: readonly TranscriptLine[], from: Placement) =>
   Arr.mapAccum(lines, from, (state, line): readonly [Placement, Placed] => {
     const turn = startsTurn(line) ? state.turn + 1 : state.turn
     const boundary = Option.orElse(boundaryOf(line), () => state.boundary)
+    const command = commandGroupAfter(line, state.command)
 
     return [
-      { turn, boundary },
-      { line, turn, boundary },
+      { turn, boundary, command },
+      { line, turn, boundary, command },
     ]
   })
 
@@ -366,8 +342,54 @@ const grouped = (item: ChatItem, group: string): Draft => ({
   group: Option.some(group),
 })
 
-const outputNote = (text: string, key: string): readonly Draft[] =>
-  Str.isNonEmpty(text.trim()) ? [draft(ChatItem.Note({ key, text: text.trim() }))] : []
+const saysNothing = (output: string): boolean =>
+  Str.isEmpty(output) ||
+  output === EMPTY_COMMAND_OUTPUT ||
+  output.startsWith(COMPACTED_OUTPUT_PREFIX)
+
+const outputDrafts = (
+  text: string,
+  key: string,
+  group: Option.Option<string>,
+): readonly Draft[] => {
+  const output = text.trim()
+
+  if (saysNothing(output)) {
+    return []
+  }
+
+  return Option.match(group, {
+    onNone: () => [draft(ChatItem.Note({ key, text: output, answersACommand: true }))],
+    onSome: (command) => [
+      grouped(ChatItem.Command({ key, text: '', shell: false, output: [output] }), command),
+    ],
+  })
+}
+
+const commandDrafts = (
+  command: LocalCommandBlock,
+  key: string,
+  group: Option.Option<string>,
+): readonly Draft[] => {
+  if (command.name === CLEAR_COMMAND) {
+    return [draft(ChatItem.Cleared({ key }))]
+  }
+
+  return Option.match(group, {
+    onNone: () => [],
+    onSome: (opened) => [
+      grouped(
+        ChatItem.Command({
+          key,
+          text: `${command.name} ${command.args}`.trim(),
+          shell: command.name === SHELL_COMMAND_NAME,
+          output: [],
+        }),
+        opened,
+      ),
+    ],
+  })
+}
 
 const turnOver = (turn: number, evidence: Evidence): boolean =>
   turn < evidence.lastTurn || evidence.context.activity === 'still'
@@ -585,7 +607,7 @@ const promptDraft = (message: UserMessage, key: string): readonly Draft[] => {
 const userNoteDrafts = (
   message: UserMessage,
   keyAt: (index: number) => string,
-  boundary: Option.Option<string>,
+  { boundary, command: commandGroup }: Placement,
 ): readonly Draft[] =>
   Arr.flatMap(message.blocks, (block, index) =>
     Match.value(block).pipe(
@@ -605,18 +627,13 @@ const userNoteDrafts = (
             Option.getOrElse(boundary, () => keyAt(index)),
           ),
         ],
-        LocalCommand: (command) => [
+        LocalCommand: (command) => commandDrafts(command, keyAt(index), commandGroup),
+        LocalCommandOutput: (output) => outputDrafts(output.text, keyAt(index), commandGroup),
+        Interruption: () => [
           draft(
-            command.name === CLEAR_COMMAND
-              ? ChatItem.Cleared({ key: keyAt(index) })
-              : ChatItem.Note({
-                  key: keyAt(index),
-                  text: `${command.name} ${command.args}`.trim(),
-                }),
+            ChatItem.Note({ key: keyAt(index), text: INTERRUPTED_NOTE, answersACommand: false }),
           ),
         ],
-        LocalCommandOutput: (output) => outputNote(output.text, keyAt(index)),
-        Interruption: () => [draft(ChatItem.Note({ key: keyAt(index), text: INTERRUPTED_NOTE }))],
       }),
     ),
   )
@@ -624,16 +641,16 @@ const userNoteDrafts = (
 const userDrafts = (
   message: UserMessage,
   keyAt: (index: number) => string,
-  boundary: Option.Option<string>,
+  placement: Placement,
 ): readonly Draft[] =>
   message.isMeta
     ? []
-    : [...promptDraft(message, keyAt(-1)), ...userNoteDrafts(message, keyAt, boundary)]
+    : [...promptDraft(message, keyAt(-1)), ...userNoteDrafts(message, keyAt, placement)]
 
 const systemDrafts = (
   message: SystemMessage,
   keyAt: (index: number) => string,
-  boundary: Option.Option<string>,
+  { boundary, command: commandGroup }: Placement,
 ): readonly Draft[] =>
   Arr.flatMap(message.blocks, (block, index) =>
     Match.value(block).pipe(
@@ -649,8 +666,16 @@ const systemDrafts = (
           ),
         ],
         TurnDuration: () => [],
-        LocalCommandOutput: (output) => outputNote(output.text, keyAt(index)),
-        Notice: (notice) => [draft(ChatItem.Note({ key: keyAt(index), text: notice.text }))],
+        LocalCommandOutput: (output) => outputDrafts(output.text, keyAt(index), commandGroup),
+        Notice: (notice) => [
+          draft(
+            ChatItem.Note({
+              key: keyAt(index),
+              text: notice.text,
+              answersACommand: notice.text.startsWith(UNKNOWN_COMMAND_PREFIX),
+            }),
+          ),
+        ],
         Unrecognized: () => [],
       }),
     ),
@@ -661,9 +686,9 @@ const draftsOf = (placed: Placed): readonly Draft[] => {
 
   return Match.value(placed.line.message).pipe(
     Match.tagsExhaustive({
-      User: (user) => userDrafts(user, keyAt, placed.boundary),
+      User: (user) => userDrafts(user, keyAt, placed),
       Assistant: (assistant) => assistantDrafts(placed.line.session, assistant, keyAt, placed.turn),
-      System: (system) => systemDrafts(system, keyAt, placed.boundary),
+      System: (system) => systemDrafts(system, keyAt, placed),
       UnrecognizedEntry: () => [],
       Malformed: (malformed) => [
         draft(ChatItem.Unreadable({ key: keyAt(0), byteLength: malformed.byteLength })),
@@ -678,6 +703,7 @@ const draftsOf = (placed: Placed): readonly Draft[] => {
 const isSubagents = ChatItem.$is('Subagents')
 const isPlan = ChatItem.$is('Plan')
 const isCompacted = ChatItem.$is('Compacted')
+const isCommand = ChatItem.$is('Command')
 
 export const isUserPrompt = ChatItem.$is('UserPrompt')
 export const isOmitted = ChatItem.$is('Omitted')
@@ -691,6 +717,10 @@ const merge = (first: ChatItem, later: ChatItem): ChatItem => {
     return ChatItem.Plan({ key: first.key, steps: later.steps })
   }
 
+  if (isCommand(first) && isCommand(later)) {
+    return ChatItem.Command({ ...first, output: [...first.output, ...later.output] })
+  }
+
   if (isCompacted(first) && isCompacted(later)) {
     return ChatItem.Compacted({
       key: first.key,
@@ -702,7 +732,7 @@ const merge = (first: ChatItem, later: ChatItem): ChatItem => {
   return first
 }
 
-const FIRST_PLACEMENT: Placement = { turn: 0, boundary: Option.none() }
+const FIRST_PLACEMENT: Placement = { turn: 0, boundary: Option.none(), command: Option.none() }
 
 const callOf = (pending: Pending): Option.Option<Call> =>
   Option.liftPredicate(pending, Pending.$is('Call'))
