@@ -23,6 +23,7 @@ import {
   failureOf,
   InvalidPaneLabel,
   isConfirmationAsked,
+  isInFlightOrDone,
   isRetriableFailure,
   keepsName,
   labelFromInput,
@@ -34,7 +35,7 @@ import {
 import type { SetPinnedFailure } from '@crook/web/actions/PaneActions'
 import { UNEXPECTED_FAILURE_MESSAGE } from '@crook/web/atoms/ActionFailure'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
-import { ActionProgress, commandProgress } from '@crook/web/atoms/ActionProgress'
+import { ActionProgress, commandProgress, UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
 
 import { agent, LAPTOP, machine } from '../HerdFixtures.ts'
@@ -153,6 +154,15 @@ describe('labelFromInput', () => {
     )
     expect(keepsName(agent('w1:p1', 'idle'), Option.none())).toBe(true)
     expect(keepsName(named, Option.none())).toBe(false)
+  })
+})
+
+describe('a command the herd never showed', () => {
+  const unconfirmed = ActionProgress.Unconfirmed({ receipt: new PaneClosed({ pane }) })
+
+  it('says so, and stops counting as underway', () => {
+    expect(failureOf(unconfirmed)).toEqual(Option.some(UNCONFIRMED_NOTE))
+    expect(isInFlightOrDone(unconfirmed)).toBe(false)
   })
 })
 

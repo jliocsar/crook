@@ -21,11 +21,17 @@ import {
 } from '@crook/web/actions/PaneActions'
 import type { SheetOutcome } from '@crook/web/actions/PaneActions'
 import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
-import { ActionProgress, commandProgress } from '@crook/web/atoms/ActionProgress'
+import { ActionProgress } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
-import { CommandRequest, sendCommandAtom } from '@crook/web/atoms/Commands'
+import {
+  CommandRequest,
+  pendingActionAtom,
+  PendingActionKey,
+  sendCommandAtom,
+} from '@crook/web/atoms/Commands'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
+import { boundedProgressAtom, SentBound } from '@crook/web/atoms/SentBound'
 import { cardFor } from '@crook/web/herd/HerdLayout'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
@@ -92,6 +98,33 @@ export const setPinnedAtom = Atom.family((agent: PaneAddress) =>
       HubLink.use((link) => Effect.as(link.setPinned(agent.machine, agent.pane, pinned), pinned)),
     )
     .pipe(Atom.keepAlive),
+)
+
+const isPinnedIn = (get: Atom.AtomContext, agent: PaneAddress): boolean =>
+  Option.exists(cardOf(get, agent), (found) => found.pinned)
+
+const herdMachineOf = (get: Atom.AtomContext, agent: PaneAddress) =>
+  pipe(
+    get(herdAtom),
+    Option.flatMap((snapshot) =>
+      Arr.findFirst(snapshot.view.machines, (entry) => entry.machine.id === agent.machine),
+    ),
+  )
+
+const cardOf = (get: Atom.AtomContext, agent: PaneAddress) =>
+  Option.flatMap(herdMachineOf(get, agent), (entry) =>
+    pipe(
+      Arr.findFirst(agentsIn(entry.state), (row) => row.pane === agent.pane),
+      Option.map(cardFor(entry)),
+    ),
+  )
+
+const pinProgressAtom = Atom.family((agent: PaneAddress) =>
+  boundedProgressAtom({
+    result: setPinnedAtom(agent),
+    progress: (get) => pinProgress(get(setPinnedAtom(agent)), isPinnedIn(get, agent)),
+    bound: SentBound,
+  }),
 )
 
 const sessionsAtom = Atom.make<readonly ActionsSession[]>([]).pipe(Atom.keepAlive)
@@ -280,33 +313,19 @@ const viewOf = (
   session: ActionsSession,
   open: boolean,
 ): AgentActionsView => {
-  const herdMachine = pipe(
-    get(herdAtom),
-    Option.flatMap((snapshot) =>
-      Arr.findFirst(snapshot.view.machines, (entry) => entry.machine.id === session.agent.machine),
-    ),
-  )
-  const agents = agentsIn(Option.flatMap(herdMachine, (entry) => entry.state))
-  const card = Option.flatMap(herdMachine, (entry) =>
-    pipe(
-      Arr.findFirst(agents, (row) => row.pane === session.agent.pane),
-      Option.map(cardFor(entry)),
-    ),
-  )
-  const commandOf = (attempt: Option.Option<{ readonly key: IdempotencyKey }>) =>
+  const herdMachine = herdMachineOf(get, session.agent)
+  const card = cardOf(get, session.agent)
+  const commandOf = (attempt: Option.Option<{ readonly key: IdempotencyKey }>): CommandProgress =>
     Option.match(attempt, {
       onNone: () => ActionProgress.Idle(),
-      onSome: ({ key }) => commandProgress(get(sendCommandAtom(key)), agents),
+      onSome: ({ key }) =>
+        get(pendingActionAtom(new PendingActionKey({ key, machine: session.agent.machine }))),
     })
   const rename = commandOf(session.rename)
   const close = commandOf(session.close)
   const pin = Option.match(session.pin, {
-    onNone: () => ActionProgress.Idle(),
-    onSome: () =>
-      pinProgress(
-        get(setPinnedAtom(session.agent)),
-        Option.exists(card, (found) => found.pinned),
-      ),
+    onNone: () => ActionProgress.Idle<boolean>(),
+    onSome: () => get(pinProgressAtom(session.agent)),
   })
 
   return {

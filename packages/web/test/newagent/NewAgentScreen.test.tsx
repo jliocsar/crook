@@ -343,6 +343,26 @@ describe('NewAgentScreen', () => {
     }),
   )
 
+  it.effect('opens clean after leaving a start that failed', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp('/new', liveWith(herd([laptop])))
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(new FolderNotFound({ folder: CROOK })))
+      yield* typeTask(TASK)
+      yield* click(startButton())
+      yield* Effect.promise(() => screen.findByRole('alert'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByRole('alert')).toBeNull()
+      })
+      yield* Effect.promise(() => router.navigate({ to: '/new' }))
+      yield* typeTask(TASK)
+
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(startButton().hasAttribute('disabled')).toBe(false)
+    }),
+  )
+
   it.effect('opens the chat of a Claude that started but did not take its task', () =>
     Effect.gen(function* () {
       const { router, link } = yield* renderApp('/new', liveWith(herd([laptopWithNewAgent])))

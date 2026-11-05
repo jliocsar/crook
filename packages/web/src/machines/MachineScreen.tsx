@@ -146,6 +146,7 @@ function MachineDetail({
             <ForgetMachine
               label={card.machine.label}
               disabled={!allowsActions(connection) || forgetting.pending}
+              pending={forgetting.pending}
               failure={forgetting.failure}
               onForget={forgetting.forget}
             />

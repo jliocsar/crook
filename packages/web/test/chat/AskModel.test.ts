@@ -17,7 +17,7 @@ import { AnswerAsk, Approve, ApproveAlways, Decline, Prompt } from '@crook/domai
 import { AskId, PaneId } from '@crook/domain/Ids'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
 import { AskDialogUnreadable, AskNotPending } from '@crook/protocol/Commands'
-import { ActionProgress } from '@crook/web/atoms/ActionProgress'
+import { ActionProgress, UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import {
   AlwaysNote,
@@ -212,6 +212,14 @@ describe('answerState', () => {
         ASK,
       ),
     ).toEqual(AskAnswerState.Refused({ message: 'Nope.' }))
+  })
+
+  it('reads an answer the dialog never moved on from as refused, so it can be answered again', () => {
+    const receipt = inputDelivered(approve)
+
+    expect(answerState(progress(ActionProgress.Unconfirmed({ receipt })), ASK)).toEqual(
+      AskAnswerState.Refused({ message: UNCONFIRMED_NOTE }),
+    )
   })
 
   it('counts an answer as underway only while it is being sent', () => {

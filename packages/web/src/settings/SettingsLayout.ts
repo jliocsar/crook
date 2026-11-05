@@ -1,8 +1,8 @@
 import type * as Cause from 'effect/Cause'
 import * as Option from 'effect/Option'
-import * as AsyncResult from 'effect/reactivity/AsyncResult'
 
 import type { NotificationEvent } from '@crook/domain/Notifications'
+import { ActionProgress } from '@crook/web/atoms/ActionProgress'
 import type { StatusTone } from '@crook/web/components/ui/status-pill'
 import { isVerified, noticeOf } from '@crook/web/connection/ConnectionView'
 import type { ConnectionNotice, ConnectionView } from '@crook/web/connection/ConnectionView'
@@ -51,12 +51,12 @@ export const hubStatus = (view: ConnectionView): HubStatus =>
     onSome: (notice) => NOTICE_STATUS[notice],
   })
 
-export const testNotificationState = <Failure>(
-  result: AsyncResult.AsyncResult<void, Failure>,
-): TestNotificationState => {
-  if (AsyncResult.isWaiting(result)) {
-    return 'sending'
-  }
-
-  return AsyncResult.isSuccess(result) ? 'sent' : 'idle'
-}
+export const testNotificationState: (progress: ActionProgress<void>) => TestNotificationState =
+  ActionProgress.$match({
+    Idle: (): TestNotificationState => 'idle',
+    Sending: (): TestNotificationState => 'sending',
+    Sent: (): TestNotificationState => 'sent',
+    Unconfirmed: (): TestNotificationState => 'idle',
+    Done: (): TestNotificationState => 'sent',
+    Failed: (): TestNotificationState => 'idle',
+  })

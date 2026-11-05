@@ -162,7 +162,7 @@ function NewAgentFlow() {
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [editedSinceStart, setEditedSinceStart] = React.useState(false)
 
-  const launch = useLaunch(view)
+  const launch = useLaunch()
   const selection = Option.flatMap(view, (herdView) => currentSelection(herdView, chosen))
   const shown = Option.all({ herdView: view, current: selection })
   const busy = launch.pending || Option.isSome(launch.opening)
@@ -226,16 +226,15 @@ function NewAgentFlow() {
             ),
           },
         )}
-        {launch.pending ? <LaunchStatus text="Starting Claude…" /> : null}
-        {Option.match(launch.opening, {
-          onNone: () => null,
-          onSome: (open) => (
-            <div className="grid gap-1">
-              <LaunchStatus text="Opening the chat…" />
-              <OpenChatButton onOpen={open} />
-            </div>
-          ),
-        })}
+        {launch.pending || Option.isSome(launch.opening) ? (
+          <div className="grid gap-1">
+            <LaunchStatus text={launch.pending ? 'Starting Claude…' : 'Opening the chat…'} />
+            {Option.match(launch.opening, {
+              onNone: () => null,
+              onSome: (open) => <OpenChatButton onOpen={open} />,
+            })}
+          </div>
+        ) : null}
         {Option.match(launch.failure, {
           onNone: () => null,
           onSome: (message) => (

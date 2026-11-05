@@ -17,6 +17,7 @@ import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
 import {
   ActionProgress,
   failureMessageOf,
+  unconfirmedNoteOf,
   isDone,
   isFailed,
   isIdle,
@@ -57,6 +58,7 @@ export const isInFlightOrDone = ActionProgress.$match({
   Idle: () => false,
   Sending: () => true,
   Sent: () => true,
+  Unconfirmed: () => false,
   Done: () => true,
   Failed: () => false,
 })
@@ -68,7 +70,10 @@ export const isConfirmationAsked = (progress: ActionProgress<unknown>): boolean 
   Option.exists(Option.liftPredicate(progress, isFailed), (failed) => failed.asksConfirmation)
 
 export const failureOf = (progress: ActionProgress<unknown>): Option.Option<string> =>
-  Option.filter(failureMessageOf(progress), () => !isConfirmationAsked(progress))
+  Option.orElse(
+    Option.filter(failureMessageOf(progress), () => !isConfirmationAsked(progress)),
+    () => unconfirmedNoteOf(progress),
+  )
 
 export const closeNeedsConfirmation = (
   row: AgentRow,

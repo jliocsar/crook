@@ -1,8 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Option from 'effect/Option'
-import * as AsyncResult from 'effect/reactivity/AsyncResult'
 
-import { HarkReachedNoDevice } from '@crook/protocol/Hark'
+import { ActionProgress } from '@crook/web/atoms/ActionProgress'
 import { connectionView } from '@crook/web/connection/ConnectionView'
 import {
   COLD_START,
@@ -18,8 +17,6 @@ import { hubStatus, testNotificationState } from '@crook/web/settings/SettingsLa
 
 const statusOf = (status: LinkStatus) =>
   hubStatus(connectionView(new HubLinkState({ status, herd: Option.none() })))
-
-const refused = new HarkReachedNoDevice()
 
 describe('hubStatus', () => {
   it('reads connected while live, recovering or quietly resyncing', () => {
@@ -40,9 +37,15 @@ describe('hubStatus', () => {
 
 describe('testNotificationState', () => {
   it('is idle until asked, sending while waiting, sent on success and idle after a refusal', () => {
-    expect(testNotificationState(AsyncResult.initial())).toBe('idle')
-    expect(testNotificationState(AsyncResult.initial(true))).toBe('sending')
-    expect(testNotificationState(AsyncResult.success(undefined))).toBe('sent')
-    expect(testNotificationState(AsyncResult.fail(refused))).toBe('idle')
+    expect(testNotificationState(ActionProgress.Idle())).toBe('idle')
+    expect(testNotificationState(ActionProgress.Sending())).toBe('sending')
+    expect(testNotificationState(ActionProgress.Sent({ receipt: undefined }))).toBe('sent')
+    expect(
+      testNotificationState(ActionProgress.Failed({ message: 'No.', asksConfirmation: false })),
+    ).toBe('idle')
+  })
+
+  it('stops saying sent once its confirmation has had its time', () => {
+    expect(testNotificationState(ActionProgress.Unconfirmed({ receipt: undefined }))).toBe('idle')
   })
 })
