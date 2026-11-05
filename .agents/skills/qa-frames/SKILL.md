@@ -29,8 +29,10 @@ it, and it opens and closes its own browser session. On a shared machine it coun
 one browser, so take whatever lock covers those.
 
 For each story you get PASS or FAIL, and under `<output>/<story>/` the frame log (`log.json`), the
-screencast (`shots/`, `shots.json`) and a contact sheet (`contact-sheet.png`) with a tile for each
-frame where the marks changed, red when a finding names it.
+screencast (`shots/`, `shots.json`) and a contact sheet (`contact-sheet.png`) with a tile for the
+first frame, the last, and each frame where the marks, a machine's state or the row count changed,
+red when a finding names it. A swap of rows for as many other rows takes no tile of its own, so
+read the last tile for where a story ended.
 
 **Open the contact sheet of every story you are reporting on**, also on a PASS. The checks only
 know what the marks name; your eyes on the sheet are the rest of the check.

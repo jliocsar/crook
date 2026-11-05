@@ -1453,6 +1453,21 @@ prototype must not fail anyone's push. Its own typecheck is `typecheck:kitchen`.
 does not load fails its own story and no other. Deleting the folder removes it; nothing else names
 it.
 
+- `bun run frames` opens a kitchen story with no variant in its address, so it plays only the first
+  variant, and it records for 2 s after a story that is done at once (measured). A comparison gets
+  one kitchen story per variant.
+- A prototype can swap a real route's screen by calling that route's `update` with another
+  `component` as its module loads (measured).
+- A skeleton swapped for rows reads a layout shift of 0, however badly it fit: the skeleton is
+  removed rather than moved, so nothing counts (measured). How well a skeleton fits is measured from
+  the boxes of what it stands for.
+- Skeleton rows in a flex column that overflows shrink unless they are told not to: a row of 46 px
+  rendered 32 (measured).
+- A generated skeleton works from what is in the DOM: skullet drew `opacity: 0` elements as bones,
+  skipping only `display: none`, its own elements and those marked `skullet-ignore`. It asks for
+  `(prefers-reduced-motion: reduce)`, which the catalog's stub does not answer, since the stub
+  matches `(prefers-reduced-motion)` alone (all measured).
+
 ## Frames
 
 `bun run frames <story...>` plays timeline stories at real speed, 390x844 at 4x CPU throttling, reads
@@ -1513,6 +1528,9 @@ the screen once per animation frame and fails on what a settled screenshot canno
   at both ("analyzer fell behind by more than 16 buffered frames") and left a 0-byte video
   (measured, version 0.41.1). `agent-browser skills get core --full`, which its help recommends,
   answers "Skill not found" here.
+- A contact sheet that added a tile only when the marks changed never showed a `/clear`, since that
+  swaps rows for rows with the same marks around them (read in how it picks tiles). It also takes a tile
+  when the row count changes and always shows the last frame.
 - `Arr.groupWith` compares each element with its group's head, not its neighbour (measured), so it
   does not find runs of consecutive frames: a frame's index minus its position within a filter is
   the key that stays the same along a run.

@@ -15,10 +15,11 @@ export const SHEET_COLUMNS = 8
 export const TILE_WIDTH = 180
 export const SHEET_WIDTH = SHEET_COLUMNS * TILE_WIDTH
 
-const sameMarks = (one: RecordedFrame, other: RecordedFrame): boolean =>
+const sameScreen = (one: RecordedFrame, other: RecordedFrame): boolean =>
   marksOf(one).join() === marksOf(other).join() &&
   statesOf(one) === statesOf(other) &&
-  one.blank === other.blank
+  one.blank === other.blank &&
+  one.rows === other.rows
 
 export const flaggedFrames = (findings: readonly Finding[]): ReadonlySet<number> =>
   new Set(
@@ -33,9 +34,10 @@ export const tileFrames = (
     frames,
     (frame, index) =>
       flagged.has(frame.frame) ||
+      index === frames.length - 1 ||
       Option.match(Arr.get(frames, index - 1), {
         onNone: () => true,
-        onSome: (previous) => !sameMarks(previous, frame),
+        onSome: (previous) => !sameScreen(previous, frame),
       }),
   )
 
@@ -63,6 +65,6 @@ export const sheetHtml = (story: string, tiles: readonly Tile[]): string =>
     'img{width:100%;display:block}',
     'figcaption{padding:2px;overflow-wrap:anywhere}',
     '</style>',
-    `<h1>${escapeHtml(story)}: red tiles are frames a finding names; every other tile is a frame where the marks or a machine's state changed</h1>`,
+    `<h1>${escapeHtml(story)}: red tiles are frames a finding names; every other tile is the first frame, the last, or one where the marks, a machine's state or the row count changed</h1>`,
     `<main>${tiles.map(tileHtml).join('')}</main>`,
   ].join('')

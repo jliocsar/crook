@@ -104,6 +104,22 @@ describe('tileFrames', () => {
       },
     ])
 
-    expect(tileFrames(frames, flagged).map(({ frame }) => frame)).toEqual([1, 2, 4])
+    expect(tileFrames(frames, flagged).map(({ frame }) => frame)).toEqual([1, 2, 4, 5])
+  })
+
+  it('shows rows that changed under the same marks, and where the story ended', () => {
+    const withRows = (frame: number, rows: number): RecordedFrame => ({
+      ...frameAt(frame, frame * 17, ['composer']),
+      rows,
+    })
+    const frames = [
+      withRows(1, 12),
+      withRows(2, 12),
+      withRows(3, 1),
+      withRows(4, 1),
+      withRows(5, 1),
+    ]
+
+    expect(tileFrames(frames, new Set()).map(({ frame }) => frame)).toEqual([1, 3, 5])
   })
 })
