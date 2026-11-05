@@ -60,7 +60,10 @@ const RETRY = 'Try again'
 const SHOW_EARLIER = 'Show earlier messages'
 const OLDER_AGENT_VERSION = '0.0.0'
 const CURRENT_THREAD = '[data-machine="transcript"][data-state="Current"]'
-const HOLDING_THREAD = '[data-machine="transcript"][data-state="Holding"]'
+
+const HELD_THREAD =
+  '[data-machine="transcript"][data-state="Holding"], [data-machine="transcript"][data-state="CatchingUp"]'
+
 const FLIPS_WORKING_AT = DateTime.add(START, { seconds: CLOCK_AFTER_START_SECONDS })
 const FLIPS_IDLE_AT = DateTime.add(FLIPS_WORKING_AT, { seconds: 10 })
 
@@ -103,7 +106,17 @@ const CACHED = Option.some(new HerdSnapshot({ view: TEAM, syncedAt: START }))
 const takeSession = ({ browser, session }: BrowserStage) =>
   Effect.flatMap(Queue.take(browser.sessions), (next) => Ref.set(session, Option.some(next)))
 
-const reopens = () => Effect.andThen(clicks(CARD_BUTTON), seesSelector(HOLDING_THREAD))
+const goesBackToTheHerd = clicks(BACK).pipe(
+  Effect.andThen(
+    until(
+      'the chat to leave',
+      () => document.querySelector('[data-machine="transcript"]') === null,
+    ),
+  ),
+  Effect.andThen(seesText(CHAT_TITLE)),
+)
+
+const reopens = () => Effect.andThen(clicks(CARD_BUTTON), seesSelector(HELD_THREAD))
 
 const watchesFor = ({ link }: LinkStage, nthTime: number) =>
   until(
@@ -126,8 +139,7 @@ const reopenedChat = (slug: string, title: string, landsAfterMs: number) =>
     settle: () =>
       Effect.gen(function* () {
         yield* seesText('The quiet redial')
-        yield* clicks(BACK)
-        yield* seesText(CHAT_TITLE)
+        yield* goesBackToTheHerd
       }),
     timeline: [
       step<LinkStage>(700, 'Tap the card, the cached view shows at once', reopens),
@@ -171,8 +183,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     settle: () =>
       Effect.gen(function* () {
         yield* seesText('The quiet redial')
-        yield* clicks(BACK)
-        yield* seesText(CHAT_TITLE)
+        yield* goesBackToTheHerd
       }),
     timeline: [
       step<LinkStage>(700, 'Tap the card, the cached view shows at once', reopens),
@@ -427,7 +438,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'reopen-while-dialing',
     title: 'A chat reopened while the link dials, its cache and no word yet',
-    shows: { text: 'The quiet redial' },
+    shows: { text: CHAT_TITLE },
     ends: { all: [{ text: 'Written while the socket was down.' }, { selector: CURRENT_THREAD }] },
     path: CHAT_PATH,
     cached: Option.none(),
@@ -442,8 +453,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
 
         yield* Queue.offerAll(transcript, CONVERSATION)
         yield* seesText('The quiet redial')
-        yield* clicks(BACK)
-        yield* seesText(CHAT_TITLE)
+        yield* goesBackToTheHerd
       }),
     timeline: [
       step<BrowserStage>(300, 'The phone puts crook away', ({ browser }) =>

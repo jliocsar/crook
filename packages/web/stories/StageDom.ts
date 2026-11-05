@@ -162,11 +162,17 @@ export const holdsDown = (name: string | RegExp, milliseconds: number) =>
     }),
   )
 
+const whenEnabled = (target: HTMLElement) =>
+  until(`${target.textContent} to be enabled`, () => !target.matches(':disabled'))
+
 export const pressesInstantly = (name: string | RegExp) =>
   Effect.flatMap(role(name), (target) =>
-    Effect.sync(() => {
-      target.click()
-    }),
+    Effect.andThen(
+      whenEnabled(target),
+      Effect.sync(() => {
+        target.click()
+      }),
+    ),
   )
 
 export const pressesEvenIfHidden = (name: string | RegExp) =>

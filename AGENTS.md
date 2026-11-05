@@ -1443,6 +1443,14 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   its story. A witness proves only what it names: the page's text includes whatever is covered or
   hidden, and a state that exists only as layout, such as a draft that grows its field, can only
   be witnessed by what caused it.
+- Two stories failed the gate only under load, and neither was slow. One clicked a button that was
+  still disabled because the link had not gone live yet, and the click was lost; a story's press now
+  waits for the button to be enabled. The other waited to see a state lasting about a second, which
+  a deferred render can skip altogether when the main thread stalls, so it waits for any state that
+  shows what it needs. Both reproduced with sixteen busy loops beside them, 2 of 6 runs (measured).
+  Raising the find limit would have hidden the first and done nothing for the second. A third
+  tapped a card while the chat it had just left was still sliding out, so nothing reopened (measured:
+  1 of 14 runs, the chat still mounted and current). A story that goes back waits for the chat to go.
 - A witness that a typed draft landed reads the send button, not the field. The field held the
   text in Chromium while React's state stayed empty, so a check of the value alone would have
   passed the bug it exists to catch.
