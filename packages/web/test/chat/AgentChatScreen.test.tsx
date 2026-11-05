@@ -221,7 +221,7 @@ describe('AgentChatScreen', () => {
         link.commandAnswer,
         Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/compact' }))),
       )
-      yield* Queue.offer(transcript, opened())
+      yield* Queue.offerAll(transcript, [opened(), caughtUp(0)])
       yield* Effect.promise(() => screen.findByText('No messages yet'))
       fireEvent.change(field(), { target: { value: '/compact' } })
       yield* click(yield* findByRole('button', 'Send'))
@@ -845,7 +845,7 @@ describe('AgentChatScreen', () => {
         expect(screen.queryByText('Sent')).toBeNull()
       })
       yield* link.endTranscript(source, new TranscriptResumeRejected({ detail: 'it shrank' }))
-      yield* Queue.offer(yield* link.transcriptFor(source), opened())
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [opened(), caughtUp(0)])
       yield* Effect.promise(() => screen.findByText('No messages yet'))
 
       expect(screen.queryByText('Sent')).toBeNull()

@@ -17,7 +17,7 @@ lives between three processes, where a unit test holds one still.
 
 ## Does your change touch it?
 
-Sync commit: `16ef652`
+Sync commit: `68940b1`
 
 The command compares these files with that commit and exits 2 when any of them moved. Each line
 is the file, then the functions the model stands for.
@@ -31,7 +31,8 @@ packages/agent/src/TranscriptStreams.ts     fromLineNearEnd openSession sessions
 packages/agent/src/HubLink.ts               session transcriptLinkOf
 packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append passOnCaughtUp fail deliver publish
 packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript TranscriptDemands PublishTranscriptBatch
-packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines catchingUpAfter catchingUpFrom failedWith resumeOf isShowable isOpened
+packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines resumeOf isOpened
+packages/web/src/chat/TranscriptMachine.ts  transition arrived watchEnded resumed landed
 packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
 packages/web/src/rpc/HubLink.ts             whileConnected watchTranscript
 packages/web/src/cache/TranscriptCache.ts   remember load
@@ -214,8 +215,9 @@ agent.
 
 - Rosters, skills and background events: they share the mailbox but carry no promise here.
 - Subagent watches. They share the relay and the phone, and never change session.
-- `shownAfter`, the held-back view, the rows, the virtualizer and everything after
-  `TranscriptView`. JC-151 walks the phone's machines in their real code.
+- What the phone's machine shows while it holds a fold back, its show delay and hold, Show earlier,
+  the rows and the virtualizer. The replay steps the machine's real `transition` for arrivals,
+  failures and resumes, and never steps a timer; the machine's own walk holds the rest.
 - A file that is rewritten, or an offset from another file: a rejected resume is modelled as an
   arbitrary `TranscriptResumeRejected`, not from its cause.
 - An agent older than the hub (`awaitsCaughtUp` false), and several phones on one pane, whose
@@ -223,8 +225,8 @@ agent.
 - A hub restart, except as both connections dropping.
 - A publish that dies of a defect: the agent tells the phone the watch failed, and a test holds it.
   If that call dies too, the watch stays dead until the next connection or re-watch.
-- `transcriptViews`' fibers are replayed by hand in `Replay.ts` from the pure functions it calls;
-  the atom itself is not run.
+- `transcriptViews`' fibers are replayed by hand in `Replay.ts` from the machine it drives; the atom
+  itself is not run.
 - A mailbox that holds a step back. The replay compares the agent's outbox fullness after each
   step, but it cannot see a hub inbox that takes more than the model lets it, since the model
   simply takes no step there.

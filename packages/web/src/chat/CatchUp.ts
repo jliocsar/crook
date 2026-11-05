@@ -5,26 +5,20 @@ import { pipe } from 'effect/Function'
 import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Struct from 'effect/Struct'
 
-import type { ClaudeSessionId } from '@crook/domain/Ids'
 import type { ThreadRow } from '@crook/web/chat/Thread'
-import { sessionOf } from '@crook/web/chat/TranscriptState'
-import type { TranscriptLine, TranscriptView } from '@crook/web/chat/TranscriptState'
+import { LaptopCatchUp, NO_CATCH_UP, TranscriptView } from '@crook/web/chat/TranscriptState'
+import type { Lapse, TranscriptLine } from '@crook/web/chat/TranscriptState'
 import { clockTime } from '@crook/web/time/Clock'
-
-export interface Lapse {
-  readonly from: DateTime.Utc
-  readonly to: DateTime.Utc
-}
 
 export type CatchUp = Data.TaggedEnum<{
   Waiting: Record<never, never>
   Off: Record<never, never>
-  Cached: { readonly lines: readonly TranscriptLine[]; readonly keys: HashSet.HashSet<string> }
+  Remembered: { readonly keys: HashSet.HashSet<string> }
   Landed: {
     readonly keys: Arr.NonEmptyReadonlyArray<string>
     readonly lapse: Option.Option<Lapse>
-    readonly session: Option.Option<ClaudeSessionId>
   }
 }>
 
@@ -66,44 +60,40 @@ const extendsCached = (
     ([was, is]) => was === is,
   )
 
-const openedWith =
-  (rows: readonly ThreadRow[]) =>
-  (view: TranscriptView): CatchUp =>
-    view.catchingUp && Arr.isReadonlyArrayNonEmpty(view.lines)
-      ? CatchUp.Cached({
-          lines: view.lines,
-          keys: HashSet.fromIterable(Arr.map(rows, (row) => row.key)),
-        })
-      : CatchUp.Off()
+export const landedOver = (
+  cached: readonly TranscriptLine[],
+  fold: TranscriptView,
+): TranscriptView =>
+  new TranscriptView(
+    Struct.evolve(fold, {
+      catchUp: () =>
+        extendsCached(cached, fold.lines)
+          ? LaptopCatchUp.Landed({ lapse: lapseOf(Arr.drop(fold.lines, cached.length)) })
+          : NO_CATCH_UP,
+    }),
+  )
+
+export const pendingOver = (view: TranscriptView): TranscriptView =>
+  Arr.isReadonlyArrayNonEmpty(view.lines)
+    ? new TranscriptView(
+        Struct.evolve(view, { catchUp: () => LaptopCatchUp.Pending({ lines: view.lines }) }),
+      )
+    : view
+
+const rowKeys = (rows: readonly ThreadRow[]) => Arr.map(rows, (row) => row.key)
 
 const landedFrom = (
-  cached: Data.TaggedEnum.Value<CatchUp, 'Cached'>,
-  view: TranscriptView,
+  keys: HashSet.HashSet<string>,
+  lapse: Option.Option<Lapse>,
   rows: readonly ThreadRow[],
 ): CatchUp =>
   pipe(
-    Option.liftPredicate(
-      view,
-      (shown) => Option.isNone(shown.failure) && extendsCached(cached.lines, shown.lines),
-    ),
-    Option.flatMap((shown) =>
-      pipe(
-        Arr.map(rows, (row) => row.key),
-        Arr.filter((key) => !HashSet.has(cached.keys, key)),
-        Arr.match({
-          onEmpty: () => Option.none<CatchUp>(),
-          onNonEmpty: (keys) =>
-            Option.some(
-              CatchUp.Landed({
-                keys,
-                lapse: lapseOf(Arr.drop(shown.lines, cached.lines.length)),
-                session: Option.map(shown.position, (position) => position.session),
-              }),
-            ),
-        }),
-      ),
-    ),
-    Option.getOrElse(() => CatchUp.Off()),
+    rowKeys(rows),
+    Arr.filter((key) => !HashSet.has(keys, key)),
+    Arr.match({
+      onEmpty: () => CatchUp.Off(),
+      onNonEmpty: (fresh) => CatchUp.Landed({ keys: fresh, lapse }),
+    }),
   )
 
 export const nextCatchUp = (
@@ -112,21 +102,29 @@ export const nextCatchUp = (
   rows: readonly ThreadRow[],
 ): CatchUp =>
   CatchUp.$match(current, {
-    Waiting: () => Option.match(view, { onNone: () => current, onSome: openedWith(rows) }),
-    Cached: (cached) =>
-      pipe(
-        view,
-        Option.filter((shown) => !shown.catchingUp),
-        Option.match({
-          onNone: () => current,
-          onSome: (shown) => landedFrom(cached, shown, rows),
-        }),
-      ),
+    Waiting: () =>
+      Option.match(view, {
+        onNone: () => current,
+        onSome: (shown) =>
+          LaptopCatchUp.$is('Pending')(shown.catchUp)
+            ? CatchUp.Remembered({ keys: HashSet.fromIterable(rowKeys(rows)) })
+            : CatchUp.Off(),
+      }),
+    Remembered: ({ keys }) =>
+      Option.match(view, {
+        onNone: () => CatchUp.Off(),
+        onSome: (shown) =>
+          LaptopCatchUp.$match(shown.catchUp, {
+            None: () => CatchUp.Off(),
+            Pending: () => current,
+            Landed: ({ lapse }) => landedFrom(keys, lapse, rows),
+          }),
+      }),
     Off: () => current,
-    Landed: (landed) =>
-      Option.exists(sessionOf(view), (session) => !Option.contains(landed.session, session))
-        ? CatchUp.Off()
-        : current,
+    Landed: () =>
+      Option.exists(view, (shown) => LaptopCatchUp.$is('Landed')(shown.catchUp))
+        ? current
+        : CatchUp.Off(),
   })
 
 export const landedOf = (catchUp: CatchUp): Option.Option<Landed> =>

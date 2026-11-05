@@ -35,15 +35,19 @@ import {
   TranscriptWatchFailed,
 } from '@crook/protocol/Transcripts'
 import {
-  EMPTY_TRANSCRIPT,
-  type TranscriptView,
-  applyTranscriptEvent,
-  catchingUpFrom,
-  failedWith,
-  isOpened,
-  isShowable,
-  resumeOf,
-} from '@crook/web/chat/TranscriptState'
+  type TranscriptViewState,
+  NO_VIEW,
+  afterAll,
+  cacheRead,
+  eventArrived,
+  foldOf,
+  hasFailed,
+  holdsBack,
+  rememberedOf,
+  watchFailed,
+  watchResumed,
+} from '@crook/web/chat/TranscriptMachine'
+import { type TranscriptView, resumeOf } from '@crook/web/chat/TranscriptState'
 
 import type { TraceState } from './TraceReader'
 
@@ -173,18 +177,21 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
         onSome: (at) => ({ off: at.offset / lineBytes, s: SESSION_NAMES[at.session] }),
       })
 
-    const realView = (view: TranscriptView) => ({
-      catching: view.catchingUp,
-      failed: Option.isSome(view.failure),
-      lines: view.lines.map((line) => {
+    const foldView = (fold: TranscriptView, catching: boolean, failed: boolean) => ({
+      catching,
+      failed,
+      lines: fold.lines.map((line) => {
         const session = SESSION_NAMES[line.session] as string
 
         return line.message._tag === 'Omitted'
           ? ['omitted', session, line.message.byteLength / lineBytes]
           : ['line', session, line.message.offset / lineBytes]
       }),
-      position: positionOfReal(view.position),
+      position: positionOfReal(fold.position),
     })
+
+    const realView = (state: TranscriptViewState) =>
+      foldView(foldOf(state), holdsBack(state), hasFailed(state))
 
     const modelView = (view: any) => ({
       catching: view.catching,
@@ -193,7 +200,7 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
       position: isNone(view.position) ? { model: 'NONE' } : canonical(view.position),
     })
 
-    let view = catchingUpFrom(EMPTY_TRANSCRIPT, true)
+    let view = afterAll(NO_VIEW, [watchResumed(true)])[0]
     let cached: TranscriptView | undefined
     let outbox: TranscriptBatch = EMPTY_BATCH
     let live: readonly TranscriptUpdate[] = []
@@ -229,12 +236,10 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
         outbox = EMPTY_BATCH
       })
 
-    const resumeWith = (current: TranscriptView) =>
+    const resumeWith = (current: TranscriptViewState) =>
       Effect.gen(function* () {
-        const from = resumeOf(current, Option.none()).from
-
-        view = catchingUpFrom(current, true)
-        yield* openWatch(from)
+        view = afterAll(current, [watchResumed(true)])[0]
+        yield* openWatch(resumeOf(foldOf(view), Option.none()).from)
       })
 
     const publishOne = (link: TranscriptAgentLink, update: TranscriptUpdate) =>
@@ -425,19 +430,21 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
           break
         }
         case 'PhoneApplies': {
-          view = applyTranscriptEvent(view, wire[0] as TranscriptEvent)
+          view = afterAll(view, [eventArrived(wire[0] as TranscriptEvent)])[0]
           wire = wire.slice(1)
-          if (isShowable(view)) cached = view
+          cached = Option.getOrElse(rememberedOf(view), () => cached)
           break
         }
         case 'PhoneSeesFailure': {
           const failure = (wire[0] as TranscriptWatchFailed).failure
 
           wire = []
-          if (failure._tag === 'TranscriptResumeRejected' && isOpened(view)) {
-            yield* resumeWith(EMPTY_TRANSCRIPT)
+          const ended = afterAll(view, [watchFailed(failure)])[0]
+
+          if (hasFailed(ended)) {
+            view = ended
           } else {
-            view = failedWith(view, failure)
+            yield* resumeWith(ended)
           }
           break
         }
@@ -456,7 +463,7 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
           break
         }
         case 'ChatReopens': {
-          yield* resumeWith(cached ?? EMPTY_TRANSCRIPT)
+          yield* resumeWith(afterAll(NO_VIEW, [cacheRead(Option.fromUndefinedOr(cached))])[0])
           break
         }
         default:
@@ -489,7 +496,7 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
 
       if (
         !same(
-          cached === undefined ? { model: 'NONE' } : canonical(realView(cached)),
+          cached === undefined ? { model: 'NONE' } : canonical(foldView(cached, false, false)),
           isNone(cachedModel) ? { model: 'NONE' } : canonical(modelView(cachedModel)),
         )
       ) {

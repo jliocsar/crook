@@ -73,6 +73,18 @@ export const sees = (witness: Witness) =>
     ),
   )
 
+export const until = (what: string, reached: () => boolean) =>
+  attempt(what, () =>
+    waitFor(
+      () => {
+        if (!reached()) {
+          throw new Error(`Still waiting: ${what}.`)
+        }
+      },
+      { timeout: FIND_TIMEOUT_MS },
+    ),
+  )
+
 export const seesText = (text: string) => sees({ text })
 
 export const seesSelector = (selector: string) => sees({ selector })

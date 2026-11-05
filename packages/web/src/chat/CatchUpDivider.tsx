@@ -9,9 +9,8 @@ import {
   nextCatchUp,
   withCatchUpDivider,
 } from '@crook/web/chat/CatchUp'
-import type { Lapse } from '@crook/web/chat/CatchUp'
 import type { ThreadRow } from '@crook/web/chat/Thread'
-import type { TranscriptView } from '@crook/web/chat/TranscriptState'
+import type { Lapse, TranscriptView } from '@crook/web/chat/TranscriptState'
 
 const CATCH_UP_KEY = 'catch-up'
 

@@ -28,17 +28,10 @@ const READ_FAILED = new TranscriptReadFailed({ detail: 'disk unplugged' })
 const VIEWPORT = '[data-slot="conversation-viewport"]'
 const COMMAND_TIMEOUT_SECONDS = 45
 const SETTLE_BEFORE_SCROLL_MS = 150
-const FIRST_RETRY_MS = 200
 
 const failWatch = ({ link }: LinkStage) => link.endTranscript(CHAT_SOURCE, READ_FAILED)
 
-const failsTwice = (stage: LinkStage) =>
-  Effect.gen(function* () {
-    yield* failWatch(stage)
-    yield* pause(FIRST_RETRY_MS)
-    yield* failWatch(stage)
-    yield* role(RETRY_LABEL)
-  })
+const failsOnce = (stage: LinkStage) => Effect.andThen(failWatch(stage), role(RETRY_LABEL))
 
 const leaveAndReopen = ({ router }: LinkStage) =>
   Effect.gen(function* () {
@@ -127,6 +120,16 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     shows: { text: 'This pane closed' },
   }),
   chatStory({
+    slug: 'closed-empty',
+    title: 'Chat, the pane closed and nothing is cached',
+    settle: ({ link }) =>
+      Effect.andThen(
+        seesSelector(SKELETON),
+        SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])]))),
+      ),
+    shows: { all: [{ text: 'This pane closed' }, { text: 'No messages on this phone yet' }] },
+  }),
+  chatStory({
     slug: 'restart-starting',
     title: 'Chat, Start Claude here again waiting',
     shows: { selector: 'button[disabled][aria-busy="true"]' },
@@ -173,30 +176,22 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
   }),
   chatStory({
     slug: 'catching-up',
-    title: 'Chat, Catching up pill on a reopen',
+    title: 'Chat, Catching up pill on a reopen that runs past the delay',
     events: CONVERSATION,
     settle: (stage) => Effect.andThen(seesText('The quiet redial'), leaveAndReopen(stage)),
     shows: { selector: '[data-slot="catching-up-pill"]' },
   }),
   chatStory({
-    slug: 'failed-first',
-    title: 'Chat, the first failure of a watch',
-    note: 'Today the first failure retries by itself: Trying again shows with nothing pressed.',
-    events: CONVERSATION,
-    settle: (stage) => Effect.andThen(seesText('The quiet redial'), failWatch(stage)),
-    shows: { text: 'Trying again' },
-  }),
-  chatStory({
     slug: 'failed-with-lines',
-    title: 'Chat, the watch failed again, Try again standing',
+    title: 'Chat, the watch failed, Try again standing',
     events: CONVERSATION,
-    settle: (stage) => Effect.andThen(seesText('The quiet redial'), failsTwice(stage)),
+    settle: (stage) => Effect.andThen(seesText('The quiet redial'), failsOnce(stage)),
     shows: { text: RETRY_LABEL },
   }),
   chatStory({
     slug: 'failed-empty',
     title: 'Chat, the watch failed with nothing to show',
-    settle: (stage) => Effect.andThen(seesSelector(SKELETON), failsTwice(stage)),
+    settle: (stage) => Effect.andThen(seesSelector(SKELETON), failsOnce(stage)),
     shows: { text: RETRY_LABEL },
   }),
   chatStory({
@@ -206,7 +201,7 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     settle: (stage) =>
       Effect.gen(function* () {
         yield* seesText('The quiet redial')
-        yield* failsTwice(stage)
+        yield* failsOnce(stage)
         yield* clicks(RETRY_LABEL)
       }),
     shows: { text: 'Trying again' },

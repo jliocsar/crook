@@ -28,11 +28,10 @@ import {
 import { linkStory } from '../Story.tsx'
 import type { LinkStage, LinkStorySpec, StoryMaker } from '../Story.tsx'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
-import { pause, role, seesText } from '../StageDom.ts'
+import { role, seesText } from '../StageDom.ts'
 
 const WORKING_LIVE = liveWith(chatHerd(chatAgent('working')))
 const NO_MESSAGES_NOTE = 'Subagents take no messages'
-const FIRST_RETRY_MS = 200
 
 const story = (
   spec: Omit<LinkStorySpec, 'path' | 'link' | 'arrange'> & {
@@ -112,8 +111,6 @@ export const SUBAGENT_STORIES: readonly StoryMaker[] = [
         const failure = new TranscriptReadFailed({ detail: 'disk unplugged' })
 
         yield* seesText(NO_MESSAGES_NOTE)
-        yield* link.endTranscript(SUBAGENT_SOURCE, failure)
-        yield* pause(FIRST_RETRY_MS)
         yield* link.endTranscript(SUBAGENT_SOURCE, failure)
         yield* role('Try again')
       }),
