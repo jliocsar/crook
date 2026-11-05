@@ -125,7 +125,7 @@ export const TIMELINE_EXPECTATIONS = {
   }),
   'actions/close-card-goes': story({ herd: inSequence('herd-list') }),
   'actions/toast-after-chat-close': story({
-    thread: inSequence('thread-rows', 'thread-away'),
+    thread: inSequence('thread-rows'),
     herd: inSequence('herd-list'),
   }),
   'machine/forgotten-while-open': story({ cards: inSequence('agent-card', 'empty-state') }),

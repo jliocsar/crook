@@ -750,9 +750,13 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   until the agent's first chunk replaces them. A file left truly empty behind such a rejection
   therefore keeps showing the old rows until Claude writes again (reasoned, not measured).
 - A chat with nothing cached whose pane closed or whose Claude exited showed a blank thread above
-  the card. It says the phone has no messages, as a machine that is away does. A chat closed from
-  itself before its transcript arrived says so too as it leaves, where it used to go blank
-  (measured: the frame tool's blank finding on that close is gone).
+  the card. It says the phone has no messages, as a machine that is away does.
+- A close from the chat that stayed on the chat, blank, for the rest of a story was the story and
+  not the app. Every story started at a pane id the router would have encoded, and a memory history
+  keeps a path as typed, so the back navigation's comparison never matched. With the encoded path
+  the chat goes back to the herd and the toast shows, with no blank (measured). A witness of the
+  toast alone passed either way, since the toast shows on the chat too: a story about arriving
+  somewhere names something only that place shows.
 - The thread skeleton on a cold reload of a chat stays in the frame baseline, explained rather than
   fixed. With nothing cached, over three sweeps it held 9 to 13 frames (233 to 369 ms) on a reconnect
   story and 10 to 17 (232 to 489 ms) on a foreground return, because the catalog's fake hub answers as soon as the screen mounts; a real

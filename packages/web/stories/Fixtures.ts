@@ -24,8 +24,8 @@ import {
 import type { FakeLink } from './Story.tsx'
 
 export const PANE = PaneId.make('w1:p1')
-export const CHAT_PATH = '/m/laptop/p/w1:p1'
-export const SUBAGENT_PATH = `/m/laptop/p/w1:p1/sub/${SESSION}/${REVIEWER}`
+export const CHAT_PATH = '/m/laptop/p/w1%3Ap1'
+export const SUBAGENT_PATH = `/m/laptop/p/w1%3Ap1/sub/${SESSION}/${REVIEWER}`
 export const MACHINE_PATH = '/machines/laptop'
 export const MACHINES_PATH = '/machines'
 export const NEW_AGENT_PATH = '/new'
