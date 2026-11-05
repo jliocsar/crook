@@ -51,7 +51,8 @@ const COMPOSER = /Message|Reply/u
 const SEND = 'Send'
 const BACK = 'Back to Agents'
 const QUESTION = 'Now check the toast too'
-const LIVE_HERD = '[data-slot="herd-list"] [data-dimmed="false"]'
+const HELD_PROMPT = 'Sent while crook was dialing'
+const LIVE_HERD = '[data-slot="herd-list"] [data-state="clear"]'
 const FLIPS_WORKING_AT = DateTime.add(START, { seconds: CLOCK_AFTER_START_SECONDS })
 const FLIPS_IDLE_AT = DateTime.add(FLIPS_WORKING_AT, { seconds: 10 })
 
@@ -173,6 +174,52 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     ],
   }),
   browserStory({
+    slug: 'send-through-redial',
+    title: 'Send during a quiet redial, held until the new connection answers',
+    note: 'The composer stays open while the link dials, and Send waits for the dial instead of failing.',
+    shows: { selector: SEND_READY },
+    ends: { text: HELD_PROMPT },
+    path: CHAT_PATH,
+    cached: Option.none(),
+    settle: (stage) =>
+      Effect.gen(function* () {
+        yield* takeSession(stage)
+        const session = yield* currentSession(stage)
+
+        yield* Ref.set(
+          stage.browser.commandAnswer,
+          Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: HELD_PROMPT }))),
+        )
+        yield* Queue.offer(session.views, chatHerd())
+
+        const transcript = yield* Queue.take(session.transcripts)
+
+        yield* Queue.offerAll(transcript, CONVERSATION)
+        yield* seesText('The quiet redial')
+        yield* types(COMPOSER, HELD_PROMPT)
+      }),
+    timeline: [
+      step<BrowserStage>(600, 'The phone goes to the background and back', ({ browser }) =>
+        SubscriptionRef.set(browser.visible, false).pipe(
+          Effect.andThen(SubscriptionRef.set(browser.visible, true)),
+        ),
+      ),
+      step<BrowserStage>(0, 'The link dials', takeSession),
+      step<BrowserStage>(200, 'Tap Send while it dials', () => clicks(SEND)),
+      step<BrowserStage>(500, 'The hub answers, and the held send goes out', (stage) =>
+        Effect.flatMap(currentSession(stage), (session) => Queue.offer(session.views, chatHerd())),
+      ),
+      step<BrowserStage>(900, 'The transcript resumes', (stage) =>
+        Effect.gen(function* () {
+          const session = yield* currentSession(stage)
+          const transcript = yield* Queue.take(session.transcripts)
+
+          yield* Queue.offer(transcript, caughtUp(50))
+        }),
+      ),
+    ],
+  }),
+  browserStory({
     slug: 'foreground-return',
     title: 'Back from the background, a quiet redial with a chat open',
     shows: { text: 'The quiet redial' },
@@ -225,6 +272,76 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
       ),
       step<LinkStage>(1200, 'The machine is back', ({ link }) =>
         SubscriptionRef.set(link.state, IDLE_HERD),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'machine-gone',
+    title: "A machine that does not come back, the card takes the composer's place",
+    shows: { selector: SEND_READY },
+    ends: { text: 'laptop is offline' },
+    events: CONVERSATION,
+    settle: () => types(COMPOSER, 'Half a thought'),
+    timeline: [
+      step<LinkStage>(600, 'The machine starts reconnecting', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent(), 'reconnecting'))),
+      ),
+      step<LinkStage>(1500, 'The hub gives it up', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent(), 'offline'))),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'machine-back-after-hub-restart',
+    title: 'A hub restart, the machine reads offline until its agent attaches again',
+    note: 'A hub that restarts lists a machine offline with no reconnecting first, so the phone gives it the grace itself.',
+    shows: { selector: SEND_READY },
+    ends: { selector: SEND_READY },
+    events: CONVERSATION,
+    settle: () => types(COMPOSER, 'Half a thought'),
+    timeline: [
+      step<LinkStage>(600, 'The restarted hub lists the machine offline', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent(), 'offline'))),
+      ),
+      step<LinkStage>(1500, 'Its agent attaches', ({ link }) =>
+        SubscriptionRef.set(link.state, IDLE_HERD),
+      ),
+    ],
+  }),
+  browserStory({
+    slug: 'send-through-machine-redial',
+    title: 'Send while the machine reconnects, held until it is back',
+    note: 'The real link holds the send while the herd says the machine is not online.',
+    shows: { selector: SEND_READY },
+    ends: { text: HELD_PROMPT },
+    path: CHAT_PATH,
+    cached: Option.none(),
+    settle: (stage) =>
+      Effect.gen(function* () {
+        yield* takeSession(stage)
+        const session = yield* currentSession(stage)
+
+        yield* Ref.set(
+          stage.browser.commandAnswer,
+          Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: HELD_PROMPT }))),
+        )
+        yield* Queue.offer(session.views, chatHerd())
+
+        const transcript = yield* Queue.take(session.transcripts)
+
+        yield* Queue.offerAll(transcript, CONVERSATION)
+        yield* seesText('The quiet redial')
+        yield* types(COMPOSER, HELD_PROMPT)
+      }),
+    timeline: [
+      step<BrowserStage>(600, 'The machine starts reconnecting', (stage) =>
+        Effect.flatMap(currentSession(stage), (session) =>
+          Queue.offer(session.views, chatHerd(chatAgent(), 'reconnecting')),
+        ),
+      ),
+      step<BrowserStage>(200, 'Tap Send while it is away', () => clicks(SEND)),
+      step<BrowserStage>(700, 'The machine is back, and the held send goes out', (stage) =>
+        Effect.flatMap(currentSession(stage), (session) => Queue.offer(session.views, chatHerd())),
       ),
     ],
   }),
@@ -335,7 +452,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'herd-first-load-from-cache',
     title: 'Herd first load from the cache, slow hub',
-    shows: { selector: '[data-dimmed="true"]' },
+    shows: { text: CHAT_TITLE },
     ends: { selector: LIVE_HERD },
     path: AGENTS_PATH,
     cached: CACHED,
@@ -350,7 +467,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'herd-first-load-fast',
     title: 'Herd first load from the cache, fast hub',
-    shows: { selector: '[data-dimmed="true"]' },
+    shows: { text: CHAT_TITLE },
     ends: { selector: LIVE_HERD },
     path: AGENTS_PATH,
     cached: CACHED,

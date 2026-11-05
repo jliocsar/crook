@@ -1,7 +1,7 @@
 import * as Deferred from 'effect/Deferred'
 import * as Option from 'effect/Option'
 
-import { LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { EXPIRED, LOGGED_OUT } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { AGENTS_PATH, TEAM } from '../Fixtures.ts'
@@ -54,14 +54,14 @@ export const GATE_STORIES: readonly StoryMaker[] = [
     slug: 'session-expired',
     title: 'Logged out, session expired',
     path: AGENTS_PATH,
-    link: stateWith(LinkStatus.Expired(), Option.some(TEAM)),
+    link: stateWith(EXPIRED, Option.some(TEAM)),
     shows: { text: 'Your session expired' },
   }),
   linkStory({
     slug: 'logged-out',
     title: 'Logged out, by choice',
     path: AGENTS_PATH,
-    link: stateWith(LinkStatus.LoggedOut(), Option.none()),
+    link: stateWith(LOGGED_OUT, Option.none()),
     shows: { text: "You're logged out" },
   }),
   linkStory({

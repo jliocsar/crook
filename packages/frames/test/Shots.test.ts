@@ -18,6 +18,7 @@ const frameAt = (frame: number, at: number, marks: readonly string[] = []): Reco
   blank: false,
   rows: 0,
   marks: Object.fromEntries(marks.map((mark) => [mark, BOX])),
+  states: {},
   added: [],
   removed: [],
   readMs: 1,
@@ -98,6 +99,7 @@ describe('tileFrames', () => {
         fromMs: 117,
         toMs: 117,
         marks: [],
+        states: '',
         words: '',
       },
     ])

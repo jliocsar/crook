@@ -210,7 +210,7 @@ Screens
 Behavior
 
 - One WSS to the hub while visible. On `visibilitychange` → visible: reconnect, request fresh merged snapshot, reconcile.
-- Cache last snapshot in IndexedDB for instant paint (render dimmed + "syncing" until fresh).
+- Cache last snapshot in IndexedDB for instant paint (render it as is, + "syncing" once the dial has taken a second).
 - Service worker: app shell caching only. No push, no notification click.
 - Outside a Home Screen app, an install screen shows the Add to Home Screen steps for iOS Safari and Chrome, with "Continue in browser".
 

@@ -13,6 +13,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 642, "width": 366, "height": 190, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1.1
@@ -29,6 +30,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 642, "width": 366, "height": 190, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1.2
@@ -45,6 +47,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 642, "width": 366, "height": 190, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1.4
@@ -61,6 +64,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 642, "width": 366, "height": 190, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 0.8
@@ -77,6 +81,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": ["div"],
       "readMs": 1.1
@@ -93,6 +98,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1
@@ -109,6 +115,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1.1
@@ -125,6 +132,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1
@@ -141,6 +149,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1.1
@@ -157,6 +166,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1.5
@@ -173,6 +183,7 @@
         "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
         "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
       },
+      "states": {},
       "added": [],
       "removed": [],
       "readMs": 1.6

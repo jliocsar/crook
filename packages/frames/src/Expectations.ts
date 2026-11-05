@@ -51,10 +51,26 @@ export const TIMELINE_EXPECTATIONS = {
   ),
   'transition/reconnect-chat-open': story(A_CHAT, { shiftBudget: BANNER_SHIFT_BUDGET }),
   'transition/foreground-return': story({ ...A_CHAT, link: NOTHING_ALLOWED }),
+  'transition/send-through-redial': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer'), link: NOTHING_ALLOWED },
+    { watchFrom: 'first-step' },
+  ),
   'transition/machine-redial': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
   }),
+  'transition/machine-gone': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer', 'edge-card'),
+  }),
+  'transition/machine-back-after-hub-restart': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'transition/send-through-machine-redial': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step' },
+  ),
   'transition/clear': story({ thread: inSequence('thread-rows'), dock: inSequence('composer') }),
   'transition/resume-other-session': story({
     thread: inSequence('thread-rows'),

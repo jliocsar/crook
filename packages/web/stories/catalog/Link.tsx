@@ -2,7 +2,19 @@ import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 
-import { COLD_START, LinkStatus, QUIET_DIALING } from '@crook/web/rpc/HubLinkState'
+import {
+  ANNOUNCED,
+  COLD_START,
+  EXPIRED,
+  LIVE,
+  LOGGED_OUT,
+  OFFLINE,
+  PARKED,
+  RECOVERED,
+  REDIALING,
+  RETURNING,
+  UNREACHABLE,
+} from '@crook/web/rpc/HubLinkState'
 
 import { stateWith } from '../../test/AppWiring.tsx'
 import {
@@ -36,12 +48,6 @@ export interface LinkMoment {
   readonly seed: LinkStorySpec['link']
   readonly shows: Witness
 }
-
-export const ANNOUNCED_DIALING = LinkStatus.Dialing({
-  announced: true,
-  afterFailure: false,
-  coldStart: false,
-})
 
 const WITH_TEAM = Option.some(TEAM)
 const NO_HERD = Option.none()
@@ -91,61 +97,79 @@ export const LINK_MOMENTS: readonly LinkMoment[] = [
   {
     slug: 'dialing-quiet',
     title: 'Dialing, quiet redial from Live',
-    seed: stateWith(QUIET_DIALING, WITH_TEAM),
+    seed: stateWith(REDIALING, WITH_TEAM),
     shows: SHELL_WITNESS,
+  },
+  {
+    slug: 'parked',
+    title: 'Parked, the page hidden and its socket closed',
+    seed: stateWith(PARKED, WITH_TEAM),
+    shows: SHELL_WITNESS,
+  },
+  {
+    slug: 'returning',
+    title: 'Returning from offline with a herd',
+    seed: stateWith(RETURNING, WITH_TEAM),
+    shows: { text: 'Syncing' },
+  },
+  {
+    slug: 'returning-empty',
+    title: 'Returning from offline with no herd',
+    seed: stateWith(RETURNING, NO_HERD),
+    shows: { text: 'Connecting to the hub' },
   },
   {
     slug: 'dialing-announced-syncing',
     title: 'Dialing, announced with a herd',
-    seed: stateWith(ANNOUNCED_DIALING, WITH_TEAM),
+    seed: stateWith(ANNOUNCED, WITH_TEAM),
     shows: { text: 'Syncing' },
   },
   {
     slug: 'dialing-announced-connecting',
     title: 'Dialing, announced with no herd',
-    seed: stateWith(ANNOUNCED_DIALING, NO_HERD),
+    seed: stateWith(ANNOUNCED, NO_HERD),
     shows: { text: 'Connecting to the hub' },
   },
   {
     slug: 'live',
     title: 'Live',
-    seed: stateWith(LinkStatus.Live({ recovered: false }), WITH_TEAM),
+    seed: stateWith(LIVE, WITH_TEAM),
     shows: SHELL_WITNESS,
   },
   {
     slug: 'live-recovered',
     title: 'Live, just recovered',
-    seed: stateWith(LinkStatus.Live({ recovered: true }), WITH_TEAM),
+    seed: stateWith(RECOVERED, WITH_TEAM),
     shows: { text: 'Back online' },
   },
   {
     slug: 'unreachable',
     title: 'Unreachable',
-    seed: stateWith(LinkStatus.Unreachable(), WITH_TEAM),
+    seed: stateWith(UNREACHABLE, WITH_TEAM),
     shows: { text: "Can't reach the hub" },
   },
   {
     slug: 'unreachable-empty',
     title: 'Unreachable with no herd',
-    seed: stateWith(LinkStatus.Unreachable(), NO_HERD),
+    seed: stateWith(UNREACHABLE, NO_HERD),
     shows: { text: "Can't reach the hub" },
   },
   {
     slug: 'offline',
     title: 'Offline',
-    seed: stateWith(LinkStatus.Offline(), WITH_TEAM),
+    seed: stateWith(OFFLINE, WITH_TEAM),
     shows: { text: "You're offline" },
   },
   {
     slug: 'expired',
     title: 'Expired',
-    seed: stateWith(LinkStatus.Expired(), WITH_TEAM),
+    seed: stateWith(EXPIRED, WITH_TEAM),
     shows: LOGGED_OUT_WITNESS,
   },
   {
     slug: 'logged-out',
     title: 'Logged out',
-    seed: stateWith(LinkStatus.LoggedOut(), NO_HERD),
+    seed: stateWith(LOGGED_OUT, NO_HERD),
     shows: LOGGED_OUT_WITNESS,
   },
 ]

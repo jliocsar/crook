@@ -26,6 +26,7 @@ export const RecordedFrame = Schema.Struct({
   blank: Schema.Boolean,
   rows: Schema.Int,
   marks: Schema.Record(Schema.String, MarkReading),
+  states: Schema.Record(Schema.String, Schema.String),
   added: Schema.Array(Schema.String),
   removed: Schema.Array(Schema.String),
   readMs: Schema.Finite,
@@ -61,6 +62,11 @@ export type FrameLog = typeof FrameLog.Type
 export const FrameLogJson = Schema.fromJsonString(FrameLog)
 
 export const marksOf = (frame: RecordedFrame): readonly string[] => Object.keys(frame.marks)
+
+export const statesOf = (frame: RecordedFrame): string =>
+  Object.entries(frame.states)
+    .map(([machine, state]) => `${machine}=${state}`)
+    .join(', ')
 
 export const shows = (frame: RecordedFrame, mark: string): boolean =>
   frame.marks[mark] !== undefined

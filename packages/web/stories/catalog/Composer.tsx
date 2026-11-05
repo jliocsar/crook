@@ -7,7 +7,7 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { SkillListing } from '@crook/domain/Skill'
 import { SkillsChanged } from '@crook/domain/Transcript'
 import { HerdrUnavailable } from '@crook/protocol/Commands'
-import { LinkStatus, QUIET_DIALING } from '@crook/web/rpc/HubLinkState'
+import { REDIALING, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import {
@@ -143,16 +143,16 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
     shows: { selector: '[role="alert"]' },
   }),
   chatStory({
-    slug: 'paused-quiet',
-    title: 'Composer, paused during a quiet redial',
-    link: stateWith(QUIET_DIALING, Option.some(chatHerd())),
+    slug: 'open-quiet-redial',
+    title: 'Composer, open during a quiet redial',
+    link: stateWith(REDIALING, Option.some(chatHerd())),
     events: CONVERSATION,
-    shows: { selector: 'textarea[placeholder="Sending is paused until crook reconnects"]' },
+    shows: { selector: 'textarea[placeholder="Message Claude"]' },
   }),
   chatStory({
     slug: 'paused-unreachable',
     title: 'Composer, paused while the hub is unreachable',
-    link: stateWith(LinkStatus.Unreachable(), Option.some(chatHerd())),
+    link: stateWith(UNREACHABLE, Option.some(chatHerd())),
     events: CONVERSATION,
     shows: { selector: 'textarea[placeholder="Sending is paused until crook reconnects"]' },
   }),

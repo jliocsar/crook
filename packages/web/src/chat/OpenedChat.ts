@@ -3,7 +3,7 @@ import * as React from 'react'
 
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
-import { canActAtom, staleAtom } from '@crook/web/atoms/Connection'
+import { canActAtom, dimsContentAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import {
   transcriptAtom,
@@ -12,6 +12,7 @@ import {
 } from '@crook/web/atoms/Transcript'
 import type { TranscriptKey } from '@crook/web/atoms/Transcript'
 import { deriveChat, EMPTY_CHAT } from '@crook/web/chat/ChatItems'
+import { PresenceState } from '@crook/web/chat/PresenceMachine'
 import type { ChatContext, ChatItem } from '@crook/web/chat/ChatItems'
 import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
 
@@ -19,11 +20,16 @@ export const useOpenedChat = (machine: MachineId, pane: PaneId) => {
   const opened = React.useMemo(() => new OpenedAgent({ machine, pane }), [machine, pane])
   const model = useAtomValue(chatScreenAtom(opened))
   const canAct = useAtomValue(canActAtom)
-  const stale = useAtomValue(staleAtom)
+  const connectionDims = useAtomValue(dimsContentAtom)
 
   useAtomMount(seenWhileOpenAtom(opened))
 
-  return { opened, model, canAct, dimmed: model.presence === 'away' || stale }
+  return {
+    opened,
+    model,
+    canAct,
+    dimmed: PresenceState.guards.Away(model.presence) || connectionDims,
+  }
 }
 
 export const useTranscriptThread = (key: TranscriptKey) => {

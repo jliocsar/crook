@@ -7,7 +7,7 @@ import * as Atom from 'effect/reactivity/Atom'
 
 import { herdNeedsYouCount, isSeen } from '@crook/domain/AgentPriority'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
-import { connectionAtom } from '@crook/web/atoms/Connection'
+import { isConnectedAtom } from '@crook/web/atoms/Connection'
 import { hubRuntime, linkStateAtom } from '@crook/web/atoms/Hub'
 import { findAgent, herdLayout } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
@@ -41,7 +41,7 @@ export const resyncAtom = hubRuntime.fn(() => HubLink.use((link) => link.resync)
 const unseenWhileLive = (opened: OpenedAgent, get: Atom.AtomContext) =>
   pipe(
     get(herdAtom),
-    Option.filter(() => get(connectionAtom).canAct),
+    Option.filter(() => get(isConnectedAtom)),
     Option.flatMap((snapshot) => findAgent(snapshot.view, opened.machine, opened.pane)),
     Option.filter(({ herdMachine, row }) => !isSeen(herdMachine)(row)),
   )

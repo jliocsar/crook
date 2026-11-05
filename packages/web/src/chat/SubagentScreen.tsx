@@ -19,6 +19,7 @@ import { activityOf, cwdOf, isWatching, titleOf } from '@crook/web/chat/ChatMode
 import { failureRows, TranscriptEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { ImageViewer } from '@crook/web/chat/Images'
 import { useChatItems, useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
+import { PresenceState } from '@crook/web/chat/PresenceMachine'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -93,7 +94,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const view = AsyncResult.value(transcript.result)
   const catchingUp = isWatching(model) && isCatchingUp(view)
   const cwd = cwdOf(model)
-  const paneClosed = model.presence === 'closed'
+  const paneClosed = PresenceState.guards.Closed(model.presence)
   const parentLines = linesOf(parent)
   const parentRosters = rostersOf(parent)
   const parentActivity = activityOf(model)

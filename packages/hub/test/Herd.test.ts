@@ -17,9 +17,9 @@ import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
 import * as Database from '@crook/hub/Database'
-import { Herd, RECONNECT_GRACE, hubVersion } from '@crook/hub/Herd'
+import { Herd, hubVersion } from '@crook/hub/Herd'
 import { HerdStore } from '@crook/hub/HerdStore'
-import { Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { Hello, MachineIdMismatch, RECONNECT_GRACE } from '@crook/protocol/AgentLink'
 import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
 
 import packageJson from '../package.json' with { type: 'json' }

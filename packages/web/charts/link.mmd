@@ -1,0 +1,26 @@
+stateDiagram-v2
+  [*] --> ColdStart
+  state "from any state" as Anywhere
+  ColdStart --> Announced: NoticeDelayPassed
+  ColdStart --> Live: HerdReceived
+  Redialing --> Parked: PageHidden
+  Redialing --> Announced: NoticeDelayPassed
+  Redialing --> Live: HerdReceived
+  Parked --> Redialing: AttemptBegan / StartNoticeTimer
+  Parked --> Live: HerdReceived
+  Announced --> Live: HerdReceived
+  Returning --> Recovered: HerdReceived / StartRecoveredTimer
+  Live --> Redialing: AttemptBegan / StartNoticeTimer<br/>ConnectionDropped
+  Live --> Parked: PageHidden
+  Recovered --> Redialing: AttemptBegan / StartNoticeTimer<br/>ConnectionDropped
+  Recovered --> Parked: PageHidden
+  Recovered --> Live: RecoveredNoticeEnded
+  Unreachable --> Recovered: HerdReceived / StartRecoveredTimer
+  Offline --> Returning: AttemptBegan
+  Offline --> Recovered: HerdReceived / StartRecoveredTimer
+  Expired --> Live: HerdReceived
+  Anywhere --> Unreachable: DialRefused
+  Anywhere --> Offline: WentOffline
+  Anywhere --> Expired: SessionExpired
+  Anywhere --> LoggedOut: LoggedOutConfirmed
+  LoggedOut --> [*]

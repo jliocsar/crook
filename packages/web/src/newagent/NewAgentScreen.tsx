@@ -5,6 +5,7 @@ import * as React from 'react'
 
 import type { HerdView } from '@crook/domain/HerdView'
 import { connectionAtom } from '@crook/web/atoms/Connection'
+import { allowsActions, dimsContent, isVerified } from '@crook/web/connection/ConnectionView'
 import { herdViewAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { Sheet } from '@crook/web/components/Sheet'
@@ -177,17 +178,13 @@ function NewAgentFlow() {
     )
   const restartBlocked = launch.blocksRestart && !editedSinceStart
   const ready =
-    connection.controlsEnabled &&
-    online &&
-    !busy &&
-    !restartBlocked &&
-    Option.isSome(commandFor(''))
+    allowsActions(connection) && online && !busy && !restartBlocked && Option.isSome(commandFor(''))
 
   React.useEffect(() => {
-    if (Option.isNone(chosen) && Option.isSome(selection) && !connection.stale) {
+    if (Option.isNone(chosen) && Option.isSome(selection) && isVerified(connection)) {
       setChosen(selection)
     }
-  }, [chosen, selection, connection.stale])
+  }, [chosen, selection, connection])
 
   const start = (text: string) => {
     const next = commandFor(text)
@@ -203,7 +200,7 @@ function NewAgentFlow() {
       <PushedHeader title="New agent" backLabel="Back to Agents" />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="no-scrollbar flex h-full flex-col justify-center overflow-y-auto px-4 pb-4">
-          <Dimmed dimmed={connection.stale}>
+          <Dimmed dimmed={dimsContent(connection)}>
             <LaunchSummary body={newAgentBody(view, selection, task)} />
           </Dimmed>
         </div>
@@ -217,7 +214,7 @@ function NewAgentFlow() {
           {
             onNone: () => null,
             onSome: (chips) => (
-              <fieldset disabled={busy || !connection.controlsEnabled} className="contents">
+              <fieldset disabled={busy || !allowsActions(connection)} className="contents">
                 <PlaceChips
                   chips={chips}
                   onOpen={(next) => {

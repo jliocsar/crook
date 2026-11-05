@@ -13,6 +13,7 @@ const describeFinding = (finding: Finding, label: string, imageOf: ImageOf): rea
     ? `    Frame ${finding.firstFrame}, ${finding.fromMs} ms after the page started.`
     : `    Frames ${finding.firstFrame} to ${finding.lastFrame}, ${finding.fromMs} ms to ${finding.toMs} ms after the page started.`,
   `    On screen then: ${finding.marks.length === 0 ? 'nothing marked' : finding.marks.join(', ')}`,
+  ...(finding.states === '' ? [] : [`    Machines then: ${finding.states}`]),
   `    Frame image (frame ${finding.imageFrame}): ${imageOf(finding.imageFrame)}`,
 ]
 

@@ -12,7 +12,7 @@ import { HerdView } from '@crook/domain/HerdView'
 import type { HerdMachine } from '@crook/domain/HerdView'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import { PLUGIN_INSTALL_COMMAND, TOKEN_CONTEXT } from '@crook/web/machines/AddMachineSheet'
-import { LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { ANNOUNCED, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
 import { afterSpring, click, dragX, eventually, findByRole, present } from '../Dom.ts'
@@ -124,10 +124,7 @@ describe('MachinesScreen', () => {
       expect(alert.textContent).toBe(refusal.message)
       expect(present(alert.closest('li'), 'The desk row').contains(cardOf('desk'))).toBe(true)
 
-      yield* SubscriptionRef.set(
-        link.state,
-        stateWith(LinkStatus.Unreachable(), Option.some(viewOf([desk]))),
-      )
+      yield* SubscriptionRef.set(link.state, stateWith(UNREACHABLE, Option.some(viewOf([desk]))))
       yield* eventually(() => {
         expect(screen.queryByRole('alert')).toBeNull()
       })
@@ -136,17 +133,14 @@ describe('MachinesScreen', () => {
 
   it.effect('disables Forget while the hub cannot act, and dims the list', () =>
     Effect.gen(function* () {
-      yield* renderApp(
-        '/machines',
-        stateWith(LinkStatus.Unreachable(), Option.some(viewOf([desk]))),
-      )
+      yield* renderApp('/machines', stateWith(UNREACHABLE, Option.some(viewOf([desk]))))
 
       yield* Effect.promise(() => screen.findByText('Swipe to forget, or wait for it to reconnect'))
 
       expect(
         screen.getByRole('button', { name: 'Forget', hidden: true }).hasAttribute('disabled'),
       ).toBe(true)
-      expect(document.querySelector('[data-dimmed="true"]')).not.toBeNull()
+      expect(document.querySelector('[data-state="dimmed"]')).not.toBeNull()
     }),
   )
 
@@ -204,13 +198,7 @@ describe('MachinesScreen', () => {
 
   it.effect('shows skeleton cards on a first load', () =>
     Effect.gen(function* () {
-      yield* renderApp(
-        '/machines',
-        stateWith(
-          LinkStatus.Dialing({ announced: true, afterFailure: false, coldStart: true }),
-          Option.none(),
-        ),
-      )
+      yield* renderApp('/machines', stateWith(ANNOUNCED, Option.none()))
 
       expect(
         (yield* Effect.promise(() => screen.findByText('Loading your machines'))).closest(

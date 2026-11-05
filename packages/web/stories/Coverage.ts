@@ -3,21 +3,21 @@ import type { Ask, AskedAction } from '@crook/domain/Ask'
 import type { AskAnswerState } from '@crook/web/chat/AskModel'
 import type { JobKind, JobState } from '@crook/web/chat/BackgroundModel'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
-import type { ChatScreenModel, ChatStatus, EdgeKind } from '@crook/web/chat/ChatModel'
+import type { ChatStatus, EdgeKind } from '@crook/web/chat/ChatModel'
+import type { PresenceState } from '@crook/web/chat/PresenceMachine'
 import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
 import type { HerdNotice } from '@crook/web/herd/HerdLayout'
 import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
 import type { TestNotificationState } from '@crook/web/settings/SettingsLayout'
 
 export const LINK_STATUS_MOMENTS = {
-  Dialing: [
-    'dialing-cold-cached',
-    'dialing-cold-empty',
-    'dialing-quiet',
-    'dialing-announced-syncing',
-    'dialing-announced-connecting',
-  ],
-  Live: ['live', 'live-recovered'],
+  ColdStart: ['dialing-cold-cached', 'dialing-cold-empty'],
+  Redialing: ['dialing-quiet'],
+  Parked: ['parked'],
+  Announced: ['dialing-announced-syncing', 'dialing-announced-connecting'],
+  Returning: ['returning', 'returning-empty'],
+  Live: ['live'],
+  Recovered: ['live-recovered'],
   Unreachable: ['unreachable', 'unreachable-empty'],
   Offline: ['offline'],
   Expired: ['expired'],
@@ -47,13 +47,15 @@ export const STATE_COVERAGE = {
     stopped: ['rows/tool-stopped'],
   } satisfies Record<ToolCallStatus, readonly string[]>,
   chatPresence: {
-    loading: ['chat/presence-loading', 'chat/skeleton'],
-    live: ['chat/conversation'],
-    away: ['chat/away', 'chat/away-empty', 'chat/reconnecting'],
-    exited: ['chat/exited'],
-    closed: ['chat/closed'],
-    notClaude: ['chat/not-claude'],
-  } satisfies Record<ChatScreenModel['presence'], readonly string[]>,
+    Loading: ['chat/presence-loading', 'chat/skeleton'],
+    Live: ['chat/conversation'],
+    Redialing: ['transition/machine-redial'],
+    Reconnecting: ['chat/reconnecting', 'transition/machine-back-after-hub-restart'],
+    Away: ['chat/away', 'chat/away-empty', 'transition/machine-gone'],
+    Exited: ['chat/exited'],
+    Closed: ['chat/closed'],
+    NotClaude: ['chat/not-claude'],
+  } satisfies Record<PresenceState['_tag'], readonly string[]>,
   edgeCard: {
     away: ['chat/away'],
     exited: ['chat/exited'],
@@ -119,6 +121,8 @@ export const REQUIRED_TRANSITIONS: readonly string[] = [
   'transition/cached-reopen-catch-up',
   'transition/reconnect-chat-open',
   'transition/machine-redial',
+  'transition/machine-gone',
+  'transition/machine-back-after-hub-restart',
   'transition/clear',
   'transition/resume-other-session',
   'transition/prompt-to-answer',

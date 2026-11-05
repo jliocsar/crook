@@ -2,7 +2,7 @@ import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
 
 import type { Finding } from '@crook/frames/Detect'
-import { marksOf } from '@crook/frames/FrameLog'
+import { marksOf, statesOf } from '@crook/frames/FrameLog'
 import type { RecordedFrame } from '@crook/frames/FrameLog'
 
 export interface Tile {
@@ -16,7 +16,9 @@ export const TILE_WIDTH = 180
 export const SHEET_WIDTH = SHEET_COLUMNS * TILE_WIDTH
 
 const sameMarks = (one: RecordedFrame, other: RecordedFrame): boolean =>
-  marksOf(one).join() === marksOf(other).join() && one.blank === other.blank
+  marksOf(one).join() === marksOf(other).join() &&
+  statesOf(one) === statesOf(other) &&
+  one.blank === other.blank
 
 export const flaggedFrames = (findings: readonly Finding[]): ReadonlySet<number> =>
   new Set(
@@ -46,7 +48,7 @@ const tileHtml = ({ frame, image, flagged }: Tile): string =>
     `<img src="${image}" alt="frame ${frame.frame}">`,
     `<figcaption><b>frame ${frame.frame}</b> ${Math.round(frame.at)} ms<br>${escapeHtml(
       frame.blank ? `BLANK ${marksOf(frame).join(', ')}` : marksOf(frame).join(', '),
-    )}</figcaption>`,
+    )}<br>${escapeHtml(statesOf(frame))}</figcaption>`,
     '</figure>',
   ].join('')
 
@@ -61,6 +63,6 @@ export const sheetHtml = (story: string, tiles: readonly Tile[]): string =>
     'img{width:100%;display:block}',
     'figcaption{padding:2px;overflow-wrap:anywhere}',
     '</style>',
-    `<h1>${escapeHtml(story)}: red tiles are frames a finding names; every other tile is a frame where the marks changed</h1>`,
+    `<h1>${escapeHtml(story)}: red tiles are frames a finding names; every other tile is a frame where the marks or a machine's state changed</h1>`,
     `<main>${tiles.map(tileHtml).join('')}</main>`,
   ].join('')

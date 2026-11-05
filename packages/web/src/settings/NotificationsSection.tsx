@@ -22,6 +22,7 @@ import type {
 import { SettingsNote, SettingsSection } from '@crook/web/settings/SettingsSection'
 import { ToggleRow } from '@crook/web/settings/ToggleRow'
 
+const UNAVAILABLE_NOTE = 'Your notification choices show once crook reconnects.'
 const SHARED_NOTE = 'Saved on the hub, so every device you log in on shares them.'
 
 const PRIVACY_NOTE =
@@ -179,7 +180,8 @@ export function NotificationsSection({
       {Option.match(current, {
         onNone: () =>
           Option.match(failureMessage(settings), {
-            onNone: () => <TogglesLoading />,
+            onNone: () =>
+              stale ? <SettingsNote>{UNAVAILABLE_NOTE}</SettingsNote> : <TogglesLoading />,
             onSome: (message) => <ActionFailure className="px-4" message={Option.some(message)} />,
           }),
         onSome: (known) => (

@@ -1,0 +1,17 @@
+stateDiagram-v2
+  [*] --> Loading
+  state "from any state" as Anywhere
+  Loading --> Redialing: MachineReconnecting / WaitOutQuiet
+  Loading --> Away: MachineOffline
+  Live --> Redialing: MachineReconnecting / WaitOutQuiet<br/>MachineOffline / WaitOutQuiet
+  Redialing --> Reconnecting: QuietEnded / WaitOutGrace
+  Redialing --> Away: MachineOffline
+  Reconnecting --> Away: MachineOffline<br/>GraceEnded
+  Away --> Reconnecting: MachineReconnecting / WaitOutGrace
+  Exited --> Away: MachineOffline
+  Closed --> Away: MachineOffline
+  Anywhere --> Loading: PaneUnknown
+  Anywhere --> Live: PaneFound
+  Anywhere --> Exited: PaneExited
+  Anywhere --> Closed: PaneClosed
+  Anywhere --> NotClaude: PaneNotClaude

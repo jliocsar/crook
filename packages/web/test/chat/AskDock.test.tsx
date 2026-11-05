@@ -34,7 +34,7 @@ import {
   DeclineMessageUndelivered,
 } from '@crook/protocol/Commands'
 
-import { liveWith, renderApp } from '../AppRender.tsx'
+import { liveWith, machineGoesAway, renderApp } from '../AppRender.tsx'
 import { click, eventually, findByRole } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
@@ -433,18 +433,9 @@ describe('the ask dock', () => {
           ]),
         ])
         yield* Effect.promise(() => screen.findByText('Bump the herd'))
-        yield* SubscriptionRef.set(
-          link.state,
-          liveWith(
-            herd([
-              machine(
-                LAPTOP,
-                [agent('w1:p1', 'blocked', { ask: editAsk, title: 'Lint the web package' })],
-                { connection: 'offline' },
-              ),
-            ]),
-          ),
-        )
+        yield* machineGoesAway(link, [
+          agent('w1:p1', 'blocked', { ask: editAsk, title: 'Lint the web package' }),
+        ])
         yield* Effect.promise(() => screen.findByText('laptop is offline'))
         yield* eventually(() => {
           expect(document.querySelector('[data-slot="ask-dock"]')).toBeNull()

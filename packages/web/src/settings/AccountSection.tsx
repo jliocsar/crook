@@ -17,6 +17,7 @@ import { SettingsNote, SettingsSection } from '@crook/web/settings/SettingsSecti
 
 type LogOut = ReturnType<typeof useLogOut>
 
+const ACCOUNT_UNAVAILABLE = 'Shows once crook reconnects'
 const LOST_PHONE_NOTE = 'Lost this phone? End its session on exe.dev from another device.'
 
 const LOG_OUT_SCOPE_NOTE =
@@ -24,18 +25,23 @@ const LOG_OUT_SCOPE_NOTE =
 
 function AccountEmail({
   account,
+  unavailable,
 }: {
   account: AsyncResult.AsyncResult<HubAccount, SettingsReadFailure>
+  unavailable: boolean
 }) {
   return Option.match(AsyncResult.value(account), {
     onNone: () =>
       Option.match(failureMessage(account), {
-        onNone: () => (
-          <span role="status" className="block">
-            <span className="sr-only">Loading your account</span>
-            <Skeleton className="ml-auto w-40" />
-          </span>
-        ),
+        onNone: () =>
+          unavailable ? (
+            <span className="text-muted-foreground font-sans">{ACCOUNT_UNAVAILABLE}</span>
+          ) : (
+            <span role="status" className="block">
+              <span className="sr-only">Loading your account</span>
+              <Skeleton className="ml-auto w-40" />
+            </span>
+          ),
         onSome: (message) => <span className="text-destructive font-sans">{message}</span>,
       }),
     onSome: (known) => known.email,
@@ -87,7 +93,9 @@ function LogOutSheet({
 
 export function AccountSection({
   account,
+  unavailable,
 }: {
+  unavailable: boolean
   account: AsyncResult.AsyncResult<HubAccount, SettingsReadFailure>
 }) {
   const [confirming, setConfirming] = React.useState(false)
@@ -96,7 +104,14 @@ export function AccountSection({
   return (
     <SettingsSection title="Account">
       <div className="grid grid-cols-1 gap-3">
-        <InfoList rows={[{ label: 'Logged in as', value: <AccountEmail account={account} /> }]} />
+        <InfoList
+          rows={[
+            {
+              label: 'Logged in as',
+              value: <AccountEmail account={account} unavailable={unavailable} />,
+            },
+          ]}
+        />
         <div className="px-4">
           <Button
             variant="destructive"

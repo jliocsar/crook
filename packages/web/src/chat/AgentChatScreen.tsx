@@ -1,4 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
+import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
 import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
@@ -34,6 +35,7 @@ import {
   chatStatus,
   cwdOf,
   edgeKindOf,
+  endedAtOf,
   herdrTurnOf,
   isWatching,
   machineLabelOf,
@@ -44,6 +46,7 @@ import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 import { summaryRows, useEpisodeSummary } from '@crook/web/chat/BackgroundSummary'
 import { failureRows, TranscriptEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { Composer } from '@crook/web/chat/Composer'
+import { isPresent, presenceMachine, PresenceState } from '@crook/web/chat/PresenceMachine'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
 import type { Restart } from '@crook/web/chat/EdgeCard'
 import { ImageViewer } from '@crook/web/chat/Images'
@@ -72,6 +75,7 @@ import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { Message } from '@crook/web/components/ui/message'
+import { stateMark } from '@crook/web/machine/Machine'
 import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
 import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
@@ -92,6 +96,7 @@ interface DockProps {
 
 const BACK_TO_AGENTS = 'Back to Agents'
 const NOT_CLAUDE = 'Not a Claude pane'
+const AWAY_NOTHING_CACHED = 'No messages on this phone yet'
 
 const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly ThreadRow[] =>
   pending.map((prompt) => ({
@@ -100,8 +105,17 @@ const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly Threa
   }))
 
 const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>) => {
-  if (model.presence === 'notClaude') {
+  if (PresenceState.guards.NotClaude(model.presence)) {
     return <EmptyState title={NOT_CLAUDE} />
+  }
+
+  if (PresenceState.guards.Away(model.presence)) {
+    return (
+      <EmptyState
+        title={AWAY_NOTHING_CACHED}
+        description={`They show once ${machineLabelOf(model)} is back.`}
+      />
+    )
   }
 
   if (!isWatching(model)) {
@@ -112,7 +126,8 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
 }
 
 const hasActions = (model: ChatScreenModel): boolean =>
-  Option.isSome(model.row) && (model.presence === 'live' || model.presence === 'away')
+  Option.isSome(model.row) &&
+  (isPresent(model.presence) || PresenceState.guards.Away(model.presence))
 
 const useThreadEpoch = (session: Option.Option<ClaudeSessionId>): number => {
   const [thread, setThread] = React.useState({ session, epoch: 0 })
@@ -152,64 +167,80 @@ function ChatDock({
     Option.match(ask, { onNone: () => '', onSome: (dock) => dock.ask.id }),
   )
 
-  if (model.presence === 'notClaude' || closedHere) {
+  const edgeKind = edgeKindOf(model)
+  const edgeShown = Option.isSome(edgeKind)
+
+  React.useEffect(() => {
+    if (edgeShown) {
+      setComposerFocused(false)
+    }
+  }, [edgeShown])
+
+  if (PresenceState.guards.NotClaude(model.presence) || closedHere) {
     return null
   }
 
   return (
     <div
       data-slot="chat-dock"
+      {...stateMark(presenceMachine, model.presence)}
       className="border-border bg-card flex min-h-0 flex-col border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)] in-data-[keyboard=open]:pb-3"
     >
       <p role="status" className="sr-only">
         {Option.match(ask, { onNone: () => '', onSome: (dock) => askAnnouncement(dock.ask) })}
       </p>
-      {Option.match(edgeKindOf(model), {
-        onSome: (kind) => (
-          <EdgeCard
-            kind={kind}
-            machineLabel={machineLabelOf(model)}
-            since={
-              kind === 'away'
-                ? Option.map(model.machine, (machine) => machine.lastSeenAt)
-                : model.endedAt
-            }
-            restart={kind === 'away' ? Option.none() : restart}
-            onBack={onBack}
-            backLabel={backLabel}
-            takeFocus={composerFocused}
+      <div className="grid min-h-0 grid-cols-1">
+        <div
+          className={cn(
+            'col-start-1 row-start-1 flex min-h-0 flex-col gap-2',
+            edgeShown && 'invisible',
+          )}
+          inert={edgeShown}
+          onFocus={(event) => {
+            setComposerFocused(true)
+            askFocus.onFocus(event)
+          }}
+          onBlur={(event) => {
+            setComposerFocused(false)
+            askFocus.onBlur(event)
+          }}
+        >
+          <Collapse open={Option.isSome(ask)} className="flex min-h-0 flex-col">
+            {Option.match(ask, {
+              onNone: () => null,
+              onSome: (dock) => (
+                <AskDock key={dock.ask.id} ref={askFocus.region} cwd={cwdOf(model)} {...dock} />
+              ),
+            })}
+          </Collapse>
+          <Composer
+            handle={askFocus.composer}
+            value={draft}
+            onValueChange={onDraftChange}
+            skills={skills}
+            {...composer}
           />
-        ),
-        onNone: () => (
-          <div
-            className="flex min-h-0 flex-col gap-2"
-            onFocus={(event) => {
-              setComposerFocused(true)
-              askFocus.onFocus(event)
-            }}
-            onBlur={(event) => {
-              setComposerFocused(false)
-              askFocus.onBlur(event)
-            }}
-          >
-            <Collapse open={Option.isSome(ask)} className="flex min-h-0 flex-col">
-              {Option.match(ask, {
-                onNone: () => null,
-                onSome: (dock) => (
-                  <AskDock key={dock.ask.id} ref={askFocus.region} cwd={cwdOf(model)} {...dock} />
-                ),
-              })}
-            </Collapse>
-            <Composer
-              handle={askFocus.composer}
-              value={draft}
-              onValueChange={onDraftChange}
-              skills={skills}
-              {...composer}
+        </div>
+        {Option.match(edgeKind, {
+          onNone: () => null,
+          onSome: (kind) => (
+            <EdgeCard
+              className="col-start-1 row-start-1"
+              kind={kind}
+              machineLabel={machineLabelOf(model)}
+              since={
+                kind === 'away'
+                  ? Option.map(model.machine, (machine) => machine.lastSeenAt)
+                  : endedAtOf(model)
+              }
+              restart={kind === 'away' ? Option.none() : restart}
+              onBack={onBack}
+              backLabel={backLabel}
+              takeFocus={composerFocused}
             />
-          </div>
-        ),
-      })}
+          ),
+        })}
+      </div>
     </div>
   )
 }
@@ -267,7 +298,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     }
   }, [covered, scrollToEnd])
 
-  const paneClosed = model.presence === 'closed'
+  const paneClosed = PresenceState.guards.Closed(model.presence)
   const askedCall = Option.getOrUndefined(Option.map(commands.ask, (dock) => dock.ask.id))
   const openRun = React.useCallback(
     (run: SubagentRun) => {
@@ -316,7 +347,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const landedRows = useCatchUp(view, conversationRows)
   const workingAt = Option.getOrUndefined(Option.filter(workingSince, () => !hasToolRunning(items)))
   const watching = isWatching(model)
-  const notClaude = model.presence === 'notClaude'
+  const notClaude = PresenceState.guards.NotClaude(model.presence)
   const rows = React.useMemo(
     (): readonly ThreadRow[] =>
       notClaude

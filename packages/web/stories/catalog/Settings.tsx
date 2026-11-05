@@ -8,9 +8,11 @@ import { defaultNotificationPrefs, NotificationSettings } from '@crook/domain/No
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import { HarkReachedNoDevice } from '@crook/protocol/Hark'
 import { HubCallDefected } from '@crook/web/rpc/HubConnection'
+import { OFFLINE, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
+import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
 import { LogOutRefused } from '@crook/web/rpc/SessionCheck'
 
-import { liveWith } from '../../test/AppWiring.tsx'
+import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { herd } from '../../test/HerdFixtures.ts'
 import { SETTINGS_PATH } from '../Fixtures.ts'
 import { clicks, role, seesText } from '../StageDom.ts'
@@ -24,6 +26,16 @@ const LOG_OUT = 'Log out'
 
 const story = (spec: Omit<LinkStorySpec, 'path' | 'link'>) =>
   linkStory({ ...spec, path: SETTINGS_PATH, link: EMPTY_LIVE })
+
+const unavailable = (slug: string, title: string, status: LinkStatus) =>
+  linkStory({
+    slug,
+    title,
+    path: SETTINGS_PATH,
+    link: stateWith(status, Option.some(herd([]))),
+    arrange: ({ link }) => link.settingsReads.close,
+    shows: { text: 'Your notification choices show once crook reconnects.' },
+  })
 
 const toggle = () =>
   Effect.flatMap(role(APPROVALS, 'switch'), (found) =>
@@ -45,6 +57,12 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
     arrange: ({ link }) => link.settingsReads.close,
     shows: { selector: '[data-slot="toggles-skeleton"]' },
   }),
+  unavailable('unavailable-offline', 'Settings, offline before the toggles arrived', OFFLINE),
+  unavailable(
+    'unavailable-unreachable',
+    'Settings, the hub unreachable before the toggles arrived',
+    UNREACHABLE,
+  ),
   story({
     slug: 'failed',
     title: 'Settings, toggles and account failed',

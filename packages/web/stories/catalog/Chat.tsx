@@ -10,7 +10,7 @@ import { TranscriptOffset } from '@crook/domain/Ids'
 import { CommandTimedOut } from '@crook/protocol/Commands'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
 import * as Duration from 'effect/Duration'
-import { COLD_START } from '@crook/web/rpc/HubLinkState'
+import { COLD_START, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
@@ -94,15 +94,15 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     slug: 'away-empty',
     title: 'Chat, the machine is offline and nothing is cached',
     link: liveWith(chatHerd(chatAgent(), 'offline')),
-    shows: { text: 'laptop is offline' },
+    shows: { text: 'No messages on this phone yet' },
   }),
   chatStory({
     slug: 'reconnecting',
     title: 'Chat, the machine is reconnecting',
-    note: 'Reads as offline today: any connection other than online is away.',
+    note: 'The header says so after a quiet second. The composer stays, and a send holds.',
     link: liveWith(chatHerd(chatAgent(), 'reconnecting')),
     events: CONVERSATION,
-    shows: { text: 'laptop is offline' },
+    shows: { text: 'laptop reconnecting' },
   }),
   chatStory({
     slug: 'exited',
@@ -243,9 +243,9 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'dimmed-stale',
     title: 'Chat, dimmed while the hub is away',
-    link: stateWith(COLD_START, Option.some(chatHerd())),
+    link: stateWith(UNREACHABLE, Option.some(chatHerd())),
     events: CONVERSATION,
-    shows: { selector: '[data-dimmed="true"]' },
+    shows: { selector: '[data-state="dimmed"]' },
   }),
   chatStory({
     slug: 'actions-sheet',
