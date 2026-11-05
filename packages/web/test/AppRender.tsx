@@ -8,11 +8,19 @@ import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
 import { appRegistry, appRouter, AppTree, liveWith } from './AppWiring.tsx'
 import { herd, LAPTOP, machine } from './HerdFixtures.ts'
 import { makeFakeHubLink } from './HubFakes.ts'
+import type { FakeHubLink } from './HubFakes.ts'
 
 const REDIALING_DOCK = '[data-machine="presence"][data-state="Redialing"]'
 
-export const renderApp = Effect.fn('renderApp')(function* (path: string, initial: HubLinkState) {
+export const renderApp = Effect.fn('renderApp')(function* (
+  path: string,
+  initial: HubLinkState,
+  arrange: (link: FakeHubLink) => Effect.Effect<void> = () => Effect.void,
+) {
   const link = yield* makeFakeHubLink(initial)
+
+  yield* arrange(link)
+
   const router = appRouter(path)
   const { registry } = yield* Effect.acquireRelease(
     Effect.sync(() => {

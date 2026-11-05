@@ -14,6 +14,7 @@ import { clockTime } from '@crook/web/time/Clock'
 import { liveWith, renderApp } from '../AppRender.tsx'
 import { eventually, present } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
+import { keepOnThisDevice } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 import { caughtUp, chunk, opened, said, SESSION } from '../TranscriptFixtures.ts'
 
@@ -84,6 +85,40 @@ const reopened = Effect.fn('reopened')(function* () {
   yield* Effect.promise(() => screen.findByText('Seen before.'))
 
   return link
+})
+
+const landsBeforeItsFirstCommit = Effect.fn('landsBeforeItsFirstCommit')(function* () {
+  const landings = watchLandings(['Seen before.', ...MISSED])
+  const statesSeen = new Set<string>()
+  const states = new MutationObserver(() => {
+    const thread = document.querySelector('[data-machine="transcript"]')
+
+    statesSeen.add(thread?.getAttribute('data-state') ?? 'none')
+  })
+
+  states.observe(document.body, { subtree: true, childList: true, attributes: true })
+
+  yield* renderApp(CHAT, current(), (link) =>
+    Effect.gen(function* () {
+      yield* keepOnThisDevice(link, { machine: LAPTOP, pane: PANE, session: SESSION }, [
+        opened(),
+        chunk(0, 10, [said(0, 'Seen before.')]),
+        caughtUp(10),
+      ])
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        chunk(
+          10,
+          40,
+          MISSED.map((text, index) => said(10 + index * 10, text)),
+        ),
+        caughtUp(40),
+      ])
+    }),
+  )
+  yield* Effect.promise(() => screen.findByText('Third on laptop.'))
+  states.disconnect()
+
+  return { landings: landings(), statesSeen }
 })
 
 const missedWhileAway = Effect.fn('missedWhileAway')(function* () {
@@ -173,6 +208,19 @@ describe('a laptop catch-up', () => {
         expect(follows(present(divider(), 'the catch-up divider'), sent)).toBe(true)
         expect(document.querySelectorAll('[data-slot="catch-up-divider"]')).toHaveLength(1)
       }),
+  )
+
+  it.effect('marks what lands before the cached rows ever committed', () =>
+    Effect.gen(function* () {
+      const { landings, statesSeen } = yield* landsBeforeItsFirstCommit()
+      const found = present(divider(), 'the catch-up divider')
+
+      expect(statesSeen.has('Cached')).toBe(false)
+      expect(statesSeen.has('Holding')).toBe(false)
+      expect(landings.filter((shown) => shown > 0)).toStrictEqual([MISSED.length + 1])
+      expect(follows(screen.getByText('Seen before.'), found)).toBe(true)
+      expect(follows(found, screen.getByText('First on laptop.'))).toBe(true)
+    }),
   )
 
   it.effect('shows no divider when nothing happened on the laptop', () =>

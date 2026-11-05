@@ -1,8 +1,15 @@
+import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 import { describe, expect, it } from 'vitest'
 
+import { parseLine } from '@crook/claude/TranscriptParser'
+import compactionAuto from '@crook/claude/fixtures/compaction-auto.jsonl?raw'
+import plainTurn from '@crook/claude/fixtures/plain-turn.jsonl?raw'
+import subagentSession from '@crook/claude/fixtures/subagent/ff0f77be-1e98-4bb2-8b24-38d673361867.jsonl?raw'
+import toolUseAndResult from '@crook/claude/fixtures/tool-use-and-result.jsonl?raw'
 import {
   CatchUp,
   landedOver,
@@ -14,6 +21,8 @@ import {
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import { TranscriptOffset } from '@crook/domain/Ids'
 import { UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
+import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
+import { chatItems, EMPTY_CHAT } from '@crook/web/chat/ChatItems'
 import {
   EMPTY_TRANSCRIPT,
   LaptopCatchUp,
@@ -24,6 +33,29 @@ import {
 import { clockTime } from '@crook/web/time/Clock'
 
 import { assistant, prompt, said, SESSION } from '../TranscriptFixtures.ts'
+
+const REAL_TRANSCRIPTS = [
+  ['a plain turn', plainTurn],
+  ['a tool call and its result', toolUseAndResult],
+  ['a compaction', compactionAuto],
+  ['a session with subagents', subagentSession],
+] as const
+
+const encoder = new TextEncoder()
+
+const messagesOf = (jsonl: string): readonly TranscriptMessage[] =>
+  pipe(
+    jsonl.split('\n'),
+    Arr.mapAccum(0, (offset, text): readonly [number, readonly TranscriptMessage[]] => {
+      const bytes = encoder.encode(text)
+
+      return [offset + bytes.length + 1, parseLine(bytes, TranscriptOffset.make(offset))]
+    }),
+    ([, parsed]) => Arr.flatten(parsed),
+  )
+
+const fixtureLines = (jsonl: string): readonly TranscriptLine[] =>
+  messagesOf(jsonl).map((message) => ({ session: SESSION, message }))
 
 const line = (offset: number): TranscriptLine => ({
   session: SESSION,
@@ -49,10 +81,15 @@ const pending = (lines: readonly TranscriptLine[]) =>
   viewOf(lines, LaptopCatchUp.Pending({ lines }))
 
 const landedView = (lines: readonly TranscriptLine[]) =>
-  viewOf(lines, LaptopCatchUp.Landed({ lapse: Option.none() }))
+  viewOf(lines, LaptopCatchUp.Landed({ cached: CACHED, lapse: Option.none() }))
 
-const cachedCatchUp = () =>
-  nextCatchUp(CatchUp.Waiting(), Option.some(pending(CACHED)), rows('a', 'b'))
+const rowsOf = (lines: readonly TranscriptLine[]) =>
+  rows(...chatItems(lines, EMPTY_CHAT.context).map((item) => item.key))
+
+const waiting = () => nextCatchUp(CatchUp.Waiting(), Option.some(pending(CACHED)), rowsOf(CACHED))
+
+const landedOf = (lines: readonly TranscriptLine[], shownRows = rowsOf(lines)) =>
+  nextCatchUp(waiting(), Option.some(landedView(lines)), shownRows)
 
 describe('landedOver', () => {
   it('names the lapse of the lines past the cache', () => {
@@ -71,8 +108,8 @@ describe('landedOver', () => {
 })
 
 describe('nextCatchUp', () => {
-  it('remembers the rows a reopened chat showed from its cache', () => {
-    expect(CatchUp.$is('Remembered')(cachedCatchUp())).toBe(true)
+  it('waits on a reopened chat until its read ends', () => {
+    expect(CatchUp.$is('Waiting')(waiting())).toBe(true)
   })
 
   it('stays off for a chat that opened with nothing to catch up from', () => {
@@ -82,68 +119,72 @@ describe('nextCatchUp', () => {
   })
 
   it('keeps waiting while nothing shows', () => {
-    const waiting = CatchUp.Waiting()
+    const before = CatchUp.Waiting()
 
-    expect(nextCatchUp(waiting, Option.none(), [])).toBe(waiting)
+    expect(nextCatchUp(before, Option.none(), [])).toBe(before)
   })
 
   it('names the rows that landed past the cache once the chat has caught up', () => {
-    const landed = nextCatchUp(
-      cachedCatchUp(),
-      Option.some(landedView([...CACHED, line(20), line(30)])),
-      rows('a', 'b', 'c', 'd'),
-    )
+    const landed = landedOf([...CACHED, line(20), line(30)])
 
-    expect(CatchUp.$is('Landed')(landed) && landed.keys).toStrictEqual(['c', 'd'])
+    expect(CatchUp.$is('Landed')(landed) && landed.keys).toStrictEqual(
+      keysOf(rowsOf([line(20), line(30)])),
+    )
+  })
+
+  it('names them just the same when the cached rows never committed', () => {
+    const lines = [...CACHED, line(20)]
+    const landed = nextCatchUp(CatchUp.Waiting(), Option.some(landedView(lines)), rowsOf(lines))
+
+    expect(CatchUp.$is('Landed')(landed) && landed.keys).toStrictEqual(keysOf(rowsOf([line(20)])))
   })
 
   it('waits while the machine still holds the read back', () => {
-    const waiting = cachedCatchUp()
+    const before = waiting()
 
-    expect(nextCatchUp(waiting, Option.some(pending(CACHED)), rows('a', 'b'))).toBe(waiting)
+    expect(nextCatchUp(before, Option.some(pending(CACHED)), rowsOf(CACHED))).toBe(before)
   })
 
   it('turns off when the landed read added no row', () => {
-    const nothing = nextCatchUp(
-      cachedCatchUp(),
-      Option.some(landedView([...CACHED, line(20)])),
-      rows('a', 'b'),
-    )
-
-    expect(CatchUp.$is('Off')(nothing)).toBe(true)
+    expect(CatchUp.$is('Off')(landedOf([...CACHED, line(20)], rowsOf(CACHED)))).toBe(true)
   })
 
   it('turns off when the machine judged no catch-up', () => {
-    const off = nextCatchUp(cachedCatchUp(), Option.some(viewOf(CACHED)), rows('a', 'b'))
+    const off = nextCatchUp(waiting(), Option.some(viewOf(CACHED)), rowsOf(CACHED))
 
     expect(CatchUp.$is('Off')(off)).toBe(true)
   })
 
   it('turns off when the session goes', () => {
-    const landed = nextCatchUp(
-      cachedCatchUp(),
-      Option.some(landedView([...CACHED, line(20)])),
-      rows('a', 'b', 'c'),
-    )
-
-    expect(CatchUp.$is('Off')(nextCatchUp(landed, Option.none(), []))).toBe(true)
+    expect(
+      CatchUp.$is('Off')(nextCatchUp(landedOf([...CACHED, line(20)]), Option.none(), [])),
+    ).toBe(true)
   })
 
   it('keeps what landed for as long as the session stays', () => {
-    const landed = nextCatchUp(
-      cachedCatchUp(),
-      Option.some(landedView([...CACHED, line(20)])),
-      rows('a', 'b', 'c'),
-    )
+    const lines = [...CACHED, line(20)]
+    const landed = landedOf(lines)
 
     expect(
-      nextCatchUp(
-        landed,
-        Option.some(landedView([...CACHED, line(20), line(30)])),
-        rows('a', 'b', 'c', 'sent'),
-      ),
+      nextCatchUp(landed, Option.some(landedView([...lines, line(30)])), [
+        ...rowsOf(lines),
+        row('sent'),
+      ]),
     ).toBe(landed)
   })
+
+  it.each(REAL_TRANSCRIPTS)(
+    'finds a row the cache held under the same key once any more of %s has landed',
+    (_name, jsonl) => {
+      const lines = fixtureLines(jsonl)
+      const whole = new Set(keysOf(rowsOf(lines)))
+      const prefixes = Arr.makeBy(lines.length, (end) => lines.slice(0, end + 1))
+
+      expect(
+        prefixes.flatMap((prefix) => keysOf(rowsOf(prefix)).filter((key) => !whole.has(key))),
+      ).toStrictEqual([])
+    },
+  )
 })
 
 describe('withCatchUpDivider', () => {

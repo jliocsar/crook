@@ -39,7 +39,7 @@ export type SessionBackgrounds = HashMap.HashMap<ClaudeSessionId, BackgroundChan
 export type LaptopCatchUp = Data.TaggedEnum<{
   None: Record<never, never>
   Pending: { readonly lines: readonly TranscriptLine[] }
-  Landed: { readonly lapse: Option.Option<Lapse> }
+  Landed: { readonly cached: readonly TranscriptLine[]; readonly lapse: Option.Option<Lapse> }
 }>
 
 export const LaptopCatchUp = Data.taggedEnum<LaptopCatchUp>()

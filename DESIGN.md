@@ -417,13 +417,13 @@ screen" on the Ask.
     or the turn ends. Stop shows for exactly as long, and the header says working.
   - The tool call an open Ask is about is hidden, so its diff isn't shown twice.
   - **A laptop catch-up** marks what was written since this phone last looked. A reopened chat
-    shows its cached thread at once. When the fresher view lands, its new rows land together, in
-    one commit under one ordinary lift capped at a screen, and the chat opens at its end. A static
-    divider sits above the first new row: the pill, with a laptop glyph, **On laptop**, then
-    `· 2:14 → 2:25` in mono 11px, the times of the first and last new entries. There is no count.
-    The divider stays in the thread while the chat is open and resets on the next open. Prompts
-    sent from the phone, and anything that arrives after the catch-up, never get it, and neither
-    does a cold open, which shows the skeleton and then the conversation.
+    shows its cached thread at once. When the fresher view lands, however soon, its new rows land
+    together, in one commit under one ordinary lift capped at a screen, and the chat opens at its
+    end. A static divider sits above the first new row: the pill, with a laptop glyph,
+    **On laptop**, then `· 2:14 → 2:25` in mono 11px, the times of the first and last new entries.
+    There is no count. The divider stays in the thread while the chat is open and resets on the
+    next open. Prompts sent from the phone, and anything that arrives after the catch-up, never
+    get it, and neither does a cold open, which shows the skeleton and then the conversation.
   - Before anything arrives the thread reads "Loading the conversation", then "No messages yet".
     A pane that isn't running Claude has no transcript: its chat reads "Not a Claude pane" and
     nothing else, with no dock.
