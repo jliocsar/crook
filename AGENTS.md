@@ -1590,6 +1590,10 @@ the screen once per animation frame and fails on what a settled screenshot canno
   at both ("analyzer fell behind by more than 16 buffered frames") and left a 0-byte video
   (measured, version 0.41.1). `agent-browser skills get core --full`, which its help recommends,
   answers "Skill not found" here.
+- A sweep on a server that had not met the code yet died once on its first story, reading the log
+  from a page whose recorder was gone, and passed when run again (1 run; that Vite's reload caused
+  it is a guess). A failed browser step now runs its story again like a starved one, so one bad
+  page does not cost the sweep, and it prints that it did.
 - A contact sheet that added a tile only when the marks changed never showed a `/clear`, since that
   swaps rows for rows with the same marks around them (read in how it picks tiles). It also takes a tile
   when the row count changes and always shows the last frame.

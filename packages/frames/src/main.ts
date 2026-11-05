@@ -221,6 +221,13 @@ const captureSettled = (
   Effect.Services<ReturnType<typeof captureStory>>
 > =>
   captureStory(page, story, output).pipe(
+    Effect.catchTag('BrowserFailed', (failure) =>
+      attemptsLeft <= 1
+        ? Effect.fail(failure)
+        : Console.log(`  ${story}: ${failure.message} Running it again.`).pipe(
+            Effect.andThen(captureSettled(page, story, output, attemptsLeft - 1)),
+          ),
+    ),
     Effect.filterOrElse(
       (captured) => attemptsLeft <= 1 || !isStarved(captured.log.frames),
       () =>
