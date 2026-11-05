@@ -48,7 +48,7 @@ import {
   PANE,
   TEAM,
 } from '../Fixtures.ts'
-import { manyLinesChunk } from '../ManyLines.ts'
+import { MANY_LINES_END, manyLinesChunk, MANY_TURNS_END, manyTurnsChunk } from '../ManyLines.ts'
 import { clicks, element, pause, seesSelector, seesText, types, until } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 import { BEFORE_FIRST_VALUE, browserStory, linkStory, step } from '../Story.tsx'
@@ -104,6 +104,19 @@ const goesBackToTheHerd = clicks(BACK).pipe(
   ),
   Effect.andThen(seesText(CHAT_TITLE)),
 )
+
+const TALL_ANSWER = 'The quiet redial keeps the old notice until the attempt ends. '.repeat(20)
+const TALL_ROWS_END = 30
+
+const TALL_ROWS: readonly TranscriptEvent[] = [
+  opened(),
+  chunk(0, TALL_ROWS_END, [
+    answered(0, TALL_ANSWER),
+    answered(10, TALL_ANSWER),
+    answered(20, TALL_ANSWER),
+  ]),
+  caughtUp(TALL_ROWS_END),
+]
 
 const reopenFromTheCard = () => Effect.andThen(seesText('The quiet redial'), goesBackToTheHerd)
 
@@ -342,6 +355,66 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
           manyLinesChunk(GAP_END),
           caughtUp(GAP_END + 1200),
         ]),
+      ),
+    ],
+  }),
+  linkStory({
+    slug: 'long-catch-up',
+    title: 'A catch-up of short rows longer than the screen, with no hole',
+    shows: { text: CHAT_TITLE },
+    ends: {
+      all: [{ selector: '[data-following]' }, { absent: 'Catching up' }, { text: 'Line 119' }],
+    },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, CONVERSATION),
+    settle: reopenFromTheCard,
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(900, 'What was missed lands, many short rows of it', ({ link }) =>
+        feed(link, [manyLinesChunk(50), caughtUp(50 + MANY_LINES_END)]),
+      ),
+    ],
+  }),
+  linkStory({
+    slug: 'long-catch-up-turns',
+    title: 'A catch-up of whole turns longer than the screen, with no hole',
+    shows: { text: CHAT_TITLE },
+    ends: {
+      all: [{ selector: '[data-following]' }, { absent: 'Catching up' }, { text: 'Answer 15' }],
+    },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, CONVERSATION),
+    settle: reopenFromTheCard,
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(900, 'What was missed lands, many turns of it', ({ link }) =>
+        feed(link, [manyTurnsChunk(50), caughtUp(50 + MANY_TURNS_END)]),
+      ),
+    ],
+  }),
+  linkStory({
+    slug: 'long-catch-up-over-tall-rows',
+    title: 'A catch-up of short rows over a view of a few tall ones',
+    shows: { text: CHAT_TITLE },
+    ends: {
+      all: [{ selector: '[data-following]' }, { absent: 'Catching up' }, { text: 'Line 119' }],
+    },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, TALL_ROWS),
+    settle: reopenFromTheCard,
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(900, 'What was missed lands, many short rows of it', ({ link }) =>
+        feed(link, [manyLinesChunk(TALL_ROWS_END), caughtUp(TALL_ROWS_END + MANY_LINES_END)]),
       ),
     ],
   }),

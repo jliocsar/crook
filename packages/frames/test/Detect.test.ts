@@ -10,6 +10,8 @@ import { FrameLog } from '@crook/frames/FrameLog'
 
 import blankFixture from './fixtures/blank.json' with { type: 'json' }
 import cleanFixture from './fixtures/clean.json' with { type: 'json' }
+import emptyBandFixture from './fixtures/empty-band.json' with { type: 'json' }
+import filledBandFixture from './fixtures/filled-band.json' with { type: 'json' }
 import flashFixture from './fixtures/flash.json' with { type: 'json' }
 import pairFixture from './fixtures/pair.json' with { type: 'json' }
 import shiftFixture from './fixtures/shift.json' with { type: 'json' }
@@ -55,6 +57,28 @@ describe('detect, over logs recorded from real runs', () => {
     expect(blank.check).toBe('blank')
     expect(blank.words).toContain('herd-skeleton')
     expect(blank.words).toContain('the first frame')
+  })
+
+  it('reports a band of the thread with no rows in it during a lift, at its widest frame', () => {
+    const story = 'transition/reopen-over-big-gap-long'
+    const findings = detect(story, decodeLog(emptyBandFixture), expectationOf(story))
+    const top = findingNamed(findings, 'empty:top')
+
+    expect(keysOf(findings)).toEqual(['empty:top', 'empty:middle'])
+    expect(top.check).toBe('empty')
+    expect(top.firstFrame).toBe(155)
+    expect(top.lastFrame).toBe(161)
+    expect(top.imageFrame).toBe(155)
+    expect(top.words).toContain('as much as 392 px')
+    expect(top.words).toContain('the lift at 660 px')
+  })
+
+  it('stays quiet about a lift that keeps the screen filled, the same story fixed', () => {
+    const story = 'transition/reopen-over-big-gap-long'
+    const log = decodeLog(filledBandFixture)
+
+    expect(Math.max(...Arr.map(log.frames, (frame) => frame.thread?.lift ?? 0))).toBe(660)
+    expect(detect(story, log, expectationOf(story))).toEqual([])
   })
 
   it('reports a pair of states the story does not allow side by side', () => {

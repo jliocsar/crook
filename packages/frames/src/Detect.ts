@@ -6,7 +6,15 @@ import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
 import type { Expectation, Order as StateOrder } from '@crook/frames/Expectations'
-import { marksOf, shows, statesOf } from '@crook/frames/FrameLog'
+import {
+  bandAt,
+  BandPlace,
+  EMPTY_BAND_PIXELS,
+  marksOf,
+  shows,
+  showsEmptyBand,
+  statesOf,
+} from '@crook/frames/FrameLog'
 import type { FrameLog, RecordedFrame, ShiftEntry, ShiftSource } from '@crook/frames/FrameLog'
 import { MARKS, NEVER_TOGETHER } from '@crook/frames/Marks'
 import type { MarkPair } from '@crook/frames/Marks'
@@ -17,7 +25,7 @@ interface Run {
   readonly after: Option.Option<RecordedFrame>
 }
 
-export const Check = Schema.Literals(['flash', 'pair', 'shift', 'blank', 'order'])
+export const Check = Schema.Literals(['flash', 'pair', 'shift', 'blank', 'empty', 'order'])
 export type Check = typeof Check.Type
 
 export const Finding = Schema.Struct({
@@ -180,6 +188,30 @@ const blanksOf = (story: string, frames: readonly RecordedFrame[]): readonly Fin
         `The content area showed nothing for ${run.frames.length} frames (${millisecondsOf(run)} ms), between ${before} and ${after}.`,
       )
     },
+  )
+
+const widestFrameOf = (run: Run, place: BandPlace): RecordedFrame =>
+  Arr.reduce(run.frames, first(run), (widest, frame) =>
+    bandAt(frame, place) > bandAt(widest, place) ? frame : widest,
+  )
+
+const emptiesOf = (story: string, frames: readonly RecordedFrame[]): readonly Finding[] =>
+  Arr.flatMap(BandPlace.literals, (place) =>
+    Arr.map(
+      runsWhere(frames, (frame) => showsEmptyBand(frame, place)),
+      (run) => {
+        const widest = widestFrameOf(run, place)
+
+        return findingFromRun(
+          story,
+          'empty',
+          `empty:${place}`,
+          run,
+          `The ${place} of the thread's viewport held no row across as much as ${bandAt(widest, place)} px, for ${run.frames.length} frames (${millisecondsOf(run)} ms) with the lift at ${widest.thread?.lift ?? 0} px at the widest. Past ${EMPTY_BAND_PIXELS} px this is not the thread's own spacing.`,
+          widest.frame,
+        )
+      },
+    ),
   )
 
 const impactOf = (source: ShiftSource): number =>
@@ -347,6 +379,7 @@ export const detect = (
             ...flashesOf(story, frames, start.frame, flashFrames),
             ...pairsOf(story, watched, [...NEVER_TOGETHER, ...expectation.forbiddenPairs]),
             ...blanksOf(story, watched),
+            ...emptiesOf(story, watched),
             ...shiftsOf(story, log, watched, expectation),
             ...Object.entries(expectation.order).flatMap(([track, order]) =>
               brokenOrderOf(story, watched, track, order),

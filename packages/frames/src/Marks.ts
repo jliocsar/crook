@@ -25,6 +25,8 @@ export const ROW_SELECTOR = '[data-row]'
 export const STAGE_SELECTOR = '#root'
 export const COVER_SELECTOR = '[data-slot="pushed-screen"]'
 export const SCREEN_SELECTOR = `${COVER_SELECTOR}, [data-slot="tab-scroller"]`
+export const THREAD_VIEWPORT_SELECTOR = '[data-slot="conversation-viewport"]'
+export const THREAD_CONTENT_SELECTOR = '[data-slot="conversation-content"]'
 
 export const CHROME_SELECTOR =
   'header, nav, [data-slot="chat-dock"], [data-slot="new-agent-dock"], [data-slot="toast"], [data-slot="sheet"], [data-slot="sheet-backdrop"]'

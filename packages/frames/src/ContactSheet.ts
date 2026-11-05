@@ -1,8 +1,9 @@
 import * as Arr from 'effect/Array'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
 import type { Finding } from '@crook/frames/Detect'
-import { marksOf, statesOf } from '@crook/frames/FrameLog'
+import { bandAt, BandPlace, marksOf, showsEmptyBand, statesOf } from '@crook/frames/FrameLog'
 import type { RecordedFrame } from '@crook/frames/FrameLog'
 
 export interface Tile {
@@ -44,12 +45,20 @@ export const tileFrames = (
 const escapeHtml = (text: string): string =>
   text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 
+const emptyBandWords = (frame: RecordedFrame): string =>
+  pipe(
+    BandPlace.literals,
+    Arr.filter((place) => showsEmptyBand(frame, place)),
+    Arr.map((place) => `EMPTY ${place} ${bandAt(frame, place)} px `),
+    Arr.join(''),
+  )
+
 const tileHtml = ({ frame, image, flagged }: Tile): string =>
   [
     `<figure class="${flagged ? 'flagged' : ''}">`,
     `<img src="${image}" alt="frame ${frame.frame}">`,
     `<figcaption><b>frame ${frame.frame}</b> ${Math.round(frame.at)} ms<br>${escapeHtml(
-      frame.blank ? `BLANK ${marksOf(frame).join(', ')}` : marksOf(frame).join(', '),
+      `${emptyBandWords(frame)}${frame.blank ? `BLANK ${marksOf(frame).join(', ')}` : marksOf(frame).join(', ')}`,
     )}<br>${escapeHtml(statesOf(frame))}</figcaption>`,
     '</figure>',
   ].join('')
