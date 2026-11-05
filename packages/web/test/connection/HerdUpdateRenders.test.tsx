@@ -28,13 +28,30 @@ import { chunk, opened, prompt } from '../TranscriptFixtures.ts'
 
 const WATCHED = ['HubGate', 'Shell', 'ToastHost', 'AgentActions']
 const WATCHED_IN_CHAT = ['ChatBody', 'ChatDock']
+const WATCHED_OF_A_CARD = ['AgentCard', 'AgentStatusPill', 'AgentMeta']
+const WATCHED_OF_A_CLOCK_SECOND = ['HerdList', 'AgentCard', 'AgentStatusPill', 'Swap']
+const WATCHED_OF_THE_MACHINE_LIST = ['MachineList', 'MachineCardBody', 'MachineBadge']
 const HERD_UPDATES = 10
 const SETTLE_MS = 30
+const LONGER_THAN_A_TICK_MS = 1100
+const CARDS_ON_A_MACHINE = 5
 const CHAT = '/m/laptop/p/w1:p1'
+const MACHINES = '/machines'
+const LAPTOP_DETAIL = '/machines/laptop'
 
 const laptop = machine(LAPTOP, [agent('w1:p1', 'idle', { title: 'Stays as it is' })])
 const deskAt = (secondsAgo: number) =>
   machine(DESK, [agent('w2:p1', 'working', { title: 'On the other machine', secondsAgo })])
+const cardsOf = (id: typeof LAPTOP, prefix: string, moved: number) =>
+  machine(
+    id,
+    Arr.makeBy(CARDS_ON_A_MACHINE, (index) =>
+      agent(`${prefix}:p${index + 1}`, 'working', {
+        title: `Agent ${prefix} ${index + 1}`,
+        secondsAgo: index === 0 ? moved : 60,
+      }),
+    ),
+  )
 const countedOf = (names: readonly string[]) =>
   Arr.map(names, (name) => RENDER_COUNTS.get(name) ?? 0)
 const counted = () => countedOf(WATCHED)
@@ -61,6 +78,104 @@ const subtract = (after: readonly number[], before: readonly number[]) =>
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
+})
+
+describe('a shown Agents page', () => {
+  it.effect('renders only the card a herd update changed', () =>
+    Effect.gen(function* () {
+      const steadyLaptop = cardsOf(LAPTOP, 'w1', 0)
+      const { link } = yield* renderApp('/', liveWith(herd([steadyLaptop, cardsOf(DESK, 'w2', 0)])))
+
+      yield* Effect.promise(() => screen.findByText('Agent w2 1'))
+      yield* wait(SETTLE_MS)
+
+      const before = countedOf(WATCHED_OF_A_CARD)
+      const presencesBefore = RENDER_COUNTS.get('AnimatePresence') ?? 0
+
+      yield* Effect.forEach(
+        Arr.range(1, HERD_UPDATES),
+        (update) =>
+          setsHerd(link, [steadyLaptop, cardsOf(DESK, 'w2', update)], update).pipe(
+            Effect.andThen(wait(SETTLE_MS)),
+          ),
+        { discard: true },
+      )
+
+      expect(subtract(countedOf(WATCHED_OF_A_CARD), before)).toEqual([
+        HERD_UPDATES,
+        HERD_UPDATES,
+        HERD_UPDATES,
+      ])
+      expect((RENDER_COUNTS.get('AnimatePresence') ?? 0) - presencesBefore).toBeLessThan(
+        HERD_UPDATES * CARDS_ON_A_MACHINE * 2,
+      )
+    }),
+  )
+
+  it.effect('renders only the elapsed labels on a clock second', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/', liveWith(herd([cardsOf(LAPTOP, 'w1', 0)])))
+      yield* Effect.promise(() => screen.findByText('Agent w1 1'))
+      yield* wait(SETTLE_MS)
+
+      const before = countedOf(WATCHED_OF_A_CLOCK_SECOND)
+      const labelsBefore = RENDER_COUNTS.get('ElapsedLabel') ?? 0
+
+      yield* wait(LONGER_THAN_A_TICK_MS)
+
+      expect(subtract(countedOf(WATCHED_OF_A_CLOCK_SECOND), before)).toEqual([0, 0, 0, 0])
+      expect((RENDER_COUNTS.get('ElapsedLabel') ?? 0) - labelsBefore).toBeGreaterThanOrEqual(
+        CARDS_ON_A_MACHINE,
+      )
+    }),
+  )
+})
+
+describe('the Machines tab', () => {
+  it.effect('renders nothing on a clock second while every machine is online', () =>
+    Effect.gen(function* () {
+      yield* renderApp(MACHINES, liveWith(herd([laptop, deskAt(0)])))
+      yield* Effect.promise(() => screen.findByText('laptop'))
+      yield* wait(SETTLE_MS)
+
+      const before = countedOf(WATCHED_OF_THE_MACHINE_LIST)
+
+      yield* wait(LONGER_THAN_A_TICK_MS)
+
+      expect(subtract(countedOf(WATCHED_OF_THE_MACHINE_LIST), before)).toEqual([0, 0, 0])
+    }),
+  )
+
+  it.effect('holds still under a machine screen, which renders only for its own machine', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(LAPTOP_DETAIL, liveWith(herd([laptop, deskAt(0)])))
+
+      yield* Effect.promise(() => screen.findByText('About'))
+      yield* wait(SETTLE_MS)
+
+      const before = countedOf(WATCHED_OF_THE_MACHINE_LIST)
+      const detailBefore = RENDER_COUNTS.get('MachineDetail') ?? 0
+
+      yield* Effect.forEach(
+        Arr.range(1, HERD_UPDATES),
+        (update) =>
+          setsHerd(link, [laptop, deskAt(update)], update).pipe(Effect.andThen(wait(SETTLE_MS))),
+        { discard: true },
+      )
+
+      expect(subtract(countedOf(WATCHED_OF_THE_MACHINE_LIST), before)).toEqual([0, 0, 0])
+      expect((RENDER_COUNTS.get('MachineDetail') ?? 0) - detailBefore).toBe(0)
+
+      yield* setsHerd(
+        link,
+        [machine(LAPTOP, [agent('w1:p1', 'working', { title: 'Now working' })]), deskAt(11)],
+        HERD_UPDATES + 1,
+      )
+      yield* eventually(() => {
+        expect((RENDER_COUNTS.get('MachineDetail') ?? 0) - detailBefore).toBeGreaterThan(0)
+      })
+    }),
+  )
 })
 
 describe('a herd update from another machine', () => {
