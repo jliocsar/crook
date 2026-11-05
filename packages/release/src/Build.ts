@@ -46,10 +46,10 @@ const webBuildOf = (workspace: Workspace) => `${workspace.root}/packages/web/${W
 const outfileOf = (artifact: Artifact, workspace: Workspace) =>
   `${workspace.output}/${artifactName(artifact)}`
 
-const embeddedAssets = (artifact: Artifact, workspace: Workspace): readonly string[] =>
+const flagsOfApp = (artifact: Artifact, workspace: Workspace): readonly string[] =>
   Match.value(artifact.app).pipe(
     Match.when('hub', () => [`--asset=${webBuildOf(workspace)}`]),
-    Match.when('agent', () => []),
+    Match.when('agent', () => ['--splitting']),
     Match.exhaustive,
   )
 
@@ -60,7 +60,7 @@ export const compileArguments = (artifact: Artifact, workspace: Workspace): read
   '--no-compile-autoload-bunfig',
   `--target=${bunCompileTarget(artifact.target)}`,
   `--outfile=${outfileOf(artifact, workspace)}`,
-  ...embeddedAssets(artifact, workspace),
+  ...flagsOfApp(artifact, workspace),
   `${workspace.root}/packages/${artifact.app}/src/main.ts`,
 ]
 

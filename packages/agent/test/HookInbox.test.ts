@@ -8,10 +8,9 @@ import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
-import * as Stdio from 'effect/Stdio'
-import * as Stream from 'effect/Stream'
+import * as Schedule from 'effect/Schedule'
 
-import { forwardHook } from '@crook/agent/HookForwarder'
+import { deliverPayload } from '@crook/agent/HookForwarder'
 import { HookInbox } from '@crook/agent/HookInbox'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 
@@ -44,13 +43,20 @@ const socketIn = Effect.fn('socketIn')(function* () {
 const configAt = (path: string) =>
   ConfigProvider.layer(ConfigProvider.fromUnknown({ CROOK_HOOK_SOCKET_PATH: path }))
 
-const forwardAt = Effect.fn('forwardAt')(function* (path: string, text: string) {
-  const context = yield* Layer.build(
-    Layer.mergeAll(configAt(path), Stdio.layerTest({ stdin: Stream.make(encoder.encode(text)) })),
-  )
+const forwardAt = (path: string, text: string) =>
+  Effect.callback<void>((resume) => {
+    deliverPayload(path, encoder.encode(text), () => {
+      resume(Effect.void)
+    })
+  })
 
-  yield* forwardHook.pipe(Effect.provide(context))
-})
+const positionReaches = (inbox: HookInbox['Service'], position: number) =>
+  inbox.position.pipe(
+    Effect.repeat({
+      until: (reached) => reached >= position,
+      schedule: Schedule.spaced('1 millis'),
+    }),
+  )
 
 const inboxAt = Effect.fn('inboxAt')(function* (path: string) {
   const context = yield* Layer.build(Layer.provide(HookInbox.layer, configAt(path)))
@@ -69,7 +75,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
         yield* forwardAt(path, preToolUse)
         yield* forwardAt(path, permissionRequest)
 
-        expect(yield* inbox.position).toBe(2)
+        expect(yield* positionReaches(inbox, 2)).toBe(2)
         expect(
           (yield* inbox.pendingFor(SESSION)).map((pending) => [
             pending.toolName,
@@ -87,7 +93,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
         yield* forwardAt(path, 'not a hook payload')
         yield* forwardAt(path, preToolUse)
 
-        expect(yield* inbox.position).toBe(1)
+        expect(yield* positionReaches(inbox, 1)).toBe(1)
       }).pipe(Effect.scoped),
     )
 

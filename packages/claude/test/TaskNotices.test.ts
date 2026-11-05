@@ -7,13 +7,9 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Stream from 'effect/Stream'
 
+import { backgroundLines } from '@crook/claude/BackgroundTasks'
 import { SubagentRoster, subagentFromMeta } from '@crook/claude/SubagentRoster'
-import {
-  NO_TASK_NOTICES,
-  settledSubagent,
-  taskNoticeLines,
-  withTaskNotices,
-} from '@crook/claude/TaskNotices'
+import { NO_TASK_NOTICES, settledSubagent, withTaskNotices } from '@crook/claude/TaskNotices'
 import { TranscriptFile, subagentsDirectoryOf } from '@crook/claude/TranscriptLocator'
 import { ClaudeSessionId, SubagentId, TranscriptOffset } from '@crook/domain/Ids'
 import { Subagent, type SubagentStatus } from '@crook/domain/Subagent'
@@ -121,15 +117,15 @@ describe('settledSubagent', () => {
   })
 })
 
-describe('taskNoticeLines', () => {
+describe('backgroundLines', () => {
   it('parses only the lines that carry a task notification', () => {
     const prompt = JSON.stringify({
       type: 'user',
       message: { role: 'user', content: 'hi' },
     })
 
-    expect(taskNoticeLines(encoder.encode(prompt), LINE)).toEqual([])
-    expect(taskNoticeLines(encoder.encode(QUEUED_NOTICE), LINE)).toEqual([
+    expect(backgroundLines(encoder.encode(prompt), LINE)).toEqual([])
+    expect(backgroundLines(encoder.encode(QUEUED_NOTICE), LINE)).toEqual([
       noticeFor(TOOL_USE, 'completed'),
     ])
   })

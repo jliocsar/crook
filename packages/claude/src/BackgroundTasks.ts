@@ -109,8 +109,6 @@ const decodeMonitorInput = Schema.decodeUnknownOption(MonitorInput)
 const decodeStopInput = Schema.decodeUnknownOption(StopInput)
 const decodeReadInput = Schema.decodeUnknownOption(ReadInput)
 
-const decoder = new TextDecoder()
-
 const isSameTasks = Schema.toEquivalence(Schema.Array(BackgroundTask))
 
 const entryFor = (taskId: string): TaskEntry => ({
@@ -405,15 +403,19 @@ export const EMPTY_LEDGER: BackgroundLedger = {
   tasks: HashMap.empty(),
 }
 
+const BACKGROUND_MARKER_BYTES = Arr.map(BACKGROUND_MARKERS, (marker) => Buffer.from(marker))
+
+const holdsBackgroundMarker = (line: Uint8Array) => {
+  const bytes = Buffer.from(line.buffer, line.byteOffset, line.length)
+
+  return Arr.some(BACKGROUND_MARKER_BYTES, (marker) => bytes.includes(marker))
+}
+
 export const backgroundLines = (
   bytes: Uint8Array,
   offset: TranscriptOffset,
 ): readonly TranscriptMessage[] => {
-  const text = decoder.decode(bytes)
-
-  return Arr.some(BACKGROUND_MARKERS, (marker) => text.includes(marker))
-    ? parseLine(bytes, offset)
-    : []
+  return holdsBackgroundMarker(bytes) ? parseLine(bytes, offset) : []
 }
 
 export const withBackgroundLines = (

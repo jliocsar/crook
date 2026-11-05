@@ -24,6 +24,7 @@ import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptS
 import { BackgroundWork } from '@crook/claude/BackgroundWork'
 import { FileWatch } from '@crook/claude/FileWatch'
 import { SkillCatalog } from '@crook/claude/SkillCatalog'
+import { SessionScans } from '@crook/claude/SessionScans'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import { TranscriptTail } from '@crook/claude/TranscriptTail'
@@ -148,7 +149,8 @@ const defectiveStreams = Effect.fn('defectiveStreams')(function* (
     }),
   )
   const watchedTail = Layer.provideMerge(TranscriptTail.layer, FileWatch.layer)
-  const subagentRoster = Layer.provideMerge(SubagentRoster.layer, watchedTail)
+  const sessionScans = Layer.provideMerge(SessionScans.layer, watchedTail)
+  const subagentRoster = Layer.provideMerge(SubagentRoster.layer, sessionScans)
   const backgroundWork = Layer.provideMerge(BackgroundWork.layer, subagentRoster)
   const context = yield* Layer.build(
     Layer.provide(TranscriptStreams.layer, [

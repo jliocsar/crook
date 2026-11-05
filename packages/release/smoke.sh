@@ -36,6 +36,10 @@ for app in agent hub; do
     fail "crook-$app-$target reports \"$reported\" rather than crook-$app v$version."
 done
 
+hook_output="$(printf '{}' | CROOK_HOOK_SOCKET_PATH="$work/no-agent.sock" "$directory/crook-agent-$target" hook 2>&1)" ||
+  fail "crook-agent-$target hook did not exit 0 with no agent listening."
+[ -z "$hook_output" ] || fail "crook-agent-$target hook printed \"$hook_output\"; it must stay silent."
+
 unset CROOK_WEB_ROOT
 
 (
