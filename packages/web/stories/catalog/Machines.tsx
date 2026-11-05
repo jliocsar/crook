@@ -153,6 +153,19 @@ export const MACHINE_STORIES: readonly StoryMaker[] = [
     settle: () => pressesInstantly(HOLD_TO_FORGET),
   }),
   linkStory({
+    slug: 'forget-stays-pending',
+    title: 'Machine, a slow forget still saying so past the press',
+    path: DESK_PATH,
+    link: liveWith(viewOf([laptop, desk])),
+    shows: { text: HOLD_TO_FORGET },
+    ends: { text: 'Forgetting…' },
+    arrange: ({ link }) => link.forgetAnswers.close,
+    timeline: [
+      step<LinkStage>(400, 'Hold to forget', () => pressesInstantly(HOLD_TO_FORGET)),
+      step<LinkStage>(1600, 'The hub has not answered', () => Effect.void),
+    ],
+  }),
+  linkStory({
     slug: 'forget-refused',
     title: 'Machine, forget refused',
     path: DESK_PATH,

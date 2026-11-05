@@ -53,14 +53,6 @@ interface ShownAgent {
 const SHEET_ACTION = 'w-full justify-start text-base'
 const CLOSING_LABEL = 'Closing…'
 
-const holdLabel = ({ closing, confirming }: { closing: boolean; confirming: boolean }) => {
-  if (closing) {
-    return CLOSING_LABEL
-  }
-
-  return confirming ? 'Hold to close anyway' : 'Hold to close agent'
-}
-
 export const useOpenAgentActions = (): OpenAgentActions => {
   const dispatch = useAtomSet(agentActionsAtom)
 
@@ -285,13 +277,14 @@ function AgentActionsSheet({
               ) : null}
               <HoldButton
                 disabled={!canAct || closing}
+                pending={closing}
+                pendingLabel={CLOSING_LABEL}
                 className={cn('w-full text-base', !confirming && 'mt-2')}
-                completeLabel={CLOSING_LABEL}
                 onComplete={() => {
                   onClose(confirming)
                 }}
               >
-                {holdLabel({ closing, confirming })}
+                {confirming ? 'Hold to close anyway' : 'Hold to close agent'}
               </HoldButton>
               <ActionFailure message={failureOf(view.close)} />
             </div>

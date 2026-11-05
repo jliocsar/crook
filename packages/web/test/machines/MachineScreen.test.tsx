@@ -36,6 +36,7 @@ const desk = machine(DESK, [agent('w2:p1', 'working', { title: 'Hidden while off
 })
 
 const OFFLINE_HINT = 'Swipe to forget, or wait for it to reconnect'
+const FORGET_OUTLASTS_THE_PRESS = Duration.millis(1400)
 
 const UNKNOWN_MACHINE =
   "crook doesn't know this machine. A forgotten machine comes back once its agent connects again."
@@ -164,6 +165,29 @@ describe('MachineScreen', () => {
 
       expect(yield* findByRole('button', 'Hold to forget desk')).toBeDefined()
       expect(screen.queryByRole('alert')).toBeNull()
+    }),
+  )
+
+  it.live('keeps saying it is forgetting for as long as the hub takes', () =>
+    Effect.gen(function* () {
+      const { router, link } = yield* renderApp('/', liveWith(viewOf([laptop, desk])))
+
+      yield* Effect.promise(() => router.navigate({ to: '/machines' }))
+      yield* link.forgetAnswers.close
+      yield* click(yield* Effect.promise(() => screen.findByText(OFFLINE_HINT)))
+      fireEvent.click(yield* findByRole('button', 'Hold to forget desk'))
+      const holdButton = () =>
+        present(document.querySelector('[data-slot="forget-machine"] button'), 'Hold to forget')
+
+      yield* eventually(() => {
+        expect(holdButton().textContent).toContain('Forgetting…')
+      })
+      yield* Effect.sleep(FORGET_OUTLASTS_THE_PRESS)
+
+      expect(holdButton().textContent).toContain('Forgetting…')
+      expect(holdButton().hasAttribute('disabled')).toBe(true)
+
+      yield* link.forgetAnswers.open
     }),
   )
 

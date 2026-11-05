@@ -1,41 +1,35 @@
 import { cn } from 'cn'
-import * as Duration from 'effect/Duration'
-import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
-type HoldState = 'idle' | 'holding' | 'complete'
+type HoldState = 'idle' | 'holding'
 
 type HoldButtonProps = React.ComponentProps<'button'> & {
   disabled: boolean
+  pending: boolean
+  pendingLabel: React.ReactNode
   onComplete: () => void
-  completeLabel: React.ReactNode
 }
 
 const HOLD_MS = 900
-const COMPLETE_LABEL_MS = 1200
 const PRIMARY_BUTTON = 0
 const KEYBOARD_CLICK_DETAIL = 0
 const PERCENT = 100
 
-const announcement = (state: HoldState, progress: number): string =>
-  ({
-    idle: '',
-    holding: `Confirmation ${Math.round(progress * PERCENT)} percent complete`,
-    complete: 'Action complete',
-  })[state]
-
-const cancelPending = (pending: React.RefObject<Option.Option<() => void>>): void => {
-  if (Option.isSome(pending.current)) {
-    pending.current.value()
+const announcement = (state: HoldState, pending: boolean, progress: number): string => {
+  if (pending) {
+    return 'Hold complete'
   }
 
-  pending.current = Option.none()
+  return state === 'holding'
+    ? `Confirmation ${Math.round(progress * PERCENT)} percent complete`
+    : ''
 }
 
 export function HoldButton({
   children,
-  completeLabel,
+  pending,
+  pendingLabel,
   onComplete,
   disabled,
   className,
@@ -45,7 +39,6 @@ export function HoldButton({
   const [state, setState] = React.useState<HoldState>('idle')
   const stateRef = React.useRef<HoldState>('idle')
   const frameRef = React.useRef<Option.Option<number>>(Option.none())
-  const resetRef = React.useRef<Option.Option<() => void>>(Option.none())
   const onCompleteRef = React.useRef(onComplete)
 
   React.useEffect(() => {
@@ -68,21 +61,8 @@ export function HoldButton({
 
   const finish = () => {
     clearFrame()
-    moveTo('complete', 1)
+    moveTo('idle', 0)
     onCompleteRef.current()
-    cancelPending(resetRef)
-    resetRef.current = Option.some(
-      Effect.runCallback(
-        Effect.sleep(Duration.millis(COMPLETE_LABEL_MS)).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              resetRef.current = Option.none()
-              moveTo('idle', 0)
-            }),
-          ),
-        ),
-      ),
-    )
   }
 
   const cancel = () => {
@@ -129,7 +109,6 @@ export function HoldButton({
   React.useEffect(
     () => () => {
       clearFrame()
-      cancelPending(resetRef)
     },
     [],
   )
@@ -138,7 +117,7 @@ export function HoldButton({
     <button
       {...props}
       data-slot="hold-button"
-      data-state={state}
+      data-state={pending ? 'pending' : state}
       type="button"
       disabled={disabled}
       onPointerDown={(event) => {
@@ -169,11 +148,11 @@ export function HoldButton({
       <span
         aria-hidden="true"
         className="bg-foreground/25 absolute inset-0 -z-10 origin-left"
-        style={{ transform: `scaleX(${progress})` }}
+        style={{ transform: `scaleX(${pending ? 1 : progress})` }}
       />
-      <span>{state === 'complete' ? completeLabel : children}</span>
+      <span>{pending ? pendingLabel : children}</span>
       <span className="sr-only" aria-live="polite">
-        {announcement(state, progress)}
+        {announcement(state, pending, progress)}
       </span>
     </button>
   )

@@ -10,6 +10,7 @@ import type { AgentRow } from '@crook/domain/AgentRow'
 import { CommandTimedOut, PaneNotCreatedByCrook } from '@crook/protocol/Commands'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import { UNREACHABLE } from '@crook/web/rpc/HubLinkState'
+import { UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
 import { ActionsIntent, agentActionsAtom, PaneAddress } from '@crook/web/atoms/AgentActions'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
@@ -20,6 +21,7 @@ import { linkStory, step } from '../Story.tsx'
 import type { LinkStage, LinkStorySpec, StoryMaker } from '../Story.tsx'
 
 const COMMAND_TIMEOUT_SECONDS = 10
+const STORY_SENT_BOUND = Duration.seconds(1.5)
 const RENAME_FIELD = 'Agent name'
 const HOLD_TO_CLOSE = 'Hold to close agent'
 
@@ -127,6 +129,27 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
       Effect.andThen(Ref.set(link.commandAnswer, closedPane), link.commandAnswers.close),
     settle: (stage) => Effect.andThen(openSheet(stage), pressesInstantly(HOLD_TO_CLOSE)),
     shows: { text: 'Closing' },
+  }),
+  story({
+    slug: 'rename-gives-up',
+    title: 'Actions sheet, a rename the herd never shows, Saving giving way at its bound',
+    shows: { text: 'Saving…' },
+    ends: { text: UNCONFIRMED_NOTE },
+    sentBound: STORY_SENT_BOUND,
+    arrange: ({ link }) => Ref.set(link.commandAnswer, renamed),
+    settle: (stage) =>
+      Effect.andThen(openSheet(stage), Effect.andThen(renameTo('Herd'), clicks('Save'))),
+    timeline: [step<LinkStage>(1800, 'The bound runs out', () => seesText('Save'))],
+  }),
+  story({
+    slug: 'close-gives-up',
+    title: 'Actions sheet, a close the herd never shows, Closing giving way at its bound',
+    shows: { text: 'Closing' },
+    ends: { all: [{ text: UNCONFIRMED_NOTE }, { text: HOLD_TO_CLOSE }] },
+    sentBound: STORY_SENT_BOUND,
+    arrange: ({ link }) => Ref.set(link.commandAnswer, closedPane),
+    settle: (stage) => Effect.andThen(openSheet(stage), pressesInstantly(HOLD_TO_CLOSE)),
+    timeline: [step<LinkStage>(1800, 'The bound runs out', () => seesText(HOLD_TO_CLOSE))],
   }),
   story({
     slug: 'close-confirm',

@@ -30,6 +30,7 @@ import type { CommandFailure } from '@crook/protocol/Commands'
 import type { HubAccount, HubStorageFailed } from '@crook/protocol/ClientApi'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
+import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
 import type {
   ForgetMachineRefused,
@@ -72,7 +73,7 @@ export interface TranscriptResume {
   readonly tail: Option.Option<TranscriptTailBytes>
 }
 
-export const SYNC_NOTICE_DELAY = Duration.seconds(1)
+export const SYNC_NOTICE_DELAY = NOTICE_DELAY
 export const RECOVERED_NOTICE_DURATION = Duration.millis(1500)
 export const CALL_HOLD_LIMIT = RECONNECT_GRACE
 

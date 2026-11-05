@@ -12,7 +12,7 @@ import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { to } from '@crook/web/machine/Machine'
 import type { Machine, Step } from '@crook/web/machine/Machine'
-import { SYNC_NOTICE_DELAY } from '@crook/web/rpc/HubLink'
+import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 
 export type PresenceCommand = Data.TaggedEnum<{
   WaitOutQuiet: { readonly drop: DateTime.Utc }
@@ -139,7 +139,7 @@ export const presenceMachine: Machine<PresenceState, PresenceEvent, PresenceComm
 
 export const presenceTimer: (command: PresenceCommand) => Effect.Effect<PresenceEvent> =
   PresenceCommand.$match({
-    WaitOutQuiet: ({ drop }) => Effect.as(Effect.sleep(SYNC_NOTICE_DELAY), quietEnded(drop)),
+    WaitOutQuiet: ({ drop }) => Effect.as(Effect.sleep(NOTICE_DELAY), quietEnded(drop)),
     WaitOutGrace: ({ drop }) => Effect.as(Effect.sleep(RECONNECT_GRACE), graceEnded(drop)),
   })
 

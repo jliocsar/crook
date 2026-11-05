@@ -7,7 +7,7 @@ import * as React from 'react'
 import type { EdgeKind } from '@crook/web/chat/ChatModel'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Button } from '@crook/web/components/ui/button'
-import { Spinner } from '@crook/web/components/ui/spinner'
+import { SpinnerGlyph } from '@crook/web/components/ui/spinner'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
 
@@ -54,7 +54,7 @@ const detailOf = ({ kind, since }: EdgeCardProps, now: DateTime.Utc): Option.Opt
 
 function EdgeIcon({ kind }: { kind: EdgeKind }) {
   if (kind === 'away') {
-    return <Spinner size={EDGE_ICON_SIZE} className="text-muted-foreground" />
+    return <SpinnerGlyph size={EDGE_ICON_SIZE} className="text-muted-foreground" />
   }
 
   return kind === 'closed' ? (

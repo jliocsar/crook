@@ -80,11 +80,11 @@ export function TaskComposer({
           className={cn(ROUND_BUTTON, 'disabled:opacity-40')}
           onPointerDown={keepFocus}
         >
-          {sending ? (
-            <Spinner size={SEND_SPINNER_SIZE} />
-          ) : (
-            <ArrowUp aria-hidden="true" className="size-4" />
-          )}
+          <Spinner
+            pending={sending}
+            size={SEND_SPINNER_SIZE}
+            idle={<ArrowUp aria-hidden="true" className="size-4" />}
+          />
         </button>
       </div>
     </form>

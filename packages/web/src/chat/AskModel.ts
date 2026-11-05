@@ -11,7 +11,7 @@ import { Approve, ApproveAlways, Decline } from '@crook/domain/Command'
 import type { AskAnswer, Command } from '@crook/domain/Command'
 import type { AskId, ClaudeSessionId } from '@crook/domain/Ids'
 import { AskNotPending } from '@crook/protocol/Commands'
-import { ActionProgress } from '@crook/web/atoms/ActionProgress'
+import { ActionProgress, UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
 import { ChatItem } from '@crook/web/chat/ChatItems'
 import type { CommandAction } from '@crook/web/chat/CommandAction'
 import { editHunks, fileName } from '@crook/web/chat/ToolView'
@@ -230,6 +230,7 @@ export const answerState = (progress: AnswerProgress, ask: AskId): AskAnswerStat
           Idle: () => AskAnswerState.Open(),
           Sending: () => AskAnswerState.Answering({ answer }),
           Sent: () => AskAnswerState.Answered({ answer }),
+          Unconfirmed: () => AskAnswerState.Refused({ message: UNCONFIRMED_NOTE }),
           Done: () => AskAnswerState.Answered({ answer }),
           Failed: ({ message }) =>
             Option.exists(progress.refusal, isAlreadyAnswered)

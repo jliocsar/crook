@@ -1,0 +1,6 @@
+stateDiagram-v2
+  [*] --> NotSent
+  state "from any state" as Anywhere
+  Awaiting --> Unconfirmed: BoundEnded
+  Anywhere --> NotSent: Settled
+  Anywhere --> Awaiting: Answered / WaitOutBound

@@ -78,10 +78,12 @@ function LogOutSheet({
             }
           }}
         >
-          <Swap id={logOut.pending ? 'pending' : 'idle'}>
-            {logOut.pending ? <Spinner /> : null}
-            {logOut.pending ? 'Logging out' : 'Log out'}
-          </Swap>
+          <span className="inline-flex items-center gap-1.5">
+            <Spinner pending={logOut.pending} />
+            <Swap id={logOut.pending ? 'pending' : 'idle'}>
+              {logOut.pending ? 'Logging out' : 'Log out'}
+            </Swap>
+          </span>
         </Button>
         <Button variant="ghost" size="touch" className="text-base" onClick={onClose}>
           Cancel

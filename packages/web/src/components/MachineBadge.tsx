@@ -27,14 +27,14 @@ export function MachineBadge({
 }) {
   return (
     <StatusPill tone={MACHINE_CONNECTION_TONE[machine.connection]} plain={plain}>
-      <Swap id={machine.connection}>
-        {isOffline(machine)
-          ? `offline · ${shortElapsed(now, machine.lastSeenAt)} ago`
-          : machine.connection}
-        {machine.connection === 'reconnecting' ? (
-          <Spinner size={RECONNECTING_SPINNER_SIZE} />
-        ) : null}
-      </Swap>
+      <span className="inline-flex items-center gap-1.5">
+        <Swap id={machine.connection}>
+          {isOffline(machine)
+            ? `offline · ${shortElapsed(now, machine.lastSeenAt)} ago`
+            : machine.connection}
+        </Swap>
+        <Spinner pending={machine.connection === 'reconnecting'} size={RECONNECTING_SPINNER_SIZE} />
+      </span>
     </StatusPill>
   )
 }

@@ -10,7 +10,7 @@ type CubicBezier = readonly [number, number, number, number]
 
 export type MotionTokens = {
   readonly tap: Transition
-  readonly fade: Transition
+  readonly fade: { readonly duration: number; readonly ease: CubicBezier }
   readonly slow: Transition
   readonly exit: TargetAndTransition
 }

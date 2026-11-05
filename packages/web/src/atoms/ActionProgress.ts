@@ -13,6 +13,7 @@ export type ActionProgress<Receipt> = Data.TaggedEnum<{
   Idle: Record<never, never>
   Sending: Record<never, never>
   Sent: { readonly receipt: Receipt }
+  Unconfirmed: { readonly receipt: Receipt }
   Done: { readonly receipt: Receipt }
   Failed: {
     readonly message: string
@@ -34,11 +35,19 @@ export const isSending = ActionProgress.$is('Sending')
 
 export const isSent = ActionProgress.$is('Sent')
 
+export const isUnconfirmed = ActionProgress.$is('Unconfirmed')
+
 export const isDone = ActionProgress.$is('Done')
 
 export const isFailed = ActionProgress.$is('Failed')
 
+export const UNCONFIRMED_NOTE =
+  'crook sent this, but the machine has not shown it yet. It may still land, so try again only if nothing changes.'
+
 const asksConfirmation = Schema.is(PaneNotCreatedByCrook)
+
+export const unconfirmedNoteOf = (progress: ActionProgress<unknown>): Option.Option<string> =>
+  isUnconfirmed(progress) ? Option.some(UNCONFIRMED_NOTE) : Option.none()
 
 export const failureMessageOf = (progress: ActionProgress<unknown>): Option.Option<string> =>
   Option.map(Option.liftPredicate(progress, isFailed), (failed) => failed.message)

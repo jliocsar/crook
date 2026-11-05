@@ -1,0 +1,12 @@
+stateDiagram-v2
+  [*] --> Hidden
+  Hidden --> Delaying: Began / WaitOutDelay
+  Delaying --> Hidden: Ended
+  Delaying --> Holding: DelayEnded / WaitOutHold
+  Holding --> Showing: HoldEnded
+  Holding --> Lingering: Ended
+  Showing --> Leaving: Ended / WaitOutFade
+  Lingering --> Holding: Began
+  Lingering --> Leaving: HoldEnded / WaitOutFade
+  Leaving --> Hidden: FadeEnded
+  Leaving --> Showing: Began

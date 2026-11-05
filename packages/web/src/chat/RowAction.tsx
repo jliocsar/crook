@@ -31,10 +31,10 @@ export function RowAction({
         className="text-primary disabled:text-muted-foreground inline-flex min-h-11 items-center px-3 text-sm font-semibold"
         onClick={onAction}
       >
-        <Swap id={shown}>
-          {pending ? <Spinner size={PENDING_SPINNER_SIZE} /> : null}
-          {shown}
-        </Swap>
+        <span className="inline-flex items-center gap-1.5">
+          <Spinner pending={pending} size={PENDING_SPINNER_SIZE} />
+          <Swap id={shown}>{shown}</Swap>
+        </span>
       </button>
     </div>
   )

@@ -53,7 +53,7 @@ export class FramesFailed extends Schema.TaggedError<FramesFailed>()('FramesFail
 
 export class NoStoryNamed extends Schema.TaggedError<NoStoryNamed>()('NoStoryNamed', {}) {
   override get message(): string {
-    return 'Name at least one story, or pass --all for every timeline story. bun run stories:list prints every id.'
+    return 'Name at least one story, or pass --all for the timeline stories a sweep plays. bun run stories:list prints every id.'
   }
 }
 
@@ -323,7 +323,7 @@ const frames = Command.make(
     ),
     all: Flag.Boolean('all').pipe(
       Flag.withDefault(false),
-      Flag.withDescription('Play every timeline story.'),
+      Flag.withDescription('Play every timeline story not waiting on reserved room.'),
     ),
     noBaseline: Flag.Boolean('no-baseline').pipe(
       Flag.withDefault(false),

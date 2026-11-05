@@ -1,18 +1,16 @@
 import { useAtom } from '@effect/atom-react/Hooks'
-import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import { AnimatePresence, motion } from 'motion/react'
 import * as React from 'react'
 
-import { ToastIntent, toastAtom } from '@crook/web/atoms/Toast'
+import { TOAST_DURATION, ToastIntent, toastAtom } from '@crook/web/atoms/Toast'
 import type { Toast } from '@crook/web/atoms/Toast'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { translate, useTransformString } from '@crook/web/motion/TransformString'
 import { COLUMN_STYLE } from '@crook/web/navigation/Column'
 
 const TOAST_RISE_PX = 8
-const TOAST_DURATION = Duration.seconds(3)
 
 function ToastLine({ toast }: { toast: Option.Option<Toast> }) {
   const transform = useTransformString()

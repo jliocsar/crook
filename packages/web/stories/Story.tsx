@@ -1,3 +1,4 @@
+import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
@@ -9,6 +10,7 @@ import { StrictMode } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 
+import { SentBound } from '@crook/web/atoms/SentBound'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import { HubLink } from '@crook/web/rpc/HubLink'
@@ -101,6 +103,7 @@ export interface StorySpec<Stage> {
 
 export interface LinkStorySpec extends StorySpec<LinkStage> {
   readonly link: HubLinkState | typeof BEFORE_FIRST_VALUE
+  readonly sentBound?: Duration.Duration
 }
 
 export interface BrowserStorySpec extends StorySpec<BrowserStage> {
@@ -205,7 +208,11 @@ export const linkStory =
         yield* link.stateReads.close
       }
 
-      const registry = yield* acquireRegistry(link.layer)
+      const registry = yield* acquireRegistry(
+        spec.sentBound === undefined
+          ? link.layer
+          : Layer.merge(link.layer, Layer.succeed(SentBound, spec.sentBound)),
+      )
 
       return yield* arranged(spec, { link, registry, router: appRouter(spec.path) })
     }),

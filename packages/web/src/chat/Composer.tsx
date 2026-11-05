@@ -4,7 +4,13 @@ import * as React from 'react'
 
 import type { SkillListing } from '@crook/domain/Skill'
 import { slashSuggestions } from '@crook/web/chat/SlashCommands'
+import {
+  composerFailureMachine,
+  composerFailureMessage,
+} from '@crook/web/chat/ComposerFailureMachine'
+import type { ComposerFailureState } from '@crook/web/chat/ComposerFailureMachine'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
+import { stateMark } from '@crook/web/machine/Machine'
 import { keepFocus } from '@crook/web/components/KeepFocus'
 import { PromptInput } from '@crook/web/components/ui/prompt-input'
 import { type SuggestionGroup, Suggestions } from '@crook/web/components/ui/suggestions'
@@ -29,7 +35,7 @@ export interface ComposerProps {
   readonly stopping: boolean
   readonly placeholder: string
   readonly label: string
-  readonly failure: Option.Option<string>
+  readonly failure: ComposerFailureState
   readonly note: Option.Option<string>
   readonly skills: readonly SkillListing[]
   readonly handle?: React.Ref<ComposerHandle>
@@ -116,7 +122,9 @@ export function Composer({
         stopLabel="Stop (Esc)"
         className="bg-background"
       />
-      <ActionFailure className="px-1" message={failure} />
+      <div className="contents" {...stateMark(composerFailureMachine, failure)}>
+        <ActionFailure className="px-1" message={composerFailureMessage(failure)} />
+      </div>
       {Option.match(note, {
         onNone: () => null,
         onSome: (text) => (

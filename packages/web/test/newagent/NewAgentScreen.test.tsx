@@ -98,7 +98,7 @@ describe('NewAgentScreen', () => {
       expect(Ref.getUnsafe(link.sent).map((sent) => sent.command)).toEqual([
         startInCrook(Option.some(TASK)),
       ])
-      expect(withoutTask()).toHaveProperty('disabled', true)
+      expect(screen.queryByRole('button', { name: 'Start without a task' })).toBeNull()
 
       yield* link.commandAnswers.open
       yield* Effect.promise(() => screen.findByText('Opening the chat…'))
@@ -340,6 +340,26 @@ describe('NewAgentScreen', () => {
 
       expect(keys).toHaveLength(2)
       expect(keys[1]).toBe(keys[0])
+    }),
+  )
+
+  it.effect('opens clean after leaving a start that failed', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp('/new', liveWith(herd([laptop])))
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(new FolderNotFound({ folder: CROOK })))
+      yield* typeTask(TASK)
+      yield* click(startButton())
+      yield* Effect.promise(() => screen.findByRole('alert'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByRole('alert')).toBeNull()
+      })
+      yield* Effect.promise(() => router.navigate({ to: '/new' }))
+      yield* typeTask(TASK)
+
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(startButton().hasAttribute('disabled')).toBe(false)
     }),
   )
 

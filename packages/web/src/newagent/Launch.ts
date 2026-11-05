@@ -1,19 +1,27 @@
-import { useAtom } from '@effect/atom-react/Hooks'
+import { useAtomValue } from '@effect/atom-react/Hooks'
+import { RegistryContext } from '@effect/atom-react/RegistryContext'
 import { useNavigate } from '@tanstack/react-router'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
+import * as Atom from 'effect/reactivity/Atom'
 import * as React from 'react'
 
-import type { LaunchCommand } from '@crook/domain/Command'
-import type { HerdView } from '@crook/domain/HerdView'
+import type { AgentStarted, LaunchCommand } from '@crook/domain/Command'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
-import { failureMessage, settledError } from '@crook/web/atoms/ActionFailure'
-import { LaunchAttempt, launchAtom } from '@crook/web/atoms/Launch'
+import { settledError } from '@crook/web/atoms/ActionFailure'
+import {
+  ActionProgress,
+  failureMessageOf,
+  isDone,
+  isSending,
+  isSent,
+  isUnconfirmed,
+} from '@crook/web/atoms/ActionProgress'
+import { LaunchAttempt, launchAtom, launchProgressAtom } from '@crook/web/atoms/Launch'
 import type { LaunchFailure } from '@crook/web/atoms/Launch'
 import { retryKey } from '@crook/web/newagent/LaunchKey'
-import { startedAgent } from '@crook/web/newagent/NewAgentLayout'
 import type { StartedAgent } from '@crook/web/newagent/NewAgentLayout'
 import { mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
 
@@ -25,6 +33,12 @@ export interface Launch {
   readonly blocksRestart: boolean
   readonly start: (machine: MachineId, command: LaunchCommand) => void
 }
+
+const NOT_SHOWN_NOTE =
+  'Claude started, but this machine has not shown its pane yet. Open the chat, or change something and start again if it never appears.'
+
+const NOTHING_SENT = Atom.make(AsyncResult.initial<AgentStarted, LaunchFailure>())
+const NO_PROGRESS = Atom.make(ActionProgress.Idle<AgentStarted>())
 
 const paneLeftRunning = (failure: LaunchFailure): Option.Option<PaneId> =>
   Match.value(failure).pipe(
@@ -48,44 +62,53 @@ const useOpenChat = () => {
   )
 }
 
-export const useLaunch = (view: Option.Option<HerdView>): Launch => {
-  const [result, launch] = useAtom(launchAtom)
+export const useLaunch = (): Launch => {
+  const registry = React.useContext(RegistryContext)
   const openChat = useOpenChat()
   const [attempt, setAttempt] = React.useState(Option.none<LaunchAttempt>())
-
-  const answered = AsyncResult.isSuccess(result) ? Option.some(result.value) : Option.none()
-  const receipt = Option.map(
-    Option.all({ sent: attempt, agent: answered }),
-    ({ sent, agent }): StartedAgent => ({ machine: sent.machine, pane: agent.pane }),
+  const progress = useAtomValue(
+    Option.match(attempt, { onNone: () => NO_PROGRESS, onSome: launchProgressAtom }),
   )
-  const started = pipe(
-    Option.all({ herdView: view, sent: attempt, agent: answered }),
-    Option.flatMap(({ herdView, sent, agent }) => startedAgent(herdView, sent.machine, agent)),
+  const result = useAtomValue(
+    Option.match(attempt, {
+      onNone: () => NOTHING_SENT,
+      onSome: (sent) => launchAtom(sent.key),
+    }),
   )
 
-  const startedPane = Option.getOrUndefined(Option.map(started, (agent) => agent.pane))
+  const openPane = (pane: PaneId) =>
+    Option.map(attempt, (sent) => () => {
+      openChat({ machine: sent.machine, pane })
+    })
+  const paneOf = (holds: (state: ActionProgress<AgentStarted>) => boolean) =>
+    pipe(
+      Option.liftPredicate(result, () => holds(progress)),
+      Option.flatMap(AsyncResult.value),
+      Option.map((agent) => agent.pane),
+    )
+  const startedPane = Option.getOrUndefined(paneOf(isDone))
+  const notShown = paneOf(isUnconfirmed)
   const leftRunning = pipe(settledError(result), Option.flatMap(paneLeftRunning))
 
   React.useEffect(() => {
-    if (Option.isSome(started)) {
-      openChat(started.value)
+    if (startedPane !== undefined) {
+      Option.map(openPane(startedPane), (open) => {
+        open()
+      })
     }
   }, [startedPane, openChat])
 
   return {
-    pending: AsyncResult.isWaiting(result),
-    opening: Option.map(receipt, (agent) => () => {
-      openChat(agent)
-    }),
-    failure: failureMessage(result),
-    blocksRestart: Option.isSome(leftRunning),
-    openChatAfterFailure: pipe(
-      leftRunning,
-      Option.flatMap((pane) =>
-        Option.map(attempt, (sent) => () => {
-          openChat({ machine: sent.machine, pane })
-        }),
-      ),
+    pending: isSending(progress),
+    opening: Option.flatMap(
+      paneOf((state) => isSent(state) || isDone(state)),
+      openPane,
+    ),
+    failure: Option.orElse(failureMessageOf(progress), () => Option.as(notShown, NOT_SHOWN_NOTE)),
+    blocksRestart: Option.isSome(leftRunning) || Option.isSome(notShown),
+    openChatAfterFailure: Option.flatMap(
+      Option.orElse(leftRunning, () => notShown),
+      openPane,
     ),
     start: (machine, command) => {
       const key = Option.getOrElse(
@@ -95,7 +118,7 @@ export const useLaunch = (view: Option.Option<HerdView>): Launch => {
       const next = new LaunchAttempt({ key, machine, command })
 
       setAttempt(Option.some(next))
-      launch(next)
+      registry.set(launchAtom(key), next)
     },
   }
 }

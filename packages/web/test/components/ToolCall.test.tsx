@@ -12,6 +12,15 @@ const footerOf = (container: HTMLElement) =>
   container.querySelector('[data-slot="tool-call-footer"]')
 
 describe('ToolCall', () => {
+  it('leaves the spinner to the Working row while it runs', () => {
+    const { container } = render(
+      <ToolCall name="Read" status="running" icon={null} panel={null} footer={Option.none()} />,
+    )
+
+    expect(container.querySelector('[data-slot="spinner"]')).toBeNull()
+    expect(container.querySelector('[data-slot="spinner-slot"]')).toBeNull()
+  })
+
   it('leaves no footer space under a call with nothing to show there', () => {
     const { container } = render(toolCall(Option.none()))
 

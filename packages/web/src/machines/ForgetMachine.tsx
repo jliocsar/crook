@@ -6,11 +6,13 @@ import { HoldButton } from '@crook/web/components/ui/hold-button'
 export function ForgetMachine({
   label,
   disabled,
+  pending,
   failure,
   onForget,
 }: {
   label: string
   disabled: boolean
+  pending: boolean
   failure: Option.Option<string>
   onForget: () => void
 }) {
@@ -19,7 +21,8 @@ export function ForgetMachine({
       <HoldButton
         disabled={disabled}
         className="w-full text-base"
-        completeLabel="Forgetting…"
+        pending={pending}
+        pendingLabel="Forgetting…"
         onComplete={onForget}
       >
         Hold to forget {label}

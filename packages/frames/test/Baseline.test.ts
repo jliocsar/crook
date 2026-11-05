@@ -1,9 +1,15 @@
 import { describe, expect, it } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Schema from 'effect/Schema'
 
 import { Baseline, isClean, verdictOf } from '@crook/frames/Baseline'
 import type { Finding } from '@crook/frames/Detect'
-import { TIMELINE_STORY_IDS } from '@crook/frames/Expectations'
+import {
+  expectationOf,
+  STILL_SHIFT_BUDGET,
+  TIMELINE_EXPECTATIONS,
+  TIMELINE_STORY_IDS,
+} from '@crook/frames/Expectations'
 import { verdictLines } from '@crook/frames/Report'
 
 import baselineJson from '../baseline.json' with { type: 'json' }
@@ -88,5 +94,13 @@ describe('the checked-in baseline', () => {
     const baseline = Schema.decodeSync(Baseline)(baselineJson)
 
     expect(TIMELINE_STORY_IDS).toEqual(expect.arrayContaining(Object.keys(baseline)))
+  })
+
+  it('leaves out of a sweep only stories it holds to the still budget', () => {
+    const leftOut = Arr.difference(Object.keys(TIMELINE_EXPECTATIONS), TIMELINE_STORY_IDS)
+
+    expect(leftOut.map((id) => expectationOf(id).shiftBudget)).toEqual(
+      leftOut.map(() => STILL_SHIFT_BUDGET),
+    )
   })
 })

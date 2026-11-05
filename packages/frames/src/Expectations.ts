@@ -1,3 +1,5 @@
+import * as Arr from 'effect/Array'
+
 import type { MarkPair } from '@crook/frames/Marks'
 
 export interface Order {
@@ -20,6 +22,14 @@ export const inSequence = (...states: readonly string[]): Order => ({
 export const fromTable = (table: Readonly<Record<string, readonly string[]>>): Order => ({
   next: new Map(Object.entries(table)),
 })
+
+const WAITING_ON_RESERVED_ROOM = [
+  'composer/send-failed-then-edited',
+  'composer/stop-failed-then-turn-ends',
+  'actions/rename-gives-up',
+  'actions/close-gives-up',
+  'new-agent/shows-after-giving-up',
+] satisfies readonly (keyof typeof TIMELINE_EXPECTATIONS)[]
 
 export const NOTHING_ALLOWED = inSequence()
 export const STILL_SHIFT_BUDGET = 0.01
@@ -203,6 +213,18 @@ export const TIMELINE_EXPECTATIONS = {
     herd: inSequence('herd-list'),
   }),
   'machine/forgotten-while-open': story({ cards: inSequence('agent-card', 'empty-state') }),
+  'machine/forget-stays-pending': story({}),
+  'composer/send-answered-past-the-delay': story(A_CHAT_WITH_ROWS),
+  'composer/send-failed-then-edited': story(A_CHAT_WITH_ROWS),
+  'composer/stop-failed-then-turn-ends': story(A_CHAT_WITH_ROWS),
+  'actions/rename-gives-up': story({}),
+  'actions/close-gives-up': story({}),
+  'new-agent/shows-after-giving-up': story({
+    'new-agent': inSequence('task-composer'),
+    thread: inSequence('thread-skeleton', 'thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'settings/test-sent-clears': story({}),
   'new-agent/start-to-chat': story({
     'new-agent': inSequence('task-composer'),
     thread: inSequence('thread-skeleton', 'thread-rows'),
@@ -219,7 +241,10 @@ export const TIMELINE_EXPECTATIONS = {
   }),
 } satisfies Record<string, Expectation>
 
-export const TIMELINE_STORY_IDS: readonly string[] = Object.keys(TIMELINE_EXPECTATIONS)
+export const TIMELINE_STORY_IDS: readonly string[] = Arr.difference(
+  Object.keys(TIMELINE_EXPECTATIONS),
+  WAITING_ON_RESERVED_ROOM,
+)
 
 export const expectationOf = (id: string): Expectation =>
   new Map<string, Expectation>(Object.entries(TIMELINE_EXPECTATIONS)).get(id) ?? NO_DECLARED_ORDER

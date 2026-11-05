@@ -23,7 +23,8 @@ import { TextBlock } from '@crook/domain/TranscriptMessage'
 import { chatHerd, chatStory, delivered, opensWith, SEND_READY } from '../ChatFixtures.ts'
 import { chatAgent, CONVERSATION } from '../Fixtures.ts'
 import { clicks, seesText, types } from '../StageDom.ts'
-import type { StoryMaker } from '../Story.tsx'
+import { step } from '../Story.tsx'
+import type { LinkStage, StoryMaker } from '../Story.tsx'
 
 const LONG_DRAFT =
   'A long draft that wraps over several lines, because the phone is narrow and the thought is not, and it keeps on going past where the field stops growing, so the field has to scroll inside itself by the end of it.'
@@ -33,6 +34,7 @@ const SEND = 'Send'
 const STOP = 'Stop (Esc)'
 const TEXTAREA = 'textarea'
 const DRAFT = 'Now check the toast too'
+const REFUSED_SEND = new HerdrUnavailable().message
 
 const typesDraft = (text: string) => Effect.flatMap(Effect.void, () => types(FIELD, text))
 
@@ -110,12 +112,68 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
     settle: () => clicks(STOP),
   }),
   chatStory({
-    slug: 'sending',
-    title: 'Composer, Sending',
+    slug: 'sending-quiet',
+    title: 'Composer, Sending, in the second before the spinner',
     shows: { selector: '[data-slot="prompt-input-submit"][aria-busy="true"]' },
     events: CONVERSATION,
     arrange: (stage) => Effect.andThen(delivered(stage, DRAFT), stage.link.commandAnswers.close),
     settle: () => Effect.andThen(typesDraft(DRAFT), clicks(SEND)),
+  }),
+  chatStory({
+    slug: 'sending',
+    title: 'Composer, Sending past the delay, with its spinner',
+    shows: { selector: '[data-slot="prompt-input-submit"] [data-slot="spinner"]' },
+    events: CONVERSATION,
+    arrange: (stage) => Effect.andThen(delivered(stage, DRAFT), stage.link.commandAnswers.close),
+    settle: () => Effect.andThen(typesDraft(DRAFT), clicks(SEND)),
+  }),
+  chatStory({
+    slug: 'send-answered-past-the-delay',
+    title: 'Composer, a send answered just past the delay, its spinner staying for its minimum',
+    shows: { selector: SEND_READY },
+    ends: { text: 'Sent' },
+    events: CONVERSATION,
+    arrange: (stage) => Effect.andThen(delivered(stage, DRAFT), stage.link.commandAnswers.close),
+    settle: () => typesDraft(DRAFT),
+    timeline: [
+      step<LinkStage>(400, 'Tap Send', () => clicks(SEND)),
+      step<LinkStage>(1100, 'The hub answers', ({ link }) => link.commandAnswers.open),
+      step<LinkStage>(800, 'The spinner has had its minimum and fade', () => Effect.void),
+    ],
+  }),
+  chatStory({
+    slug: 'send-failed-then-edited',
+    title: 'Composer, a refused send, gone once the draft moves on',
+    shows: { selector: '[role="alert"]' },
+    ends: { absent: REFUSED_SEND },
+    events: CONVERSATION,
+    arrange: ({ link }) => Ref.set(link.commandAnswer, Exit.fail(new HerdrUnavailable())),
+    settle: () => Effect.andThen(typesDraft(DRAFT), clicks(SEND)),
+    timeline: [step<LinkStage>(800, 'Type on', () => typesDraft(' and the banner'))],
+  }),
+  chatStory({
+    slug: 'stop-failed',
+    title: 'Composer, a refused Stop',
+    shows: { selector: '[role="alert"]' },
+    row: chatAgent('working', 0),
+    events: CONVERSATION,
+    arrange: ({ link }) => Ref.set(link.commandAnswer, Exit.fail(new HerdrUnavailable())),
+    settle: () => clicks(STOP),
+  }),
+  chatStory({
+    slug: 'stop-failed-then-turn-ends',
+    title: 'Composer, a refused Stop, gone once the turn is over',
+    shows: { selector: '[role="alert"]' },
+    ends: { absent: REFUSED_SEND },
+    row: chatAgent('working', 0),
+    events: CONVERSATION,
+    arrange: ({ link }) => Ref.set(link.commandAnswer, Exit.fail(new HerdrUnavailable())),
+    settle: () => clicks(STOP),
+    timeline: [
+      step<LinkStage>(800, 'The turn ends on its own', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent('idle', 0)))),
+      ),
+    ],
   }),
   chatStory({
     slug: 'sent',

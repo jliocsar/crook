@@ -120,9 +120,9 @@ function AnswerButtons({
           }}
         >
           {button.label}
-          {Option.exists(answering, (answer) => Equal.equals(answer, button.answer)) ? (
-            <Spinner />
-          ) : null}
+          <Spinner
+            pending={Option.exists(answering, (answer) => Equal.equals(answer, button.answer))}
+          />
         </Button>
       ))}
     </div>

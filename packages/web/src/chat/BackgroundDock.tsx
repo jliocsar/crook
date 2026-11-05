@@ -247,9 +247,9 @@ function JobGlyph({ job, size = 12 }: { job: BackgroundJob; size?: number }) {
   )
 }
 
-function JobStateIcon({ state, size = 13 }: { state: JobState; size?: number }) {
+function JobEndIcon({ state, size }: { state: JobState; size: number }) {
   return Match.value(state).pipe(
-    Match.when('running', () => <Spinner size={size} className="text-primary" />),
+    Match.when('running', () => null),
     Match.when('done', () => (
       <Check aria-hidden="true" size={size} strokeWidth={2.5} className="text-accent" />
     )),
@@ -268,6 +268,17 @@ function JobStateIcon({ state, size = 13 }: { state: JobState; size?: number }) 
       <CircleDashed aria-hidden="true" size={size} className="text-muted-foreground" />
     )),
     Match.exhaustive,
+  )
+}
+
+function JobStateIcon({ state, size = 13 }: { state: JobState; size?: number }) {
+  return (
+    <Spinner
+      pending={state === 'running'}
+      size={size}
+      className="text-primary"
+      idle={<JobEndIcon state={state} size={size} />}
+    />
   )
 }
 

@@ -341,7 +341,9 @@ The Agents tab: every agent on every machine, one section per machine.
     didn't open this pane. Closing it ends whatever runs there, not just Claude.", and the
     button reads "Hold to close anyway".
   - Save reads "Saving…" and the Hold Button "Closing…" until the herd shows the change; then the
-    sheet closes by itself. A refusal shows its sentence in the sheet, under the action.
+    sheet closes by itself. A refusal shows its sentence in the sheet, under the action. A change
+    the herd has not shown after 15 s gives both back, with a line saying crook sent it and the
+    machine has not shown it yet; it may still land.
   - Swiping the sheet away while a close is out only hides it: the close still finishes, a close
     from the chat still goes back to the herd, and a close that fails brings the sheet back with
     its sentence. Once a pane has asked for "Hold to close anyway", every retry asks the same.
@@ -629,8 +631,11 @@ apart from a summary.
   machine moves to its most recent folder.
 - **The task comes first.** The worktree branch is suggested from the task's first line, as a
   lowercase slug, and you can edit it.
-- **Starting** reads "Starting Claude…". The chat replaces this screen once the pane is in the
-  herd, so Back goes to Agents. Until then it reads "Opening the chat…" with "Open the chat".
+- **Starting** reads "Starting Claude…" where "Start without a task" sat, so the dock holds still.
+  The chat replaces this screen once the pane is in the herd, so Back goes to Agents. Until then it
+  reads "Opening the chat…" with "Open the chat" on that same line. A
+  pane the herd has not shown after 15 s says so in a line of its own, keeps "Open the chat", and
+  the chat still replaces the screen if the pane lands later.
 - **Empty cases**, each in the summary's place:
   - "No machines yet", "Add one from Machines, then start Claude on it.";
   - "Every machine is offline", "Claude can start once one reconnects.";
@@ -698,7 +703,8 @@ rule.
   taps (read-only, `aria-busy`) while its write is in flight, and is disabled only while the hub
   can't act. A refused write shows the hub's sentence under its row. Below the rows:
   - "Saved on the hub, so every device you log in on shares them."
-  - a full-width secondary "Send a test", which swaps to "Sending" and then "Sent to your phone";
+  - a full-width secondary "Send a test", which swaps to "Sending" and then "Sent to your phone"
+    for as long as a toast shows, 3 s;
     a refusal shows its sentence beneath, and the button reads "Send a test" again;
   - "Notifications name the agent and the machine, never what Claude wrote. Hark delivers them,
     so they open nothing in crook."
@@ -849,7 +855,7 @@ This is the list in SPEC §8.1, plus Spinner, with what each component is for in
 | Hold Button     | Destructive confirms, such as closing an agent              |
 | Empty State     | Nothing needs you; no machines yet                          |
 | Skeleton        | First load with no cached snapshot                          |
-| Spinner         | Reconnecting, refreshing                                    |
+| Spinner         | Any wait past a second, held 400 ms once it shows           |
 | Kbd             | Hardware-keyboard hints (iPad, desktop browser)             |
 | Side Panel      | Agent detail                                                |
 | Command Palette | Jump to an agent                                            |

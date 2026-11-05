@@ -1,5 +1,4 @@
 import * as Data from 'effect/Data'
-import * as Equal from 'effect/Equal'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import type * as AsyncResult from 'effect/reactivity/AsyncResult'
@@ -14,6 +13,7 @@ import { commandProgress, progressOf } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { herdViewAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
+import { boundedProgressAtom, SentBound } from '@crook/web/atoms/SentBound'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
 export class CommandRequest extends Data.Class<{
@@ -52,7 +52,9 @@ export const pendingAction = (
   })
 
 export const pendingActionAtom = Atom.family((key: PendingActionKey) =>
-  Atom.make((get) =>
-    pendingAction(get(sendCommandAtom(key.key)), get(herdViewAtom), key.machine),
-  ).pipe(Atom.withEquality(Equal.equals)),
+  boundedProgressAtom({
+    result: sendCommandAtom(key.key),
+    progress: (get) => pendingAction(get(sendCommandAtom(key.key)), get(herdViewAtom), key.machine),
+    bound: SentBound,
+  }),
 )

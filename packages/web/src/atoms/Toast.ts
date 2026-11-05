@@ -1,4 +1,5 @@
 import * as Data from 'effect/Data'
+import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
 import * as Atom from 'effect/reactivity/Atom'
 
@@ -11,6 +12,8 @@ export type ToastIntent = Data.TaggedEnum<{
   Show: { readonly text: string }
   Expire: { readonly id: number }
 }>
+
+export const TOAST_DURATION = Duration.seconds(3)
 
 export const ToastIntent = Data.taggedEnum<ToastIntent>()
 

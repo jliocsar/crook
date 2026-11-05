@@ -52,7 +52,7 @@ function LaunchStatus({ text }: { text: string }) {
       role="status"
       className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-5"
     >
-      <Spinner size={STATUS_SPINNER_SIZE} />
+      <Spinner holdsRoom size={STATUS_SPINNER_SIZE} />
       {text}
     </p>
   )
@@ -162,7 +162,7 @@ function NewAgentFlow() {
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [editedSinceStart, setEditedSinceStart] = React.useState(false)
 
-  const launch = useLaunch(view)
+  const launch = useLaunch()
   const selection = Option.flatMap(view, (herdView) => currentSelection(herdView, chosen))
   const shown = Option.all({ herdView: view, current: selection })
   const busy = launch.pending || Option.isSome(launch.opening)
@@ -226,16 +226,6 @@ function NewAgentFlow() {
             ),
           },
         )}
-        {launch.pending ? <LaunchStatus text="Starting Claude…" /> : null}
-        {Option.match(launch.opening, {
-          onNone: () => null,
-          onSome: (open) => (
-            <div className="grid gap-1">
-              <LaunchStatus text="Opening the chat…" />
-              <OpenChatButton onOpen={open} />
-            </div>
-          ),
-        })}
         {Option.match(launch.failure, {
           onNone: () => null,
           onSome: (message) => (
@@ -255,17 +245,27 @@ function NewAgentFlow() {
             start(task)
           }}
         />
-        <Button
-          variant="ghost"
-          size="touch"
-          disabled={!ready}
-          className="text-muted-foreground text-sm"
-          onClick={() => {
-            start('')
-          }}
-        >
-          Start without a task
-        </Button>
+        {busy ? (
+          <div className="flex h-11 items-center justify-center gap-3">
+            <LaunchStatus text={launch.pending ? 'Starting Claude…' : 'Opening the chat…'} />
+            {Option.match(launch.opening, {
+              onNone: () => null,
+              onSome: (open) => <OpenChatButton onOpen={open} />,
+            })}
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="touch"
+            disabled={!ready}
+            className="text-muted-foreground text-sm"
+            onClick={() => {
+              start('')
+            }}
+          >
+            Start without a task
+          </Button>
+        )}
       </div>
       {Option.match(shown, {
         onNone: () => null,

@@ -1,4 +1,4 @@
-import { useAtom, useAtomSet } from '@effect/atom-react/Hooks'
+import { useAtom, useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 
@@ -8,6 +8,7 @@ import {
   logOutAtom,
   sendTestNotificationAtom,
   setNotificationPrefAtom,
+  testNotificationProgressAtom,
 } from '@crook/web/atoms/Settings'
 import { testNotificationState } from '@crook/web/settings/SettingsLayout'
 
@@ -25,9 +26,10 @@ export const useNotificationPref = (event: NotificationEvent) => {
 
 export const useTestNotification = () => {
   const [result, send] = useAtom(sendTestNotificationAtom, { mode: 'promiseExit' })
+  const progress = useAtomValue(testNotificationProgressAtom)
 
   return {
-    state: testNotificationState(result),
+    state: testNotificationState(progress),
     failure: failureMessage(result),
     send: () => {
       void send()
