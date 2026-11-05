@@ -19,6 +19,7 @@ const SESSION = ClaudeSessionId.make('84f3659c-7fcf-4280-8580-b82ae5fd8f91')
 const ENTRY_MODULE = new URL('../src/main.ts', import.meta.url).pathname
 const FORWARDER_MODULE = new URL('../src/HookForwarder.ts', import.meta.url).pathname
 const LARGE_OUTPUT_LENGTH = 4 * 1024 * 1024
+const OVERLONG_SOCKET_PATH_LENGTH = 200
 
 const preToolUse = (output: string) =>
   JSON.stringify({
@@ -34,6 +35,8 @@ const ENVIRONMENTS: readonly Readonly<Record<string, string>>[] = [
   { XDG_STATE_HOME: '/state', HOME: '/home/jc' },
   { XDG_STATE_HOME: 'relative/state', HOME: '/home/jc' },
   { HOME: '/home/jc' },
+  { CROOK_HOOK_SOCKET_PATH: '', XDG_STATE_HOME: '/state', HOME: '/home/jc' },
+  { XDG_STATE_HOME: '', HOME: '/home/jc' },
 ]
 
 const runHookCommand = Effect.fn('runHookCommand')(function* (
@@ -67,6 +70,7 @@ describe('The hook command', () => {
       )
 
       expect(Arr.map(ENVIRONMENTS, hookSocketPath)).toEqual(expected)
+      expect(hookSocketPath({ HOME: '' })).toBeUndefined()
     }),
   )
 
@@ -128,6 +132,17 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
           ),
         ).toBe(1)
       }).pipe(Effect.scoped),
+    )
+
+    real.effect('stays silent and exits 0 on a socket path no socket can have', () =>
+      Effect.gen(function* () {
+        const result = yield* runHookCommand(
+          { CROOK_HOOK_SOCKET_PATH: `/${'x'.repeat(OVERLONG_SOCKET_PATH_LENGTH)}` },
+          '{}',
+        )
+
+        expect(result).toEqual([0, '', ''])
+      }),
     )
 
     real.effect('carries a payload far larger than one write of the socket', () =>

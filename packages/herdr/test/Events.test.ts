@@ -22,14 +22,13 @@ layer(BunFileSystem.layer)('HerdrEvent', (it) => {
         Str.split(yield* fileSystem.readFileString(CAPTURED_EVENTS), '\n'),
         Arr.filter(Str.isNonEmpty),
       )
-      const failures = pipe(
-        lines,
-        Arr.map((line) => decodeEvent(line)),
-        Arr.filter(Result.isFailure),
+      const names = Arr.filterMap(lines, (line) =>
+        Result.map(decodeEvent(line), (event) => event.event),
       )
 
-      expect(lines).not.toHaveLength(0)
-      expect(failures).toEqual([])
+      expect(names).toHaveLength(lines.length)
+      expect(names).toContain('pane_closed')
+      expect(names).toContain('pane.agent_status_changed')
     }),
   )
 })

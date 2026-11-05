@@ -956,6 +956,13 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   CPU, a peak of 129 to 137 MB. Searching a line's bytes for the markers rather than decoding it
   first took the two old reads from 1057 to 1175 ms to 737 to 800 ms, and left the peak alone;
   neither `--smol` nor reads of 64 or 256 KiB lowered the peak (all measured in Bun on the laptop).
+  The price lands on the running count, which now carries the whole scan for every Claude pane
+  once per agent start or session: on the 118 MB transcript, its first read went from 451 to 475 ms
+  of CPU to 571 to 691 ms, on an otherwise quiet laptop. Run side by side at a load average near 18, the
+  count's own markers alone took 729 to 747 ms and the whole scan 1159 to 1239 ms, at 118 MB, 476 to
+  527 and 758 to 782 at 32 MB, and about the same at 0.4 MB, with the peak the same at each. So one
+  chat opened per agent start already pays for it, and most of the difference is the search for
+  more markers over every byte rather than the 243 further lines parsed.
 - Claude Code 2.1.312 names background work in the transcript like this (measured in local
   transcripts and a probe session). A background Bash's tool result opens with `Command running
   in background with ID: <id>. Output is being written to: <…>/tasks/<id>.output`, and its

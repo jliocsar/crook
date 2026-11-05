@@ -2,6 +2,7 @@
 const HOOK_SUBCOMMAND = 'hook'
 const ARGUMENTS_BEFORE_SUBCOMMAND = 2
 const HOOK_SOCKET_FILE = 'crook/hook.sock'
+const EMPTY_VARIABLE = ''
 const SLOWEST_MEASURED_DELIVERY_MILLIS = 15.139
 const HOOK_DELIVERY_TIMEOUT_MILLIS = SLOWEST_MEASURED_DELIVERY_MILLIS * 10
 
@@ -14,8 +15,9 @@ export const hookSocketPath = (
 ): string | undefined => {
   const explicit = environment.CROOK_HOOK_SOCKET_PATH
   const stateHome = environment.XDG_STATE_HOME
+  const home = environment.HOME
 
-  if (explicit !== undefined) {
+  if (explicit !== undefined && explicit !== EMPTY_VARIABLE) {
     return explicit
   }
 
@@ -23,9 +25,9 @@ export const hookSocketPath = (
     return `${stateHome}/${HOOK_SOCKET_FILE}`
   }
 
-  return environment.HOME === undefined
+  return home === undefined || home === EMPTY_VARIABLE
     ? undefined
-    : `${environment.HOME}/.local/state/${HOOK_SOCKET_FILE}`
+    : `${home}/.local/state/${HOOK_SOCKET_FILE}`
 }
 
 export const deliverPayload = (path: string, payload: Uint8Array, finished: () => void): void => {
@@ -62,11 +64,14 @@ export const deliverPayload = (path: string, payload: Uint8Array, finished: () =
 export const forwardStdin = (finished: () => void): void => {
   const path = hookSocketPath(Bun.env)
 
-  void Bun.stdin.bytes().then((payload) => {
-    if (path === undefined) {
-      finished()
-    } else {
-      deliverPayload(path, payload, finished)
-    }
-  }, finished)
+  void Bun.stdin
+    .bytes()
+    .then((payload) => {
+      if (path === undefined) {
+        finished()
+      } else {
+        deliverPayload(path, payload, finished)
+      }
+    })
+    .catch(finished)
 }
