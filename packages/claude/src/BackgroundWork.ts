@@ -17,14 +17,12 @@ import * as Struct from 'effect/Struct'
 
 import {
   type BackgroundLedger,
-  EMPTY_LEDGER,
-  backgroundLines,
   backgroundTasks,
   outputFileOf,
   sameTasks,
-  withBackgroundLines,
 } from '@crook/claude/BackgroundTasks'
 import { FileWatch, readyOr } from '@crook/claude/FileWatch'
+import { SessionScans } from '@crook/claude/SessionScans'
 import { SubagentRoster, SubagentsUnreadable } from '@crook/claude/SubagentRoster'
 import { withoutAnsi } from '@crook/claude/TranscriptParser'
 import {
@@ -32,17 +30,9 @@ import {
   type TranscriptFile,
   subagentsDirectoryOf,
 } from '@crook/claude/TranscriptLocator'
-import {
-  NEWLINE,
-  TAIL_READ_SIZE,
-  type TailError,
-  type TailEvent,
-  TranscriptTail,
-  messagesIn,
-} from '@crook/claude/TranscriptTail'
+import { NEWLINE, TAIL_READ_SIZE, type TailError, messagesIn } from '@crook/claude/TranscriptTail'
 import { type BackgroundTask, ShellTask, SubagentActivity } from '@crook/domain/Background'
 import { SubagentId } from '@crook/domain/Ids'
-import { TRANSCRIPT_START } from '@crook/domain/Transcript'
 import type { AssistantMessage, TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import { firstLine, toolSubject } from '@crook/domain/ToolSubject'
 
@@ -62,11 +52,6 @@ interface OutputTail {
   readonly lines: readonly string[]
   readonly at: Option.Option<DateTime.Utc>
   readonly size: number
-}
-
-interface LedgerScan {
-  readonly ledger: BackgroundLedger
-  readonly caughtUp: boolean
 }
 
 export type BackgroundWatchError = TailError | SubagentsUnreadable | BackgroundOutputUnreadable
@@ -93,7 +78,6 @@ const TRAILING_CARRIAGE_RETURNS = /\r+$/u
 const LINE_BREAK = '\n'
 const NO_OUTPUTS: OutputTails = HashMap.empty()
 const NO_ACTIVITY: Activities = HashMap.empty()
-const NO_SCAN: LedgerScan = { ledger: EMPTY_LEDGER, caughtUp: false }
 const BY_SUBAGENT = Order.mapInput(Order.String, (activity: SubagentActivity) => activity.subagent)
 
 const decoder = new TextDecoder()
@@ -104,17 +88,6 @@ const decodeSubagentId = Schema.decodeUnknownOption(SubagentId)
 
 export const sameSnapshot = (left: BackgroundSnapshot, right: BackgroundSnapshot): boolean =>
   sameTasks(left.tasks, right.tasks) && isSameActivity(left.activity, right.activity)
-
-const scanAfter = (scan: LedgerScan, event: TailEvent): LedgerScan =>
-  Match.value(event).pipe(
-    Match.tagsExhaustive({
-      TranscriptChunk: (chunk) => ({
-        ledger: withBackgroundLines(scan.ledger, chunk.messages),
-        caughtUp: scan.caughtUp,
-      }),
-      TranscriptCaughtUp: () => ({ ledger: scan.ledger, caughtUp: true }),
-    }),
-  )
 
 const shellOutputsOf = (ledger: BackgroundLedger): ShellOutputs =>
   pipe(
@@ -243,7 +216,7 @@ const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const fileWatch = yield* FileWatch
-  const tail = yield* TranscriptTail
+  const scans = yield* SessionScans
   const roster = yield* SubagentRoster
 
   const openTail = Effect.fn('BackgroundWork.openTail')(function* (target: string) {
@@ -407,11 +380,7 @@ const make = Effect.gen(function* () {
   }
 
   const ledgers = (file: TranscriptFile) =>
-    tail.followWith(file, TRANSCRIPT_START, backgroundLines).pipe(
-      Stream.scan(() => NO_SCAN, scanAfter),
-      Stream.filter((scan) => scan.caughtUp),
-      Stream.map((scan) => scan.ledger),
-    )
+    scans.follow(file).pipe(Stream.map((scan) => scan.ledger))
 
   const watch = (file: TranscriptFile): Stream.Stream<BackgroundSnapshot, BackgroundWatchError> =>
     Stream.unwrap(

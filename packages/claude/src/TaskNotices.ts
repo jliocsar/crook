@@ -5,24 +5,12 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 
-import { parseLine } from '@crook/claude/TranscriptParser'
-import type { TranscriptOffset } from '@crook/domain/Ids'
 import { Subagent, type SubagentStatus, statusOfNotice } from '@crook/domain/Subagent'
 import type { TaskNotificationBlock, TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 export type TaskNotices = HashMap.HashMap<string, TaskNotificationBlock>
 
-const NOTICE_MARKER = '<task-notification>'
-
-const decoder = new TextDecoder()
-
 export const NO_TASK_NOTICES: TaskNotices = HashMap.empty()
-
-export const taskNoticeLines = (
-  bytes: Uint8Array,
-  offset: TranscriptOffset,
-): readonly TranscriptMessage[] =>
-  decoder.decode(bytes).includes(NOTICE_MARKER) ? parseLine(bytes, offset) : []
 
 export const taskNoticesIn = (
   messages: readonly TranscriptMessage[],

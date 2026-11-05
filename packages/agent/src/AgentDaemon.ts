@@ -29,6 +29,7 @@ import { claudeRoots } from '@crook/claude/ClaudeRoots'
 import { FileWatch } from '@crook/claude/FileWatch'
 import { LastTurn } from '@crook/claude/LastTurn'
 import { MANAGED_SKILL_HOMES, SkillCatalog } from '@crook/claude/SkillCatalog'
+import { SessionScans } from '@crook/claude/SessionScans'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import { TranscriptTail } from '@crook/claude/TranscriptTail'
@@ -40,8 +41,11 @@ const watchedTranscriptsAt = (roots: readonly string[]) =>
     FileWatch.layer,
   )
 
+const scannedTranscriptsAt = (roots: readonly string[]) =>
+  Layer.provideMerge(SessionScans.layer, watchedTranscriptsAt(roots))
+
 export const transcriptReadersAt = (roots: readonly string[]) =>
-  Layer.provideMerge(SubagentRoster.layer, watchedTranscriptsAt(roots))
+  Layer.provideMerge(SubagentRoster.layer, scannedTranscriptsAt(roots))
 
 const transcriptStreamingWith = <SkillsFailure>(
   skills: Layer.Layer<SkillCatalog, SkillsFailure, FileSystem.FileSystem | Path.Path>,
