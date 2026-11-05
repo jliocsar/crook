@@ -225,6 +225,24 @@ export const initialMachineState = (
   contents: MachineStateContents,
 ): MachineState => new MachineState({ machine, version: MachineStateVersion.make(0), ...contents })
 
+export const machineStateWithHerdrLost = (
+  machine: MachineId,
+  connection: HerdrConnectionId,
+  places: readonly Place[],
+  lostAt: DateTime.Utc,
+): MachineState =>
+  new MachineState({
+    machine,
+    version: MachineStateVersion.make(0),
+    herdrVersion: '',
+    herdr: new HerdrLink({ connection, lostAt: Option.some(lostAt) }),
+    workspaces: [],
+    tabs: [],
+    panes: [],
+    agents: [],
+    places,
+  })
+
 export const nextMachineState = (
   previous: MachineState,
   contents: MachineStateContents,

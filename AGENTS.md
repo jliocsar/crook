@@ -1147,6 +1147,38 @@ herdr checks `pane.wait_for_output` on a 100 ms grid: every wait ended within 8 
 answers once the keys are in, at least 300 ms before the line's own output appeared (measured).
 :::
 
+:::tip
+A read herdr never answers fails as a named timeout, ten times the slowest read measured. Measured
+on herdr 0.9.5, an isolated session with 20 panes reporting agents, 3 runs, each read alone and as
+one refresh (a snapshot, then every pane's process info and detection read at once), idle and with
+8 panes printing in a loop: `session.snapshot` had a median of 104 to 119 ms and a slowest of
+201 ms, with the panes printing; `pane.process_info` and `pane.read` a median of 101 to 104 ms and
+a slowest of 144 ms; `events.subscribe` a median of 1 to 4 ms and a slowest of 118 ms; a whole
+refresh a slowest of 270 ms. A lone call can answer in under 1 ms, but one right after another
+waits about 100 ms, which reads as a 100 ms grid (not read in its source). Only reads carry the timeout. A call
+that legitimately waits, such as a prompt, an agent start, a wait for output or a worktree, stays
+under the budget of the command around it, since timing out a call that has already acted says
+nothing about whether it landed.
+
+A refresh runs inside the state's lock, so its reads being bounded is what bounds every other state
+change. When an invalidation's re-read times out the state says herdr is lost at once and the
+following subscription is told, so the reconnect loop takes over and clears the mark when herdr
+answers again; nothing else would, since an idle machine sends no events. A hung herdr with an idle
+subscription and nobody asking for a re-read goes unnoticed: nothing polls.
+
+An agent reads herdr once as it starts, and on any failure attaches with an empty state marked lost
+instead of retrying. Retrying before it attached left an agent started before herdr showing the
+machine as offline (all four tests of it hung until their 20 s limit before the fix, measured). That
+state says nothing about the panes, so the hub keeps the machine's seen marks and herdr version
+through any lost state rather than treating its empty list as every pane gone.
+
+`pane.process_info` leaves out `foreground_processes` and `foreground_process_group_id` when it
+catches a pane's shell between two children (measured: 1 of 47 raw reads on panes running a printing
+loop; the first of 14 failed calls in one loaded run was this). crook's schema requires the first,
+so such a read fails as a changed protocol and that pane goes without a session for that one
+refresh. Whether a pane whose foreground stays Claude ever shows it is not measured.
+:::
+
 :::warning
 `shadcn add` writes a `utils` module even when `components.json` aliases `utils` to the `cn`
 package (measured on 4.22.0). That module only re-exports `cn`, which

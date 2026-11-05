@@ -4,6 +4,7 @@ import type * as NonEmptyArray from 'effect/Array'
 import * as Config from 'effect/Config'
 import * as Context from 'effect/Context'
 import * as Deferred from 'effect/Deferred'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
@@ -27,6 +28,7 @@ import type { SessionSnapshot } from '@crook/herdr/Records'
 export type HerdrRequestError =
   | HerdrUnreachable
   | HerdrConnectionClosed
+  | HerdrTimedOut
   | HerdrRequestInvalid
   | HerdrRequestRejected
   | HerdrPaneNotFound
@@ -76,6 +78,15 @@ export class HerdrConnectionClosed extends Schema.TaggedError<HerdrConnectionClo
 ) {
   override get message(): string {
     return `Herdr closed the connection during ${this.method} before it finished. The server most likely stopped or restarted: reconnect and re-read its state.`
+  }
+}
+
+export class HerdrTimedOut extends Schema.TaggedError<HerdrTimedOut>()('HerdrTimedOut', {
+  method: Schema.String,
+  timeoutMillis: Schema.Finite,
+}) {
+  override get message(): string {
+    return `Herdr did not answer ${this.method} within ${this.timeoutMillis} ms, far past its slowest measured answer. The server is most likely hung: restart it if it stays silent.`
   }
 }
 
@@ -280,13 +291,31 @@ const clientOf = (
     subscribe,
   })
 
+const withReplyTimeout =
+  ({ name, replyTimeout }: Pick<HerdrMethod<unknown, unknown>, 'name' | 'replyTimeout'>) =>
+  <Success, Failure, Needs>(reply: Effect.Effect<Success, Failure, Needs>) =>
+    Option.match(replyTimeout, {
+      onNone: () => reply,
+      onSome: (duration) =>
+        Effect.timeoutOrElse(reply, {
+          duration,
+          orElse: () =>
+            Effect.fail(
+              new HerdrTimedOut({ method: name, timeoutMillis: Duration.toMillis(duration) }),
+            ),
+        }),
+    })
+
 const makeLive = (socketPath: string) => {
   const request = Effect.fn('HerdrClient.request')(function* <Params, Result>(
     method: HerdrMethod<Params, Result>,
     params: Params,
   ) {
     const line = yield* encodeRequest(method, params)
-    const reply = yield* exchange(socketPath, method.name, line).pipe(Stream.runHead)
+    const reply = yield* exchange(socketPath, method.name, line).pipe(
+      Stream.runHead,
+      withReplyTimeout(method),
+    )
     const replyLine = yield* Effect.fromOption(
       reply,
       () => new HerdrConnectionClosed({ method: method.name }),
@@ -329,7 +358,7 @@ const makeLive = (socketPath: string) => {
       Effect.forkScoped,
     )
 
-    yield* Deferred.await(started)
+    yield* Deferred.await(started).pipe(withReplyTimeout(EventsSubscribeMethod))
 
     return Stream.fromQueue(events)
   })

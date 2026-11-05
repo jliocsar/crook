@@ -1,3 +1,5 @@
+import * as Duration from 'effect/Duration'
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { Subscription } from '@crook/herdr/Events'
@@ -16,18 +18,32 @@ export interface HerdrMethod<Params, Result> {
   readonly name: string
   readonly params: Schema.Codec<Params, unknown>
   readonly result: Schema.Codec<Result, unknown>
+  readonly replyTimeout: Option.Option<Duration.Duration>
 }
+
+const SLOWEST_MEASURED_READ_REPLY = Duration.millis(202)
+
+export const HERDR_READ_TIMEOUT = Duration.times(SLOWEST_MEASURED_READ_REPLY, 10)
 
 const makeMethod = <Params, Result>(
   name: string,
-  schemas: Omit<HerdrMethod<Params, Result>, 'name'>,
-): HerdrMethod<Params, Result> => ({ name, ...schemas })
+  schemas: Pick<HerdrMethod<Params, Result>, 'params' | 'result'>,
+): HerdrMethod<Params, Result> => ({ name, replyTimeout: Option.none(), ...schemas })
+
+const makeReadMethod = <Params, Result>(
+  name: string,
+  schemas: Pick<HerdrMethod<Params, Result>, 'params' | 'result'>,
+): HerdrMethod<Params, Result> => ({
+  name,
+  replyTimeout: Option.some(HERDR_READ_TIMEOUT),
+  ...schemas,
+})
 
 const EmptyParams = Schema.Struct({})
 
 const PaneEnvironment = Schema.Record(Schema.String, Schema.String)
 
-export const Ping = makeMethod('ping', {
+export const Ping = makeReadMethod('ping', {
   params: EmptyParams,
   result: Schema.Struct({
     type: Schema.Literal('pong'),
@@ -62,7 +78,7 @@ export const PaneCloseMethod = makeMethod('pane.close', {
 
 const PaneReadSource = Schema.Literals(['visible', 'recent', 'recent_unwrapped', 'detection'])
 
-export const PaneReadMethod = makeMethod('pane.read', {
+export const PaneReadMethod = makeReadMethod('pane.read', {
   params: Schema.Struct({ pane_id: Schema.String, source: PaneReadSource }),
   result: Schema.Struct({
     type: Schema.Literal('pane_read'),
@@ -146,7 +162,7 @@ export const AgentWaitMethod = makeMethod('agent.wait', {
   result: Schema.Struct({ type: Schema.Literal('agent_info'), agent: AgentInfo }),
 })
 
-export const PaneProcessInfoMethod = makeMethod('pane.process_info', {
+export const PaneProcessInfoMethod = makeReadMethod('pane.process_info', {
   params: Schema.Struct({ pane_id: Schema.String }),
   result: Schema.Struct({
     type: Schema.Literal('pane_process_info'),
@@ -154,7 +170,7 @@ export const PaneProcessInfoMethod = makeMethod('pane.process_info', {
   }),
 })
 
-export const SessionSnapshotMethod = makeMethod('session.snapshot', {
+export const SessionSnapshotMethod = makeReadMethod('session.snapshot', {
   params: EmptyParams,
   result: Schema.Struct({
     type: Schema.Literal('session_snapshot'),
@@ -162,7 +178,7 @@ export const SessionSnapshotMethod = makeMethod('session.snapshot', {
   }),
 })
 
-export const EventsSubscribeMethod = makeMethod('events.subscribe', {
+export const EventsSubscribeMethod = makeReadMethod('events.subscribe', {
   params: Schema.Struct({ subscriptions: Schema.Array(Subscription) }),
   result: Schema.Struct({ type: Schema.Literal('subscription_started') }),
 })

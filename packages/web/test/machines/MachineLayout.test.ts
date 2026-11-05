@@ -3,10 +3,12 @@ import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
+import * as Struct from 'effect/Struct'
 
 import { CrookVersion } from '@crook/domain/CrookVersion'
-import { HerdView } from '@crook/domain/HerdView'
-import type { HerdMachine } from '@crook/domain/HerdView'
+import { HerdMachine, HerdView } from '@crook/domain/HerdView'
+import { HerdrLink } from '@crook/domain/HerdrLink'
+import { MachineState } from '@crook/domain/MachineState'
 import {
   aboutRows,
   agentsHeading,
@@ -41,6 +43,21 @@ const cardOf = (herdMachine: HerdMachine) =>
   Option.getOrThrow(Arr.head(machinesLayout(viewOf([herdMachine])).machines))
 
 const FIVE_MINUTES_LATER = DateTime.addDuration(START, Duration.minutes(5))
+
+const withHerdrLost = (herdMachine: HerdMachine) =>
+  new HerdMachine(
+    Struct.evolve(herdMachine, {
+      state: Option.map(
+        (state) =>
+          new MachineState(
+            Struct.evolve(state, {
+              herdr: (link) =>
+                new HerdrLink({ connection: link.connection, lostAt: Option.some(START) }),
+            }),
+          ),
+      ),
+    }),
+  )
 
 describe('machinesLayout', () => {
   it('gives one card per machine with its agents, who needs you and whether it is behind', () => {
@@ -102,6 +119,21 @@ describe('machine detail', () => {
         Arr.get(aboutRows(detail, FIVE_MINUTES_LATER), 1),
       ),
     ).toEqual(Option.some({ label: 'crook agent', value: '0.0.9, hub has 0.1.0', warn: true }))
+  })
+
+  it('says herdr is lost on a machine that is online, and only there', () => {
+    const herdrRowOf = (herdMachine: HerdMachine) =>
+      Option.flatMap(machineDetail(viewOf([herdMachine]), herdMachine.machine.id), (detail) =>
+        Arr.findFirst(aboutRows(detail, FIVE_MINUTES_LATER), (row) => row.label === 'Herdr'),
+      )
+
+    expect(cardOf(withHerdrLost(laptop)).herdrLostAt).toEqual(Option.some(START))
+    expect(cardOf(laptop).herdrLostAt).toEqual(Option.none())
+    expect(cardOf(withHerdrLost(desk)).herdrLostAt).toEqual(Option.none())
+    expect(herdrRowOf(withHerdrLost(laptop))).toEqual(
+      Option.some({ label: 'Herdr', value: 'lost for 5m', warn: true }),
+    )
+    expect(herdrRowOf(laptop)).toEqual(Option.some({ label: 'Herdr', value: '0.9.5', warn: false }))
   })
 
   it('hides the agents of an offline machine and counts the rest', () => {

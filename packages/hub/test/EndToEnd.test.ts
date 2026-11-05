@@ -3,6 +3,7 @@ import { expect, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -32,6 +33,7 @@ import { AnswerAsk, Approve, InputDelivered, Prompt } from '@crook/domain/Comman
 import { HerdReplaced, type HerdUpdate, MachineReplaced } from '@crook/domain/HerdUpdate'
 import { type HerdMachine, findMachine } from '@crook/domain/HerdView'
 import { IdempotencyKey, MachineId, TerminalId } from '@crook/domain/Ids'
+import { isHerdrLost } from '@crook/domain/MachineState'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -232,6 +234,31 @@ const commandAsked = (row: AgentRow) =>
 layer(Layer.mergeAll(testHub, BunFileSystem.layer), { excludeTestServices: true })(
   'fake herdr, real agent, real hub, headless phone',
   (live) => {
+    live.effect('shows an agent started before herdr as online with herdr lost', () =>
+      Effect.gen(function* () {
+        const machine = MachineId.make('e2e-before-herdr')
+        const fileSystem = yield* FileSystem.FileSystem
+        const folder = yield* fileSystem.makeTempDirectoryScoped()
+        const herdr = HerdrClient.layerAt(`${folder}/herdr.sock`)
+
+        yield* Layer.build(yield* agentOver(machine, yield* syncingFoundation(machine, herdr), []))
+
+        const view = yield* herdWhere((herd) =>
+          Option.exists(
+            findMachine(herd, machine),
+            (entry) =>
+              entry.machine.connection === 'online' && Option.exists(entry.state, isHerdrLost),
+          ),
+        )
+
+        expect(
+          Option.flatMap(findMachine(view, machine), (entry) => entry.state).pipe(
+            Option.map((state) => state.agents),
+          ),
+        ).toEqual(Option.some([]))
+      }),
+    )
+
     live.effect('carries a herdr status change through the agent and the hub to WatchHerd', () =>
       Effect.gen(function* () {
         const machine = MachineId.make('e2e-status')

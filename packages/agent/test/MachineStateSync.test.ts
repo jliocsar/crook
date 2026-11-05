@@ -1,16 +1,20 @@
-import { expect, it } from '@effect/vitest'
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
+import * as BunSocketServer from '@effect/platform-bun/BunSocketServer'
+import { expect, it, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
 import type * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
+import * as Socket from 'effect/socket/Socket'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
@@ -25,7 +29,7 @@ import { NO_RUNNING_COUNTS, RunningSubagents } from '@crook/agent/RunningSubagen
 import { type AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import { type Ask, UnknownAsk } from '@crook/domain/Ask'
 import { AskId, ClaudeSessionId, PaneId } from '@crook/domain/Ids'
-import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
+import { type MachineState, isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
 import { Checkout, Place } from '@crook/domain/Place'
 import type { HerdrEvent, Subscription } from '@crook/herdr/Events'
 import {
@@ -35,10 +39,15 @@ import {
   HerdrPaneNotFound,
   type HerdrSubscriptionError,
   HerdrUnreachable,
+  decodeSentRequest,
+  scriptedResult,
 } from '@crook/herdr/HerdrClient'
+import { EventsSubscribeMethod, SessionSnapshotMethod } from '@crook/herdr/Methods'
 import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from '@crook/herdr/RecordFixtures'
 import { type AgentInfo, type SessionSnapshot, TabInfo } from '@crook/herdr/Records'
 import { RECONNECT_CAP } from '@crook/protocol/AgentLink'
+
+type AnsweredMethods = (method: string) => boolean
 
 interface FakeSubscription {
   readonly subscriptions: readonly Subscription[]
@@ -651,3 +660,171 @@ it.effect(
       expect(published.places).toEqual([place])
     }),
 )
+
+const HUNG_HERDR_TEST_LIMIT = Duration.seconds(20)
+
+const fakeHerdrAt = Effect.fn('fakeHerdrAt')(function* (
+  socketPath: string,
+  answers: Ref.Ref<AnsweredMethods>,
+) {
+  const replies = new Map([
+    [
+      SessionSnapshotMethod.name,
+      scriptedResult(SessionSnapshotMethod, { type: 'session_snapshot', snapshot: working }).line,
+    ],
+    [
+      EventsSubscribeMethod.name,
+      scriptedResult(EventsSubscribeMethod, { type: 'subscription_started' }).line,
+    ],
+  ])
+  const server = yield* BunSocketServer.make({ path: socketPath })
+
+  yield* server
+    .run((socket) =>
+      Effect.gen(function* () {
+        const outgoing = yield* Queue.unbounded<string>()
+
+        yield* Stream.fromQueue(outgoing).pipe(
+          Stream.pipeThroughChannel(Socket.toChannelString(socket)),
+          Stream.splitLines,
+          Stream.runForEach((line) =>
+            Effect.gen(function* () {
+              const { method } = decodeSentRequest({ method: '', line })
+              const answered = yield* Ref.get(answers)
+              const reply = Option.fromNullishOr(replies.get(method))
+
+              if (answered(method) && Option.isSome(reply)) {
+                yield* Queue.offer(outgoing, `${reply.value}\n`)
+              }
+            }),
+          ),
+          Effect.ignore({ log: 'Debug' }),
+        )
+      }),
+    )
+    .pipe(Effect.forkScoped)
+})
+
+const socketPathInTempFolder = Effect.fn('socketPathInTempFolder')(function* () {
+  const fileSystem = yield* FileSystem.FileSystem
+  const folder = yield* fileSystem.makeTempDirectoryScoped()
+
+  return `${folder}/herdr.sock`
+})
+
+const syncOverRealClient = Effect.fn('syncOverRealClient')(function* (socketPath: string) {
+  const runningCounts = yield* SubscriptionRef.make(NO_RUNNING_COUNTS)
+  const context = yield* Layer.build(
+    Layer.provideMerge(MachineStateSync.layer, [
+      HerdrClient.layerAt(socketPath),
+      CreatedPanes.layerTest(),
+      RunningSubagents.layerTest(runningCounts, () => Effect.void),
+      PendingAsks.layerTest(new Map()),
+      RecentPlaces.layerTest(),
+      ClaudeSessions.layerTest(new Map([['w1:p1', SESSION]])),
+      GitBranches.layerTest(new Map()),
+      ConfigProvider.layer(ConfigProvider.fromUnknown({ CROOK_MACHINE_ID: 'laptop' })),
+    ]),
+  )
+
+  return {
+    sync: Context.get(context, MachineStateSync),
+    createdPanes: Context.get(context, CreatedPanes),
+  }
+})
+
+const firstStateWhere = (
+  sync: MachineStateSync['Service'],
+  predicate: (state: MachineState) => boolean,
+) => sync.changes.pipe(Stream.filter(predicate), Stream.runHead, Effect.flatMap(Effect.fromOption))
+
+layer(BunFileSystem.layer, { excludeTestServices: true })('Over a real herdr client', (hung) => {
+  hung.effect(
+    'attaches with herdr lost when herdr is not running, and fills in once it is',
+    () =>
+      Effect.gen(function* () {
+        const socketPath = yield* socketPathInTempFolder()
+        const { sync } = yield* syncOverRealClient(socketPath)
+        const initial = yield* sync.current
+
+        yield* fakeHerdrAt(socketPath, yield* Ref.make<AnsweredMethods>(() => true))
+
+        const filled = yield* firstStateWhere(sync, (state) => !isHerdrLost(state))
+
+        expect(initial.version).toBe(0)
+        expect(isHerdrLost(initial)).toBe(true)
+        expect(initial.agents).toEqual([])
+        expect(filled.agents.map((row) => row.pane)).toEqual(['w1:p1'])
+        expect(filled.herdrVersion).toBe('0.9.1')
+        expect(isResync(initial, filled)).toBe(true)
+      }),
+    Duration.toMillis(HUNG_HERDR_TEST_LIMIT),
+  )
+
+  hung.effect(
+    'attaches with herdr lost when herdr takes the connection and never answers the first read',
+    () =>
+      Effect.gen(function* () {
+        const socketPath = yield* socketPathInTempFolder()
+
+        yield* fakeHerdrAt(socketPath, yield* Ref.make<AnsweredMethods>(() => false))
+
+        const { sync } = yield* syncOverRealClient(socketPath)
+
+        expect(isHerdrLost(yield* sync.current)).toBe(true)
+      }),
+    Duration.toMillis(HUNG_HERDR_TEST_LIMIT),
+  )
+
+  hung.effect(
+    'marks herdr lost when it stops answering at the subscribe',
+    () =>
+      Effect.gen(function* () {
+        const socketPath = yield* socketPathInTempFolder()
+
+        yield* fakeHerdrAt(
+          socketPath,
+          yield* Ref.make<AnsweredMethods>((method) => method === SessionSnapshotMethod.name),
+        )
+
+        const { sync } = yield* syncOverRealClient(socketPath)
+        const lost = yield* firstStateWhere(sync, isHerdrLost)
+
+        expect(lost.agents.map((row) => row.pane)).toEqual(['w1:p1'])
+      }),
+    Duration.toMillis(HUNG_HERDR_TEST_LIMIT),
+  )
+
+  hung.effect(
+    'lets go of the state when a re-read hangs, says herdr is lost, and clears it once herdr answers',
+    () =>
+      Effect.gen(function* () {
+        const socketPath = yield* socketPathInTempFolder()
+        const answers = yield* Ref.make<AnsweredMethods>(() => true)
+
+        yield* fakeHerdrAt(socketPath, answers)
+
+        const { sync, createdPanes } = yield* syncOverRealClient(socketPath)
+
+        expect(isHerdrLost(yield* sync.current)).toBe(false)
+
+        yield* Ref.set(answers, () => false)
+        yield* sync.invalidate
+        yield* createdPanes.remember(PaneId.make('w1:p1'))
+
+        const remembered = yield* firstStateWhere(sync, (state) =>
+          state.agents.some((row) => row.createdByCrook),
+        )
+        const lost = yield* firstStateWhere(sync, isHerdrLost)
+
+        yield* Ref.set(answers, () => true)
+
+        const back = yield* firstStateWhere(sync, (state) => !isHerdrLost(state))
+
+        expect(remembered.agents.map((row) => row.createdByCrook)).toEqual([true])
+        expect(lost.agents.map((row) => row.pane)).toEqual(['w1:p1'])
+        expect(isResync(lost, back)).toBe(true)
+      }),
+    Duration.toMillis(HUNG_HERDR_TEST_LIMIT),
+  )
+})

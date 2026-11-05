@@ -190,6 +190,7 @@ const make = Effect.gen(function* () {
       }),
       Effect.catchTags({
         HerdrConnectionClosed: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
+        HerdrTimedOut: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrResponseInvalid: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrPromptStalled: () => Effect.succeed(Result.fail(new CommandDeliveryUnknown())),
         HerdrUnreachable: () => Effect.fail(new HerdrUnavailable()),

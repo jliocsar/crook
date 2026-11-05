@@ -11,6 +11,7 @@ import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Queue from 'effect/Queue'
 import * as Random from 'effect/Random'
 import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
@@ -26,6 +27,7 @@ import {
   herdContents,
   herdrLostState,
   initialMachineState,
+  machineStateWithHerdrLost,
   nextMachineState,
   withCreatedPanes,
   withRunningSubagents,
@@ -37,9 +39,13 @@ import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { RunningSubagents } from '@crook/agent/RunningSubagents'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { HerdrConnectionId, MachineId } from '@crook/domain/Ids'
-import type { MachineState } from '@crook/domain/MachineState'
+import { type MachineState, isHerdrLost } from '@crook/domain/MachineState'
 import type { LifecycleEventKind, Subscription } from '@crook/herdr/Events'
-import { HerdrClient, type HerdrSubscriptionError } from '@crook/herdr/HerdrClient'
+import {
+  HerdrClient,
+  type HerdrSubscriptionError,
+  type HerdrTimedOut,
+} from '@crook/herdr/HerdrClient'
 import type { AgentInfo } from '@crook/herdr/Records'
 import { reconnectBackoff } from '@crook/protocol/AgentLink'
 
@@ -175,21 +181,29 @@ const make = Effect.gen(function* () {
   })
 
   const firstConnection = yield* mintConnection
+  const startedAt = yield* DateTime.now
 
   const readInitial = Effect.fn('MachineStateSync.readInitial')(function* () {
     const reading = yield* read()
-    const startedAt = yield* DateTime.now
     const contents = yield* contentsOf([], firstConnection, reading, startedAt, startedAt)
 
-    return { startedAt, initial: initialMachineState(machine, contents) }
+    return initialMachineState(machine, contents)
   })
 
-  const { startedAt, initial } = yield* readInitial().pipe(
-    Effect.tapError(logHerdrFailure),
-    Effect.retry(herdrBackoff),
-  )
+  const startWithHerdrLost = Effect.fn('MachineStateSync.startWithHerdrLost')(function* (
+    error: HerdrSubscriptionError,
+  ) {
+    yield* Effect.logWarning(error.message)
+
+    const places = yield* recentPlaces.observe([], startedAt)
+
+    return machineStateWithHerdrLost(machine, firstConnection, places, startedAt)
+  })
+
+  const initial = yield* readInitial().pipe(Effect.catch(startWithHerdrLost))
   const state = yield* SubscriptionRef.make(initial)
-  const resyncPending = yield* Ref.make(false)
+  const resyncPending = yield* Ref.make(isHerdrLost(initial))
+  const suspectedHangs = yield* Queue.sliding<void>(1)
 
   const connectionAfter = (previous: MachineState) =>
     Effect.flatMap(Ref.getAndSet(resyncPending, false), (pending) =>
@@ -221,7 +235,10 @@ const make = Effect.gen(function* () {
 
     yield* herdr.subscribe(subscriptionsFor(subscribed)).pipe(
       Effect.flatMap((events) =>
-        Stream.concat(Stream.succeed(undefined), events).pipe(
+        Stream.concat(
+          Stream.succeed(undefined),
+          Stream.merge(events, Stream.fromQueue(suspectedHangs)),
+        ).pipe(
           Stream.buffer({ capacity: 1, strategy: 'sliding' }),
           Stream.mapEffect(() => refresh),
           Stream.tap(() => markHealthy),
@@ -283,7 +300,18 @@ const make = Effect.gen(function* () {
   )
 
   const scope = yield* Effect.scope
-  const invalidate = refresh.pipe(Effect.catch(logHerdrFailure), Effect.forkIn(scope))
+  const noteHang = (timedOut: HerdrTimedOut) =>
+    Effect.logWarning(timedOut.message).pipe(
+      Effect.andThen(Ref.set(resyncPending, true)),
+      Effect.andThen(markHerdrLost),
+      Effect.andThen(Queue.offer(suspectedHangs, undefined)),
+    )
+  const invalidate = refresh.pipe(
+    Effect.catch((error: HerdrSubscriptionError) =>
+      Match.value(error).pipe(Match.tag('HerdrTimedOut', noteHang), Match.orElse(logHerdrFailure)),
+    ),
+    Effect.forkIn(scope),
+  )
 
   yield* asks.changes.pipe(
     Stream.runForEach(() => invalidate),
