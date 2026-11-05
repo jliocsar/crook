@@ -571,7 +571,7 @@ path to it, a transition that throws or returns what the schema refuses, a state
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
 its own test shows each one failing. Two states that differ only by a token are one state: the
 walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
-guard and not a measurement: the machines here have 10, 11, 8 and 117 (measured), so reaching it means a
+guard and not a measurement: the machines here have 10, 11, 8, 117, 6, 3 and 3 (measured), so reaching it means a
 token got into a state's identity.
 
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
@@ -614,6 +614,20 @@ A send for a machine on its way back holds until the machine is online and the l
 The card takes the composer's cell at the composer's height, 102 px at 390 and at 430 wide, in light and dark. A machine's name long enough to wrap made it 106 and pushed the dock up 4 px, so the title truncates (measured).
 
 The drop's own time is the token for a wait, so the machine needs no counter: the hub moves it on every drop. A machine sees a herd's reading only when it changes, so offline landing while a drop is still quiet can only be the hub's reconnecting running out, and that goes to the card.
+:::
+
+:::tip
+A spinner keeps one rule, in one component: it shows a second after a wait starts, and once shown it stays 400 ms and then fades. The second is the link notice's and the 400 ms is the frame tool's limit, both reused rather than measured anew, and they share one module so they cannot part. A wait over within the second shows nothing, and the glyph it stands in for stays where it was. Before this a Send answered 1.1 s after the tap showed no progress at all, 0 of 280 frames; now it shows 27 frames, 549 ms, with no finding (measured in Chromium at 4x CPU throttling, one run of each). Only the spinner waits: a word such as "Saving…" still changes on the tap, since the tap needs an answer. A state whose own machine has already waited, the banner, the pill, the away card and the pull gesture, passes that on and shows at once. A spinner whose host goes away with its state goes with it, whatever its hold says: a chat closed from its sheet took its Working row's spinner along after 8 and 13 frames, under the sheet and on its way out, so that story lists it as a finding some runs show.
+
+The Working row owns the only spinner during a tool. A running tool's own row keeps a still dot, so a turn never shows two at once.
+
+A command the hub answered is no longer waited for without end. Once it answers, the herd has 15 s to show the result, the same 15 s the hub gives a machine to come back, since a herd that cannot show it inside that means the machine is gone or the command did not land. Past that, the action stops reading as underway and says crook sent it and the machine has not shown it. It may still land, so what the herd shows later still finishes it and takes the note away. Before, "Saving…" and "Opening the chat…" were still up after 16 s of a herd that never moved (measured in the story harness). A test notification, which nothing in the herd confirms, reads Sent for as long as a toast shows, 3 s, where it used to stay until the screen left (still up after 6 s, measured the same way). That wait is the same machine, one per command, so it has no element to mark and the note is what shows it. A retry after it takes a fresh key, because the hub replays a known key's receipt instead of acting again. The bound is a context reference with the 15 s as its default, and a story sets its own, because the smoke test plays stories one after another and 15 s each would cost more than the rest of the suite.
+
+A new agent's launch keeps one call per attempt, and the screen reads only its own attempt, so a failure from before cannot show on a screen opened later. The call also keeps running after the screen leaves, as every other command does.
+
+A composer's failure has an exit other than the next send. A refused prompt holds while the field holds the words it refused, which the failure itself puts back, and clears once the draft moves on. A refused Stop has nothing to do with the draft: it clears on the next press or when the turn ends. A refused prompt outlives a turn ending, because the words are still unsent. Before, both stayed through an edit or the end of the turn (measured in the story harness).
+
+The Background dock and its summary were reported to land apart, the dock on its second tick and the summary on its own timer. They do not: one timer wakes the screen, the dock reads the clock as it renders, and over 4 of 4 runs of a dock that ran its full 14 s the summary's row mounted one frame before the dock began to fade, 7 to 9 ms apart (measured in Chromium at 4x CPU throttling).
 :::
 
 ## Web
@@ -684,10 +698,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   `effecttsgo/lazy-effect` rejects it (measured). Code that needs the router takes it as an
   argument, typed `RegisteredRouter`: `AnyRouter` types `history` as `any`, and the type-aware
   rules reject every call on it (measured).
-- The Hold Button shows its complete label for a while after a hold, whatever its parent says,
-  so a test that reads that label right after a hold reads the button's own state. Assert what
-  the parent controls, such as `disabled` (measured: a test on the label passed with the fix
-  reverted).
+- The Hold Button's label follows what its parent says. It used to show its complete label for
+  1200 ms after a hold and then go back, so a Forget still out read "Hold to forget" again while
+  it was still pending (measured at 1400 ms in the story harness).
 - A grid with no column template gives each item an `auto` column, which grows to the item's
   min-content, so a `truncate` inside it never truncates and a long agent title pushed its card
   past the screen on real data (measured). A grid whose items must shrink takes `grid-cols-1`,
