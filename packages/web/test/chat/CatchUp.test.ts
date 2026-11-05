@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CatchUp,
+  landedOver,
   lapseLabel,
   lapseOf,
   nextCatchUp,
@@ -14,13 +15,12 @@ import type { ThreadRow } from '@crook/web/chat/Thread'
 import { TranscriptOffset } from '@crook/domain/Ids'
 import { UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
 import {
-  catchingUpFrom,
   EMPTY_TRANSCRIPT,
-  failedWith,
+  LaptopCatchUp,
+  NO_CATCH_UP,
   type TranscriptLine,
   TranscriptView,
 } from '@crook/web/chat/TranscriptState'
-import { HubCallDefected } from '@crook/web/rpc/HubConnection'
 import { clockTime } from '@crook/web/time/Clock'
 
 import { assistant, prompt, said, SESSION } from '../TranscriptFixtures.ts'
@@ -36,95 +36,110 @@ const rows = (...keys: readonly string[]): readonly ThreadRow[] => keys.map(row)
 
 const MARKER = row('catch-up')
 
-const viewOf = (lines: readonly TranscriptLine[], catchingUp: boolean) =>
-  catchingUpFrom(
-    new TranscriptView(Struct.evolve(EMPTY_TRANSCRIPT, { lines: () => lines })),
-    catchingUp,
+const viewOf = (lines: readonly TranscriptLine[], catchUp: LaptopCatchUp = NO_CATCH_UP) =>
+  new TranscriptView(
+    Struct.evolve(EMPTY_TRANSCRIPT, { lines: () => lines, catchUp: () => catchUp }),
   )
 
 const keysOf = (shown: readonly ThreadRow[]) => shown.map((found) => found.key)
 
 const CACHED = [line(0), line(10)]
 
+const pending = (lines: readonly TranscriptLine[]) =>
+  viewOf(lines, LaptopCatchUp.Pending({ lines }))
+
+const landedView = (lines: readonly TranscriptLine[]) =>
+  viewOf(lines, LaptopCatchUp.Landed({ lapse: Option.none() }))
+
 const cachedCatchUp = () =>
-  nextCatchUp(CatchUp.Waiting(), Option.some(viewOf(CACHED, true)), rows('a', 'b'))
+  nextCatchUp(CatchUp.Waiting(), Option.some(pending(CACHED)), rows('a', 'b'))
+
+describe('landedOver', () => {
+  it('names the lapse of the lines past the cache', () => {
+    const landed = landedOver(CACHED, viewOf([...CACHED, line(20)]))
+
+    expect(LaptopCatchUp.$is('Landed')(landed.catchUp)).toBe(true)
+  })
+
+  it('lands nothing when the read added no line', () => {
+    expect(landedOver(CACHED, viewOf(CACHED)).catchUp).toEqual(NO_CATCH_UP)
+  })
+
+  it('lands nothing when the read started over instead of extending the cache', () => {
+    expect(landedOver(CACHED, viewOf([line(0), line(10), line(20)])).catchUp).toEqual(NO_CATCH_UP)
+  })
+})
 
 describe('nextCatchUp', () => {
   it('remembers the rows a reopened chat showed from its cache', () => {
-    expect(CatchUp.$is('Cached')(cachedCatchUp())).toBe(true)
+    expect(CatchUp.$is('Remembered')(cachedCatchUp())).toBe(true)
   })
 
-  it('stays off for a cold open, which has nothing cached to catch up from', () => {
-    const cold = nextCatchUp(CatchUp.Waiting(), Option.some(viewOf([], true)), [])
+  it('stays off for a chat that opened with nothing to catch up from', () => {
+    const cold = nextCatchUp(CatchUp.Waiting(), Option.some(viewOf(CACHED)), rows('a', 'b'))
 
     expect(CatchUp.$is('Off')(cold)).toBe(true)
   })
 
-  it('stays off when the chat opened already current', () => {
-    const current = nextCatchUp(
-      CatchUp.Waiting(),
-      Option.some(viewOf(CACHED, false)),
-      rows('a', 'b'),
-    )
+  it('keeps waiting while nothing shows', () => {
+    const waiting = CatchUp.Waiting()
 
-    expect(CatchUp.$is('Off')(current)).toBe(true)
+    expect(nextCatchUp(waiting, Option.none(), [])).toBe(waiting)
   })
 
   it('names the rows that landed past the cache once the chat has caught up', () => {
     const landed = nextCatchUp(
       cachedCatchUp(),
-      Option.some(viewOf([...CACHED, line(20), line(30)], false)),
+      Option.some(landedView([...CACHED, line(20), line(30)])),
       rows('a', 'b', 'c', 'd'),
     )
 
     expect(CatchUp.$is('Landed')(landed) && landed.keys).toStrictEqual(['c', 'd'])
   })
 
-  it('waits while the chat is still catching up', () => {
+  it('waits while the machine still holds the read back', () => {
     const waiting = cachedCatchUp()
 
-    expect(nextCatchUp(waiting, Option.some(viewOf(CACHED, true)), rows('a', 'b'))).toBe(waiting)
+    expect(nextCatchUp(waiting, Option.some(pending(CACHED)), rows('a', 'b'))).toBe(waiting)
   })
 
-  it('turns off when nothing new landed', () => {
-    const nothing = nextCatchUp(cachedCatchUp(), Option.some(viewOf(CACHED, false)), rows('a', 'b'))
+  it('turns off when the landed read added no row', () => {
+    const nothing = nextCatchUp(
+      cachedCatchUp(),
+      Option.some(landedView([...CACHED, line(20)])),
+      rows('a', 'b'),
+    )
 
     expect(CatchUp.$is('Off')(nothing)).toBe(true)
   })
 
-  it('turns off when the chat started over instead of extending the cache', () => {
-    const restarted = nextCatchUp(
-      cachedCatchUp(),
-      Option.some(viewOf([line(0), line(10), line(20)], false)),
-      rows('a', 'b', 'c'),
-    )
+  it('turns off when the machine judged no catch-up', () => {
+    const off = nextCatchUp(cachedCatchUp(), Option.some(viewOf(CACHED)), rows('a', 'b'))
 
-    expect(CatchUp.$is('Off')(restarted)).toBe(true)
+    expect(CatchUp.$is('Off')(off)).toBe(true)
   })
 
-  it('turns off when the watch failed', () => {
-    const failed = nextCatchUp(
-      cachedCatchUp(),
-      Option.some(
-        failedWith(viewOf([...CACHED, line(20)], true), new HubCallDefected({ cause: 'gone' })),
-      ),
-      rows('a', 'b', 'c'),
-    )
-
-    expect(CatchUp.$is('Off')(failed)).toBe(true)
-  })
-
-  it('keeps what landed for as long as the chat stays open', () => {
+  it('turns off when the session goes', () => {
     const landed = nextCatchUp(
       cachedCatchUp(),
-      Option.some(viewOf([...CACHED, line(20)], false)),
+      Option.some(landedView([...CACHED, line(20)])),
+      rows('a', 'b', 'c'),
+    )
+
+    expect(CatchUp.$is('Off')(nextCatchUp(landed, Option.none(), []))).toBe(true)
+  })
+
+  it('keeps what landed for as long as the session stays', () => {
+    const landed = nextCatchUp(
+      cachedCatchUp(),
+      Option.some(landedView([...CACHED, line(20)])),
       rows('a', 'b', 'c'),
     )
 
     expect(
       nextCatchUp(
         landed,
-        Option.some(viewOf([...CACHED, line(20), line(30)], false)),
+        Option.some(landedView([...CACHED, line(20), line(30)])),
         rows('a', 'b', 'c', 'sent'),
       ),
     ).toBe(landed)

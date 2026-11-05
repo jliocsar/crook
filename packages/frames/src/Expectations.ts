@@ -41,6 +41,13 @@ const A_CHAT = {
   dock: inSequence('composer'),
 }
 
+const A_CHAT_WITH_ROWS = {
+  thread: inSequence('thread-rows'),
+  dock: inSequence('composer'),
+}
+
+const A_REOPENED_CHAT = A_CHAT_WITH_ROWS
+
 export const NO_DECLARED_ORDER: Expectation = story({})
 
 export const TIMELINE_EXPECTATIONS = {
@@ -80,6 +87,27 @@ export const TIMELINE_EXPECTATIONS = {
       hole: inSequence('show-earlier', 'show-earlier-pending'),
     },
     { watchFrom: 'first-step' },
+  ),
+  'transition/slow-catch-up': story(A_REOPENED_CHAT, { watchFrom: 'first-step' }),
+  'transition/catch-up-lands-under-words': story(A_REOPENED_CHAT, { watchFrom: 'first-step' }),
+  'transition/opened-empty': story({
+    thread: inSequence('thread-skeleton', 'thread-empty'),
+    dock: inSequence('composer'),
+  }),
+  'transition/failed-then-retry': story(A_CHAT_WITH_ROWS),
+  'transition/show-earlier-loads': story(A_CHAT_WITH_ROWS),
+  'transition/resume-after-show-earlier': story({
+    thread: fromTable({
+      'thread-rows': ['thread-skeleton'],
+      'thread-skeleton': ['thread-rows'],
+    }),
+    dock: inSequence('composer'),
+  }),
+  'transition/older-agent-open': story(A_CHAT),
+  'transition/older-agent-rejected-resume': story(A_CHAT_WITH_ROWS),
+  'transition/reopen-while-dialing': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step', shiftBudget: BANNER_SHIFT_BUDGET },
   ),
   'transition/reconnect-chat-open': story(A_CHAT, { shiftBudget: BANNER_SHIFT_BUDGET }),
   'transition/foreground-return': story({ ...A_CHAT, link: NOTHING_ALLOWED }),

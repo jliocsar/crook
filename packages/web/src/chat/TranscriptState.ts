@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
+import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
@@ -19,7 +20,6 @@ import {
   type TranscriptTailBytes,
 } from '@crook/domain/Transcript'
 import { OmittedLines, type TranscriptMessage } from '@crook/domain/TranscriptMessage'
-import type { HubCallDefected, WatchTranscriptRefused } from '@crook/web/rpc/HubConnection'
 import type { TranscriptResume } from '@crook/web/rpc/HubLink'
 
 export interface TranscriptLine {
@@ -27,11 +27,22 @@ export interface TranscriptLine {
   readonly message: TranscriptMessage
 }
 
-export type TranscriptWatchFailure = WatchTranscriptRefused | HubCallDefected
+export interface Lapse {
+  readonly from: DateTime.Utc
+  readonly to: DateTime.Utc
+}
 
 export type SessionRosters = HashMap.HashMap<ClaudeSessionId, readonly Subagent[]>
 
 export type SessionBackgrounds = HashMap.HashMap<ClaudeSessionId, BackgroundChanged>
+
+export type LaptopCatchUp = Data.TaggedEnum<{
+  None: Record<never, never>
+  Pending: { readonly lines: readonly TranscriptLine[] }
+  Landed: { readonly lapse: Option.Option<Lapse> }
+}>
+
+export const LaptopCatchUp = Data.taggedEnum<LaptopCatchUp>()
 
 export class TranscriptView extends Data.Class<{
   readonly position: Option.Option<TranscriptPosition>
@@ -39,12 +50,13 @@ export class TranscriptView extends Data.Class<{
   readonly rosters: SessionRosters
   readonly backgrounds: SessionBackgrounds
   readonly skills: readonly SkillListing[]
-  readonly catchingUp: boolean
-  readonly failure: Option.Option<TranscriptWatchFailure>
+  readonly whole: boolean
+  readonly catchUp: LaptopCatchUp
 }> {}
 
 export const NO_ROSTERS: SessionRosters = HashMap.empty()
 export const NO_BACKGROUNDS: SessionBackgrounds = HashMap.empty()
+export const NO_CATCH_UP = LaptopCatchUp.None()
 
 export const EMPTY_TRANSCRIPT = new TranscriptView({
   position: Option.none(),
@@ -52,40 +64,23 @@ export const EMPTY_TRANSCRIPT = new TranscriptView({
   rosters: NO_ROSTERS,
   backgrounds: NO_BACKGROUNDS,
   skills: [],
-  catchingUp: false,
-  failure: Option.none(),
+  whole: false,
+  catchUp: NO_CATCH_UP,
 })
 
 export const isOpened = (view: TranscriptView): boolean => Option.isSome(view.position)
 
-export const isShowable = (view: TranscriptView): boolean =>
-  (isOpened(view) && !view.catchingUp) || Option.isSome(view.failure)
+export const hasLines = (view: TranscriptView): boolean => Arr.isReadonlyArrayNonEmpty(view.lines)
 
-export const catchingUpFrom = (view: TranscriptView, awaitsCaughtUp: boolean): TranscriptView =>
-  new TranscriptView(Struct.evolve(view, { catchingUp: () => awaitsCaughtUp }))
-
-export const shownAfter = (
-  shown: Option.Option<TranscriptView>,
-  view: TranscriptView,
-): readonly [Option.Option<TranscriptView>, readonly TranscriptView[]] =>
-  pipe(
-    Option.liftPredicate(view, isShowable),
-    Option.orElse(() =>
-      pipe(
-        shown,
-        Option.filter((last) => !last.catchingUp),
-        Option.map((last) => catchingUpFrom(last, true)),
-      ),
-    ),
-    Option.match({
-      onNone: () => [shown, []],
-      onSome: (next) => [Option.some(next), [next]],
-    }),
-  )
-
-const opensAnotherSession = (view: TranscriptView, event: TranscriptEvent): boolean =>
+export const opensAnotherSession = (
+  position: Option.Option<TranscriptPosition>,
+  event: TranscriptEvent,
+): boolean =>
   Match.value(event).pipe(
-    Match.tag('TranscriptOpened', (opened) => !inSession(view.position, opened.session)),
+    Match.tag(
+      'TranscriptOpened',
+      (opened) => Option.isSome(position) && !inSession(position, opened.session),
+    ),
     Match.orElse(() => false),
   )
 
@@ -95,6 +90,8 @@ const withoutSession = (view: TranscriptView): TranscriptView =>
       lines: () => [],
       rosters: () => NO_ROSTERS,
       backgrounds: () => NO_BACKGROUNDS,
+      whole: () => false,
+      catchUp: () => NO_CATCH_UP,
     }),
   )
 
@@ -132,17 +129,11 @@ const skillsAfter = (view: TranscriptView, event: TranscriptEvent): readonly Ski
     Match.orElse(() => view.skills),
   )
 
-const catchingUpAfter = (view: TranscriptView, event: TranscriptEvent): boolean =>
-  Match.value(event).pipe(
-    Match.tag('TranscriptCaughtUp', () => false),
-    Match.orElse(() => view.catchingUp),
-  )
-
 export const applyTranscriptEvent = (
   view: TranscriptView,
   event: TranscriptEvent,
 ): TranscriptView => {
-  const current = opensAnotherSession(view, event) ? withoutSession(view) : view
+  const current = opensAnotherSession(view.position, event) ? withoutSession(view) : view
 
   return new TranscriptView({
     position: positionAfter(current.position, event),
@@ -150,14 +141,23 @@ export const applyTranscriptEvent = (
     rosters: rostersAfter(current, event),
     backgrounds: backgroundsAfter(current, event),
     skills: skillsAfter(current, event),
-    catchingUp: catchingUpAfter(current, event),
-    failure: Option.none(),
+    whole: current.whole,
+    catchUp: current.catchUp,
   })
 }
 
-export const failedWith = (view: TranscriptView, failure: TranscriptWatchFailure): TranscriptView =>
+export const withoutPendingCatchUp = (view: TranscriptView): TranscriptView =>
+  LaptopCatchUp.$is('Pending')(view.catchUp)
+    ? new TranscriptView(Struct.evolve(view, { catchUp: () => NO_CATCH_UP }))
+    : view
+
+export const readAgain = (view: TranscriptView, whole: boolean): TranscriptView =>
   new TranscriptView(
-    Struct.evolve(view, { catchingUp: () => false, failure: () => Option.some(failure) }),
+    Struct.evolve(EMPTY_TRANSCRIPT, {
+      skills: () => view.skills,
+      whole: () => whole,
+      catchUp: () => withoutPendingCatchUp(view).catchUp,
+    }),
   )
 
 const holeOf = ({ message }: TranscriptLine): Option.Option<OmittedLines> =>
@@ -201,13 +201,7 @@ export const withOneHole = (view: TranscriptView): TranscriptView =>
 export const resumeOf = (
   view: TranscriptView,
   tail: Option.Option<TranscriptTailBytes>,
-): TranscriptResume => ({ from: view.position, tail })
-
-export const isCatchingUp = (view: Option.Option<TranscriptView>): boolean =>
-  Option.exists(view, (found) => found.catchingUp)
-
-export const hasFailed = (view: Option.Option<TranscriptView>): boolean =>
-  Option.exists(view, (found) => Option.isSome(found.failure))
+): TranscriptResume => ({ from: view.position, tail: view.whole ? Option.none() : tail })
 
 export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
@@ -224,6 +218,3 @@ export const rostersOf = (view: Option.Option<TranscriptView>): SessionRosters =
 
 export const backgroundsOf = (view: Option.Option<TranscriptView>): SessionBackgrounds =>
   Option.match(view, { onNone: () => NO_BACKGROUNDS, onSome: (found) => found.backgrounds })
-
-export const skillsOf = (view: Option.Option<TranscriptView>): readonly SkillListing[] =>
-  Option.match(view, { onNone: () => [], onSome: (found) => found.skills })

@@ -496,13 +496,15 @@ HubSends ==   \* inbox.take: one message, and the next only after the phone's ac
                  mode, view, cached, ghost>>
 
 -----------------------------------------------------------------------------
-(* @crook/web/chat/TranscriptState + atoms/Transcript.ts: the phone *)
+(* @crook/web/chat/TranscriptState + TranscriptMachine + atoms/Transcript.ts: the phone. A view is *)
+(* its fold; catching is every machine state that holds a fold back, failed is Failed and Retrying *)
 
-EMPTY_TRANSCRIPT == [position |-> NONE, lines |-> <<>>, catching |-> FALSE, failed |-> FALSE]
+EMPTY_TRANSCRIPT == [position |-> NONE, lines |-> <<>>, catching |-> FALSE, failed |-> FALSE,
+                     whole |-> FALSE, shownAt |-> NONE]
 
 isOpened(v) == v.position /= NONE
 
-isShowable(v) == (isOpened(v) /\ ~v.catching) \/ v.failed
+remembered(v) == isOpened(v) /\ ~v.catching
 
 isOmitted(l) == l[1] = "omitted"
 
@@ -533,33 +535,37 @@ linesAfter(v, u) ==
 applyTranscriptEvent(v, u) ==
   [position |-> positionAfter(v.position, u),
    lines    |-> linesAfter(v, u),
-   catching |-> IF u.t = "caughtUp" THEN FALSE ELSE v.catching,
-   failed   |-> FALSE]
+   catching |-> CASE u.t = "caughtUp" -> FALSE
+                  [] u.t = "opened" /\ v.position /= NONE /\ ~inSession(v.position, u.s) -> TRUE
+                  [] OTHER -> v.catching,
+   failed   |-> FALSE,
+   whole    |-> v.whole,
+   shownAt  |-> v.shownAt]
 
-PhoneApplies ==   \* Transcript.apply, one event at a time, so a drop can land between two
-  /\ wire /= <<>>
-  /\ mode = "watching"
-  /\ Head(wire).t /= "failed"
-  /\ LET u == Head(wire)
-         next == applyTranscriptEvent(view, u)
-     IN /\ view' = next
-        /\ wire' = Tail(wire)
-        /\ cached' = IF isShowable(next) THEN next ELSE cached
-        /\ ghost' = [ghost EXCEPT
-             !.phoneEpoch = IF u.t = "opened" /\ u.e > @ THEN u.e ELSE @,
-             !.rewound = @ \/ (u.t = "opened" /\ u.e < ghost.phoneEpoch),
-             !.repeatedOpen = @ \/ (u.t = "opened" /\ inSession(view.position, u.s))]
-  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
-                 inbox, mode>>
+\* The machine's leftSession: while the fold has no position yet, the rows on screen name the session,
+\* so a read asked for in one session and opening in another counts as having left it.
+knownPosition(v) == IF v.position /= NONE THEN v.position ELSE v.shownAt
+
+leavesWholeRead(v, u) ==
+  /\ v.whole
+  /\ u.t = "opened"
+  /\ knownPosition(v) /= NONE
+  /\ ~inSession(knownPosition(v), u.s)
+
+seenBy(g, u) ==
+  [g EXCEPT
+     !.phoneEpoch = IF u.t = "opened" /\ u.e > @ THEN u.e ELSE @,
+     !.rewound = @ \/ (u.t = "opened" /\ u.e < g.phoneEpoch),
+     !.repeatedOpen = @ \/ (u.t = "opened" /\ inSession(view.position, u.s))]
 
 \* whileConnected + watchOnce: resume reads the view's position and marks it catching up; the
 \* hub's watch makes a new watcher with its own inbox and delivered = from; reconcile stops the
-\* fiber of the watch that went away.
-Resume(v, nextMode, whole) ==
+\* fiber of the watch that went away. resumeOf asks for the tail unless the view is being read whole.
+Resume(v, nextMode) ==
   /\ view' = [v EXCEPT !.catching = TRUE]
   /\ watcher' = [alive |-> TRUE,
                  delivered |-> IF Broken = "relay-forgets-resume" THEN NONE ELSE v.position,
-                 tail |-> ~whole]
+                 tail |-> ~v.whole]
   /\ inbox' = EMPTY_BATCH
   /\ wire' = <<>>
   /\ call' = NONE
@@ -570,6 +576,25 @@ Resume(v, nextMode, whole) ==
   /\ fiber' = FIBER_OFF
   /\ mode' = nextMode
 
+PhoneApplies ==   \* Transcript.apply, one event at a time, so a drop can land between two
+  /\ wire /= <<>>
+  /\ mode = "watching"
+  /\ Head(wire).t /= "failed"
+  /\ LET u == Head(wire)
+         next == applyTranscriptEvent(view, u)
+     IN IF leavesWholeRead(view, u) /\ Broken /= "whole-survives-session"
+        THEN \* leftSession: ReadAgain, and what the old watch still delivers is dropped until the
+             \* new one has been asked, so nothing lands between the two steps here.
+             /\ Resume(EMPTY_TRANSCRIPT, "watching")
+             /\ ghost' = [seenBy(ghost, u) EXCEPT !.watchFrom = NONE]
+             /\ UNCHANGED <<pane, file, budget, agentUp, cached>>
+        ELSE /\ view' = next
+             /\ wire' = Tail(wire)
+             /\ cached' = IF remembered(next) THEN next ELSE cached
+             /\ ghost' = seenBy(ghost, u)
+             /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, call, stale, permit,
+                            watcher, moving, inbox, mode>>
+
 PhoneSeesFailure ==   \* Transcript.settle
   /\ wire /= <<>>
   /\ mode = "watching"
@@ -577,7 +602,7 @@ PhoneSeesFailure ==   \* Transcript.settle
   /\ IF Head(wire).kind = "rejected" /\ isOpened(view)
      THEN /\ Resume(IF Broken = "reset-keeps-lines"
                     THEN [EMPTY_TRANSCRIPT EXCEPT !.lines = view.lines]
-                    ELSE EMPTY_TRANSCRIPT, "watching", ghost.whole)
+                    ELSE EMPTY_TRANSCRIPT, "watching")
           /\ ghost' = [ghost EXCEPT !.watchFrom = NONE]
           /\ UNCHANGED <<pane, file, budget, agentUp, cached>>
      ELSE /\ view' = [view EXCEPT !.catching = FALSE, !.failed = TRUE]
@@ -588,7 +613,7 @@ PhoneSeesFailure ==   \* Transcript.settle
 
 PhoneReconnects ==   \* whileConnected: connected turned Some again
   /\ mode = "offline"
-  /\ Resume(view, "watching", ghost.whole)
+  /\ Resume(view, "watching")
   /\ ghost' = [ghost EXCEPT !.watchFrom = view.position]
   /\ UNCHANGED <<pane, file, budget, agentUp, cached>>
 
@@ -661,28 +686,32 @@ PhoneConnectionDrops ==   \* the hub's watch ends with the socket; the watcher l
   /\ moving' = NONE
   /\ UNCHANGED <<pane, file, agentUp, view, cached, ghost>>
 
-ChatReopens ==   \* transcriptViews runs again: the cache's view, or nothing if the watch is whole
+ChatReopens ==   \* transcriptViews runs again from the cache's view, whole if that view was read whole
   /\ budget.reopens > 0
   /\ mode /= "offline"
   /\ budget' = [budget EXCEPT !.reopens = @ - 1]
-  /\ LET opening == IF ghost.whole \/ cached = NONE THEN EMPTY_TRANSCRIPT ELSE withOneHole(cached)
-     IN /\ Resume(opening, "watching", ghost.whole)
+  /\ LET opening == IF cached = NONE THEN EMPTY_TRANSCRIPT ELSE withOneHole(cached)
+     IN /\ Resume(opening, "watching")
         /\ ghost' = [ghost EXCEPT !.watchFrom = opening.position]
   /\ UNCHANGED <<pane, file, agentUp, cached>>
 
-\* transcriptWholeAtom turns true, so transcriptViews runs again from nothing, with no tail.
+\* EarlierAsked: LoadingEarlier and ReadAgain, so the watch starts over from nothing, with no tail.
+\* Only from a view on screen: a press while a fold is held back asks the same of the pipe, and the
+\* machine's walk holds which of those states take it.
 UserShowsEarlier ==
   /\ budget.earlier > 0
   /\ mode /= "offline"
+  /\ ~view.catching
+  /\ ~view.failed
   /\ \E k \in DOMAIN view.lines : isOmitted(view.lines[k])
   /\ budget' = [budget EXCEPT !.earlier = @ - 1]
-  /\ Resume(EMPTY_TRANSCRIPT, "watching", TRUE)
-  /\ ghost' = [ghost EXCEPT !.watchFrom = NONE, !.whole = TRUE]
+  /\ Resume([EMPTY_TRANSCRIPT EXCEPT !.whole = TRUE, !.shownAt = view.position], "watching")
+  /\ ghost' = [ghost EXCEPT !.watchFrom = NONE]
   /\ UNCHANGED <<pane, file, agentUp, cached>>
 
 UserPressesTryAgain ==   \* transcriptRetryAtom, or watchable turning true
   /\ mode = "failed"
-  /\ Resume(view, "watching", ghost.whole)
+  /\ Resume(view, "watching")
   /\ ghost' = [ghost EXCEPT !.watchFrom = view.position]
   /\ UNCHANGED <<pane, file, budget, agentUp, cached>>
 
@@ -757,8 +786,7 @@ Init ==
   /\ mode = "watching"
   /\ view = [EMPTY_TRANSCRIPT EXCEPT !.catching = TRUE]
   /\ cached = NONE
-  /\ ghost = [phoneEpoch |-> 0, rewound |-> FALSE, repeatedOpen |-> FALSE, watchFrom |-> NONE,
-              whole |-> FALSE]
+  /\ ghost = [phoneEpoch |-> 0, rewound |-> FALSE, repeatedOpen |-> FALSE, watchFrom |-> NONE]
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(Internal)
 
@@ -811,7 +839,11 @@ NeverBehindFile ==
    /\ view.position.off < file[PaneSession]) => ~Quiescent
 
 \* Show earlier leaves nothing out: a whole watch never skips.
-WholeShowsAll == ghost.whole => \A k \in DOMAIN view.lines : ~isOmitted(view.lines[k])
+WholeShowsAll == view.whole => \A k \in DOMAIN view.lines : ~isOmitted(view.lines[k])
+
+\* Reading one session whole says nothing about the next: it starts from its tail.
+WholeStaysInItsSession ==
+  (view.whole /\ view.position /= NONE) => inSession(view.shownAt, view.position.s)
 
 \* Gaps can repeat for ever, and what a view keeps of them stays bounded.
 AtMostTwoHoles == Cardinality(holesIn(view.lines)) <= 2
@@ -829,6 +861,7 @@ NoCaughtUpDropped == [][~\E who \in Who : HubDropsCaughtUp(who)]_vars
 NoCallOnGoneWatch == [][~\E who \in Who : HubDropsCallOfGoneWatch(who)]_vars
 NoHoleLanded == [][holesIn(view'.lines) = {}]_vars
 NoEarlierShown == [][~UserShowsEarlier]_vars
+NoWholeLeft == [][~(PhoneApplies /\ leavesWholeRead(view, Head(wire)))]_vars
 NoHoleFolded == [][~(ChatReopens /\ cached /= NONE /\ Cardinality(holesIn(cached.lines)) >= 2)]_vars
 
 \* Not a rule. Simulation "breaks" it at a depth to print one long random behaviour, with its

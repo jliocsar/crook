@@ -20,6 +20,14 @@ beforeAll(() => {
   vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(SCROLL_HEIGHT)
 })
 
+describe('story paths', () => {
+  it('spells a pane id as the router does, or a close from the chat never goes back', () => {
+    expect(CATALOG_STORIES.filter((story) => story.path.includes(':')).map(({ id }) => id)).toEqual(
+      [],
+    )
+  })
+})
+
 describe.each(CATALOG_STORIES.map((story) => [story.id, story] as const))('%s', (_id, story) => {
   it.live(
     'reaches its state and plays its timeline',

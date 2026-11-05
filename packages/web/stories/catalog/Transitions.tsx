@@ -14,13 +14,14 @@ import { Prompt } from '@crook/domain/Command'
 import { TranscriptOffset } from '@crook/domain/Ids'
 import { omittedBetween, omittedUpTo } from '@crook/domain/Transcript'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
+import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { LocalCommandBlock } from '@crook/domain/TranscriptMessage'
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
 
 import { liveWith } from '../../test/AppWiring.tsx'
-import { START } from '../../test/HerdFixtures.ts'
+import { herd, LAPTOP, machine, START } from '../../test/HerdFixtures.ts'
 import { dropSession, inputDelivered } from '../../test/HubFakes.ts'
 import {
   answered,
@@ -39,6 +40,7 @@ import { chatHerd, chatStory, delivered, SEND_READY } from '../ChatFixtures.ts'
 import {
   AGENTS_PATH,
   CHAT_PATH,
+  CHAT_SOURCE,
   CHAT_TITLE,
   chatAgent,
   CONVERSATION,
@@ -47,7 +49,7 @@ import {
   TEAM,
 } from '../Fixtures.ts'
 import { manyLinesChunk } from '../ManyLines.ts'
-import { clicks, element, pause, seesText, types } from '../StageDom.ts'
+import { clicks, element, pause, seesSelector, seesText, types, until } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 import { BEFORE_FIRST_VALUE, browserStory, linkStory, step } from '../Story.tsx'
 import type { BrowserStage, LinkStage, StoryMaker, StoryStepFailed } from '../Story.tsx'
@@ -59,7 +61,11 @@ const BACK = 'Back to Agents'
 const QUESTION = 'Now check the toast too'
 const HELD_PROMPT = 'Sent while crook was dialing'
 const LIVE_HERD = '[data-slot="herd-list"] [data-state="clear"]'
+const RETRY = 'Try again'
 const SHOW_EARLIER = 'Show earlier messages'
+const OLDER_AGENT_VERSION = '0.0.0'
+const CURRENT_THREAD = '[data-machine="transcript"][data-state="Current"]'
+const HOLDING_THREAD = '[data-machine="transcript"][data-state="Holding"]'
 const GAP_END = 4096
 const LONG_GAP_END = 5000
 const LONG_ABOVE_LINES = 6
@@ -175,14 +181,65 @@ const IDLE_HERD = liveWith(
   ),
 )
 
+const OLDER_AGENT_HERD = liveWith(
+  herd([
+    machine(LAPTOP, [chatAgent()], { agentVersion: OLDER_AGENT_VERSION, herdrVersion: '0.9.5' }),
+  ]),
+)
+
+const READ_FAILED = new TranscriptReadFailed({ detail: 'disk unplugged' })
+const RESUME_REJECTED = new TranscriptResumeRejected({ detail: 'the file shrank' })
+
+const OMITTED_TAIL = [
+  opened(),
+  omittedUpTo(SESSION, TranscriptOffset.make(4096)),
+  chunk(4096, 4106, [said(4096, 'The tail of a long session.')]),
+  caughtUp(4106),
+]
+const WHOLE_FILE = [
+  chunk(0, 4106, [prompt(0, 'How it began.'), said(4096, 'The tail of a long session.')]),
+  caughtUp(4106),
+]
+
 const LOST = new HubConnectionLost({ detail: 'connection refused' })
 const CACHED = Option.some(new HerdSnapshot({ view: TEAM, syncedAt: START }))
 
 const takeSession = ({ browser, session }: BrowserStage) =>
   Effect.flatMap(Queue.take(browser.sessions), (next) => Ref.set(session, Option.some(next)))
 
+const reopens = () => Effect.andThen(clicks(CARD_BUTTON), seesSelector(HOLDING_THREAD))
+
+const watchesFor = ({ link }: LinkStage, nthTime: number) =>
+  until(
+    `the transcript watched ${nthTime} times`,
+    () => Ref.getUnsafe(link.resumes).length >= nthTime,
+  )
+
 const currentSession = ({ session }: BrowserStage) =>
   Effect.orDie(Effect.flatMap(Ref.get(session), Effect.fromOption))
+
+const reopenedChat = (slug: string, title: string, landsAfterMs: number) =>
+  linkStory({
+    slug,
+    title,
+    shows: { text: CHAT_TITLE },
+    ends: { all: [{ text: 'Written while the chat was closed.' }, { selector: CURRENT_THREAD }] },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, CONVERSATION),
+    settle: () =>
+      Effect.gen(function* () {
+        yield* seesText('The quiet redial')
+        yield* clicks(BACK)
+        yield* seesText(CHAT_TITLE)
+      }),
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', reopens),
+      step<LinkStage>(landsAfterMs, 'What was missed lands', ({ link }) =>
+        feed(link, [chunk(50, 60, [said(50, 'Written while the chat was closed.')]), caughtUp(60)]),
+      ),
+    ],
+  })
 
 export const TRANSITION_STORIES: readonly StoryMaker[] = [
   linkStory({
@@ -222,9 +279,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
         yield* seesText(CHAT_TITLE)
       }),
     timeline: [
-      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
-        clicks(CARD_BUTTON),
-      ),
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', reopens),
       step<LinkStage>(900, 'What was missed lands', ({ link }) =>
         feed(link, [
           chunk(50, 90, [
@@ -446,6 +501,162 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
           const transcript = yield* Queue.take(session.transcripts)
 
           yield* Queue.offer(transcript, caughtUp(50))
+        }),
+      ),
+    ],
+  }),
+  reopenedChat('slow-catch-up', 'A catch-up slow enough to say so, the words then the rows', 1800),
+  reopenedChat(
+    'catch-up-lands-under-words',
+    'A catch-up that lands just after the words show, they hold for as long as they must',
+    1100,
+  ),
+  chatStory({
+    slug: 'opened-empty',
+    title: 'A session with nothing in it, from the skeleton to No messages yet',
+    shows: { selector: '[data-slot="thread-skeleton"]' },
+    ends: { text: 'No messages yet' },
+    timeline: [
+      step<LinkStage>(700, 'The agent has read the session and found nothing', ({ link }) =>
+        feed(link, [opened(), caughtUp(0)]),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'failed-then-retry',
+    title: 'A watch fails, Try again, and it delivers',
+    shows: { text: 'The quiet redial' },
+    ends: { all: [{ selector: CURRENT_THREAD }, { absent: RETRY }] },
+    events: CONVERSATION,
+    timeline: [
+      step<LinkStage>(500, 'The watch fails, the rows stay', ({ link }) =>
+        link.endTranscript(CHAT_SOURCE, READ_FAILED),
+      ),
+      step<LinkStage>(900, 'Tap Try again', () => clicks(RETRY)),
+      step<LinkStage>(800, 'The watch delivers', ({ link }) =>
+        feed(link, [opened(), caughtUp(50)]),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'show-earlier-loads',
+    title: 'Show earlier, the button says it loads, then the whole session lands',
+    shows: { text: SHOW_EARLIER },
+    ends: { all: [{ text: 'How it began.' }, { absent: 'Loading earlier messages' }] },
+    events: OMITTED_TAIL,
+    timeline: [
+      step<LinkStage>(500, 'Tap Show earlier', () => clicks(SHOW_EARLIER)),
+      step<LinkStage>(900, 'The agent has read the whole file', (stage) =>
+        Effect.andThen(watchesFor(stage, 2), feed(stage.link, [opened(), ...WHOLE_FILE])),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'resume-after-show-earlier',
+    title: '/resume after Show earlier, the next session is read from its tail',
+    note: 'The session that was read whole stays whole on a reconnect, and the next one offers Show earlier again.',
+    shows: { text: SHOW_EARLIER },
+    ends: { all: [{ text: 'Where we left off.' }, { text: SHOW_EARLIER }] },
+    events: OMITTED_TAIL,
+    settle: () =>
+      Effect.gen(function* () {
+        yield* seesText(SHOW_EARLIER)
+        yield* clicks(SHOW_EARLIER)
+      }),
+    timeline: [
+      step<LinkStage>(600, 'The whole file lands', (stage) =>
+        Effect.andThen(watchesFor(stage, 2), feed(stage.link, [opened(), ...WHOLE_FILE])),
+      ),
+      step<LinkStage>(800, 'The pane resumes another session', ({ link }) =>
+        feed(link, [opened(NEXT_SESSION)]),
+      ),
+      step<LinkStage>(700, 'The new watch reads its tail', (stage) =>
+        Effect.andThen(
+          watchesFor(stage, 3),
+          feed(stage.link, [
+            opened(NEXT_SESSION),
+            omittedUpTo(NEXT_SESSION, TranscriptOffset.make(4096)),
+            chunk(4096, 4106, [said(4096, 'Where we left off.')], NEXT_SESSION),
+            caughtUp(4106, NEXT_SESSION),
+          ]),
+        ),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'older-agent-open',
+    title: 'An agent too old for marks, the skeleton holds past its open',
+    shows: { selector: '[data-slot="thread-skeleton"]' },
+    ends: { text: 'The first chunk.' },
+    link: OLDER_AGENT_HERD,
+    timeline: [
+      step<LinkStage>(500, 'The agent opens the session', ({ link }) => feed(link, [opened()])),
+      step<LinkStage>(500, 'Its first chunk lands', ({ link }) =>
+        feed(link, [chunk(0, 10, [said(0, 'The first chunk.')])]),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'older-agent-rejected-resume',
+    title: 'A rejected resume on an agent too old for marks, the rows stay',
+    shows: { text: 'Before the file shrank.' },
+    ends: { all: [{ text: 'Read again.' }, { absent: 'Before the file shrank.' }] },
+    link: OLDER_AGENT_HERD,
+    events: [opened(), chunk(0, 10, [said(0, 'Before the file shrank.')])],
+    timeline: [
+      step<LinkStage>(500, 'The hub refuses the resume', ({ link }) =>
+        link.endTranscript(CHAT_SOURCE, RESUME_REJECTED),
+      ),
+      step<LinkStage>(300, 'The agent opens the file again', ({ link }) => feed(link, [opened()])),
+      step<LinkStage>(500, 'Its first chunk lands', ({ link }) =>
+        feed(link, [chunk(0, 5, [said(0, 'Read again.')])]),
+      ),
+    ],
+  }),
+  browserStory({
+    slug: 'reopen-while-dialing',
+    title: 'A chat reopened while the link dials, its cache and no word yet',
+    shows: { text: 'The quiet redial' },
+    ends: { all: [{ text: 'Written while the socket was down.' }, { selector: CURRENT_THREAD }] },
+    path: CHAT_PATH,
+    cached: Option.none(),
+    settle: (stage) =>
+      Effect.gen(function* () {
+        yield* takeSession(stage)
+        const session = yield* currentSession(stage)
+
+        yield* Queue.offer(session.views, chatHerd())
+
+        const transcript = yield* Queue.take(session.transcripts)
+
+        yield* Queue.offerAll(transcript, CONVERSATION)
+        yield* seesText('The quiet redial')
+        yield* clicks(BACK)
+        yield* seesText(CHAT_TITLE)
+      }),
+    timeline: [
+      step<BrowserStage>(300, 'The phone puts crook away', ({ browser }) =>
+        SubscriptionRef.set(browser.visible, false),
+      ),
+      step<BrowserStage>(300, 'crook comes back', ({ browser }) =>
+        SubscriptionRef.set(browser.visible, true),
+      ),
+      step<BrowserStage>(0, 'The link dials', takeSession),
+      step<BrowserStage>(100, 'Tap the card, the cache shows and nothing is read yet', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<BrowserStage>(400, 'The hub answers', (stage) =>
+        Effect.flatMap(currentSession(stage), (session) => Queue.offer(session.views, chatHerd())),
+      ),
+      step<BrowserStage>(300, 'The transcript resumes', (stage) =>
+        Effect.gen(function* () {
+          const session = yield* currentSession(stage)
+          const transcript = yield* Queue.take(session.transcripts)
+
+          yield* Queue.offerAll(transcript, [
+            chunk(50, 60, [said(50, 'Written while the socket was down.')]),
+            caughtUp(60),
+          ])
         }),
       ),
     ],

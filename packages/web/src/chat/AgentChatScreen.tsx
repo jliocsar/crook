@@ -3,7 +3,6 @@ import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
 import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
-import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import { Ellipsis } from 'lucide-react'
 import * as React from 'react'
 
@@ -44,7 +43,7 @@ import {
 } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 import { summaryRows, useEpisodeSummary } from '@crook/web/chat/BackgroundSummary'
-import { failureRows, TranscriptEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
+import { failureRows, ThreadEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { Composer } from '@crook/web/chat/Composer'
 import { isPresent, presenceMachine, PresenceState } from '@crook/web/chat/PresenceMachine'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
@@ -56,13 +55,14 @@ import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import {
   hasFailed,
-  isCatchingUp,
-  linesOf,
-  rostersOf,
-  sessionOf,
+  isLoadingEarlier,
+  saysCatchingUp,
+  shownOf,
   skillsOf,
-} from '@crook/web/chat/TranscriptState'
-import type { TranscriptView } from '@crook/web/chat/TranscriptState'
+  threadSessionOf,
+  transcriptMachine,
+} from '@crook/web/chat/TranscriptMachine'
+import { linesOf, rostersOf } from '@crook/web/chat/TranscriptState'
 import {
   holdingSince,
   lastTurnEvidence,
@@ -73,7 +73,6 @@ import {
 import type { WorkingSignals } from '@crook/web/chat/WorkingHold'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
-import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { Message } from '@crook/web/components/ui/message'
 import { stateMark } from '@crook/web/machine/Machine'
 import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
@@ -95,35 +94,12 @@ interface DockProps {
 }
 
 const BACK_TO_AGENTS = 'Back to Agents'
-const NOT_CLAUDE = 'Not a Claude pane'
-const AWAY_NOTHING_CACHED = 'No messages on this phone yet'
 
 const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly ThreadRow[] =>
   pending.map((prompt) => ({
     key: prompt.key,
     content: <Message meta={prompt.queued ? 'Queued' : 'Sent'}>{prompt.text}</Message>,
   }))
-
-const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>) => {
-  if (PresenceState.guards.NotClaude(model.presence)) {
-    return <EmptyState title={NOT_CLAUDE} />
-  }
-
-  if (PresenceState.guards.Away(model.presence)) {
-    return (
-      <EmptyState
-        title={AWAY_NOTHING_CACHED}
-        description={`They show once ${machineLabelOf(model)} is back.`}
-      />
-    )
-  }
-
-  if (!isWatching(model)) {
-    return null
-  }
-
-  return <TranscriptEmpty view={view} />
-}
 
 const hasActions = (model: ChatScreenModel): boolean =>
   Option.isSome(model.row) &&
@@ -254,21 +230,20 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     [machine, pane],
   )
   const transcript = useTranscriptThread(transcriptKey)
-  const latest = AsyncResult.value(transcript.result)
-  const view = AsyncResult.value(React.useDeferredValue(transcript.result))
-  const catchingUp = isWatching(model) && isCatchingUp(latest)
-  const landing = isWatching(model) && isCatchingUp(view)
+  const state = React.useDeferredValue(transcript.state)
+  const view = React.useMemo(() => shownOf(state), [state])
+  const catchingUp = isWatching(model) && saysCatchingUp(state)
   const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
   const [draft, setDraft] = React.useState('')
   const cwd = cwdOf(model)
   const rosters = rostersOf(view)
   const lines = linesOf(view)
-  const session = sessionOf(view)
+  const session = threadSessionOf(state)
   const threadEpoch = useThreadEpoch(session)
   const evidence = React.useMemo(() => lastTurnEvidence(lines), [lines])
   const workingSince = useWorkingHold({
-    herdr: herdrTurnOf(model, hasFailed(view)),
+    herdr: herdrTurnOf(model, hasFailed(state)),
     evidence,
   })
   const activity = Option.isSome(workingSince) ? 'working' : activityOf(model)
@@ -326,15 +301,16 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const backgroundWork = useBackgroundWork(view, items, openSubagentJob)
   const backgroundContext = React.useMemo(() => Option.some(backgroundWork), [backgroundWork])
   const episodeSummary = useEpisodeSummary(backgroundWork, lines)
+  const earlierPending = isLoadingEarlier(state)
   const environment = React.useMemo<ThreadEnvironment>(
     () => ({
       cwd,
       paneClosed,
       onShowEarlier: transcript.onShowEarlier,
-      earlierPending: transcript.whole && (catchingUp || landing),
+      earlierPending,
       onOpenRun: Option.some(openRun),
     }),
-    [cwd, paneClosed, transcript.onShowEarlier, transcript.whole, catchingUp, landing, openRun],
+    [cwd, paneClosed, transcript.onShowEarlier, earlierPending, openRun],
   )
   const shownItems = React.useMemo(
     () =>
@@ -360,9 +336,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
               : []),
             ...pendingPromptRows(commands.pendingPrompts),
             ...(workingAt === undefined ? [] : [workingRow((now) => shortElapsed(now, workingAt))]),
-            ...(watching
-              ? failureRows(AsyncResult.value(transcript.result), transcript.onRetry)
-              : []),
+            ...(watching ? failureRows(state, transcript.onRetry) : []),
           ],
     [
       notClaude,
@@ -372,7 +346,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       commands.pendingPrompts,
       workingAt,
       watching,
-      transcript.result,
+      state,
       transcript.onRetry,
     ],
   )
@@ -414,13 +388,13 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         }
       />
       <BackgroundContext.Provider value={backgroundContext}>
-        <div className="min-h-0 flex-1">
+        <div {...stateMark(transcriptMachine, state)} className="min-h-0 flex-1">
           <Thread
             key={threadEpoch}
             handle={thread}
             rows={rows}
             dimmed={dimmed}
-            empty={emptyThread(model, view)}
+            empty={<ThreadEmpty model={model} state={state} started={transcript.started} />}
           />
         </div>
       </BackgroundContext.Provider>
@@ -429,7 +403,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         model={model}
         closedHere={closedHere}
         composer={commands.composer}
-        skills={skillsOf(view)}
+        skills={skillsOf(state)}
         ask={commands.ask}
         restart={commands.restart}
         draft={draft}

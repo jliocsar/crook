@@ -35,7 +35,7 @@ const laptopWith = (agents: readonly AgentRow[]) => machine(LAPTOP, agents)
 
 const EVERYONE = liveWith(herd([laptopWith([porting, wiring, banner])]))
 const REST = liveWith(herd([laptopWith([wiring, banner])]))
-const PORTING_CHAT = '/m/laptop/p/w1:p1'
+const PORTING_CHAT = '/m/laptop/p/w1%3Ap1'
 
 const openSheet = ({ registry }: LinkStage, pane: AgentRow['pane'] = porting.pane) =>
   Effect.gen(function* () {
@@ -169,7 +169,7 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
     slug: 'toast-after-chat-close',
     title: 'Toast, a close from the chat lands on the herd',
     shows: { selector: '[data-slot="sheet"]' },
-    ends: { text: 'Pane closed' },
+    ends: { all: [{ text: 'Pane closed' }, { selector: '[data-slot="herd-list"]' }] },
     path: PORTING_CHAT,
     link: EVERYONE,
     arrange: ({ link }) => Ref.set(link.commandAnswer, closedPane),

@@ -3,7 +3,6 @@ import * as Arr from 'effect/Array'
 import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
-import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
 import type { ClaudeSessionId, MachineId, PaneId, SubagentId } from '@crook/domain/Ids'
@@ -11,12 +10,13 @@ import {
   PaneTranscriptKey,
   SubagentTranscriptKey,
   transcriptAtom,
+  transcriptStateOf,
 } from '@crook/web/atoms/Transcript'
 import { hasToolRunning, isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import { CatchingUpPill } from '@crook/web/chat/ChatHeader'
 import { activityOf, cwdOf, isWatching, titleOf } from '@crook/web/chat/ChatModel'
-import { failureRows, TranscriptEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
+import { failureRows, ThreadEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { ImageViewer } from '@crook/web/chat/Images'
 import { useChatItems, useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
 import { PresenceState } from '@crook/web/chat/PresenceMachine'
@@ -24,7 +24,14 @@ import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import { runStatusShown, runTicks } from '@crook/web/chat/ToolView'
-import { isCatchingUp, linesOf, NO_ROSTERS, rostersOf } from '@crook/web/chat/TranscriptState'
+import {
+  isLoadingEarlier,
+  saysCatchingUp,
+  shownOf,
+  transcriptMachine,
+} from '@crook/web/chat/TranscriptMachine'
+import { linesOf, NO_ROSTERS, rostersOf } from '@crook/web/chat/TranscriptState'
+import { stateMark } from '@crook/web/machine/Machine'
 import { Response } from '@crook/web/components/ui/response'
 import { RunDot } from '@crook/web/components/ui/subagent-tree'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
@@ -89,10 +96,11 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
     () => new SubagentTranscriptKey({ machine, session, subagent }),
     [machine, session, subagent],
   )
-  const parent = AsyncResult.value(useAtomValue(transcriptAtom(parentKey)))
+  const parent = shownOf(transcriptStateOf(useAtomValue(transcriptAtom(parentKey))))
   const transcript = useTranscriptThread(key)
-  const view = AsyncResult.value(transcript.result)
-  const catchingUp = isWatching(model) && isCatchingUp(view)
+  const { state } = transcript
+  const view = React.useMemo(() => shownOf(state), [state])
+  const catchingUp = isWatching(model) && saysCatchingUp(state)
   const cwd = cwdOf(model)
   const paneClosed = PresenceState.guards.Closed(model.presence)
   const parentLines = linesOf(parent)
@@ -123,15 +131,16 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   )
   const parentTitle = titleOf(model, pane)
 
+  const earlierPending = isLoadingEarlier(state)
   const environment = React.useMemo<ThreadEnvironment>(
     () => ({
       cwd,
       paneClosed,
       onShowEarlier: transcript.onShowEarlier,
-      earlierPending: transcript.whole && catchingUp,
+      earlierPending,
       onOpenRun: Option.none(),
     }),
-    [cwd, paneClosed, transcript.onShowEarlier, transcript.whole, catchingUp],
+    [cwd, paneClosed, transcript.onShowEarlier, earlierPending],
   )
 
   const conversationRows = useItemRows(shownItems, environment)
@@ -146,7 +155,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
           ),
         )
       : []),
-    ...failureRows(view, transcript.onRetry),
+    ...failureRows(state, transcript.onRetry),
   ]
 
   return (
@@ -169,8 +178,12 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
           backLabel={`Back to ${parentTitle}`}
           trailing={<CatchingUpPill shown={catchingUp && !dimmed} />}
         />
-        <div className="min-h-0 flex-1">
-          <Thread rows={rows} dimmed={dimmed} empty={<TranscriptEmpty view={view} />} />
+        <div {...stateMark(transcriptMachine, state)} className="min-h-0 flex-1">
+          <Thread
+            rows={rows}
+            dimmed={dimmed}
+            empty={<ThreadEmpty model={model} state={state} started={transcript.started} />}
+          />
         </div>
         <div
           data-slot="chat-dock"

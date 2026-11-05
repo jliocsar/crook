@@ -55,6 +55,7 @@ const HOLDS_ON_MAIN = [
   'NeverBehindFile',
   'WholeShowsAll',
   'AtMostTwoHoles',
+  'WholeStaysInItsSession',
 ]
 
 const finding = (
@@ -85,6 +86,7 @@ const RETURN: Constants = { SessionPath: 'PathReturn' }
 const DROPS: Constants = { AgentDrops: 1 }
 const BACKLOG: Constants = { SessionPath: 'PathOne', FirstFileLines: 3, TailLines: 3, Writes: 0 }
 const BIG_GAP: Constants = { SessionPath: 'PathOne', Writes: 3, SwitchQueueSize: 1 }
+const SESSION_CHANGE_WHILE_WHOLE: Constants = { SessionPath: 'PathStraight', FirstFileLines: 2, Writes: 1, ShowEarliers: 1 }
 const REPEATED_GAPS: Constants = { ...BIG_GAP, MailboxCapacity: 1, Writes: 6, Reopens: 3 }
 
 const HOLDING: readonly Check[] = [
@@ -126,6 +128,7 @@ const HOLDING: readonly Check[] = [
     Reopens: 1,
     ShowEarliers: 1,
   }),
+  holds('holds/session-change-while-whole', 'the pane moves on during or after a Show earlier, and the next session starts from its tail', SESSION_CHANGE_WHILE_WHOLE),
   holds('holds/repeated-gaps', 'the chat keeps reopening over big gaps, and what it holds stays bounded', REPEATED_GAPS),
   holds('holds/return-over-big-gap', 'the pane goes A, B, A and the chat reopens on a gap too big for one read', {
     ...RETURN,
@@ -191,6 +194,7 @@ const REACHED: readonly Check[] = [
     SwitchQueueSize: 1,
     MailboxCapacity: 1,
   }),
+  reach('reach/whole-left', 'a session read whole changes, and the watch restarts from the tail', 'NoWholeLeft', SESSION_CHANGE_WHILE_WHOLE),
   reach('reach/hole-folded', 'a view that holds two holes is opened from the cache with one', 'NoHoleFolded', REPEATED_GAPS),
   reach('reach/call-on-gone-watch', 'a call lands after its watch has failed and left the map', 'NoCallOnGoneWatch', { ...STALE_SOCKET, WatchFailures: 1 }),
 ]
@@ -212,6 +216,7 @@ const CAN_FAIL: readonly Check[] = [
   },
   mutant('skip-from-start', 'AlwaysSettles', { ...BIG_GAP, Reopens: 1 }, 'a skip over a gap says it starts at byte 0, not at the position'),
   mutant('whole-takes-tail', 'WholeShowsAll', { ...BIG_GAP, FirstFileLines: 2, Writes: 0, ShowEarliers: 1 }, 'a whole watch skips as if it had a tail'),
+  mutant('whole-survives-session', 'WholeStaysInItsSession', SESSION_CHANGE_WHILE_WHOLE, 'a session read whole makes the next one whole too'),
   mutant('no-fold', 'AtMostTwoHoles', REPEATED_GAPS, 'the cache hands back every hole it holds'),
   mutant('fold-not-marked', 'NoHole', REPEATED_GAPS, 'the rows a fold drops leave no mark at the start of the file'),
   mutant('open-not-filtered', 'NoRepeatedOpen', DROPS, 'deliver forwards every TranscriptOpened'),

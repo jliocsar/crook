@@ -1,8 +1,10 @@
+import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 import * as Stream from 'effect/Stream'
@@ -22,22 +24,32 @@ import { herdAtom, herdViewAtom } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import {
-  applyTranscriptEvent,
-  catchingUpFrom,
-  EMPTY_TRANSCRIPT,
-  failedWith,
-  isOpened,
-  isShowable,
-  resumeOf,
-  shownAfter,
-} from '@crook/web/chat/TranscriptState'
-import type { TranscriptWatchFailure } from '@crook/web/chat/TranscriptState'
+  afterAll,
+  cacheRead,
+  EARLIER_ASKED,
+  emptyWait,
+  eventArrived,
+  foldOf,
+  isCaughtUp,
+  NO_VIEW,
+  noticeHold,
+  noticeWait,
+  rememberedOf,
+  sameOnScreen,
+  TranscriptCommand,
+  TranscriptViewState,
+  watchFailed,
+  watchResumed,
+} from '@crook/web/chat/TranscriptMachine'
+import type { TranscriptViewEvent, TranscriptWatchFailure } from '@crook/web/chat/TranscriptMachine'
+import { resumeOf } from '@crook/web/chat/TranscriptState'
 import { findAgent, isOnlineMachine } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
 export interface WatchSignals {
   readonly watchable: Atom.Atom<boolean>
   readonly retries: Atom.Atom<number>
+  readonly earlier: Atom.Atom<number>
   readonly awaitsCaughtUp: Atom.Atom<boolean>
   readonly herd: Atom.Atom<Option.Option<HerdView>>
 }
@@ -57,8 +69,6 @@ export class SubagentTranscriptKey extends Data.TaggedClass('SubagentTranscriptK
   readonly subagent: SubagentId
 }> {}
 
-const tailFor = (whole: boolean) => (whole ? Option.none() : Option.some(CHAT_OPEN_TAIL))
-
 const sourceOf = (key: TranscriptKey): TranscriptSource =>
   Match.value(key).pipe(
     Match.tagsExhaustive({
@@ -68,22 +78,9 @@ const sourceOf = (key: TranscriptKey): TranscriptSource =>
     }),
   )
 
-const isResumeRejected = (failure: TranscriptWatchFailure): boolean =>
-  Match.value(failure).pipe(
-    Match.tag('TranscriptResumeRejected', () => true),
-    Match.orElse(() => false),
-  )
-
-const isCaughtUp = (event: TranscriptEvent): boolean =>
-  Match.value(event).pipe(
-    Match.tag('TranscriptCaughtUp', () => true),
-    Match.orElse(() => false),
-  )
-
 const subscribed = Effect.fn('Transcript.subscribed')(function* <Value>(
   registry: AtomRegistry.AtomRegistry,
   atom: Atom.Atom<Value>,
-  immediate: boolean,
 ) {
   const changes = yield* Queue.unbounded<Value>()
 
@@ -94,53 +91,83 @@ const subscribed = Effect.fn('Transcript.subscribed')(function* <Value>(
         (value) => {
           Queue.offerUnsafe(changes, value)
         },
-        { immediate },
+        { immediate: true },
       ),
     ),
     (unsubscribe) => Effect.sync(unsubscribe),
   )
 
-  return Stream.fromQueue(changes)
+  return Stream.fromQueue(changes).pipe(Stream.changes, Stream.drop(1))
 })
 
-const transcriptViews = (
-  machine: MachineId,
-  source: TranscriptSource,
-  whole: boolean,
-  signals: WatchSignals,
-) =>
+const countedPast = (count: SubscriptionRef.SubscriptionRef<number>, past: number) =>
+  SubscriptionRef.changes(count).pipe(
+    Stream.filter((seen) => seen > past),
+    Stream.take(1),
+    Stream.runDrain,
+  )
+
+const transcriptViews = (machine: MachineId, source: TranscriptSource, signals: WatchSignals) =>
   Stream.unwrap(
     Effect.gen(function* () {
       const link = yield* HubLink
       const cache = yield* TranscriptCache
       const registry = yield* AtomRegistry.AtomRegistry
-      const watchableChanges = yield* subscribed(registry, signals.watchable, true)
-      const retryChanges = yield* subscribed(registry, signals.retries, false)
+      const scope = yield* Effect.scope
+      const watchableChanges = yield* subscribed(registry, signals.watchable)
+      const retryChanges = yield* subscribed(registry, signals.retries)
+      const earlierChanges = yield* subscribed(registry, signals.earlier)
       const readAwaitsCaughtUp = Effect.sync(() => registry.get(signals.awaitsCaughtUp))
-      const awaitsCaughtUpNow = yield* readAwaitsCaughtUp
       const cached = yield* cache.load(machine, source)
-      const view = yield* SubscriptionRef.make(
-        catchingUpFrom(
-          whole ? EMPTY_TRANSCRIPT : Option.getOrElse(cached, () => EMPTY_TRANSCRIPT),
-          awaitsCaughtUpNow,
-        ),
+      const state = yield* SubscriptionRef.make<TranscriptViewState>(
+        afterAll(NO_VIEW, [cacheRead(cached)])[0],
       )
       const restarts = yield* SubscriptionRef.make(0)
+      const rereads = yield* SubscriptionRef.make(0)
       const persist = Effect.suspend(() =>
         cache.persist(machine, source, registry.get(signals.herd)),
       )
 
       yield* Effect.addFinalizer(() => persist)
 
+      const dispatch = (
+        events: readonly TranscriptViewEvent[],
+      ): Effect.Effect<TranscriptViewState> =>
+        Effect.flatMap(
+          SubscriptionRef.modify(state, (current) => {
+            const [next, commands] = afterAll(current, events)
+
+            return [{ next, commands }, next]
+          }),
+          ({ next, commands }) =>
+            Effect.as(Effect.forEach(commands, perform, { discard: true }), next),
+        )
+
+      const afterTimer = (timer: Effect.Effect<TranscriptViewEvent>) =>
+        Effect.forkIn(
+          Effect.flatMap(timer, (event) => dispatch([event])),
+          scope,
+        )
+
+      const perform: (command: TranscriptCommand) => Effect.Effect<void> = TranscriptCommand.$match(
+        {
+          WaitOutNotice: ({ attempt }) => afterTimer(noticeWait(attempt)),
+          HoldNotice: ({ attempt }) => afterTimer(noticeHold(attempt)),
+          WaitOutEmpty: ({ attempt }) => afterTimer(emptyWait(attempt)),
+          ReadAgain: () => SubscriptionRef.update(rereads, (count) => count + 1),
+        },
+      )
+
       yield* Stream.merge(
-        watchableChanges.pipe(
-          Stream.changes,
-          Stream.drop(1),
-          Stream.filter((ready) => ready),
-        ),
+        watchableChanges.pipe(Stream.filter((ready) => ready)),
         retryChanges,
       ).pipe(
         Stream.runForEach(() => SubscriptionRef.update(restarts, (count) => count + 1)),
+        Effect.forkScoped,
+      )
+
+      yield* earlierChanges.pipe(
+        Stream.runForEach(() => dispatch([EARLIER_ASKED])),
         Effect.forkScoped,
       )
 
@@ -148,55 +175,49 @@ const transcriptViews = (
         failure: TranscriptWatchFailure,
         restartsAtStart: number,
       ) {
-        const current = yield* SubscriptionRef.get(view)
+        const next = yield* dispatch([watchFailed(failure)])
 
-        if (isResumeRejected(failure) && isOpened(current)) {
-          return yield* SubscriptionRef.set(view, EMPTY_TRANSCRIPT)
+        if (TranscriptViewState.guards.Failed(next)) {
+          yield* countedPast(restarts, restartsAtStart)
         }
-
-        yield* SubscriptionRef.set(view, failedWith(current, failure))
-
-        return yield* SubscriptionRef.changes(restarts).pipe(
-          Stream.filter((count) => count > restartsAtStart),
-          Stream.take(1),
-          Stream.runDrain,
-        )
       })
 
       const resume = Effect.flatMap(readAwaitsCaughtUp, (awaits) =>
-        SubscriptionRef.modify(view, (current) => [
-          resumeOf(current, tailFor(whole)),
-          catchingUpFrom(current, awaits),
-        ]),
+        Effect.map(dispatch([watchResumed(awaits)]), (next) =>
+          resumeOf(foldOf(next), Option.some(CHAT_OPEN_TAIL)),
+        ),
       )
 
-      const apply = Effect.fn('Transcript.apply')(function* (event: TranscriptEvent) {
-        const next = yield* SubscriptionRef.updateAndGet(view, (current) =>
-          applyTranscriptEvent(current, event),
-        )
+      const apply = Effect.fn('Transcript.apply')(function* (
+        events: Arr.NonEmptyReadonlyArray<TranscriptEvent>,
+      ) {
+        const next = yield* dispatch(Arr.map(events, eventArrived))
 
-        if (isShowable(next)) {
-          yield* cache.remember(machine, source, next)
-        }
+        yield* Option.match(rememberedOf(next), {
+          onNone: () => Effect.void,
+          onSome: (view) => cache.remember(machine, source, view),
+        })
 
-        if (isCaughtUp(event)) {
+        if (Arr.some(events, isCaughtUp)) {
           yield* persist
         }
       })
 
       const watchOnce = Effect.gen(function* () {
         const restartsAtStart = yield* SubscriptionRef.get(restarts)
+        const rereadsAtStart = yield* SubscriptionRef.get(rereads)
 
         yield* link.watchTranscript(machine, source, resume).pipe(
-          Stream.runForEach(apply),
+          Stream.runForEachArray(apply),
           Effect.andThen(Effect.never),
           Effect.catch((failure) => settle(failure, restartsAtStart)),
+          Effect.raceFirst(countedPast(rereads, rereadsAtStart)),
         )
       })
 
       yield* Effect.forkScoped(Effect.forever(watchOnce))
 
-      return SubscriptionRef.changes(view).pipe(Stream.mapAccum(() => cached, shownAfter))
+      return SubscriptionRef.changes(state).pipe(Stream.changesWith(sameOnScreen))
     }),
   )
 
@@ -231,8 +252,8 @@ export const transcriptRetryAtom = Atom.family((key: TranscriptKey) =>
   Atom.make(0).pipe(Atom.withLabel(`transcript retries on ${key.machine}`)),
 )
 
-export const transcriptWholeAtom = Atom.family((key: TranscriptKey) =>
-  Atom.make(false).pipe(Atom.withLabel(`whole transcript on ${key.machine}`)),
+export const transcriptEarlierAtom = Atom.family((key: TranscriptKey) =>
+  Atom.make(0).pipe(Atom.withLabel(`earlier messages asked on ${key.machine}`)),
 )
 
 const watchableAtomOf = (key: TranscriptKey): Atom.Atom<boolean> =>
@@ -244,12 +265,17 @@ const watchableAtomOf = (key: TranscriptKey): Atom.Atom<boolean> =>
   )
 
 export const transcriptAtom = Atom.family((key: TranscriptKey) =>
-  hubRuntime.atom((get) =>
-    transcriptViews(key.machine, sourceOf(key), get(transcriptWholeAtom(key)), {
+  hubRuntime.atom(
+    transcriptViews(key.machine, sourceOf(key), {
       watchable: watchableAtomOf(key),
       retries: transcriptRetryAtom(key),
+      earlier: transcriptEarlierAtom(key),
       awaitsCaughtUp: awaitsCaughtUpAtom(key.machine),
       herd: herdViewAtom,
     }),
   ),
 )
+
+export const transcriptStateOf = (
+  result: AsyncResult.AsyncResult<TranscriptViewState, unknown>,
+): TranscriptViewState => Option.getOrElse(AsyncResult.value(result), () => NO_VIEW)
