@@ -14,20 +14,20 @@ import * as Str from 'effect/String'
 
 import { flatMapSome, orElseSome } from '@crook/agent/OptionEffect'
 
-export interface GitCheckout {
-  readonly root: string
-  readonly branch: Option.Option<string>
-}
-
 interface FoundGitDirectory {
   readonly root: string
   readonly gitDirectory: string
 }
 
+export interface GitCheckout extends FoundGitDirectory {
+  readonly branch: Option.Option<string>
+}
+
 const GIT_ENTRY = '.git'
-const HEAD_FILE = 'HEAD'
 const GITDIR_PREFIX = 'gitdir: '
 const BRANCH_REF_PREFIX = 'ref: refs/heads/'
+
+export const HEAD_FILE = 'HEAD'
 
 export class GitMetadataUnreadable extends Schema.TaggedError<GitMetadataUnreadable>()(
   'GitMetadataUnreadable',
@@ -123,10 +123,7 @@ const make = Effect.gen(function* () {
   const checkoutIn = (
     found: FoundGitDirectory,
   ): Effect.Effect<Option.Option<GitCheckout>, GitMetadataUnreadable> => {
-    const checkoutAt = (head: string): GitCheckout => ({
-      root: found.root,
-      branch: branchOfHead(head),
-    })
+    const checkoutAt = (head: string): GitCheckout => ({ ...found, branch: branchOfHead(head) })
 
     return headIn(found.gitDirectory).pipe(Effect.map(Option.map(checkoutAt)))
   }
@@ -167,6 +164,7 @@ export class GitBranches extends Context.Service<
           Effect.succeed(
             Option.map(Option.fromNullishOr(branches.get(cwd)), (branch): GitCheckout => ({
               root: cwd,
+              gitDirectory: `${cwd}/${GIT_ENTRY}`,
               branch: Option.some(branch),
             })),
           ),

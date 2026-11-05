@@ -8,7 +8,9 @@ import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 
-import { ClaudeSessionFileUnreadable, ClaudeSessions } from '@crook/agent/ClaudeSessions'
+import { ClaudeSessionFileUnreadable, ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
+import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
+import { ClaudeSessionId } from '@crook/domain/Ids'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -33,6 +35,7 @@ const LIVE_CLAUDE_STAT =
 const LIVE_CLAUDE_PROC_START = '248837515'
 const LIVE_CLAUDE_PID = 2224797
 const SESSION_ID = '270d2fc3-129e-4a0d-aef3-78f495af98c9'
+const REPORTED_SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 
 const PidFile = Schema.fromJsonString(
   Schema.Struct({ pid: Schema.Int, sessionId: Schema.String, procStart: Schema.String }),
@@ -61,6 +64,7 @@ const workConfigDir: ProcessFixture = {
 const sessions = Effect.fn('sessions')(function* (
   responses: readonly ScriptedResponse[],
   fixture: ProcessFixture = workConfigDir,
+  heldSessions: readonly ClaudeSessionId[] = [],
 ) {
   const fileSystem = yield* FileSystem.FileSystem
   const root = yield* fileSystem.makeTempDirectoryScoped()
@@ -79,9 +83,10 @@ const sessions = Effect.fn('sessions')(function* (
 
   const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
   const context = yield* Layer.build(
-    ClaudeSessions.layerAt(`${root}/proc`).pipe(
-      Layer.provide(HerdrClient.layerTest({ responses, events })),
-    ),
+    Layer.provide(ClaudeSessions.layerAt(`${root}/proc`), [
+      HerdrClient.layerTest({ responses, events }),
+      ClaudeSessionFiles.layerTest(heldSessions),
+    ]),
   )
 
   return Context.get(context, ClaudeSessions)
@@ -95,14 +100,33 @@ const reportedSession = (kind: 'id' | 'path', value: string) =>
   })
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it) => {
-  it.effect('takes the session herdr reports without asking for the process', () =>
+  it.effect('takes the session herdr reports while a pid file names it, without asking', () =>
     Effect.gen(function* () {
-      const claudeSessions = yield* sessions([])
-      const session = yield* claudeSessions.resolve(
-        reportedSession('id', 'cc70b540-d22a-4ea4-aaf9-a0db3ce151aa'),
-      )
+      const claudeSessions = yield* sessions([], workConfigDir, [REPORTED_SESSION])
+      const session = yield* claudeSessions.resolve(reportedSession('id', REPORTED_SESSION))
 
-      expect(session).toEqual(Option.some('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa'))
+      expect(session).toEqual(Option.some(REPORTED_SESSION))
+    }),
+  )
+
+  it.effect('reads the pid file when herdr still reports the session a /clear just left', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([claudeInPane])
+      const session = yield* claudeSessions.resolve(reportedSession('id', REPORTED_SESSION))
+
+      expect(session).toEqual(Option.some(SESSION_ID))
+    }),
+  )
+
+  it.effect('keeps what herdr reports when the process cannot say otherwise', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([claudeInPane], {
+        ...workConfigDir,
+        pidFile: Option.none(),
+      })
+      const session = yield* claudeSessions.resolve(reportedSession('id', REPORTED_SESSION))
+
+      expect(session).toEqual(Option.some(REPORTED_SESSION))
     }),
   )
 

@@ -6,6 +6,11 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
+import {
+  ClaudeSessionFileUnreadable,
+  ClaudeSessionFiles,
+  SessionFile,
+} from '@crook/agent/ClaudeSessionFiles'
 import { flatMapSome } from '@crook/agent/OptionEffect'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 import {
@@ -22,19 +27,6 @@ const STAT_COMM_TERMINATOR = ') '
 const STAT_START_TIME_INDEX = 19
 
 export const PROC_ROOT = '/proc'
-
-export class ClaudeSessionFileUnreadable extends Schema.TaggedError<ClaudeSessionFileUnreadable>()(
-  'ClaudeSessionFileUnreadable',
-  { path: Schema.String, cause: Schema.Defect() },
-) {
-  override get message(): string {
-    return `Could not read ${this.path} while looking up a Claude session. Check that crook runs as the same user as Claude, and that the file still has the shape crook expects.`
-  }
-}
-
-export const SessionFile = Schema.fromJsonString(
-  Schema.Struct({ pid: Schema.Int, sessionId: ClaudeSessionId, procStart: Schema.String }),
-)
 
 const reportedSession = (agent: AgentInfo) =>
   agent.agent_session.pipe(
@@ -62,6 +54,7 @@ const make = (procRoot: string) =>
   Effect.gen(function* () {
     const herdr = yield* HerdrClient
     const fileSystem = yield* FileSystem.FileSystem
+    const sessionFiles = yield* ClaudeSessionFiles
 
     const readFile = (path: string) =>
       fileSystem.readFileString(path).pipe(
@@ -115,10 +108,18 @@ const make = (procRoot: string) =>
         return Option.none()
       }
 
-      return yield* Option.match(reportedSession(agent), {
-        onNone: () => sessionOfPane(agent.pane_id),
-        onSome: Effect.succeedSome,
+      const reported = reportedSession(agent)
+      const stillOpen = yield* Option.match(reported, {
+        onNone: () => Effect.succeed(false),
+        onSome: sessionFiles.holds,
       })
+
+      return stillOpen
+        ? reported
+        : yield* Effect.map(
+            sessionOfPane(agent.pane_id),
+            Option.orElse(() => reported),
+          )
     })
 
     return ClaudeSessions.of({ resolve })

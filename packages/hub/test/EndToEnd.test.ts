@@ -14,6 +14,8 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
+import { CheckoutHeads } from '@crook/agent/CheckoutHeads'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
@@ -165,6 +167,8 @@ const syncingFoundation = Effect.fn('syncingFoundation')(function* (
   const sync = Layer.provide(MachineStateSync.layer, [
     pendingAsks,
     ClaudeSessions.layerTest(new Map()),
+    ClaudeSessionFiles.layerTest(),
+    CheckoutHeads.layerTest(),
     RecentPlaces.layerTest(),
     runningSubagents,
   ])

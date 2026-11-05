@@ -7,6 +7,8 @@ import * as StatusSocket from '@crook/agent/StatusSocket'
 import { AgentLauncher } from '@crook/agent/AgentLauncher'
 import { AskAnswers } from '@crook/agent/AskAnswers'
 import { AuditLog } from '@crook/agent/AuditLog'
+import { CheckoutHeads } from '@crook/agent/CheckoutHeads'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
 import { CommandPolicy } from '@crook/agent/CommandPolicy'
@@ -76,6 +78,11 @@ const machineReaders = Layer.provideMerge(
   machineHost,
 )
 
+const machineWatches = Layer.provideMerge(
+  Layer.mergeAll(ClaudeSessionFiles.layer, CheckoutHeads.layer),
+  machineReaders,
+)
+
 const machineFacts = Layer.provideMerge(
   Layer.mergeAll(
     ClaudeSessions.layer,
@@ -83,7 +90,7 @@ const machineFacts = Layer.provideMerge(
     RecentPlaces.layer,
     RunningSubagents.layer,
   ),
-  machineReaders,
+  machineWatches,
 )
 
 const machineState = Layer.provideMerge(MachineStateSync.layer, machineFacts)
