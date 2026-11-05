@@ -17,9 +17,11 @@ import { liveWith } from '../../test/AppWiring.tsx'
 import { START } from '../../test/HerdFixtures.ts'
 import {
   answered,
+  caughtUp,
   chunk,
   compactBoundary,
   compactSummary,
+  opened,
   prompt,
   toolResult,
   toolUse,
@@ -27,6 +29,7 @@ import {
 } from '../../test/TranscriptFixtures.ts'
 import { chatHerd, chatStory, delivered } from '../ChatFixtures.ts'
 import { chatAgent, CONVERSATION, feed } from '../Fixtures.ts'
+import { MANY_LINES_END, manyLinesChunk } from '../ManyLines.ts'
 import { clicks, seesText, seesWithin, types } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 import { step } from '../Story.tsx'
@@ -34,6 +37,7 @@ import type { LinkStage, StoryMaker } from '../Story.tsx'
 
 const STILL_ACTIVITY = '[data-machine="activity"][data-state="Still"]'
 const COMPOSER_FIELD_NAME = /Message/u
+const TYPED_COMPACT = '/compact keep the toast'
 const UNANSWERED_FIND_MS = Duration.toMillis(COMMAND_SILENCE) + 2000
 const FLIPS_WORKING_AT = DateTime.add(START, { seconds: CLOCK_AFTER_START_SECONDS })
 const FLIPS_IDLE_AT = DateTime.add(FLIPS_WORKING_AT, { seconds: 10 })
@@ -145,11 +149,11 @@ export const TURN_STORIES: readonly StoryMaker[] = [
     },
     events: CONVERSATION,
     timeline: [
-      step<LinkStage>(300, 'The user sends /compact', sends('/compact')),
+      step<LinkStage>(300, 'The user sends /compact', sends(TYPED_COMPACT)),
       step<LinkStage>(400, 'The typed command reaches the transcript as meta', ({ link }) =>
         feed(link, [
           chunk(50, 60, [
-            user(50, [new TextBlock({ text: '/compact' })], {
+            user(50, [new TextBlock({ text: TYPED_COMPACT })], {
               isMeta: true,
               seconds: TURN_START,
             }),
@@ -168,7 +172,7 @@ export const TURN_STORIES: readonly StoryMaker[] = [
               isMeta: true,
               seconds: TURN_START + 8,
             }),
-            user(85, [new LocalCommandBlock({ name: '/compact', args: '' })], {
+            user(85, [new LocalCommandBlock({ name: '/compact', args: 'keep the toast' })], {
               seconds: TURN_START + 8,
             }),
             user(
@@ -214,6 +218,46 @@ export const TURN_STORIES: readonly StoryMaker[] = [
           chunk(60, 70, [
             user(
               60,
+              [
+                new LocalCommandOutputBlock({
+                  text: 'Set model to `Opus 5.5` and saved as your default for new sessions',
+                }),
+              ],
+              { seconds: TURN_START },
+            ),
+          ]),
+        ]),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'slash-send-following',
+    title: 'A slash send at the end of a long thread, its output lifting the thread as it lands',
+    shows: { text: 'Line 119' },
+    ends: {
+      all: [
+        { selector: '[data-slot="command"] code' },
+        { absent: 'Sent' },
+        { selector: STILL_ACTIVITY },
+      ],
+    },
+    events: [opened(), manyLinesChunk(0), caughtUp(MANY_LINES_END)],
+    timeline: [
+      step<LinkStage>(600, 'The user sends /model opus', sends('/model opus')),
+      step<LinkStage>(700, 'The command line lands', ({ link }) =>
+        feed(link, [
+          chunk(MANY_LINES_END, MANY_LINES_END + 10, [
+            user(MANY_LINES_END, [new LocalCommandBlock({ name: '/model', args: 'opus' })], {
+              seconds: TURN_START,
+            }),
+          ]),
+        ]),
+      ),
+      step<LinkStage>(700, 'Its output lands in a later batch', ({ link }) =>
+        feed(link, [
+          chunk(MANY_LINES_END + 10, MANY_LINES_END + 20, [
+            user(
+              MANY_LINES_END + 10,
               [
                 new LocalCommandOutputBlock({
                   text: 'Set model to `Opus 5.5` and saved as your default for new sessions',

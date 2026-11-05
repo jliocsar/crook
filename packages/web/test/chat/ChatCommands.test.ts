@@ -214,18 +214,15 @@ describe('a command send', () => {
 
   it('stays through an interruption or a notice about something else', () => {
     const wait = waitAfterSend(NOTHING, [], sending('/nosuchcommand'))
+    const unrelated = items(
+      [
+        '{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}',
+        '{"type":"system","subtype":"informational","content":"A made up plugin reloaded"}',
+      ].join('\n'),
+    )
 
-    expect(
-      shownOf(
-        wait,
-        items(
-          [
-            '{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}',
-            '{"type":"system","subtype":"informational","content":"A made up plugin reloaded"}',
-          ].join('\n'),
-        ),
-      ),
-    ).toEqual(['/nosuchcommand'])
+    expect(Arr.filter(unrelated, ChatItem.$is('Note'))).toHaveLength(2)
+    expect(shownOf(wait, unrelated)).toEqual(['/nosuchcommand'])
   })
 
   it('ends on a shell line landing', () => {
