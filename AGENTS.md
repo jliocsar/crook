@@ -1328,6 +1328,33 @@ so such a read fails as a changed protocol and that pane goes without a session 
 refresh. Whether a pane whose foreground stays Claude ever shows it is not measured.
 :::
 
+:::tip
+Nothing in herdr announces a session change. Two runs of a real Claude Code 2.1.317 under herdr 0.9.5, with herdr's own `SessionStart` hook installed and, in the first, every herdr event logged:
+
+- `/clear` moved the pid file's session id 9 to 79 ms after `agent.prompt` answered (6 of them), and the new transcript file landed 143 to 207 ms after that (3 of them). The events around it belong to the pane's title, not to the session: `pane_updated` 37 and 55 ms after the pid file, still carrying the old id, and `tab_renamed` about 240 ms after it. A `/clear` with no title left to change, such as one right after another, fired no event at all.
+- The hook's report lands later than the pid file and fires no event of its own (measured there and by reporting directly), so a re-read on one of those title events read the old id and nothing followed to read the new one.
+- `/resume <id>` moved the id 110 and 252 ms after `agent.prompt` answered. It does go through herdr's status, working then idle, and a `pane_updated` 82 ms after the pid file carried the new id.
+- A `git switch` typed in a pane or run from outside it renames a new `HEAD` into the git directory. herdr's tab label shows the branch only until the pane has a title, so a `tab_renamed` follows 222 to 514 ms later only while it does (measured for the label, reasoned for a pane with a title).
+
+So the agent watches one folder per Claude root, which holds the pid files, and one git directory per checkout an agent sits in, which holds `HEAD`. `HEAD` is replaced by a rename, so a watch on the file itself would die with it. An agent with one root, one checkout and one session held 4 inotify watches at rest. An event is filtered by name before anything is read, and a re-read only follows if the file now says something else: Claude rewrites its pid file on every status change, `busy`, `idle` and `waiting`, and keeps `.key` files beside it, all of which land in the same folder, while a git directory sees every lock file. A rewrite under the same session cost 0.45 to 0.95 ms of CPU, and a lock file created and renamed in a git directory 0.35 to 1.24 ms, against 10 to 220 ms for 10 s of an agent left alone (Bun on the laptop, 2000 of each, three runs; the spread is what else the laptop ran). Over one 180 s window on the laptop with Claudes running, the pid folder saw 12 events, and the main checkout's git directory 1.
+
+From a file changing to the agent's publish leaving for the hub: 106 to 126 ms for a real Claude's `/clear` and `/resume` (4 changes, among them the second `/clear` of a pair, the kind that fires no herdr event), and over three runs with a copy of `sleep` named `claude` and a pid file written by hand, 24 to 247 ms for a session and 17 to 252 ms for a real `git switch`, 12 of each per run, most near 230 ms. The re-read's herdr calls are that time (reasoned from the 100 ms grid above, not measured apart). A pair of session changes 20 ms apart published once in 9 of 9, on the latest. A pair of switches ended on the latest as well, usually with a further publish for herdr's own tab label. Twenty rewrites under one session, two commits, a status and a switch to the branch already out published nothing.
+
+A session change itself is dearer, re-read and publish and following the new session together: 28 to 97 ms of CPU over 100 changes, three runs. Waiting for a new session's transcript opens one watch per project folder, so with 37 folders the agent went from 4 watches to 40 and back on a change (a read every 2 ms saw 40 in 8 of 10 changes and fewer in the rest).
+
+herdr's reported session is trusted only while a pid file names it. Trusting it first can leave a `/clear` stale: the re-read the pid file asks for can arrive before the hook reports (herdr still carried the old id 55 ms after the pid file moved), and the report wakes nothing. When it no longer holds, the pane's process is asked, which costs one more read of herdr for that one refresh, and what herdr reports is the fallback if the process cannot say.
+:::
+
+:::tip
+Bare `/model`, `/effort` and `/fast` each open a dialog over the prompt, and the pid file's status says `waiting` (real Claude Code 2.1.317 over herdr's `agent.prompt`, one run). They differ in what the next prompt does. `/model` leaves herdr reading idle, so `agent.prompt` is accepted, its text and Enter land in the picker, the picker answers "Set model to Opus 5.5 and saved as your default for new sessions", and the prompt reaches no transcript: the prompt is lost and a default has changed. `/effort` and `/fast` read as blocked, so `agent.prompt` is refused with `agent_blocked` and types nothing, and the dialog stays open until Escape, which writes "Cancelled".
+:::
+
+:::tip
+Deleting a folder under a Bun `fs.watch` reports the folder's own name, and after that the watch hears nothing, though it neither closes nor fails: a folder made again under the same path stayed silent (measured on Bun 1.4.4). Renaming it away reported nothing at all. A watch that must outlive its folder opens again when it hears its own name. Claude touches its pid folder as it starts, which reports that same name, so each new Claude costs one reopen and one read of the folder.
+
+`fs.watch` throws on a folder it may not read, and the effect file system opens its watcher inside a synchronous effect, so `EACCES` arrives as a defect rather than a `PlatformError`, and a retry alone would let it through (measured). A watch that must keep trying turns the defect into its own failure first.
+:::
+
 :::warning
 `shadcn add` writes a `utils` module even when `components.json` aliases `utils` to the `cn`
 package (measured on 4.22.0). That module only re-exports `cn`, which
