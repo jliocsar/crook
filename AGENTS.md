@@ -946,6 +946,16 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Scanning a whole transcript for notifications parses only the lines that carry the tag: a
   118 MB transcript of 24363 lines took 40 to 87 ms that way and 280 to 315 ms parsing every
   line (measured in Bun on the laptop).
+- A whole-file read for notifications and background work cost a chat twice on every phone unlock,
+  since the chat's roster and its background watch each read from byte 0 again: on the 118 MB
+  transcript 1057 to 1175 ms of CPU, 550 to 619 ms of wall time and a peak of 143 to 144 MB, on a
+  process that idles at 54 MB. Their markers are one set, so one read per session feeds both, and
+  the running count already keeps that read alive for every Claude pane. A chat arriving at it
+  then cost 7 to 25 ms of CPU and 3 to 13 ms of wall time, reading nothing (three runs of five
+  arrivals each). With no count holding it, one arrival reads the file once: 292 to 718 ms of
+  CPU, a peak of 129 to 137 MB. Searching a line's bytes for the markers rather than decoding it
+  first took the two old reads from 1057 to 1175 ms to 737 to 800 ms, and left the peak alone;
+  neither `--smol` nor reads of 64 or 256 KiB lowered the peak (all measured in Bun on the laptop).
 - Claude Code 2.1.312 names background work in the transcript like this (measured in local
   transcripts and a probe session). A background Bash's tool result opens with `Command running
   in background with ID: <id>. Output is being written to: <…>/tasks/<id>.output`, and its
@@ -1055,6 +1065,39 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   upgrade with `Host: attacker.example` was proxied). A proxy rule that trusts an upgrade does
   its own host check, and the `Host` it compares against must be a fixed name, never another
   request header: a DNS-rebound page sends a matching `Host` and `Origin`.
+
+:::tip
+What the agent costs over an hour, measured on the laptop, which decided what got changed.
+
+Claude Code runs a hook command three times per tool call: 33 hook runs for 11 calls in a real
+session (pre, post and batch). The busiest recent hour held 292 tool calls and the median active
+hour 19, against 6.1 CPU-seconds an hour for the whole running agent, watched for 600 s beside
+three busy Claudes. A hook that started the whole compiled agent took 125 ms of CPU and a peak
+of 52 MB per run, so hook processes were the largest cost by far: 110 CPU-seconds in that busiest
+hour. Bun parses what a binary imports at its start, so only parsing less helps. Bytecode reached
+68 ms, a lazy import without splitting 47 ms, Effect's core with splitting 17 ms, and a forwarder
+importing nothing with splitting 4.4 ms of CPU, 4.2 ms of wall time and 19.7 MB, with 30 of 30
+payloads delivered.
+
+A real Claude's 22 s turn of 12 tool calls made herdr send 4 events: two status flips, one title
+change and one tab rename. A title set by escape code sends one `pane_updated` per change, and
+printing output sent 1 in 20 s, so nothing a working Claude does floods the subscription. The
+last week's transcripts held a median of 4 turns per active hour, a 90th percentile of 26 and at
+most 40. A re-read of 8 Claude panes and 15 recent places cost 20 to 38 ms of the agent's CPU and
+4 to 20 ms of herdr's, about 10 CPU-seconds at the busiest and under one in a median hour, so the
+re-read stayed as it is. Waiting for a session's file costs 16.95 ms of CPU against a look's 1.92 ms
+across 37 project folders, about 0.17 CPU-seconds an hour at 11 sessions, so that stayed too.
+:::
+
+:::tip
+Bun, measured on 1.4.3, for a client that writes to a Unix socket:
+
+- `socket.write` returns how many bytes it took, and the rest has to wait for `drain`. A 4 MiB
+  write that ignored it lost what did not fit.
+- `socket.end()` closes at once, so the client's `close` fires before the server has handled the
+  bytes, which still arrive. A test polls for what the server did rather than trusting the close.
+  `allowHalfOpen` with `shutdown(true)` hung: the client got `end` and never `close`.
+:::
 
 :::warning
 A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
