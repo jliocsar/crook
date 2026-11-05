@@ -38,7 +38,7 @@ const TEST_LABEL = {
 
 const TEST_ICON = {
   idle: <Send />,
-  sending: <Spinner />,
+  sending: <Send />,
   sent: <Check />,
 } satisfies Record<TestNotificationState, React.ReactNode>
 
@@ -147,12 +147,12 @@ function TestNotification({ disabled }: { disabled: boolean }) {
             }
           }}
         >
-          <Swap id={test.state}>
+          <span className="inline-flex items-center gap-1.5">
             <span aria-hidden="true" className="inline-flex">
-              {TEST_ICON[test.state]}
+              <Spinner pending={test.state === 'sending'} idle={TEST_ICON[test.state]} />
             </span>
-            {TEST_LABEL[test.state]}
-          </Swap>
+            <Swap id={test.state}>{TEST_LABEL[test.state]}</Swap>
+          </span>
         </Button>
         <span className="sr-only" aria-live="polite">
           {test.state === 'sent' ? 'Test notification sent' : ''}

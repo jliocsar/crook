@@ -1,6 +1,5 @@
 import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
-import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -26,6 +25,7 @@ import {
 } from '@crook/web/chat/TranscriptState'
 import { caseName, to } from '@crook/web/machine/Machine'
 import type { Machine, Step } from '@crook/web/machine/Machine'
+import { NOTICE_HOLD } from '@crook/web/machine/NoticeTiming'
 import { HubCallDefected } from '@crook/web/rpc/HubConnection'
 import { SYNC_NOTICE_DELAY } from '@crook/web/rpc/HubLink'
 
@@ -101,8 +101,6 @@ export const TranscriptViewEvent = Schema.TaggedUnion({
   EmptyDue: { attempt: Schema.Int },
 })
 export type TranscriptViewEvent = typeof TranscriptViewEvent.Type
-
-const NOTICE_HOLD = Duration.millis(400)
 
 export const NO_VIEW = TranscriptViewState.cases.NoView.make({
   fold: EMPTY_TRANSCRIPT,

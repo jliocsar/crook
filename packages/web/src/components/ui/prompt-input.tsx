@@ -1,3 +1,4 @@
+import { Spinner } from '@crook/web/components/ui/spinner'
 import { cn } from 'cn'
 import { ArrowUp, Square } from 'lucide-react'
 import * as React from 'react'
@@ -128,7 +129,11 @@ export function PromptInput({
             onPointerDown={keepFocus}
             onClick={onStop}
           >
-            <Square aria-hidden="true" size={STOP_ICON_SIZE} fill="currentColor" />
+            <Spinner
+              pending={stopping}
+              size={STOP_ICON_SIZE}
+              idle={<Square aria-hidden="true" size={STOP_ICON_SIZE} fill="currentColor" />}
+            />
           </button>
         ) : (
           <button
@@ -141,7 +146,11 @@ export function PromptInput({
             className={cn(ROUND_BUTTON, 'ml-auto disabled:opacity-40')}
             onPointerDown={keepFocus}
           >
-            <ArrowUp aria-hidden="true" size={SEND_ICON_SIZE} />
+            <Spinner
+              pending={sending}
+              size={SEND_ICON_SIZE}
+              idle={<ArrowUp aria-hidden="true" size={SEND_ICON_SIZE} />}
+            />
           </button>
         )}
       </div>

@@ -29,12 +29,22 @@ function StartsOnText({ on }: { on: Option.Option<StartsOn> }) {
 }
 
 export function LaunchSummary({ body }: { body: NewAgentBody }) {
+  const loading = NewAgentBody.$is('Loading')(body)
+
+  return (
+    <Spinner
+      pending={loading}
+      size={LOADING_SPINNER_SIZE}
+      label="Loading your machines"
+      className="text-muted-foreground flex justify-center"
+      idle={loading ? null : <LaunchBody body={body} />}
+    />
+  )
+}
+
+function LaunchBody({ body }: { body: NewAgentBody }) {
   return NewAgentBody.$match(body, {
-    Loading: () => (
-      <div className="text-muted-foreground flex justify-center">
-        <Spinner size={LOADING_SPINNER_SIZE} label="Loading your machines" />
-      </div>
-    ),
+    Loading: () => null,
     NoMachines: () => (
       <EmptyState
         className={SUMMARY_CLASS}

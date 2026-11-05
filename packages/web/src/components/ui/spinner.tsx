@@ -1,13 +1,50 @@
+import * as Duration from 'effect/Duration'
 import * as React from 'react'
 
 import { cn } from 'cn'
 
+import {
+  INDICATOR_BEGAN,
+  INDICATOR_ENDED,
+  indicatorMachine,
+  IndicatorState,
+  indicatorTimer,
+  isIndicatorShown,
+} from '@crook/web/machine/IndicatorMachine'
+import { stateMark } from '@crook/web/machine/Machine'
+import { useMachine } from '@crook/web/machine/UseMachine'
+import { motionTokens } from '@crook/web/motion/MotionTokens'
+
 type SpinnerProps = Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> & {
+  pending?: boolean
+  alreadyWaited?: boolean
+  idle?: React.ReactNode
   size?: number
   label?: string
 }
 
-export function Spinner({ size = 16, label, className, ...rootProps }: SpinnerProps) {
+const indicatorPerform = (command: Parameters<ReturnType<typeof indicatorTimer>>[0]) =>
+  indicatorTimer(Duration.seconds(motionTokens().fade.duration))(command)
+
+const useIndicator = (pending: boolean): IndicatorState => {
+  const [state, dispatch] = useMachine(indicatorMachine, indicatorPerform)
+
+  React.useEffect(() => {
+    dispatch(pending ? INDICATOR_BEGAN : INDICATOR_ENDED)
+  }, [pending, dispatch])
+
+  return state
+}
+
+function SpinnerGlyph({
+  size,
+  label,
+  className,
+  ...rootProps
+}: Omit<React.HTMLAttributes<HTMLSpanElement>, 'children'> & {
+  size: number
+  label: string | undefined
+}) {
   return (
     <span
       data-slot="spinner"
@@ -41,5 +78,52 @@ export function Spinner({ size = 16, label, className, ...rootProps }: SpinnerPr
       </svg>
       {label === undefined ? null : <span className="sr-only">{label}</span>}
     </span>
+  )
+}
+
+export function Spinner({
+  pending = true,
+  alreadyWaited = false,
+  idle = null,
+  size = 16,
+  label,
+  className,
+  ...rootProps
+}: SpinnerProps) {
+  const state = useIndicator(pending && !alreadyWaited)
+
+  if (alreadyWaited) {
+    return pending ? (
+      <SpinnerGlyph size={size} label={label} className={className} {...rootProps} />
+    ) : (
+      idle
+    )
+  }
+
+  if (!isIndicatorShown(state)) {
+    return pending && idle === null ? (
+      <span
+        data-slot="spinner-slot"
+        aria-hidden="true"
+        className={cn('inline-block shrink-0', className)}
+        style={{ width: size, height: size }}
+      />
+    ) : (
+      idle
+    )
+  }
+
+  return (
+    <SpinnerGlyph
+      {...stateMark(indicatorMachine, state)}
+      size={size}
+      label={label}
+      className={cn(
+        'transition-opacity duration-(--motion) ease-(--ease-out) starting:opacity-0 motion-reduce:transition-none',
+        IndicatorState.guards.Leaving(state) && 'opacity-0',
+        className,
+      )}
+      {...rootProps}
+    />
   )
 }

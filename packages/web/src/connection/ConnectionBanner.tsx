@@ -52,8 +52,8 @@ const NOTICE_COPY = {
 >
 
 const NOTICE_ICON = {
-  syncing: <Spinner size={NOTICE_SPINNER_SIZE} />,
-  connecting: <Spinner size={NOTICE_SPINNER_SIZE} />,
+  syncing: <Spinner alreadyWaited size={NOTICE_SPINNER_SIZE} />,
+  connecting: <Spinner alreadyWaited size={NOTICE_SPINNER_SIZE} />,
   unreachable: <ServerOff aria-hidden="true" className="size-3.5 shrink-0" />,
   offline: <WifiOff aria-hidden="true" className="size-3.5 shrink-0" />,
   recovered: <Check aria-hidden="true" className="size-3.5 shrink-0" />,

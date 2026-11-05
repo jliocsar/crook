@@ -54,7 +54,7 @@ const detailOf = ({ kind, since }: EdgeCardProps, now: DateTime.Utc): Option.Opt
 
 function EdgeIcon({ kind }: { kind: EdgeKind }) {
   if (kind === 'away') {
-    return <Spinner size={EDGE_ICON_SIZE} className="text-muted-foreground" />
+    return <Spinner alreadyWaited size={EDGE_ICON_SIZE} className="text-muted-foreground" />
   }
 
   return kind === 'closed' ? (

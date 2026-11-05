@@ -1,9 +1,10 @@
 import { cn } from 'cn'
 import * as Option from 'effect/Option'
-import { Check, ChevronRight, Circle, CircleDot, Loader, TriangleAlert } from 'lucide-react'
+import { Check, ChevronRight, Circle, CircleDot, TriangleAlert } from 'lucide-react'
 import * as React from 'react'
 
 import { useRowFlag } from '@crook/web/components/RowMemory'
+import { RunDot } from '@crook/web/components/ui/subagent-tree'
 
 export type ToolCallStatus = 'running' | 'waiting' | 'success' | 'error' | 'stopped'
 
@@ -30,11 +31,12 @@ const CHEVRON_SIZE = 14
 function StatusIcon({ status }: { status: ToolCallStatus }) {
   if (status === 'running') {
     return (
-      <Loader
-        aria-hidden="true"
-        size={ICON_SIZE}
-        className="text-muted-foreground animate-spin motion-reduce:animate-none"
-      />
+      <span
+        className="inline-flex items-center justify-center"
+        style={{ width: ICON_SIZE, height: ICON_SIZE }}
+      >
+        <RunDot status="running" />
+      </span>
     )
   }
 

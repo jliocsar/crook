@@ -1,0 +1,89 @@
+import { describe, expect, it } from '@effect/vitest'
+import { cleanup, render } from '@testing-library/react'
+import * as Duration from 'effect/Duration'
+import * as Effect from 'effect/Effect'
+import { afterEach } from 'vitest'
+
+import { Spinner } from '@crook/web/components/ui/spinner'
+import { NOTICE_DELAY, NOTICE_HOLD } from '@crook/web/machine/NoticeTiming'
+
+const SPINNER = '[data-slot="spinner"]'
+const IDLE = '[data-testid="idle"]'
+const MARGIN = Duration.millis(150)
+const FADE = Duration.millis(250)
+
+const idleGlyph = <span data-testid="idle" />
+
+const shownIn = (container: HTMLElement): boolean => container.querySelector(SPINNER) !== null
+
+afterEach(() => {
+  cleanup()
+})
+
+describe('the indicator', () => {
+  it.live('shows nothing but what it stands in for until its delay is out', () =>
+    Effect.gen(function* () {
+      const { container } = render(<Spinner idle={idleGlyph} />)
+
+      expect(shownIn(container)).toBe(false)
+      expect(container.querySelector(IDLE)).not.toBeNull()
+
+      yield* Effect.sleep(Duration.subtract(NOTICE_DELAY, MARGIN))
+
+      expect(shownIn(container)).toBe(false)
+
+      yield* Effect.sleep(Duration.times(MARGIN, 2))
+
+      expect(shownIn(container)).toBe(true)
+      expect(container.querySelector(IDLE)).toBeNull()
+    }),
+  )
+
+  it.live('never shows for a wait that ends before its delay, and holds its room meanwhile', () =>
+    Effect.gen(function* () {
+      const { container, rerender } = render(<Spinner size={14} />)
+      const slot = container.querySelector<HTMLElement>('[data-slot="spinner-slot"]')
+
+      expect(slot?.style.width).toBe('14px')
+
+      rerender(<Spinner pending={false} size={14} />)
+
+      expect(container.querySelector('[data-slot="spinner-slot"]')).toBeNull()
+
+      yield* Effect.sleep(Duration.sum(NOTICE_DELAY, MARGIN))
+
+      expect(shownIn(container)).toBe(false)
+    }),
+  )
+
+  it.live('stays for its minimum after a wait that ends just past the delay', () =>
+    Effect.gen(function* () {
+      const { container, rerender } = render(<Spinner idle={idleGlyph} />)
+
+      yield* Effect.sleep(Duration.sum(NOTICE_DELAY, MARGIN))
+
+      expect(shownIn(container)).toBe(true)
+
+      rerender(<Spinner pending={false} idle={idleGlyph} />)
+
+      expect(shownIn(container)).toBe(true)
+
+      yield* Effect.sleep(Duration.sum(NOTICE_HOLD, FADE))
+
+      expect(shownIn(container)).toBe(false)
+      expect(container.querySelector(IDLE)).not.toBeNull()
+    }),
+  )
+
+  it.live('shows at once for a state that did its own waiting, and goes with it', () =>
+    Effect.sync(() => {
+      const { container, rerender } = render(<Spinner alreadyWaited />)
+
+      expect(shownIn(container)).toBe(true)
+
+      rerender(<Spinner alreadyWaited pending={false} />)
+
+      expect(shownIn(container)).toBe(false)
+    }),
+  )
+})

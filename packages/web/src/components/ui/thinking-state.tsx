@@ -1,6 +1,7 @@
 import { cn } from 'cn'
-import { Loader } from 'lucide-react'
 import type * as React from 'react'
+
+import { Spinner } from '@crook/web/components/ui/spinner'
 
 type ThinkingStateProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   label: React.ReactNode
@@ -21,11 +22,7 @@ export function ThinkingState({ label, elapsed, className, ...rootProps }: Think
       {...rootProps}
     >
       <div data-slot="thinking-state-header" className="flex items-center gap-2.5 px-3.5 py-2.5">
-        <Loader
-          aria-hidden="true"
-          size={ICON_SIZE}
-          className="text-muted-foreground shrink-0 animate-spin motion-reduce:animate-none"
-        />
+        <Spinner size={ICON_SIZE} className="text-muted-foreground shrink-0" />
         <span
           data-slot="thinking-state-label"
           className="animate-pulse text-sm font-semibold motion-reduce:animate-none"

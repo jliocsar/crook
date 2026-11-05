@@ -162,7 +162,7 @@ export function Questionnaire({
           className="ml-auto"
         >
           {submitLabel}
-          {pending ? <Spinner /> : <Check aria-hidden="true" />}
+          <Spinner pending={pending} idle={<Check aria-hidden="true" />} />
         </Button>
       </div>
     </form>

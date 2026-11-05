@@ -140,7 +140,7 @@ export function PullToResync({
         aria-hidden="true"
         className="text-muted-foreground pointer-events-none absolute inset-x-0 top-0 flex h-10 items-center justify-center opacity-0"
       >
-        <Spinner />
+        <Spinner alreadyWaited />
       </div>
       <div ref={content}>{children}</div>
     </div>

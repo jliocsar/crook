@@ -96,7 +96,7 @@ export function CatchingUpPill({ shown }: { shown: boolean }) {
             className={cn(HEADER_PILL, 'text-muted-foreground')}
             {...pillMotion}
           >
-            <Spinner size={PILL_SPINNER_SIZE} />
+            <Spinner alreadyWaited size={PILL_SPINNER_SIZE} />
             {CATCHING_UP}
           </motion.span>
         ) : null}
