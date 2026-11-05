@@ -301,15 +301,16 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const backgroundWork = useBackgroundWork(view, items, openSubagentJob)
   const backgroundContext = React.useMemo(() => Option.some(backgroundWork), [backgroundWork])
   const episodeSummary = useEpisodeSummary(backgroundWork, lines)
+  const earlierPending = isLoadingEarlier(state)
   const environment = React.useMemo<ThreadEnvironment>(
     () => ({
       cwd,
       paneClosed,
       onShowEarlier: transcript.onShowEarlier,
-      earlierPending: isLoadingEarlier(state),
+      earlierPending,
       onOpenRun: Option.some(openRun),
     }),
-    [cwd, paneClosed, transcript.onShowEarlier, state, openRun],
+    [cwd, paneClosed, transcript.onShowEarlier, earlierPending, openRun],
   )
   const shownItems = React.useMemo(
     () =>
@@ -393,7 +394,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
             handle={thread}
             rows={rows}
             dimmed={dimmed}
-            empty={<ThreadEmpty model={model} state={state} />}
+            empty={<ThreadEmpty model={model} state={state} started={transcript.started} />}
           />
         </div>
       </BackgroundContext.Provider>

@@ -131,15 +131,16 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   )
   const parentTitle = titleOf(model, pane)
 
+  const earlierPending = isLoadingEarlier(state)
   const environment = React.useMemo<ThreadEnvironment>(
     () => ({
       cwd,
       paneClosed,
       onShowEarlier: transcript.onShowEarlier,
-      earlierPending: isLoadingEarlier(state),
+      earlierPending,
       onOpenRun: Option.none(),
     }),
-    [cwd, paneClosed, transcript.onShowEarlier, state],
+    [cwd, paneClosed, transcript.onShowEarlier, earlierPending],
   )
 
   const conversationRows = useItemRows(shownItems, environment)
@@ -178,7 +179,11 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
           trailing={<CatchingUpPill shown={catchingUp && !dimmed} />}
         />
         <div {...stateMark(transcriptMachine, state)} className="min-h-0 flex-1">
-          <Thread rows={rows} dimmed={dimmed} empty={<ThreadEmpty model={model} state={state} />} />
+          <Thread
+            rows={rows}
+            dimmed={dimmed}
+            empty={<ThreadEmpty model={model} state={state} started={transcript.started} />}
+          />
         </div>
         <div
           data-slot="chat-dock"

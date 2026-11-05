@@ -3,7 +3,7 @@ import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
 
 import { TranscriptOffset } from '@crook/domain/Ids'
-import { omittedUpTo, TranscriptTailBytes } from '@crook/domain/Transcript'
+import { omittedUpTo, SkillsChanged, TranscriptTailBytes } from '@crook/domain/Transcript'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import {
   afterAll,
@@ -297,6 +297,38 @@ describe('a rejected resume', () => {
   })
 })
 
+describe('a restart under way', () => {
+  const whole = after([
+    watchResumed(true),
+    eventArrived(opened()),
+    eventArrived(omittedUpTo(SESSION, TAIL_START)),
+    eventArrived(chunk(4096, 4106, [said(4096, 'tail')])),
+    eventArrived(caughtUp(4106)),
+    EARLIER_ASKED,
+  ])
+
+  it('ignores the failure of the watch it is leaving', () => {
+    expect(after([watchFailed(READ_FAILED)], whole)).toBe(whole)
+  })
+})
+
+describe('a rejected resume while the words show', () => {
+  const held = after([watchResumed(true)], reopened)
+  const saying = after([noticeDue(attemptOf(held))], held)
+
+  it('keeps saying them, rather than dropping them and saying them again', () => {
+    expect(saysCatchingUp(after([watchFailed(REJECTED)], saying))).toBe(true)
+  })
+})
+
+describe('Show earlier with nothing shown', () => {
+  it('changes nothing', () => {
+    const empty = after([cacheRead(Option.some(EMPTY_TRANSCRIPT))])
+
+    expect(after([EARLIER_ASKED], empty)).toBe(empty)
+  })
+})
+
 describe('a failed watch', () => {
   it('keeps what it holds and is not catching up', () => {
     const failed = after(
@@ -444,6 +476,13 @@ describe('what reaches the screen', () => {
     const holding = after([watchResumed(true)], reopened)
 
     expect(sameOnScreen(holding, after([eventArrived(NEWER)], holding))).toBe(true)
+  })
+
+  it('wakes the screen for a skill list that arrives behind the same rows', () => {
+    const holding = after([watchResumed(true)], reopened)
+    const skills = eventArrived(new SkillsChanged({ session: SESSION, skills: [] }))
+
+    expect(sameOnScreen(holding, after([skills], holding))).toBe(false)
   })
 
   it('wakes the screen when the rows, the tag or the session change', () => {

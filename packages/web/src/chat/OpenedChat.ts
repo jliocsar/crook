@@ -1,4 +1,6 @@
 import { useAtomMount, useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
+import * as Option from 'effect/Option'
+import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as React from 'react'
 
 import type { MachineId, PaneId } from '@crook/domain/Ids'
@@ -44,7 +46,12 @@ export const useTranscriptThread = (key: TranscriptKey) => {
     retry((count) => count + 1)
   }, [retry])
 
-  return { state: transcriptStateOf(result), onShowEarlier, onRetry }
+  return {
+    state: transcriptStateOf(result),
+    started: Option.isSome(AsyncResult.value(result)),
+    onShowEarlier,
+    onRetry,
+  }
 }
 
 export const useChatItems = (

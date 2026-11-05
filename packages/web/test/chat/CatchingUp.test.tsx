@@ -337,6 +337,23 @@ describe('a chat catching up', () => {
     }),
   )
 
+  it.effect('saves nothing on this device until a read has ended', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, laptopOn('online', OLDER_AGENT))
+      const transcript = yield* link.transcriptFor(source)
+
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [said(0, 'Shown, not saved.')])])
+      yield* Effect.promise(() => screen.findByText('Shown, not saved.'))
+
+      expect(Ref.getUnsafe(link.storedTranscripts).size).toBe(0)
+
+      yield* Queue.offer(transcript, caughtUp(10))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.storedTranscripts).size).toBe(1)
+      })
+    }),
+  )
+
   it.effect('shows no "No messages yet" before the first chunk of an agent too old for marks', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, laptopOn('online', OLDER_AGENT))

@@ -110,12 +110,18 @@ function LoadingThread() {
 export function ThreadEmpty({
   model,
   state,
+  started,
 }: {
   model: ChatScreenModel
   state: TranscriptViewState
+  started: boolean
 }) {
   if (PresenceState.guards.NotClaude(model.presence)) {
     return <EmptyState title={NOT_CLAUDE} />
+  }
+
+  if (!started) {
+    return <LoadingThread />
   }
 
   if (PresenceState.guards.Away(model.presence)) {

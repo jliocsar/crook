@@ -102,7 +102,7 @@ export const TranscriptViewEvent = Schema.TaggedUnion({
 })
 export type TranscriptViewEvent = typeof TranscriptViewEvent.Type
 
-export const NOTICE_HOLD = Duration.millis(400)
+const NOTICE_HOLD = Duration.millis(400)
 
 export const NO_VIEW = TranscriptViewState.cases.NoView.make({
   fold: EMPTY_TRANSCRIPT,
@@ -203,7 +203,7 @@ export const attemptOf = (state: TranscriptViewState): number =>
     Match.orElse(({ attempt }) => attempt),
   )
 
-const awaitsOf = (state: TranscriptViewState): boolean =>
+export const awaitsOf = (state: TranscriptViewState): boolean =>
   Match.value(state).pipe(
     Match.tag('Cached', () => false),
     Match.tags({
@@ -213,7 +213,7 @@ const awaitsOf = (state: TranscriptViewState): boolean =>
     Match.orElse(({ awaits }) => awaits),
   )
 
-const isRestarting = (state: TranscriptViewState): boolean =>
+export const isRestarting = (state: TranscriptViewState): boolean =>
   Match.value(state).pipe(
     Match.tags({
       NoView: ({ restarting }) => restarting,
@@ -240,6 +240,7 @@ export const failureOf = (state: TranscriptViewState): Option.Option<TranscriptW
 
 export const isRetrying = TranscriptViewState.guards.Retrying
 export const isLoadingEarlier = TranscriptViewState.guards.LoadingEarlier
+export const isCaughtUp = Schema.is(TranscriptCaughtUp)
 export const hasFailed = TranscriptViewState.isAnyOf(['Failed', 'Retrying'])
 export const knowsNothing = TranscriptViewState.isAnyOf(['NoView', 'Failed', 'Retrying'])
 export const saysCatchingUp = TranscriptViewState.isAnyOf(['CatchingUp', 'NoticeLeaving'])
@@ -412,7 +413,7 @@ const arrivedWhile = (state: TranscriptViewState, next: TranscriptView): Transcr
     Match.withReturnType<TranscriptStep>(),
     Match.tagsExhaustive({
       NoView: ({ fold, attempt, awaits }) => arrivedWithNoView(fold, next, attempt, awaits),
-      Cached: () => to(cachedState(next)),
+      Cached: () => to(state),
       Holding: ({ shown, attempt, awaits }) => arrivedWhileHolding(shown, next, attempt, awaits),
       CatchingUp: ({ shown, attempt, noticeHeld: held }) =>
         !hasLines(shown) && hasLines(next)
@@ -434,7 +435,7 @@ const arrivedWhile = (state: TranscriptViewState, next: TranscriptView): Transcr
   )
 
 const arrived = (state: TranscriptViewState, event: TranscriptEvent): TranscriptStep => {
-  if (isRestarting(state)) {
+  if (isRestarting(state) || TranscriptViewState.guards.Cached(state)) {
     return to(state)
   }
 
@@ -446,7 +447,7 @@ const arrived = (state: TranscriptViewState, event: TranscriptEvent): Transcript
     return leftSession(state, next)
   }
 
-  if (Schema.is(TranscriptCaughtUp)(event)) {
+  if (isCaughtUp(event)) {
     return isOpened(next) ? landed(state, next) : to(state)
   }
 
@@ -472,7 +473,17 @@ const startedOver = (state: TranscriptViewState): TranscriptStep => {
 
   return Option.match(Option.filter(shownOf(state), hasLines), {
     onNone: () => to(noView(fold, attempt, awaits)),
-    onSome: (shown) => to(holding(shown, fold, attempt, awaits)),
+    onSome: (shown) =>
+      to(
+        saysCatchingUp(state)
+          ? catchingUp(
+              shown,
+              fold,
+              attempt,
+              TranscriptViewState.guards.CatchingUp(state) && state.noticeHeld,
+            )
+          : holding(shown, fold, attempt, awaits),
+      ),
   })
 }
 
@@ -497,33 +508,32 @@ const watchEnded = (
       )
 }
 
+const canAskEarlier = TranscriptViewState.isAnyOf([
+  'Cached',
+  'Holding',
+  'CatchingUp',
+  'NoticeLeaving',
+  'Current',
+  'Failed',
+  'Retrying',
+])
+
 const earlierAsked = (state: TranscriptViewState): TranscriptStep =>
-  Option.match(
-    Option.filter(shownOf(state), () =>
-      TranscriptViewState.isAnyOf([
-        'Cached',
-        'Holding',
-        'CatchingUp',
-        'NoticeLeaving',
-        'Current',
-        'Failed',
-        'Retrying',
-      ])(state),
-    ),
-    {
-      onNone: () => to(state),
-      onSome: (shown) => [
-        loadingEarlier(
-          shown,
-          readAgain(foldOf(state), true),
-          attemptOf(state),
-          awaitsOf(state),
-          true,
-        ),
-        [TranscriptCommand.ReadAgain()],
-      ],
-    },
-  )
+  canAskEarlier(state)
+    ? Option.match(Option.filter(shownOf(state), hasLines), {
+        onNone: () => to(state),
+        onSome: (shown) => [
+          loadingEarlier(
+            shown,
+            readAgain(foldOf(state), true),
+            attemptOf(state),
+            awaitsOf(state),
+            true,
+          ),
+          [TranscriptCommand.ReadAgain()],
+        ],
+      })
+    : to(state)
 
 const noticeWaitEnded = (state: TranscriptViewState, attempt: number): TranscriptStep =>
   Match.value(state).pipe(
@@ -619,21 +629,18 @@ export const afterAll = (
     return [next, [...commands, ...more]]
   })
 
-export const transcriptTimer = (
-  command: TranscriptCommand,
-): Option.Option<Effect.Effect<TranscriptViewEvent>> =>
-  TranscriptCommand.$match(command, {
-    WaitOutNotice: ({ attempt }) =>
-      Option.some(Effect.as(Effect.sleep(SYNC_NOTICE_DELAY), noticeDue(attempt))),
-    HoldNotice: ({ attempt }) =>
-      Option.some(Effect.as(Effect.sleep(NOTICE_HOLD), noticeHeld(attempt))),
-    WaitOutEmpty: ({ attempt }) =>
-      Option.some(Effect.as(Effect.sleep(SYNC_NOTICE_DELAY), emptyDue(attempt))),
-    ReadAgain: () => Option.none(),
-  })
+export const noticeWait = (attempt: number): Effect.Effect<TranscriptViewEvent> =>
+  Effect.as(Effect.sleep(SYNC_NOTICE_DELAY), noticeDue(attempt))
+
+export const noticeHold = (attempt: number): Effect.Effect<TranscriptViewEvent> =>
+  Effect.as(Effect.sleep(NOTICE_HOLD), noticeHeld(attempt))
+
+export const emptyWait = (attempt: number): Effect.Effect<TranscriptViewEvent> =>
+  Effect.as(Effect.sleep(SYNC_NOTICE_DELAY), emptyDue(attempt))
 
 export const sameOnScreen = (one: TranscriptViewState, other: TranscriptViewState): boolean =>
   caseName(TranscriptViewState, one) === caseName(TranscriptViewState, other) &&
   Option.getOrUndefined(shownOf(one)) === Option.getOrUndefined(shownOf(other)) &&
   Option.getOrUndefined(threadSessionOf(one)) === Option.getOrUndefined(threadSessionOf(other)) &&
-  Option.getOrUndefined(failureOf(one)) === Option.getOrUndefined(failureOf(other))
+  Option.getOrUndefined(failureOf(one)) === Option.getOrUndefined(failureOf(other)) &&
+  skillsOf(one) === skillsOf(other)

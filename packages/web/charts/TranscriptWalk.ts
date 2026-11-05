@@ -4,6 +4,7 @@ import * as Schema from 'effect/Schema'
 import {
   BackgroundChanged,
   omittedUpTo,
+  SkillsChanged,
   TranscriptCaughtUp,
   TranscriptOpened,
 } from '@crook/domain/Transcript'
@@ -11,13 +12,15 @@ import { ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import {
   attemptOf,
+  awaitsOf,
   cacheRead,
   EARLIER_ASKED,
   emptyDue,
   eventArrived,
-  failureOf,
   foldOf,
   hasFailed,
+  isCaughtUp,
+  isRestarting,
   noticeDue,
   noticeHeld,
   saysCatchingUp,
@@ -34,6 +37,7 @@ import {
   applyTranscriptEvent,
   EMPTY_TRANSCRIPT,
   hasLines,
+  isOpened,
   LaptopCatchUp,
   sessionOf,
 } from '@crook/web/chat/TranscriptState'
@@ -53,10 +57,7 @@ const CACHED_VIEW = applyTranscriptEvent(
 )
 
 const isCaughtUpArrival = (event: TranscriptViewEvent): boolean =>
-  TranscriptViewEvent.guards.EventArrived(event) && Schema.is(TranscriptCaughtUp)(event.event)
-
-const opensSession = (event: TranscriptViewEvent): boolean =>
-  TranscriptViewEvent.guards.EventArrived(event) && Schema.is(TranscriptOpened)(event.event)
+  TranscriptViewEvent.guards.EventArrived(event) && isCaughtUp(event.event)
 
 const opensAnother = (state: TranscriptViewState, event: TranscriptViewEvent): boolean =>
   TranscriptViewEvent.guards.EventArrived(event) &&
@@ -64,10 +65,6 @@ const opensAnother = (state: TranscriptViewState, event: TranscriptViewEvent): b
   Option.exists(threadSessionOf(state), (session) => session !== event.event.session)
 
 const isTimer = TranscriptViewEvent.isAnyOf(['NoticeDue', 'NoticeHeld', 'EmptyDue'])
-
-const isRestarting = (state: TranscriptViewState): boolean =>
-  (TranscriptViewState.guards.NoView(state) || TranscriptViewState.guards.LoadingEarlier(state)) &&
-  state.restarting
 
 const shownHasLines = (state: TranscriptViewState): boolean =>
   Option.exists(shownOf(state), hasLines)
@@ -98,22 +95,25 @@ const shownRelation = (state: TranscriptViewState): string =>
 
 const flagsOf = (state: TranscriptViewState): string =>
   JSON.stringify([
-    TranscriptViewState.guards.NoView(state) ||
-    TranscriptViewState.guards.Holding(state) ||
-    TranscriptViewState.guards.LoadingEarlier(state) ||
-    TranscriptViewState.guards.Current(state) ||
-    TranscriptViewState.guards.OpenedEmpty(state) ||
-    TranscriptViewState.guards.Failed(state) ||
-    TranscriptViewState.guards.Retrying(state)
-      ? state.awaits
-      : true,
+    awaitsOf(state),
     TranscriptViewState.guards.CatchingUp(state) ? state.noticeHeld : false,
     isRestarting(state),
   ])
 
 const saysNoMessages = (state: TranscriptViewState): boolean =>
-  TranscriptViewState.guards.OpenedEmpty(state) ||
-  (TranscriptViewState.isAnyOf(['Cached', 'Holding', 'CatchingUp'])(state) && !shownHasLines(state))
+  !TranscriptViewState.guards.NoView(state) && !hasFailed(state) && !shownHasLines(state)
+
+const waitsOutEmpty = (state: TranscriptViewState): boolean =>
+  TranscriptViewState.guards.NoView(state) &&
+  !state.awaits &&
+  !state.restarting &&
+  isOpened(state.fold) &&
+  !hasLines(state.fold)
+
+const hasCommand = (
+  commands: readonly TranscriptCommand[],
+  command: TranscriptCommand['_tag'],
+): boolean => commands.some(TranscriptCommand.$is(command))
 
 const here = (state: TranscriptViewState): ClaudeSessionId =>
   Option.getOrElse(threadSessionOf(state), () => SESSION_A)
@@ -133,6 +133,7 @@ export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, 
       eventArrived(new TranscriptOpened({ session: elsewhere(state) })),
       eventArrived(omittedUpTo(here(state), SOME_OFFSET)),
       eventArrived(new BackgroundChanged({ session: here(state), tasks: [], activity: [] })),
+      eventArrived(new SkillsChanged({ session: here(state), skills: [] })),
       eventArrived(new TranscriptCaughtUp({ session: here(state), offset: SOME_OFFSET })),
       watchFailed(READ_FAILED),
       watchFailed(REJECTED),
@@ -177,14 +178,6 @@ export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, 
         name: 'a failure never says it is catching up',
         holds: (state) => !hasFailed(state) || !saysCatchingUp(state),
       },
-      {
-        name: 'only a failed watch or its retry carries a failure',
-        holds: (state) => hasFailed(state) === Option.isSome(failureOf(state)),
-      },
-      {
-        name: 'a skeleton shows only with nothing to show',
-        holds: (state) => !TranscriptViewState.guards.NoView(state) || !shownHasLines(state),
-      },
     ],
     arrowRules: [
       {
@@ -192,7 +185,7 @@ export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, 
         holds: ({ from, event, to }) =>
           !shownHasLines(from) ||
           shownHasLines(to) ||
-          opensSession(event) ||
+          opensAnother(from, event) ||
           isCaughtUpArrival(event),
       },
       {
@@ -234,7 +227,7 @@ export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, 
           !foldOf(from).whole ||
           isRestarting(from) ||
           !opensAnother(from, event) ||
-          (!foldOf(to).whole && commands.length === 1),
+          (!foldOf(to).whole && hasCommand(commands, 'ReadAgain')),
       },
       {
         name: 'a catch-up lands only from a reopened cache, once the read has ended',
@@ -245,12 +238,16 @@ export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, 
       },
       {
         name: 'a resume that holds rows back starts the wait that ends in words',
-        holds: ({ from, event, to, commands }) =>
+        holds: ({ event, to, commands }) =>
           !TranscriptViewEvent.guards.WatchResumed(event) ||
           !TranscriptViewState.guards.Holding(to) ||
           !to.awaits ||
-          commands.length === 1 ||
-          hasFailed(from),
+          hasCommand(commands, 'WaitOutNotice'),
+      },
+      {
+        name: 'silence from an agent too old for marks starts the wait that ends it',
+        holds: ({ from, to, commands }) =>
+          !waitsOutEmpty(to) || waitsOutEmpty(from) || hasCommand(commands, 'WaitOutEmpty'),
       },
     ],
   }

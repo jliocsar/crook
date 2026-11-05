@@ -7,7 +7,6 @@ import * as Queue from 'effect/Queue'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
-import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
@@ -17,7 +16,6 @@ import type { ClaudeSessionId, MachineId, PaneId, SubagentId } from '@crook/doma
 import {
   PaneTranscript,
   SubagentTranscript,
-  TranscriptCaughtUp,
   TranscriptTailBytes,
   type TranscriptEvent,
   type TranscriptSource,
@@ -29,21 +27,21 @@ import {
   afterAll,
   cacheRead,
   EARLIER_ASKED,
+  emptyWait,
   eventArrived,
   foldOf,
+  isCaughtUp,
   NO_VIEW,
+  noticeHold,
+  noticeWait,
   rememberedOf,
   sameOnScreen,
-  transcriptTimer,
+  TranscriptCommand,
   TranscriptViewState,
   watchFailed,
   watchResumed,
 } from '@crook/web/chat/TranscriptMachine'
-import type {
-  TranscriptViewEvent,
-  TranscriptWatchFailure,
-  TranscriptCommand,
-} from '@crook/web/chat/TranscriptMachine'
+import type { TranscriptViewEvent, TranscriptWatchFailure } from '@crook/web/chat/TranscriptMachine'
 import { resumeOf } from '@crook/web/chat/TranscriptState'
 import { findAgent, isOnlineMachine } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
@@ -145,15 +143,20 @@ const transcriptViews = (machine: MachineId, source: TranscriptSource, signals: 
             Effect.as(Effect.forEach(commands, perform, { discard: true }), next),
         )
 
-      const perform = (command: TranscriptCommand): Effect.Effect<void> =>
-        Option.match(transcriptTimer(command), {
-          onNone: () => SubscriptionRef.update(rereads, (count) => count + 1),
-          onSome: (timer) =>
-            Effect.forkIn(
-              Effect.flatMap(timer, (event) => dispatch([event])),
-              scope,
-            ),
-        })
+      const afterTimer = (timer: Effect.Effect<TranscriptViewEvent>) =>
+        Effect.forkIn(
+          Effect.flatMap(timer, (event) => dispatch([event])),
+          scope,
+        )
+
+      const perform: (command: TranscriptCommand) => Effect.Effect<void> = TranscriptCommand.$match(
+        {
+          WaitOutNotice: ({ attempt }) => afterTimer(noticeWait(attempt)),
+          HoldNotice: ({ attempt }) => afterTimer(noticeHold(attempt)),
+          WaitOutEmpty: ({ attempt }) => afterTimer(emptyWait(attempt)),
+          ReadAgain: () => SubscriptionRef.update(rereads, (count) => count + 1),
+        },
+      )
 
       yield* Stream.merge(
         watchableChanges.pipe(Stream.filter((ready) => ready)),
@@ -195,7 +198,7 @@ const transcriptViews = (machine: MachineId, source: TranscriptSource, signals: 
           onSome: (view) => cache.remember(machine, source, view),
         })
 
-        if (Arr.some(events, (event) => Schema.is(TranscriptCaughtUp)(event))) {
+        if (Arr.some(events, isCaughtUp)) {
           yield* persist
         }
       })

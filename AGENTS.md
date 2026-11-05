@@ -571,7 +571,7 @@ path to it, a transition that throws or returns what the schema refuses, a state
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
 its own test shows each one failing. Two states that differ only by a token are one state: the
 walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
-guard and not a measurement: the machines here have 11, 8 and 130 (measured; the last has ten tags, and its identity keeps what each view holds beside its name), so reaching it means a
+guard and not a measurement: the machines here have 11, 8 and 130 (measured), so reaching it means a
 token got into a state's identity.
 
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
@@ -748,7 +748,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   its open, so the phone keeps the skeleton for the same second before it says "No messages yet"
   (reasoned, not measured). With rows on screen it never says so, and a rejected resume keeps them
   until the agent's first chunk replaces them. A file left truly empty behind such a rejection
-  therefore keeps showing the old rows (reasoned, not measured).
+  therefore keeps showing the old rows until Claude writes again (reasoned, not measured).
 - A chat with nothing cached whose pane closed or whose Claude exited showed a blank thread above
   the card. It says the phone has no messages, as a machine that is away does. A chat closed from
   itself before its transcript arrived says so too as it leaves, where it used to go blank
