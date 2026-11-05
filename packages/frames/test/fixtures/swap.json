@@ -1,0 +1,2066 @@
+{
+  "timeOrigin": 1793841538349,
+  "frames": [
+    {
+      "frame": 35,
+      "at": 1654.3,
+      "vsync": 1653.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 36,
+      "at": 1670.4,
+      "vsync": 1670,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.3
+    },
+    {
+      "frame": 37,
+      "at": 1687.9,
+      "vsync": 1686.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 38,
+      "at": 1703.7,
+      "vsync": 1703.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.4
+    },
+    {
+      "frame": 39,
+      "at": 1720.4,
+      "vsync": 1720.1,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 40,
+      "at": 1737.7,
+      "vsync": 1736.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 41,
+      "at": 1754.5,
+      "vsync": 1753.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 42,
+      "at": 1770.8,
+      "vsync": 1770,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 43,
+      "at": 1787.4,
+      "vsync": 1786.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 44,
+      "at": 1804.5,
+      "vsync": 1803.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 45,
+      "at": 1820.5,
+      "vsync": 1820,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 46,
+      "at": 1837.2,
+      "vsync": 1836.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.3
+    },
+    {
+      "frame": 47,
+      "at": 1854.7,
+      "vsync": 1853.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 48,
+      "at": 1870.7,
+      "vsync": 1870.1,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.5
+    },
+    {
+      "frame": 49,
+      "at": 1887.3,
+      "vsync": 1886.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 50,
+      "at": 1904.1,
+      "vsync": 1903.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.5
+    },
+    {
+      "frame": 51,
+      "at": 1920.6,
+      "vsync": 1920,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 52,
+      "at": 1937.5,
+      "vsync": 1936.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 53,
+      "at": 1953.7,
+      "vsync": 1953.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.9
+    },
+    {
+      "frame": 54,
+      "at": 1970.5,
+      "vsync": 1970,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.9
+    },
+    {
+      "frame": 55,
+      "at": 1987.7,
+      "vsync": 1986.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 56,
+      "at": 2003.6,
+      "vsync": 2003.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 57,
+      "at": 2020.3,
+      "vsync": 2020,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 58,
+      "at": 2037.4,
+      "vsync": 2036.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.7
+    },
+    {
+      "frame": 59,
+      "at": 2053.9,
+      "vsync": 2053.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 60,
+      "at": 2070.3,
+      "vsync": 2070.1,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 61,
+      "at": 2167.6,
+      "vsync": 2086.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 1 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": ["span[hollow-dot]", "style", "span", "section[edge-card]"],
+      "removed": ["span[status-dot]", "div"],
+      "readMs": 0.9
+    },
+    {
+      "frame": 62,
+      "at": 2173.5,
+      "vsync": 2170,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 1 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.3
+    },
+    {
+      "frame": 63,
+      "at": 2188,
+      "vsync": 2186.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.9 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.9 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.4
+    },
+    {
+      "frame": 64,
+      "at": 2204,
+      "vsync": 2203.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.8 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.8 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 65,
+      "at": 2220.8,
+      "vsync": 2220,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.7 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.7 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 3
+    },
+    {
+      "frame": 66,
+      "at": 2237.1,
+      "vsync": 2236.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.7 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.7 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 67,
+      "at": 2254.1,
+      "vsync": 2253.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.7 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.7 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 68,
+      "at": 2270.8,
+      "vsync": 2270,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.2
+    },
+    {
+      "frame": 69,
+      "at": 2289.9,
+      "vsync": 2286.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.7
+    },
+    {
+      "frame": 70,
+      "at": 2304.8,
+      "vsync": 2303.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": ["style", "span"],
+      "readMs": 1.9
+    },
+    {
+      "frame": 71,
+      "at": 2320.6,
+      "vsync": 2320,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.8
+    },
+    {
+      "frame": 72,
+      "at": 2337.4,
+      "vsync": 2336.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.8
+    },
+    {
+      "frame": 73,
+      "at": 2353.9,
+      "vsync": 2353.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 74,
+      "at": 2370.7,
+      "vsync": 2370,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 75,
+      "at": 2387.6,
+      "vsync": 2386.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 76,
+      "at": 2403.9,
+      "vsync": 2403.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 3
+    },
+    {
+      "frame": 77,
+      "at": 2420.4,
+      "vsync": 2420,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.8
+    },
+    {
+      "frame": 78,
+      "at": 2437.4,
+      "vsync": 2436.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.7
+    },
+    {
+      "frame": 79,
+      "at": 2453.9,
+      "vsync": 2453.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 80,
+      "at": 2470.3,
+      "vsync": 2470,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 81,
+      "at": 2487.5,
+      "vsync": 2486.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 82,
+      "at": 2504.4,
+      "vsync": 2503.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 83,
+      "at": 2520.5,
+      "vsync": 2520,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 84,
+      "at": 2537.4,
+      "vsync": 2536.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.5
+    },
+    {
+      "frame": 85,
+      "at": 2553.6,
+      "vsync": 2553.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 86,
+      "at": 2570.3,
+      "vsync": 2570,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.9
+    },
+    {
+      "frame": 87,
+      "at": 2587.7,
+      "vsync": 2586.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 88,
+      "at": 2603.7,
+      "vsync": 2603.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 89,
+      "at": 2621.5,
+      "vsync": 2620,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 3.3
+    },
+    {
+      "frame": 90,
+      "at": 2637.3,
+      "vsync": 2636.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 3.9
+    },
+    {
+      "frame": 91,
+      "at": 2654.4,
+      "vsync": 2653.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 4.3
+    },
+    {
+      "frame": 92,
+      "at": 2670.3,
+      "vsync": 2670,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 93,
+      "at": 2687.2,
+      "vsync": 2686.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 94,
+      "at": 2703.9,
+      "vsync": 2703.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.9
+    },
+    {
+      "frame": 95,
+      "at": 2721.5,
+      "vsync": 2720,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 96,
+      "at": 2737.1,
+      "vsync": 2736.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.8
+    },
+    {
+      "frame": 97,
+      "at": 2753.9,
+      "vsync": 2753.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 98,
+      "at": 2770.7,
+      "vsync": 2770,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 99,
+      "at": 2787.7,
+      "vsync": 2786.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.9
+    },
+    {
+      "frame": 100,
+      "at": 2804.1,
+      "vsync": 2803.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 101,
+      "at": 2821,
+      "vsync": 2820,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.3
+    },
+    {
+      "frame": 102,
+      "at": 2837.8,
+      "vsync": 2836.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 103,
+      "at": 2853.9,
+      "vsync": 2853.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 104,
+      "at": 2870.9,
+      "vsync": 2870,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 105,
+      "at": 2887,
+      "vsync": 2886.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 106,
+      "at": 2904.2,
+      "vsync": 2903.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.5
+    },
+    {
+      "frame": 107,
+      "at": 2920.7,
+      "vsync": 2920,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.5
+    },
+    {
+      "frame": 108,
+      "at": 2937.6,
+      "vsync": 2936.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 109,
+      "at": 2954.6,
+      "vsync": 2953.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.3
+    },
+    {
+      "frame": 110,
+      "at": 2970.9,
+      "vsync": 2970,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.5
+    },
+    {
+      "frame": 111,
+      "at": 2987.9,
+      "vsync": 2986.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 112,
+      "at": 3003.9,
+      "vsync": 3003.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 113,
+      "at": 3020.9,
+      "vsync": 3020,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.3
+    },
+    {
+      "frame": 114,
+      "at": 3037.2,
+      "vsync": 3036.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 115,
+      "at": 3053.7,
+      "vsync": 3053.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 116,
+      "at": 3070.6,
+      "vsync": 3070,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.3
+    },
+    {
+      "frame": 117,
+      "at": 3087.1,
+      "vsync": 3086.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 118,
+      "at": 3103.6,
+      "vsync": 3103.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 119,
+      "at": 3120.7,
+      "vsync": 3120,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 120,
+      "at": 3137.5,
+      "vsync": 3136.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 121,
+      "at": 3153.6,
+      "vsync": 3153.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 122,
+      "at": 3170.6,
+      "vsync": 3170,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 123,
+      "at": 3187.4,
+      "vsync": 3186.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.3
+    },
+    {
+      "frame": 124,
+      "at": 3204,
+      "vsync": 3203.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 125,
+      "at": 3220.6,
+      "vsync": 3220,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 126,
+      "at": 3237.3,
+      "vsync": 3236.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 127,
+      "at": 3253.8,
+      "vsync": 3253.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 128,
+      "at": 3270.3,
+      "vsync": 3270,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "dimmed": { "x": 0, "y": 57, "width": 390, "height": 632, "opacity": 0.6 },
+        "edge-card": { "x": 12, "y": 702, "width": 366, "height": 130, "opacity": 1 },
+        "spinner": { "x": 29, "y": 721, "width": 20, "height": 20, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 129,
+      "at": 3344.5,
+      "vsync": 3286.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": ["span[status-dot]", "style", "span", "div"],
+      "removed": ["span[hollow-dot]", "section[edge-card]"],
+      "readMs": 0.8
+    },
+    {
+      "frame": 130,
+      "at": 3350.2,
+      "vsync": 3336.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.6 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 131,
+      "at": 3357.8,
+      "vsync": 3353.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.7 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 132,
+      "at": 3370.8,
+      "vsync": 3370,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.8 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 133,
+      "at": 3387,
+      "vsync": 3386.7,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.9 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 134,
+      "at": 3403.9,
+      "vsync": 3403.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.9 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 135,
+      "at": 3420.3,
+      "vsync": 3419.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 0.9 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.8
+    },
+    {
+      "frame": 136,
+      "at": 3437.2,
+      "vsync": 3436.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 137,
+      "at": 3453.6,
+      "vsync": 3453.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 138,
+      "at": 3470.1,
+      "vsync": 3470,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.8
+    },
+    {
+      "frame": 139,
+      "at": 3487.9,
+      "vsync": 3486.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.5
+    },
+    {
+      "frame": 140,
+      "at": 3505.6,
+      "vsync": 3503.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": ["style", "span"],
+      "readMs": 1.3
+    },
+    {
+      "frame": 141,
+      "at": 3520.9,
+      "vsync": 3520,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.8
+    },
+    {
+      "frame": 142,
+      "at": 3537.2,
+      "vsync": 3536.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 143,
+      "at": 3554.1,
+      "vsync": 3553.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 144,
+      "at": 3571.1,
+      "vsync": 3569.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.5
+    },
+    {
+      "frame": 145,
+      "at": 3587.3,
+      "vsync": 3586.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.9
+    },
+    {
+      "frame": 146,
+      "at": 3604.1,
+      "vsync": 3603.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 5
+    },
+    {
+      "frame": 147,
+      "at": 3620.8,
+      "vsync": 3619.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 148,
+      "at": 3637.5,
+      "vsync": 3636.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 149,
+      "at": 3653.5,
+      "vsync": 3653.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 150,
+      "at": 3670.9,
+      "vsync": 3669.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 151,
+      "at": 3687.3,
+      "vsync": 3686.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.6
+    },
+    {
+      "frame": 152,
+      "at": 3704.1,
+      "vsync": 3703.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.6
+    },
+    {
+      "frame": 153,
+      "at": 3720.4,
+      "vsync": 3719.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 154,
+      "at": 3737.4,
+      "vsync": 3736.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    }
+  ],
+  "shifts": [],
+  "steps": [
+    { "index": 0, "label": "The machine starts reconnecting", "at": 2077.600000023842 },
+    { "index": 1, "label": "The machine is back", "at": 3281.8000000715256 }
+  ]
+}

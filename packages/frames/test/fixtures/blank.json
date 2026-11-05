@@ -1,0 +1,215 @@
+{
+  "timeOrigin": 1793841573682,
+  "frames": [
+    {
+      "frame": 17,
+      "at": 538.8,
+      "vsync": 535.6,
+      "phase": "mounting",
+      "mounted": false,
+      "blank": false,
+      "rows": 0,
+      "marks": {},
+      "added": [],
+      "removed": [],
+      "readMs": 0
+    },
+    {
+      "frame": 18,
+      "at": 553.9,
+      "vsync": 552.3,
+      "phase": "mounting",
+      "mounted": false,
+      "blank": false,
+      "rows": 0,
+      "marks": {},
+      "added": [],
+      "removed": [],
+      "readMs": 0
+    },
+    {
+      "frame": 19,
+      "at": 622.9,
+      "vsync": 568.9,
+      "phase": "playing",
+      "mounted": true,
+      "blank": true,
+      "rows": 0,
+      "marks": {},
+      "added": ["span", "div", "nav", "div[toast]"],
+      "removed": [],
+      "readMs": 7.6
+    },
+    {
+      "frame": 20,
+      "at": 641.4,
+      "vsync": 618.9,
+      "phase": "playing",
+      "mounted": true,
+      "blank": true,
+      "rows": 0,
+      "marks": {},
+      "added": [],
+      "removed": [],
+      "readMs": 3.6
+    },
+    {
+      "frame": 21,
+      "at": 696.3,
+      "vsync": 635.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": ["div[herd-skeleton]"],
+      "removed": [],
+      "readMs": 9.7
+    },
+    {
+      "frame": 22,
+      "at": 710.1,
+      "vsync": 702.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 0.1
+    },
+    {
+      "frame": 23,
+      "at": 724.7,
+      "vsync": 718.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 24,
+      "at": 736,
+      "vsync": 735.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 25,
+      "at": 753,
+      "vsync": 752.3,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 26,
+      "at": 769.4,
+      "vsync": 768.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 27,
+      "at": 786.3,
+      "vsync": 785.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 28,
+      "at": 803.2,
+      "vsync": 802.2,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 29,
+      "at": 819.3,
+      "vsync": 818.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 30,
+      "at": 836.2,
+      "vsync": 835.6,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 0.5
+    },
+    {
+      "frame": 31,
+      "at": 852.7,
+      "vsync": 852.2,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "marks": { "herd-skeleton": { "x": 0, "y": 56, "width": 390, "height": 588, "opacity": 1 } },
+      "added": [],
+      "removed": [],
+      "readMs": 0.2
+    }
+  ],
+  "shifts": [
+    {
+      "at": 645.9,
+      "value": 0.00002206175823682169,
+      "hadRecentInput": false,
+      "sources": [
+        {
+          "element": "#text",
+          "from": { "x": 16, "y": 11, "width": 66, "height": 28 },
+          "to": { "x": 16, "y": 14, "width": 65, "height": 28 }
+        }
+      ]
+    }
+  ],
+  "steps": [{ "index": 0, "label": "The link gives its first value", "at": 636.4000000953674 }]
+}

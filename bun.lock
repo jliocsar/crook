@@ -56,6 +56,17 @@
         "@crook/tsconfig": "workspace:*",
       },
     },
+    "packages/frames": {
+      "name": "@crook/frames",
+      "version": "0.0.8",
+      "dependencies": {
+        "@effect/platform-bun": "4.0.5",
+        "effect": "4.0.5",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
     "packages/herdr": {
       "name": "@crook/herdr",
       "version": "0.0.8",
@@ -145,6 +156,7 @@
       },
       "devDependencies": {
         "@crook/claude": "workspace:*",
+        "@crook/frames": "workspace:*",
         "@crook/tsconfig": "workspace:*",
         "@effect/platform-bun": "4.0.5",
         "@tailwindcss/node": "4.3.3",
@@ -376,6 +388,8 @@
     "@crook/claude": ["@crook/claude@workspace:packages/claude"],
 
     "@crook/domain": ["@crook/domain@workspace:packages/domain"],
+
+    "@crook/frames": ["@crook/frames@workspace:packages/frames"],
 
     "@crook/herdr": ["@crook/herdr@workspace:packages/herdr"],
 

@@ -1,0 +1,201 @@
+{
+  "timeOrigin": 1793841544381.4,
+  "frames": [
+    {
+      "frame": 60,
+      "at": 1555.2,
+      "vsync": 1554.1,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 642, "width": 366, "height": 190, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 61,
+      "at": 1571,
+      "vsync": 1570.8,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 642, "width": 366, "height": 190, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 62,
+      "at": 1588,
+      "vsync": 1587.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 642, "width": 366, "height": 190, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 63,
+      "at": 1605.9,
+      "vsync": 1604.1,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 642, "width": 366, "height": 190, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 0.8
+    },
+    {
+      "frame": 64,
+      "at": 1621.7,
+      "vsync": 1620.8,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": ["div"],
+      "readMs": 1.1
+    },
+    {
+      "frame": 65,
+      "at": 1637.7,
+      "vsync": 1637.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 66,
+      "at": 1654.8,
+      "vsync": 1654.1,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 67,
+      "at": 1671,
+      "vsync": 1670.8,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 68,
+      "at": 1688,
+      "vsync": 1687.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 69,
+      "at": 1704.5,
+      "vsync": 1704.1,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.5
+    },
+    {
+      "frame": 70,
+      "at": 1721,
+      "vsync": 1720.8,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "composer": { "x": 12, "y": 730, "width": 366, "height": 102, "opacity": 1 }
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    }
+  ],
+  "shifts": [
+    {
+      "at": 1623.8,
+      "value": 0.026560499539543134,
+      "hadRecentInput": false,
+      "sources": [
+        {
+          "element": "div[chat-dock]",
+          "from": { "x": 0, "y": 629, "width": 390, "height": 215 },
+          "to": { "x": 0, "y": 717, "width": 390, "height": 127 }
+        }
+      ]
+    }
+  ],
+  "steps": [
+    { "index": 0, "label": "Send /clear", "at": 1398.7999999523163 },
+    { "index": 1, "label": "The pane opens a new session", "at": 1901.6999999284744 },
+    { "index": 2, "label": "Caught up on the empty session", "at": 2204.399999976158 },
+    { "index": 3, "label": "The first prompt of the new session", "at": 3009.399999976158 }
+  ]
+}
