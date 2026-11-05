@@ -697,6 +697,26 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   as two steps, an agent connection dropping between them would leave the position behind what
   the phone holds, and the agent's resend from that position would reach the phone twice, with
   nothing downstream left to drop it (reasoned from the interrupt points, not measured).
+- A publish from an agent connection that has died can still run at the hub after its successor's.
+  The RPC server forks a handler for each request frame it reads, and nothing orders two sockets.
+  With a proxy holding the client's bytes, the client dead by its own ping timeout and its successor
+  already publishing, releasing the first held frame ran the call in 10 of 10 runs: the phone got
+  the finished session back with its lines repeated, and the next live chunk was refused. Released
+  in one read with the ping and close frame behind it, the call never ran, in 10 of 10: the handler
+  was forked into a scope that closed first (all measured). So it takes a gap at the hub between
+  the frame and the end of its socket. The hub closed a silent socket 12.0 s after it fell silent,
+  while the agent gives up 5 to 10 s after its last frame and redials, so the hub still reads a
+  socket the agent has left (one run measured). A network that delivers the oldest segment before
+  the rest is reasoned, not measured.
+- The hub fences publishes per connection. Each upgrade mints a link with a rising number, and a
+  link stops counting once a later one asks for demands. A call on a link that stopped counting
+  drops what is left of its updates and still replies with success, so nothing changes on the wire
+  and an older agent is covered too: every publisher got its watch ids from the demand stream. The
+  fence moves at the demand and not at the upgrade, so a dial the agent gave up on, which never
+  speaks, fences nothing. A client speaks only after its upgrade's reply and redials only after
+  giving up, so the numbers follow the agent's own order, and an older link asking late cannot move
+  the fence back. A publish parked on a full mailbox wakes when its link is replaced and lets go,
+  rather than delivering once the phone drains.
 - A watch's delivered position lives beside the watch, outside the set the agents' demands are
   built from, so only a watch that comes or goes works out a machine's demand again. Updating
   the position inside that set recomputed the demand once per event: 21 events cost 21

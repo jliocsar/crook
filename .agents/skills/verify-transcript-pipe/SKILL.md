@@ -29,8 +29,8 @@ packages/protocol/src/Transcripts.ts        TranscriptOutOfStep TranscriptWatchF
 packages/claude/src/TranscriptTail.ts       open available follow drain tailStart
 packages/agent/src/TranscriptStreams.ts     fromLineNearEnd openSession finishSession fromSession sessionsOf followPane publishAll runWatch serve
 packages/agent/src/HubLink.ts               session transcriptLinkOf
-packages/hub/src/TranscriptRelay.ts         watch demandOf forward forwardInSession append fail deliver publish
-packages/hub/src/HttpRoutes.ts              WatchTranscript TranscriptDemands PublishTranscriptBatch
+packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append fail deliver publish
+packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript TranscriptDemands PublishTranscriptBatch
 packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines catchingUpAfter catchingUpFrom failedWith resumeOf isShowable isOpened
 packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
 packages/web/src/rpc/HubLink.ts             whileConnected watchTranscript
@@ -71,9 +71,8 @@ The run has six parts, each a line per check:
 - `jc147/*`: the same model with the phone's view reset that JC-147 plans. This is a prediction:
   it runs nothing real.
 - `can-fail/*`: each rule failing on a broken variant of the code it guards. A check never seen
-  failing proves nothing. `OneSessionShown` and `NeverRewinds` have no line here because the code
-  as it is already breaks them: `finding/F1` against `jc147/F1-gone`, and `finding/F3-stale-open-rewinds`
-  against `holds/*`, show each failing and holding.
+  failing proves nothing. `OneSessionShown` has no line here because the code as it is already
+  breaks it: `finding/F1` against `jc147/F1-gone` shows it failing and holding.
 - `replay/*`: fixed random walks through the real relay, mailbox and view, comparing every
   position, line and mailbox after every step, plus nine cases through the real
   `TranscriptStreams.follow` over real files. `replay/every-step` fails if any step of the model
@@ -120,28 +119,6 @@ the user wants instead.
 Harm: repeated rows, and row keys that collide (measured in
 `tmp/redesign/research-bugs.md`, bug 3).
 
-**F3, a late publish from a dead socket rewinds the hub.** Breaks `NeverRewinds`,
-`NoDuplicateLine`, `NeverStuckCatchingUp`, `ShowsPaneSession` and `NeverBehindFile`. Not fixed by
-JC-147: its duplicate and old lines go, the other four stay. Needs a message delayed past a
-reconnect, so it should be rare; how rare is not measured.
-
-1. The agent's first attempt publishes `[opened A, chunk 0-1, caughtUp A]`, and its socket dies
-   with that call undelivered. `RpcServer` only interrupts a handler it has started and whose
-   socket it knows is closed, and nothing orders two sockets.
-2. The agent reconnects. `demandOf` hands it the position, `fromSession` runs, and the pane has
-   moved to B: `[opened A, chunk 0-1, opened B, chunk B 0-1]` is delivered, then `caughtUp B` is
-   published.
-3. The old call lands. `deliver` sees `opened A` with the position in B, so `inSession` is false:
-   `forward` sends it and moves the position to A@0. Its chunk is refused, to nobody.
-4. `caughtUp B` is now of a session the position is not in: `forwardInSession` drops it.
-5. The phone applies `opened A`: position A@0, `catchingUp` true for good, and the agent, caught up
-   and idle, sends nothing. The next line in B is refused with `expected` A@0, and the restart
-   drains A from its start and opens B again.
-
-Harm: the chat jumps back to the finished conversation with the "Catching up" pill on, until
-Claude writes again, and then repeats lines. The relay has no way to tell a dead connection's
-publish from a live one.
-
 **F4, `NeverBehindFile`: a return inside the switch queue leaves the hub at offset 0.** Not fixed
 by JC-147, which makes it worse. Needs the pane to go A, B, A while `opened(B)` is still in
 `mergeAll`'s queue: microseconds on an idle pipe, longer while a full mailbox holds the queue up
@@ -169,6 +146,18 @@ end.** JC-147 makes it moot, since it shows no old session. Needs the session to
 3. The queue drains: `opened(A)`, the chunk, `opened(B)`. A's later line never arrives.
 
 Harm: A's last lines are missing above the divider, with no mark.
+
+**Settled: a late publish from a dead socket.** It used to rewind the hub: the agent's first
+attempt published `[opened A, chunk 0-1, caughtUp A]`, its socket died with that call undelivered,
+the agent reconnected, and the old call landed afterwards. `opened A` moved the position back to
+A@0, its chunk was accepted because it continued that position, and the phone jumped back to the
+finished conversation with its lines repeated. It happens through a real socket, which
+`TranscriptFence.test.ts` holds: `RpcServer` runs a dead connection's handler for a frame it read
+before the socket ended. The relay now fences by connection: `linkFor` mints a link per upgrade, a
+link counts until a later one asks for demands, and a call on a link that stopped counting drops
+what is left of its updates and still replies. `holds/late-publish-from-dead-socket` and
+`can-fail/no-fence` show the rule holding with the fence and failing without it, and
+`reach/fenced-call-dropped` walks the drop through the real relay.
 
 A refusal is not a finding on its own: `reach/live-chunk-refused` gets one with no drop at all. A
 cold watch has `opened(A)` tapped and its chunk 0-1 still in `mergeAll`'s queue when the pane
@@ -234,7 +223,7 @@ is a modeling error, and the replay is what tells.
 **When JC-147 lands:** set `Jc147` to the code's behaviour by making the reset the model's only
 behaviour, remove the flag, and turn `SessionCleared` out of `linesAfter` and `Replay.ts`.
 `finding/F1` and `finding/F2` go away as `jc147/F1-gone` and `jc147/F2-gone` predict.
-`finding/F3` and `finding/F4` stay, and F4 turns from a position behind into an empty thread.
+`finding/F4` stays, and turns from a position behind into an empty thread.
 Removing the drain from `fromSession` (its change 6) means removing `DRAIN` from `startInner`;
 `FollowReplay.ts`'s cases that finish a session change with it.
 
@@ -253,8 +242,10 @@ Every check is one pane, one chat, one agent, one hub, with lines counted, not b
 
 Assumed, not checked: Claude only appends whole lines, and only to the pane's current session.
 One `Semaphore` waiter at a time (at most one dead socket's call). A delayed call is allowed only
-when `SocketsMayReorder` is on: `holds/*` keep sockets in order, and F3 is what breaks without
-that. Fairness on the pipe's own steps for `AlwaysSettles`. `awaitsCaughtUp` is true: a current
+when `SocketsMayReorder` is on, and `holds/late-publish-from-dead-socket` is the check that turns
+it on. A dead link is never the newest to ask for demands once its successor has: a client speaks
+only after its upgrade's reply, so links are minted in the order the agent's real connections
+started, and a dial the agent gave up on never asks, so it fences nothing. Fairness on the pipe's own steps for `AlwaysSettles`. `awaitsCaughtUp` is true: a current
 agent.
 
 ## What it does not cover

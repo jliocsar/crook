@@ -34,6 +34,7 @@ import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import {
   TranscriptOutOfStep,
   TranscriptReadFailed,
+  type TranscriptUpdate,
   TranscriptWatchFailed,
   type TranscriptWatchId,
 } from '@crook/protocol/Transcripts'
@@ -90,11 +91,24 @@ const describeEvent = (event: TranscriptEvent) =>
     }),
   )
 
-const relay = Effect.map(Layer.build(TranscriptRelay.layer), (context) =>
-  Context.get(context, TranscriptRelay),
-)
+const relay = Effect.gen(function* () {
+  const transcripts = Context.get(yield* Layer.build(TranscriptRelay.layer), TranscriptRelay)
+  const laptop = yield* transcripts.linkFor(LAPTOP)
+  const desktop = yield* transcripts.linkFor(DESKTOP)
+  const linkOf = (machine: MachineId) => (machine === LAPTOP ? laptop : desktop)
 
-const watchIds = (transcripts: TranscriptRelay['Service'], machine: MachineId, count: number) =>
+  return {
+    ...transcripts,
+    demands: (machine: MachineId) => linkOf(machine).demands,
+    publish: (
+      machine: MachineId,
+      id: TranscriptWatchId,
+      updates: Arr.NonEmptyReadonlyArray<TranscriptUpdate>,
+    ) => linkOf(machine).publish(id, updates),
+  }
+})
+
+const watchIds = (transcripts: Effect.Success<typeof relay>, machine: MachineId, count: number) =>
   transcripts.demands(machine).pipe(
     Stream.filter((demand) => demand.watches.length === count),
     Stream.runHead,
@@ -481,6 +495,98 @@ layer(Layer.empty)('TranscriptRelay', (it) => {
         [`chunk ${CHUNK_READ_LIMIT}-${CHUNK_READ_LIMIT + 10} 1`],
       ])
       expect(yield* fromOfDemand).toEqual(Option.some(at(CHUNK_READ_LIMIT + 10)))
+    }),
+  )
+
+  it.effect('stops counting a link once a later link asks for demands', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* watching(transcripts, paneSource, Option.none())
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+      const successor = yield* transcripts.linkFor(LAPTOP)
+
+      yield* transcripts.publish(LAPTOP, id, [opened])
+
+      const beforeTheSuccessorSpoke = yield* Queue.take(events)
+
+      yield* Stream.runHead(successor.demands)
+      yield* transcripts.publish(LAPTOP, id, [new TranscriptOpened({ session: NEXT_SESSION })])
+      yield* successor.publish(id, [chunkBetween(0, 10)])
+
+      expect(beforeTheSuccessorSpoke).toBe(describeEvent(opened))
+      expect(yield* Queue.take(events)).toBe(describeEvent(chunkBetween(0, 10)))
+    }),
+  )
+
+  it.effect('keeps counting a link while a later one has connected and said nothing', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* watching(transcripts, paneSource, Option.none())
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+
+      yield* transcripts.linkFor(LAPTOP)
+      yield* transcripts.publish(LAPTOP, id, [opened])
+
+      expect(yield* Queue.take(events)).toBe(describeEvent(opened))
+    }),
+  )
+
+  it.effect('does not hand the watch back when an older link asks for demands late', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* watching(transcripts, paneSource, Option.none())
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+      const successor = yield* transcripts.linkFor(LAPTOP)
+
+      yield* Stream.runHead(successor.demands)
+      yield* Stream.runHead(transcripts.demands(LAPTOP))
+      yield* transcripts.publish(LAPTOP, id, [new TranscriptOpened({ session: NEXT_SESSION })])
+      yield* successor.publish(id, [opened])
+
+      expect(yield* Queue.take(events)).toBe(describeEvent(opened))
+    }),
+  )
+
+  it.effect('lets go of a publish blocked on a full mailbox when its link is replaced', () =>
+    Effect.gen(function* () {
+      const transcripts = yield* relay
+      const events = yield* Queue.unbounded<string>()
+      const acknowledged = yield* Deferred.make<void>()
+
+      yield* transcripts.watch(LAPTOP, paneSource, Option.none(), Option.none()).pipe(
+        Stream.runForEachArray((taken) =>
+          Effect.andThen(
+            Queue.offerAll(events, Arr.map(taken, describeEvent)),
+            Deferred.await(acknowledged),
+          ),
+        ),
+        Effect.ignore({ log: 'Debug' }),
+        Effect.forkScoped,
+      )
+      const id = yield* onlyWatch(yield* watchIds(transcripts, LAPTOP, 1))
+      const successor = yield* transcripts.linkFor(LAPTOP)
+      const full = chunkBetween(0, CHUNK_READ_LIMIT)
+      const stale = chunkBetween(CHUNK_READ_LIMIT, CHUNK_READ_LIMIT + 10)
+
+      yield* transcripts.publish(LAPTOP, id, [opened])
+      yield* Queue.take(events)
+      yield* transcripts.publish(LAPTOP, id, [full])
+      const blocked = yield* Effect.forkChild(transcripts.publish(LAPTOP, id, [stale]), {
+        startImmediately: true,
+      })
+
+      yield* Stream.runHead(successor.demands)
+      yield* Fiber.join(blocked)
+      const demand = yield* Stream.runHead(successor.demands)
+
+      expect(
+        Option.map(demand, (current) => Arr.map(current.watches, (watch) => watch.from)),
+      ).toEqual(Option.some([Option.some(at(CHUNK_READ_LIMIT))]))
+
+      yield* Deferred.succeed(acknowledged, undefined)
+      yield* successor.publish(id, [stale])
+
+      expect(yield* Queue.takeN(events, 2)).toEqual([describeEvent(full), describeEvent(stale)])
     }),
   )
 })

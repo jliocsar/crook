@@ -58,6 +58,7 @@ VARIABLES
   fiber,     \* the runWatch fiber of this watch: publishAll + followPane
   call,      \* the PublishTranscriptBatch in flight on the live connection: NONE or updates left
   stale,     \* the one a dead connection left at the hub: NONE or updates left
+  superseded, \* TranscriptRelay's latestLinks: a later link has asked for demands, so stale no longer counts
   permit,    \* Watcher.delivery semaphore: "free", "live" or "stale"
   watcher,   \* [alive: in the watchers map, delivered: the TxRef]
   moving,    \* only for Broken = "forward-two-steps": the position move not yet done
@@ -68,7 +69,7 @@ VARIABLES
   cached,    \* phone: TranscriptCache's remembered view, or NONE
   ghost      \* not in the code: history the rules read
 
-vars == <<pane, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
+vars == <<pane, file, budget, agentUp, fiber, call, stale, superseded, permit, watcher, moving,
           inbox, wire, mode, view, cached, ghost>>
 
 -----------------------------------------------------------------------------
@@ -198,7 +199,7 @@ nextChunk(i, s) ==
 Emit(event, nextInner) ==
   /\ Len(fiber.queued) < SwitchQueueSize
   /\ fiber' = [fiber EXCEPT !.queued = Append(@, event), !.inner = nextInner]
-  /\ UNCHANGED <<pane, file, budget, agentUp, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 FollowReads ==   \* TranscriptTail.available, drain or follow
@@ -239,7 +240,7 @@ SwitchMapSwitches ==
   /\ fiber.seen /= PaneSession
   /\ fiber' = [fiber EXCEPT !.seen = PaneSession,
                             !.inner = startInner(fiber.at, PaneSession, pane.at)]
-  /\ UNCHANGED <<pane, file, budget, agentUp, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 TapOffers ==   \* Stream.tap moves the Ref; Stream.runForEach(outbox.offer)
@@ -250,7 +251,7 @@ TapOffers ==   \* Stream.tap moves the Ref; Stream.runForEach(outbox.offer)
         /\ fiber' = [fiber EXCEPT !.queued = Tail(@),
                                   !.at = positionAfter(@, u),
                                   !.outbox = batchWith(@, u)]
-  /\ UNCHANGED <<pane, file, budget, agentUp, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 Publishes ==   \* outbox.takeCaughtUp, then link.publish; one call at a time
@@ -260,24 +261,26 @@ Publishes ==   \* outbox.takeCaughtUp, then link.publish; one call at a time
   /\ isCaughtUp(fiber.outbox)
   /\ call' = updatesOf(fiber.outbox)
   /\ fiber' = [fiber EXCEPT !.outbox = EMPTY_BATCH]
-  /\ UNCHANGED <<pane, file, budget, agentUp, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 \* serve -> reconcile: a demand starts a fiber from the watch's delivered position, on every
-\* hub connection and for every new watch.
+\* hub connection and for every new watch. The hub's demands runs askedForDemands first, so a call
+\* of an earlier link stops counting before the position is read (TranscriptRelay.stillCounts).
 DemandStartsWatch ==
   /\ agentUp
   /\ watcher.alive
   /\ ~fiber.running
   /\ moving = NONE
   /\ fiber' = fiberFrom(watcher.delivered)
+  /\ superseded' = (Broken /= "no-fence" /\ stale /= NONE)
   /\ UNCHANGED <<pane, file, budget, agentUp, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 AgentReconnects ==   \* HubLink: session() retried with hubReconnectSchedule
   /\ ~agentUp
   /\ agentUp' = TRUE
-  /\ UNCHANGED <<pane, file, budget, fiber, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, fiber, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 -----------------------------------------------------------------------------
@@ -296,6 +299,7 @@ MayHoldPermit(who) ==
   /\ permit \in {"free", who}
   /\ moving = NONE
   /\ who = "live" /\ permit = "free" => (SocketsMayReorder \/ stale = NONE)
+  /\ who = "stale" => ~superseded
 
 UpdatesLeft(who) == IF who = "live" THEN call ELSE stale
 
@@ -318,7 +322,7 @@ HubDropsOpen(who) ==   \* deliver: "inSession(position, opened.session) ? void"
      IN /\ u.t = "opened"
         /\ isOpenFiltered(u)
         /\ AfterStep(who, Tail(UpdatesLeft(who)))
-  /\ UNCHANGED <<pane, file, budget, agentUp, fiber, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 HubForwardsOpen(who) ==
@@ -331,7 +335,7 @@ HubForwardsOpen(who) ==
         /\ ~isOpenFiltered(u)
         /\ Forwards(u)
         /\ AfterStep(who, Tail(UpdatesLeft(who)))
-  /\ UNCHANGED <<pane, file, budget, agentUp, fiber,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber,
                  wire, mode, view, cached, ghost>>
 
 chunkContinues(u) ==
@@ -347,7 +351,7 @@ HubForwardsChunk(who) ==   \* append: continuesFrom ? forward
         /\ chunkContinues(u)
         /\ Forwards(u)
         /\ AfterStep(who, Tail(UpdatesLeft(who)))
-  /\ UNCHANGED <<pane, file, budget, agentUp, fiber,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber,
                  wire, mode, view, cached, ghost>>
 
 \* append: TranscriptOutOfStep. runWatch's attempt(outOfStep.expected) restarts the follow from
@@ -365,7 +369,7 @@ HubRefusesChunk(who) ==
                     THEN fiberFrom(IF Broken = "restart-from-watch-from"
                                    THEN ghost.watchFrom ELSE watcher.delivered)
                     ELSE fiber
-  /\ UNCHANGED <<pane, file, budget, agentUp, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 isCaughtUpForwarded(u) ==
@@ -381,7 +385,7 @@ HubForwardsCaughtUp(who) ==   \* forwardInSession
         /\ ~isFull(inbox)
         /\ Forwards(u)
         /\ AfterStep(who, Tail(UpdatesLeft(who)))
-  /\ UNCHANGED <<pane, file, budget, agentUp, fiber,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber,
                  wire, mode, view, cached, ghost>>
 
 HubDropsCaughtUp(who) ==   \* forwardInSession: the news of a session it is not in
@@ -392,7 +396,7 @@ HubDropsCaughtUp(who) ==   \* forwardInSession: the news of a session it is not 
      IN /\ u.t = "caughtUp"
         /\ ~isCaughtUpForwarded(u)
         /\ AfterStep(who, Tail(UpdatesLeft(who)))
-  /\ UNCHANGED <<pane, file, budget, agentUp, fiber, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 HubFailsWatch(who) ==   \* fail: the failure goes in the inbox and the watcher leaves the map
@@ -406,20 +410,36 @@ HubFailsWatch(who) ==   \* fail: the failure goes in the inbox and the watcher l
         /\ SetLeft(who, NONE)
         /\ permit' = "free"
         /\ fiber' = FIBER_OFF
-  /\ UNCHANGED <<pane, file, budget, agentUp, moving, wire, mode, view, cached, ghost>>
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, moving, wire, mode, view, cached, ghost>>
 
 HubDropsCallOfGoneWatch(who) ==   \* publish: "no phone on this machine watches it any more"
   /\ UpdatesLeft(who) /= NONE
   /\ ~watcher.alive
   /\ SetLeft(who, NONE)
   /\ permit' = "free"
+  /\ superseded' = (who = "live" /\ superseded)
   /\ UNCHANGED <<pane, file, budget, agentUp, fiber, watcher, moving,
+                 inbox, wire, mode, view, cached, ghost>>
+
+\* publish and forward: stillCounts is false, so what is left of the call moves nothing. Each
+\* update is checked inside forward's transaction, so a call blocked on a full inbox lets go too.
+HubDropsFencedCall ==
+  /\ stale /= NONE
+  /\ superseded
+  /\ watcher.alive
+  /\ permit \in {"free", "stale"}
+  /\ moving = NONE
+  /\ stale' = NONE
+  /\ superseded' = FALSE
+  /\ permit' = "free"
+  /\ UNCHANGED <<pane, file, budget, agentUp, fiber, call, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 \* RpcServer.disconnect interrupts the dead connection's handler between two transactions.
 HubSeesDeadSocket ==
   /\ stale /= NONE \/ (moving /= NONE /\ ~agentUp)
   /\ stale' = NONE
+  /\ superseded' = FALSE
   /\ permit' = IF permit = "stale" THEN "free" ELSE permit
   /\ moving' = NONE
   /\ UNCHANGED <<pane, file, budget, agentUp, fiber, call, watcher,
@@ -429,7 +449,7 @@ ForwardMovesPosition ==   \* only for Broken = "forward-two-steps"
   /\ moving /= NONE
   /\ watcher' = [watcher EXCEPT !.delivered = moving]
   /\ moving' = NONE
-  /\ UNCHANGED <<pane, file, budget, agentUp, fiber, call, stale, permit,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, call, stale, permit,
                  inbox, wire, mode, view, cached, ghost>>
 
 HubSends ==   \* inbox.take: one message, and the next only after the phone's acknowledgement
@@ -438,7 +458,7 @@ HubSends ==   \* inbox.take: one message, and the next only after the phone's ac
   /\ mode = "watching"
   /\ wire' = updatesOf(inbox)
   /\ inbox' = EMPTY_BATCH
-  /\ UNCHANGED <<pane, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
                  mode, view, cached, ghost>>
 
 -----------------------------------------------------------------------------
@@ -486,7 +506,7 @@ PhoneApplies ==   \* Transcript.apply, one event at a time, so a drop can land b
              !.lostTail = @ \/ (u.t = "opened" /\ ~Jc147 /\ view.position /= NONE
                                 /\ view.position.s /= u.s /\ view.position.off > 0
                                 /\ view.position.off < ghost.leftAt[view.position.s])]
-  /\ UNCHANGED <<pane, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
                  inbox, mode>>
 
 \* whileConnected + watchOnce: resume reads the view's position and marks it catching up; the
@@ -500,6 +520,7 @@ Resume(v, nextMode) ==
   /\ wire' = <<>>
   /\ call' = NONE
   /\ stale' = NONE
+  /\ superseded' = FALSE
   /\ permit' = "free"
   /\ moving' = NONE
   /\ fiber' = FIBER_OFF
@@ -518,7 +539,7 @@ PhoneSeesFailure ==   \* Transcript.settle
      ELSE /\ view' = [view EXCEPT !.catching = FALSE, !.failed = TRUE]
           /\ mode' = "failed"
           /\ wire' = <<>>
-          /\ UNCHANGED <<pane, file, budget, agentUp, fiber, call, stale, permit, watcher,
+          /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, call, stale, permit, watcher,
                          moving, inbox, cached, ghost>>
 
 PhoneReconnects ==   \* whileConnected: connected turned Some again
@@ -535,14 +556,14 @@ ClaudeWrites ==
   /\ ~pane.gone
   /\ file' = [file EXCEPT ![PaneSession] = @ + 1]
   /\ budget' = [budget EXCEPT !.writes = @ - 1]
-  /\ UNCHANGED <<pane, agentUp, fiber, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, agentUp, fiber, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 PaneChangesSession ==   \* /clear, /resume: MachineStateSync sees another claudeSession
   /\ pane.at < Len(SessionPath)
   /\ pane' = [at |-> pane.at + 1, gone |-> FALSE]
   /\ ghost' = [ghost EXCEPT !.leftAt[SessionPath[pane.at]] = file[SessionPath[pane.at]]]
-  /\ UNCHANGED <<file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached>>
 
 PaneLosesClaude ==   \* the agent row shows no claudeSession for now
@@ -550,13 +571,13 @@ PaneLosesClaude ==   \* the agent row shows no claudeSession for now
   /\ ~pane.gone
   /\ pane' = [pane EXCEPT !.gone = TRUE]
   /\ budget' = [budget EXCEPT !.gaps = @ - 1]
-  /\ UNCHANGED <<file, agentUp, fiber, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, file, agentUp, fiber, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 PaneGetsClaudeBack ==
   /\ pane.gone
   /\ pane' = [pane EXCEPT !.gone = FALSE]
-  /\ UNCHANGED <<file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 AgentConnectionDrops ==   \* the socket dies; serve's scope closes; a call in flight may outlive it
@@ -567,6 +588,7 @@ AgentConnectionDrops ==   \* the socket dies; serve's scope closes; a call in fl
   /\ fiber' = FIBER_OFF
   /\ call' = NONE
   /\ stale' = IF call /= NONE THEN call ELSE stale
+  /\ superseded' = (call = NONE /\ superseded)
   /\ permit' = IF permit = "live" THEN "stale" ELSE permit
   /\ UNCHANGED <<pane, file, watcher, moving, inbox, wire, mode, view, cached, ghost>>
 
@@ -577,7 +599,7 @@ FollowFails(kind) ==   \* publishAll: Stream.catch(followFailed), behind what th
   /\ budget' = [budget EXCEPT !.failures = @ - 1]
   /\ fiber' = [fiber EXCEPT !.queued = Append(@, [t |-> "failed", kind |-> kind]),
                             !.inner = [@ EXCEPT !.stage = "ended"]]
-  /\ UNCHANGED <<pane, file, agentUp, call, stale, permit, watcher, moving,
+  /\ UNCHANGED <<superseded, pane, file, agentUp, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
 PhoneConnectionDrops ==   \* the hub's watch ends with the socket; the watcher leaves the map
@@ -591,6 +613,7 @@ PhoneConnectionDrops ==   \* the hub's watch ends with the socket; the watcher l
   /\ fiber' = FIBER_OFF
   /\ call' = NONE
   /\ stale' = NONE
+  /\ superseded' = FALSE
   /\ permit' = "free"
   /\ moving' = NONE
   /\ UNCHANGED <<pane, file, agentUp, view, cached, ghost>>
@@ -634,6 +657,7 @@ Internal ==
   \/ DemandStartsWatch
   \/ AgentReconnects
   \/ HubStep
+  \/ HubDropsFencedCall
   \/ HubSeesDeadSocket
   \/ ForwardMovesPosition
   \/ HubSends
@@ -667,6 +691,7 @@ Init ==
   /\ fiber = FIBER_OFF
   /\ call = NONE
   /\ stale = NONE
+  /\ superseded = FALSE
   /\ permit = "free"
   /\ watcher = [alive |-> TRUE, delivered |-> NONE]
   /\ moving = NONE
@@ -739,7 +764,9 @@ AlwaysSettles == []<>Quiescent
 \* Not rules. Each "breaks" the first time the pipe takes that step, so TLC prints a path to it
 \* for the replay: refusals sit past where every bug path stops, and random walks missed them.
 NoLiveChunkRefused == [][~HubRefusesChunk("live")]_vars
-NoStaleChunkRefused == [][~HubRefusesChunk("stale")]_vars
+NoFencedCallDropped == [][~HubDropsFencedCall]_vars
+NoDeadSocketSeen == [][~HubSeesDeadSocket]_vars
+NoCaughtUpDropped == [][~\E who \in Who : HubDropsCaughtUp(who)]_vars
 NoCallOnGoneWatch == [][~\E who \in Who : HubDropsCallOfGoneWatch(who)]_vars
 
 \* Not a rule. Simulation "breaks" it at a depth to print one long random behaviour, with its
