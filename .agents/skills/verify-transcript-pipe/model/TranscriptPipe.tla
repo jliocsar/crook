@@ -558,7 +558,7 @@ seenBy(g, u) ==
      !.rewound = @ \/ (u.t = "opened" /\ u.e < g.phoneEpoch),
      !.repeatedOpen = @ \/ (u.t = "opened" /\ inSession(view.position, u.s))]
 
-\* whileConnected + watchOnce: resume reads the view's position and marks it catching up; the
+\* whileDialed + watchOnce: resume reads the view's position and marks it catching up; the
 \* hub's watch makes a new watcher with its own inbox and delivered = from; reconcile stops the
 \* fiber of the watch that went away. resumeOf asks for the tail unless the view is being read whole.
 Resume(v, nextMode) ==
@@ -611,7 +611,7 @@ PhoneSeesFailure ==   \* Transcript.settle
           /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, call, stale, permit, watcher,
                          moving, inbox, cached, ghost>>
 
-PhoneReconnects ==   \* whileConnected: connected turned Some again
+PhoneReconnects ==   \* whileDialed: dialed turned Some again
   /\ mode = "offline"
   /\ Resume(view, "watching")
   /\ ghost' = [ghost EXCEPT !.watchFrom = view.position]

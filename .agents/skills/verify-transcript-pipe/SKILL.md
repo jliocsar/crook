@@ -34,7 +34,7 @@ packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript Transcr
 packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines resumeOf isOpened withOneHole
 packages/web/src/chat/TranscriptMachine.ts  transition arrived watchEnded resumed landed leftSession startedOver earlierAsked
 packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
-packages/web/src/rpc/HubLink.ts             whileConnected watchTranscript
+packages/web/src/rpc/HubLink.ts             whileDialed transcriptWhileDialed
 packages/web/src/cache/TranscriptCache.ts   remember load
 ```
 

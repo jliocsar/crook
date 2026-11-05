@@ -744,6 +744,26 @@ describe('HubLink', () => {
     }),
   )
 
+  it.effect('asks for a transcript as soon as it has dialed, before the first herd', () =>
+    Effect.gen(function* () {
+      const { link, nextSession, settle } = yield* start()
+
+      yield* link
+        .watchTranscript(
+          LAPTOP,
+          new PaneTranscript({ pane: PaneId.make('w1:p1') }),
+          Effect.succeed({ from: Option.none(), tail: Option.none() }),
+        )
+        .pipe(Stream.runDrain, Effect.forkScoped)
+
+      const session = yield* nextSession
+
+      yield* settle
+
+      expect(yield* Ref.get(session.transcriptRequests)).toHaveLength(1)
+    }),
+  )
+
   it.effect('resumes a transcript watch on the next connection from where the phone stands', () =>
     Effect.gen(function* () {
       const { link, current, nextSession, settle } = yield* start()
