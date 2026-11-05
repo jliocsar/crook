@@ -29,7 +29,7 @@ import type { CapturedStory } from '@crook/frames/Capture'
 import { flaggedFrames, sheetHtml, SHEET_WIDTH, tileFrames } from '@crook/frames/ContactSheet'
 import { detect, Finding } from '@crook/frames/Detect'
 import { expectationOf, TIMELINE_STORY_IDS } from '@crook/frames/Expectations'
-import { isStarved, shareOfSlowFrames, SLOW_FRAME_MS } from '@crook/frames/FrameLog'
+import { isStarved, p90FrameMs, STARVED_P90_FRAME_MS } from '@crook/frames/FrameLog'
 import { verdictLines } from '@crook/frames/Report'
 import { imageWithItsAge, NO_IMAGE, shotOfFrame } from '@crook/frames/Shots'
 
@@ -250,7 +250,7 @@ const judgeStory = Effect.fn('frames.judgeStory')(function* (
   )
   yield* Effect.when(
     Console.log(
-      `  STARVED ${Math.round(shareOfSlowFrames(captured.log.frames) * 100)}% of this run's frames took over ${SLOW_FRAME_MS} ms, so its frame counts mean little. Run the story again when the machine is quieter before believing it.`,
+      `  STARVED A tenth of this run's frames took over ${Math.round(p90FrameMs(captured.log.frames))} ms, past the ${STARVED_P90_FRAME_MS} ms that marks a starved run, so its frame counts mean little. Run the story again when the machine is quieter before believing it.`,
     ),
     Effect.succeed(isStarved(captured.log.frames)),
   )

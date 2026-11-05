@@ -51,7 +51,7 @@ The image line says how far it was taken from its frame. Read that before you re
 screencast can go a few hundred ms with no new picture, so a short state may not be in any image.
 That does not clear it. The log read the DOM saying it was visible; say both.
 
-A line reading `STARVED` means more than a tenth of that run's frames took over 50 ms. Other work
+A line reading `STARVED` means a tenth of that run's frames took over 30 ms. Other work
 on the machine starved it, and the tool has already retried twice. Its frame counts mean little.
 Run the story again when the machine is quieter before believing a finding from it.
 

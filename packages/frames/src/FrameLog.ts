@@ -1,9 +1,10 @@
 import * as Arr from 'effect/Array'
+import { pipe } from 'effect/Function'
+import * as Number from 'effect/Number'
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
-const STARVED_SHARE_OF_SLOW_FRAMES = 0.1
-
-export const SLOW_FRAME_MS = 50
+export const STARVED_P90_FRAME_MS = 30
 
 export const Box = Schema.Struct({
   x: Schema.Finite,
@@ -64,13 +65,16 @@ export const marksOf = (frame: RecordedFrame): readonly string[] => Object.keys(
 export const shows = (frame: RecordedFrame, mark: string): boolean =>
   frame.marks[mark] !== undefined
 
-export const shareOfSlowFrames = (frames: readonly RecordedFrame[]): number => {
+export const p90FrameMs = (frames: readonly RecordedFrame[]): number => {
   const mounted = frames.filter((frame) => frame.mounted)
   const later = Arr.drop(mounted, 1)
-  const gaps = Arr.zipWith(later, mounted, (next, frame) => next.at - frame.at)
+  const gaps = pipe(
+    Arr.zipWith(later, mounted, (next, frame) => next.at - frame.at),
+    Arr.sort(Number.Order),
+  )
 
-  return gaps.length === 0 ? 0 : gaps.filter((gap) => gap > SLOW_FRAME_MS).length / gaps.length
+  return Option.getOrElse(Arr.get(gaps, Math.floor(gaps.length * 0.9)), () => 0)
 }
 
 export const isStarved = (frames: readonly RecordedFrame[]): boolean =>
-  shareOfSlowFrames(frames) > STARVED_SHARE_OF_SLOW_FRAMES
+  p90FrameMs(frames) > STARVED_P90_FRAME_MS

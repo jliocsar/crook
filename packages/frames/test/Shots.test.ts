@@ -1,8 +1,9 @@
 import { describe, expect, it } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
 
 import { flaggedFrames, tileFrames } from '@crook/frames/ContactSheet'
-import { isStarved, shareOfSlowFrames } from '@crook/frames/FrameLog'
+import { isStarved, p90FrameMs } from '@crook/frames/FrameLog'
 import type { RecordedFrame } from '@crook/frames/FrameLog'
 import { imageWithItsAge, NO_IMAGE, shotOfFrame } from '@crook/frames/Shots'
 
@@ -23,13 +24,23 @@ const frameAt = (frame: number, at: number, marks: readonly string[] = []): Reco
 })
 
 describe('isStarved', () => {
-  it('calls a run starved once more than a tenth of its frames took over 50 ms', () => {
-    const steady = [frameAt(1, 0), frameAt(2, 17), frameAt(3, 34), frameAt(4, 51)]
-    const starved = [frameAt(1, 0), frameAt(2, 17), frameAt(3, 100), frameAt(4, 117)]
+  const framesWithGaps = (gaps: readonly number[]): readonly RecordedFrame[] =>
+    gaps.reduce<readonly RecordedFrame[]>(
+      (frames, gap, index) => [...frames, frameAt(index + 2, (frames.at(-1)?.at ?? 0) + gap)],
+      [frameAt(1, 0)],
+    )
+
+  it('calls a steady run fine, with a few long frames in it', () => {
+    const steady = framesWithGaps([...Arr.replicate(17, 19), 200])
 
     expect(isStarved(steady)).toBe(false)
-    expect(shareOfSlowFrames(starved)).toBeCloseTo(1 / 3)
-    expect(isStarved(starved)).toBe(true)
+  })
+
+  it('calls a run starved when its frames slow down without any of them passing 50 ms', () => {
+    const slowed = framesWithGaps(Arr.makeBy(20, (index) => 20 + index))
+
+    expect(p90FrameMs(slowed)).toBe(38)
+    expect(isStarved(slowed)).toBe(true)
   })
 })
 

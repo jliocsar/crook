@@ -1372,11 +1372,15 @@ the screen once per animation frame and fails on what a settled screenshot canno
   shared 15 GB laptop. It stays out of the gate: it needs a browser and a dev server, it costs two
   minutes per push, and its counts move with what else the machine runs. The detection runs in the
   gate, over recorded logs, with no browser.
-- A loaded machine can make a false finding. One story's frames dropped to 19 per second with
-  another agent working: a pill that held 51 to 52 frames in three other sweeps held 6 and read as
-  a flash. That run had 13.5% of its frames over 50 ms, and every other run at most 6%, so more
-  than a tenth means the run is starved: the tool runs it again, twice at most, and says so if it
-  stays starved.
+- A loaded machine can make a false finding, by slowing every frame without any one of them looking
+  long. One story's frames dropped to 19 per second with another agent working: a pill that held 51
+  to 52 frames in three other sweeps held 6 and read as a flash. Counting frames over 50 ms missed
+  the next case: at a load average near 9, a pill that held 54 to 55 frames in three quiet runs held
+  23 for 659 ms and failed as a flash, with only 8.1% of its frames over 50 ms. The 90th percentile
+  frame time told them apart: 17 ms on the six quiet runs and 42 to 44 on the two loaded ones (all
+  measured). So a p90 past 30 ms means the run is starved: the tool runs it again, twice at most,
+  and says so if it stays starved. With sixteen busy loops beside it, a run retried twice and printed
+  that it stayed starved, at a p90 of 71 ms (measured).
 - The rAF log and the screencast were checked against each other over one sweep's 3725 frames and
   2829 pictures: 75 of 84 mark changes showed a pixel change in that element's box, 48 of those
   within 33 ms of the log either way, 2 earlier, 24 up to 300 ms later and 1 over that. Blank frames
