@@ -31,6 +31,11 @@ const body = () => within(document.body)
 
 const pageText = () => document.body.textContent ?? ''
 
+const someFieldHolds = (text: string): boolean =>
+  Array.from(
+    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea'),
+  ).some((field) => field.value === text)
+
 const holds = (witness: Witness): boolean =>
   Match.value(witness).pipe(
     Match.when({ text: Match.string }, ({ text }) => pageText().includes(text)),
@@ -39,6 +44,7 @@ const holds = (witness: Witness): boolean =>
       ({ selector }) => document.querySelector(selector) !== null,
     ),
     Match.when({ absent: Match.string }, ({ absent }) => !pageText().includes(absent)),
+    Match.when({ field: Match.string }, ({ field }) => someFieldHolds(field)),
     Match.exhaustive,
   )
 
@@ -47,6 +53,7 @@ const witnessName = (witness: Witness): string =>
     Match.when({ text: Match.string }, ({ text }) => `sees "${text}"`),
     Match.when({ selector: Match.string }, ({ selector }) => `sees ${selector}`),
     Match.when({ absent: Match.string }, ({ absent }) => `no longer sees "${absent}"`),
+    Match.when({ field: Match.string }, ({ field }) => `sees a field holding "${field}"`),
     Match.exhaustive,
   )
 
@@ -199,5 +206,7 @@ export const dispatchPointer = (
     clientY,
   })
 
+  Object.defineProperty(event, 'pageX', { value: clientX })
+  Object.defineProperty(event, 'pageY', { value: clientY })
   target.dispatchEvent(event)
 }

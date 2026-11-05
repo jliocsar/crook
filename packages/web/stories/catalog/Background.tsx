@@ -189,6 +189,7 @@ export const BACKGROUND_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'summary-row',
     title: 'Background summary, the row once all settled',
+    shows: { selector: '[data-slot="background-summary"]' },
     note: 'The row appears once the dock has settled, 14 s after the last job ended in the app.',
     events: changed(
       [new ShellTask(Struct.evolve(shell('completed'), { endedAt: () => Option.some(ago(60)) }))],
@@ -198,6 +199,8 @@ export const BACKGROUND_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'dock-to-summary',
     title: 'Background dock, running through to the summary',
+    shows: { selector: '[data-slot="background-dock"]' },
+    ends: { text: 'All background work finished' },
     row: chatAgent('working'),
     events: changed([shell()]),
     settle: () => seesText('running'),

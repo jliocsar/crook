@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
+import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Record from 'effect/Record'
 
@@ -47,6 +48,20 @@ describe('the story catalog', () => {
 
   it('gives every story its own id', () => {
     expect(ids.size).toBe(CATALOG_STORIES.length)
+  })
+
+  it('names what every story shows', () => {
+    expect(
+      CATALOG_STORIES.filter((story) => Option.isNone(story.witness)).map((story) => story.id),
+    ).toEqual([])
+  })
+
+  it('names where every timeline ends', () => {
+    expect(
+      CATALOG_STORIES.filter(
+        (story) => story.kind === 'transition' && Option.isNone(story.endWitness),
+      ).map((story) => story.id),
+    ).toEqual([])
   })
 
   it('names a moment for every link status and a status for every moment', () => {

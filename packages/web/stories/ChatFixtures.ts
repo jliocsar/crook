@@ -17,6 +17,7 @@ import { linkStory } from './Story.tsx'
 import type { LinkStage, LinkStorySpec, StoryMaker } from './Story.tsx'
 
 export const COMPOSER_FIELD = 'textarea'
+export const SEND_READY = '[data-slot="prompt-input-submit"]:not([disabled])'
 export const THREAD_ROW = '[data-row]'
 
 export const chatHerd = (row: AgentRow = chatAgent(), connection: MachineConnection = 'online') =>

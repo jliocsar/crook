@@ -6,9 +6,10 @@ import type { StoryEnv } from './Story.tsx'
 type StoryEnvValue = boolean | number | string | EventTarget
 
 const MOTION_QUERY = '(prefers-reduced-motion)'
-const CLOCK_AFTER_START_MS = 5 * 60 * 1000
 const KEYBOARD_HEIGHT = 336
 const KEYBOARD_ELEMENT_ID = 'story-keyboard'
+
+export const CLOCK_AFTER_START_SECONDS = 300
 
 const defineOn = (target: Navigator | Window, property: string, value: StoryEnvValue): void => {
   Object.defineProperty(target, property, { configurable: true, value })
@@ -17,7 +18,7 @@ const defineOn = (target: Navigator | Window, property: string, value: StoryEnvV
 export const startClockAtFixtures = (): void => {
   // oxlint-disable-next-line effecttsgo/global-date-in-effect, effecttsgo/global-date
   const realNow = Date.now.bind(Date)
-  const offset = START.epochMilliseconds + CLOCK_AFTER_START_MS - realNow()
+  const offset = START.epochMilliseconds + CLOCK_AFTER_START_SECONDS * 1000 - realNow()
 
   // oxlint-disable-next-line effecttsgo/global-date-in-effect, effecttsgo/global-date
   Date.now = () => realNow() + offset

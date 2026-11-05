@@ -45,6 +45,7 @@ export type Witness =
   | { readonly text: string }
   | { readonly selector: string }
   | { readonly absent: string }
+  | { readonly field: string }
 
 export interface Story {
   readonly id: string
@@ -56,6 +57,7 @@ export interface Story {
   readonly kind: StoryKind
   readonly steps: readonly StepInfo[]
   readonly witness: Option.Option<Witness>
+  readonly endWitness: Option.Option<Witness>
   readonly start: Effect.Effect<RunningStory, StoryStepFailed, Scope.Scope>
 }
 
@@ -89,7 +91,8 @@ export interface StorySpec<Stage> {
   readonly note?: string
   readonly path: string
   readonly env?: Partial<StoryEnv>
-  readonly shows?: Witness
+  readonly shows: Witness
+  readonly ends?: Witness
   readonly arrange?: (stage: Stage) => Effect.Effect<void, StoryStepFailed>
   readonly settle?: (stage: Stage) => Effect.Effect<void, StoryStepFailed>
   readonly timeline?: readonly TimelineStep<Stage>[]
@@ -139,7 +142,8 @@ const describeSpec = <Stage,>(spec: StorySpec<Stage>, group: string) => ({
   env: { ...DEFAULT_ENV, ...spec.env },
   kind: spec.timeline === undefined ? ('state' as const) : ('transition' as const),
   steps: (spec.timeline ?? []).map(({ label, delayMs }) => ({ label, delayMs })),
-  witness: Option.fromUndefinedOr(spec.shows),
+  witness: Option.some(spec.shows),
+  endWitness: Option.fromUndefinedOr(spec.ends),
 })
 
 export const mountedScene =

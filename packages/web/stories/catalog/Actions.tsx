@@ -85,6 +85,7 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'cannot-act',
     title: 'Actions sheet, while the hub cannot act',
+    shows: { selector: '[data-slot="sheet"] button[disabled]' },
     path: AGENTS_PATH,
     link: stateWith(
       LinkStatus.Unreachable(),
@@ -95,6 +96,7 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'rename-editing',
     title: 'Actions sheet, renaming',
+    shows: { selector: 'input[aria-label="Agent name"]' },
     settle: (stage) => Effect.andThen(openSheet(stage), clicks('Rename')),
   }),
   story({
@@ -155,6 +157,8 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'close-card-goes',
     title: 'Actions sheet, a close that lands',
+    shows: { selector: '[data-slot="sheet"]' },
+    ends: { absent: 'Port the herd screen' },
     arrange: ({ link }) => Ref.set(link.commandAnswer, closedPane),
     settle: openSheet,
     timeline: [
@@ -167,6 +171,8 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'toast-after-chat-close',
     title: 'Toast, a close from the chat lands on the herd',
+    shows: { selector: '[data-slot="sheet"]' },
+    ends: { text: 'Pane closed' },
     path: PORTING_CHAT,
     link: EVERYONE,
     arrange: ({ link }) => Ref.set(link.commandAnswer, closedPane),

@@ -24,6 +24,7 @@ import type { LinkStorySpec, StoryMaker } from '../Story.tsx'
 
 const SWIPE_LEFT = [200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100]
 const FIRST_SWIPE_CARD = '[data-slot="swipe-card"]'
+const SWIPE_ACTIONS_OPEN = '[data-slot="swipe-actions"]:not([inert])'
 const PULL_DISTANCE = 200
 
 const LONG_TITLE =
@@ -137,6 +138,7 @@ export const HERD_STORIES: readonly StoryMaker[] = [
   herdStory({
     slug: 'section-collapsed',
     title: 'Section, collapsed',
+    shows: { selector: '[data-slot="machine-section"] button[aria-expanded="false"]' },
     link: liveWith(TEAM),
     settle: () => clicks(/^laptop/u),
   }),
@@ -226,12 +228,14 @@ export const HERD_STORIES: readonly StoryMaker[] = [
   herdStory({
     slug: 'swipe-open',
     title: 'Agent card, swiped open',
+    shows: { selector: SWIPE_ACTIONS_OPEN },
     link: liveWith(TEAM),
     settle: () => swipes(FIRST_SWIPE_CARD, SWIPE_LEFT),
   }),
   herdStory({
     slug: 'swipe-dragging',
     title: 'Agent card, mid swipe',
+    shows: { selector: '[data-slot="swipe-card"][style*="translateX(-"]' },
     link: liveWith(TEAM),
     settle: () =>
       Effect.flatMap(element(FIRST_SWIPE_CARD), (card) =>
@@ -248,6 +252,7 @@ export const HERD_STORIES: readonly StoryMaker[] = [
   herdStory({
     slug: 'pin-failure',
     title: 'Agent card, the hub refused a pin',
+    shows: { text: 'disk full' },
     link: liveWith(TEAM),
     arrange: ({ link }) =>
       Ref.set(link.pinRefusal, Option.some(new HubStorageFailed({ detail: 'disk full' }))),
@@ -261,6 +266,7 @@ export const HERD_STORIES: readonly StoryMaker[] = [
   herdStory({
     slug: 'pulling',
     title: 'Pull to resync, mid pull',
+    shows: { selector: '[style*="translateY(96px)"]' },
     note: 'Touch events are constructed by hand, so this one needs a browser with Touch.',
     link: liveWith(TEAM),
     settle: () => pulling(PULL_DISTANCE),

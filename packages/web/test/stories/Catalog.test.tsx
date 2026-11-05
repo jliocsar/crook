@@ -44,6 +44,8 @@ describe.each(CATALOG_STORIES.map((story) => [story.id, story] as const))('%s', 
             for (const next of running.steps) {
               yield* next
             }
+
+            yield* Option.match(story.endWitness, { onNone: () => Effect.void, onSome: sees })
           }).pipe(Effect.provideService(Scope.Scope, scope)),
         )
 

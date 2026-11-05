@@ -137,6 +137,7 @@ export const makePlayer = Effect.fn('makePlayer')(function* (story: Story, root:
     const { position } = yield* SubscriptionRef.get(snapshot)
 
     if (position >= story.steps.length) {
+      yield* Option.match(story.endWitness, { onNone: () => Effect.void, onSome: sees })
       yield* update({ phase: 'done' })
       yield* Deferred.succeed(current.done, undefined)
     }

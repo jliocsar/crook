@@ -18,6 +18,7 @@ import { clicks, seesText, types } from '../StageDom.ts'
 import { linkStory, step } from '../Story.tsx'
 import type { LinkStage, LinkStorySpec, StoryMaker } from '../Story.tsx'
 
+const START_READY = 'button[aria-label="Start Claude"]:not([disabled])'
 const CROOK = '/home/jliocsar/Projects/crook'
 const DOTFILES = '/home/jliocsar/dotfiles'
 const NEW_PANE = PaneId.make('w1:p9')
@@ -167,6 +168,7 @@ export const NEW_AGENT_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'starts-unnamed-worktree',
     title: 'New agent, a worktree with no name yet',
+    shows: { text: 'in a new worktree once its branch has a name' },
     link: liveWith(herd([laptop])),
     settle: () =>
       Effect.gen(function* () {
@@ -178,6 +180,7 @@ export const NEW_AGENT_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'typed',
     title: 'New agent, a task typed',
+    shows: { selector: START_READY },
     link: liveWith(herd([laptop, desk])),
     settle: () => types(TASK_FIELD, TASK),
   }),
@@ -209,6 +212,8 @@ export const NEW_AGENT_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'start-to-chat',
     title: 'New agent, Start through to the chat',
+    shows: { selector: START_READY },
+    ends: { text: 'Loading the conversation' },
     link: liveWith(herd([laptop, desk])),
     arrange: ({ link }) =>
       Effect.andThen(Ref.set(link.commandAnswer, started), link.commandAnswers.close),

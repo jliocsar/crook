@@ -35,7 +35,7 @@ export const PIXEL_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
 export const at = (seconds: number) =>
-  Option.some(DateTime.makeUnsafe(`2026-10-20T12:00:${String(seconds).padStart(2, '0')}Z`))
+  Option.some(DateTime.add(DateTime.makeUnsafe('2026-10-20T12:00:00Z'), { seconds }))
 
 export const user = (
   offset: number,
@@ -88,7 +88,8 @@ export const turnDuration = (offset: number, seconds = 0) =>
     blocks: [new TurnDurationBlock({ durationMs: 1000 })],
   })
 
-export const prompt = (offset: number, text: string) => user(offset, [new TextBlock({ text })])
+export const prompt = (offset: number, text: string, seconds = 0) =>
+  user(offset, [new TextBlock({ text })], { seconds })
 
 export const said = (offset: number, text: string) => assistant(offset, [new TextBlock({ text })])
 

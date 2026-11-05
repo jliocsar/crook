@@ -1,10 +1,13 @@
+import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
+import * as Struct from 'effect/Struct'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import { AgentRow } from '@crook/domain/AgentRow'
 import { Prompt } from '@crook/domain/Command'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
@@ -23,7 +26,7 @@ import {
   toolResult,
   toolUse,
 } from '../../test/TranscriptFixtures.ts'
-import { chatHerd, chatStory, delivered } from '../ChatFixtures.ts'
+import { chatHerd, chatStory, delivered, SEND_READY } from '../ChatFixtures.ts'
 import {
   AGENTS_PATH,
   CHAT_PATH,
@@ -35,6 +38,7 @@ import {
   TEAM,
 } from '../Fixtures.ts'
 import { clicks, seesText, types } from '../StageDom.ts'
+import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 import { browserStory, linkStory, step } from '../Story.tsx'
 import type { BrowserStage, LinkStage, StoryMaker } from '../Story.tsx'
 
@@ -43,8 +47,23 @@ const COMPOSER = /Message|Reply/u
 const SEND = 'Send'
 const BACK = 'Back to Agents'
 const QUESTION = 'Now check the toast too'
-const WORKING_HERD = liveWith(chatHerd(chatAgent('working', 0)))
-const IDLE_HERD = liveWith(chatHerd(chatAgent('idle', 0)))
+const LIVE_HERD = '[data-slot="herd-list"] [data-dimmed="false"]'
+const FLIPS_WORKING_AT = DateTime.add(START, { seconds: CLOCK_AFTER_START_SECONDS })
+const FLIPS_IDLE_AT = DateTime.add(FLIPS_WORKING_AT, { seconds: 10 })
+
+const WORKING_HERD = liveWith(
+  chatHerd(
+    new AgentRow(
+      Struct.evolve(chatAgent('working', 0), { statusChangedAt: () => FLIPS_WORKING_AT }),
+    ),
+  ),
+)
+const IDLE_HERD = liveWith(
+  chatHerd(
+    new AgentRow(Struct.evolve(chatAgent('idle', 0), { statusChangedAt: () => FLIPS_IDLE_AT })),
+  ),
+)
+
 const LOST = new HubConnectionLost({ detail: 'connection refused' })
 const CACHED = Option.some(new HerdSnapshot({ view: TEAM, syncedAt: START }))
 
@@ -58,6 +77,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'cold-chat-open',
     title: 'Cold chat open, from a card to a full thread',
+    shows: { text: CHAT_TITLE },
+    ends: { text: 'The quiet redial' },
     path: AGENTS_PATH,
     link: liveWith(chatHerd()),
     settle: () => seesText(CHAT_TITLE),
@@ -73,6 +94,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'cached-reopen-catch-up',
     title: 'Cached reopen, then a catch-up',
+    shows: { text: CHAT_TITLE },
+    ends: { text: 'Yes, the notice waits a second now.' },
     path: CHAT_PATH,
     link: liveWith(chatHerd()),
     arrange: ({ link }) => feed(link, CONVERSATION),
@@ -102,6 +125,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'reconnect-chat-open',
     title: 'Reconnect with a chat open, on the real link',
+    shows: { text: 'The quiet redial' },
+    ends: { text: 'Written while the socket was down.' },
     note: 'Drives the real HubLink over a fake browser, so its delays and its resume are the app’s own.',
     path: CHAT_PATH,
     cached: Option.none(),
@@ -141,6 +166,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'foreground-return',
     title: 'Back from the background, a quiet redial with a chat open',
+    shows: { text: 'The quiet redial' },
+    ends: { absent: 'Catching up' },
     path: CHAT_PATH,
     cached: Option.none(),
     settle: (stage) =>
@@ -179,6 +206,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'machine-redial',
     title: 'Machine redial in a chat, with a draft in the composer',
+    shows: { selector: SEND_READY },
+    ends: { selector: SEND_READY },
     events: CONVERSATION,
     settle: () => types(COMPOSER, 'Half a thought'),
     timeline: [
@@ -193,6 +222,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'clear',
     title: '/clear, from the old session to the new one',
+    shows: { text: 'The quiet redial' },
+    ends: { text: 'A fresh start.' },
     events: CONVERSATION,
     arrange: (stage) => delivered(stage, '/clear'),
     settle: () => types(COMPOSER, '/clear'),
@@ -212,6 +243,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'prompt-to-answer',
     title: 'Prompt, Sent, working, tool, answer',
+    shows: { selector: SEND_READY },
+    ends: { text: 'The toast is fine.' },
     events: CONVERSATION,
     arrange: ({ link }) =>
       Ref.set(
@@ -226,16 +259,28 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
         SubscriptionRef.set(link.state, WORKING_HERD),
       ),
       step<LinkStage>(500, 'The prompt reaches the transcript', ({ link }) =>
-        feed(link, [chunk(50, 60, [prompt(50, QUESTION)])]),
+        feed(link, [chunk(50, 60, [prompt(50, QUESTION, CLOCK_AFTER_START_SECONDS + 1)])]),
       ),
       step<LinkStage>(900, 'A tool starts', ({ link }) =>
-        feed(link, [chunk(60, 70, [toolUse(60, 'toolu_grep', 'Grep', { pattern: 'toast' })])]),
+        feed(link, [
+          chunk(60, 70, [
+            toolUse(60, 'toolu_grep', 'Grep', { pattern: 'toast' }, CLOCK_AFTER_START_SECONDS + 2),
+          ]),
+        ]),
       ),
       step<LinkStage>(800, 'The tool ends', ({ link }) =>
-        feed(link, [chunk(70, 80, [toolResult(70, 'toolu_grep', 'src/toast/Toast.tsx:24')])]),
+        feed(link, [
+          chunk(70, 80, [
+            toolResult(70, 'toolu_grep', 'src/toast/Toast.tsx:24', {
+              seconds: CLOCK_AFTER_START_SECONDS + 3,
+            }),
+          ]),
+        ]),
       ),
       step<LinkStage>(1200, 'The answer lands', ({ link }) =>
-        feed(link, [chunk(80, 90, [answered(80, 'The toast is fine.')])]),
+        feed(link, [
+          chunk(80, 90, [answered(80, 'The toast is fine.', CLOCK_AFTER_START_SECONDS + 4)]),
+        ]),
       ),
       step<LinkStage>(150, 'herdr says idle', ({ link }) =>
         SubscriptionRef.set(link.state, IDLE_HERD),
@@ -245,6 +290,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'herd-first-load-from-cache',
     title: 'Herd first load from the cache, slow hub',
+    shows: { selector: '[data-dimmed="true"]' },
+    ends: { selector: LIVE_HERD },
     path: AGENTS_PATH,
     cached: CACHED,
     settle: () => seesText(CHAT_TITLE),
@@ -258,6 +305,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'herd-first-load-fast',
     title: 'Herd first load from the cache, fast hub',
+    shows: { selector: '[data-dimmed="true"]' },
+    ends: { selector: LIVE_HERD },
     path: AGENTS_PATH,
     cached: CACHED,
     settle: () => seesText(CHAT_TITLE),
@@ -271,6 +320,8 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'herd-first-load-empty',
     title: 'Herd first load with no cache',
+    shows: { text: 'Loading your agents' },
+    ends: { text: CHAT_TITLE },
     path: AGENTS_PATH,
     cached: Option.none(),
     timeline: [

@@ -1238,9 +1238,19 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   setting the value through the native setter and firing `input`. After changing stories, load
   them in a browser too: one page, one iframe at a time, reading `data-story-phase` on each
   frame's root, went through all of them in about four minutes.
-- A state with no reachable witness is the weak spot: a story that names no text or selector
-  proves only that its steps ran. A story states what it shows, which fails it when the state
-  stops being reached.
+- Every story names what it shows, and the types refuse one that does not; a timeline also names
+  where it ends, which a test holds, since a witness taken before the steps says nothing about
+  them. Both the smoke test and the browser check them, so a state that stops being reached fails
+  its story. A witness proves only what it names: the page's text includes whatever is covered or
+  hidden, and a state that exists only as layout, such as a draft that grows its field, can only
+  be witnessed by what caused it.
+- A witness that a typed draft landed reads the send button, not the field. The field held the
+  text in Chromium while React's state stayed empty, so a check of the value alone would have
+  passed the bug it exists to catch.
+- The clock sits five minutes past the fixtures' start, so a status flip or transcript entry a
+  live transition means as just now is stamped past that. Stamped at the start, a Working row read
+  5m a second after the send, a running tool read 5m 3s, and the row stayed after the answer,
+  because the answer's stamp was older than the flip (measured in Chromium).
 - The coverage test is exhaustive over what is a union in the types (a new member fails to
   compile) and over the routes and the link matrix (a new route fails it at run time). It cannot
   see a state that lives in a boolean, a local `useState` or CSS, and a story names what it
@@ -1250,7 +1260,11 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   in the browser instead makes the dev page reload in a loop (reported by another agent, not
   measured here).
 - Vite discovers the highlighter's languages only when a chat first renders, and reloads the page
-  once on each fresh dependency cache (measured), so the first story of a run can restart.
+  once on each fresh server (measured), so the first story of a run can restart, and a sweep
+  started in that page dies with it. Load a chat first and wait for the reload.
+- A timeline's end witness has to hold at every playback speed. The catch-up's trail showed at
+  full length, where the missed rows land 900 ms after the tap, and not at twice the speed, where
+  they land 450 ms after it, so its transition ends on the rows instead (measured in Chromium).
 
 :::warning
 A production build must get nothing from the catalog, and Tailwind is what would leak it. Its

@@ -217,6 +217,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'answering',
     title: 'Ask, answering',
+    shows: { selector: '[data-slot="button"][disabled] [data-slot="spinner"]' },
     link: blocked(bashAsk()),
     events: LEAD_IN,
     arrange: ({ link }) =>
@@ -239,6 +240,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'already-answered',
     title: 'Ask, already answered elsewhere',
+    shows: { text: 'Already answered' },
     link: blocked(bashAsk()),
     events: LEAD_IN,
     arrange: ({ link }) =>
@@ -266,6 +268,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'question-answering',
     title: 'Ask, a typed answer on its way',
+    shows: { selector: '[data-slot="questionnaire-submit"][disabled]' },
     link: blocked(question(Option.some(false))),
     events: LEAD_IN,
     arrange: ({ link }) =>
@@ -278,6 +281,8 @@ export const ASK_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'next-ask',
     title: 'Ask, one ask gives way to the next',
+    shows: { text: 'Run this command?' },
+    ends: { text: 'Edit Herd.ts?' },
     link: blocked(bashAsk()),
     events: LEAD_IN,
     arrange: ({ link }) =>

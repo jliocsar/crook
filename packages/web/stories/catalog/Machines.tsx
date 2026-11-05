@@ -84,6 +84,7 @@ export const MACHINES_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'swipe-open',
     title: 'Machines, offline card swiped open',
+    shows: { selector: '[data-slot="swipe-actions"]:not([inert])' },
     path: MACHINES_PATH,
     link: liveWith(viewOf([desk])),
     settle: () => Effect.andThen(seesText(OFFLINE_HINT), swipes(DESK_CARD, SWIPE_LEFT)),
@@ -91,6 +92,7 @@ export const MACHINES_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'forget-pending',
     title: 'Machines, Forget waiting on the hub',
+    shows: { selector: '[data-slot="swipe-actions"] button[disabled]' },
     path: MACHINES_PATH,
     link: liveWith(viewOf([desk])),
     arrange: ({ link }) => link.forgetAnswers.close,
@@ -144,6 +146,7 @@ export const MACHINE_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'forget-pending',
     title: 'Machine, forget waiting on the hub',
+    shows: { text: 'Forgetting…' },
     path: DESK_PATH,
     link: liveWith(viewOf([laptop, desk])),
     arrange: ({ link }) => link.forgetAnswers.close,
@@ -161,6 +164,8 @@ export const MACHINE_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'forgotten-while-open',
     title: 'Machine, leaves the herd while open',
+    shows: { text: 'Agents · 2' },
+    ends: { text: "crook doesn't know this machine" },
     path: MACHINE_PATH,
     link: liveWith(viewOf([laptop, desk])),
     timeline: [

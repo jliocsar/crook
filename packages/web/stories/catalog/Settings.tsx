@@ -48,6 +48,7 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'failed',
     title: 'Settings, toggles and account failed',
+    shows: { text: 'A call to the hub died instead of failing' },
     arrange: failSettings,
   }),
   story({
@@ -63,6 +64,7 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'toggle-busy',
     title: 'Settings, a toggle write in flight',
+    shows: { selector: '[role="switch"][aria-busy="true"]' },
     arrange: ({ link }) => link.prefAnswers.close,
     settle: toggle,
   }),
@@ -97,11 +99,13 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'log-out-sheet',
     title: 'Settings, log out sheet',
+    shows: { text: 'Log out of crook?' },
     settle: () => openLogOut,
   }),
   story({
     slug: 'log-out-pending',
     title: 'Settings, log out waiting',
+    shows: { text: 'Logging out' },
     arrange: ({ link }) => link.logOutAnswers.close,
     settle: () => Effect.andThen(openLogOut, clicks(/^Log out/u)),
   }),

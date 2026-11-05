@@ -129,6 +129,7 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'restart-starting',
     title: 'Chat, Start Claude here again waiting',
+    shows: { selector: 'button[disabled][aria-busy="true"]' },
     events: CONVERSATION,
     arrange: ({ link }) =>
       Effect.andThen(

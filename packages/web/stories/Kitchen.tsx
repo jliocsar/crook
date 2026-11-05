@@ -86,6 +86,7 @@ const kitchenStory = (slug: string, load: PrototypeLoader): Story => ({
   kind: 'state',
   steps: [],
   witness: Option.some({ selector: '.proto-picker' }),
+  endWitness: Option.none(),
   start: Effect.gen(function* () {
     const { prototype } = yield* Effect.tryPromise({
       try: load,

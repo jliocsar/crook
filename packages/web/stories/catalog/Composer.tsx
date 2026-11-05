@@ -20,10 +20,13 @@ import {
   user,
 } from '../../test/TranscriptFixtures.ts'
 import { TextBlock } from '@crook/domain/TranscriptMessage'
-import { chatHerd, chatStory, delivered, opensWith } from '../ChatFixtures.ts'
+import { chatHerd, chatStory, delivered, opensWith, SEND_READY } from '../ChatFixtures.ts'
 import { chatAgent, CONVERSATION } from '../Fixtures.ts'
-import { clicks, seesText, types } from '../StageDom.ts'
+import { clicks, seesSelector, seesText, types } from '../StageDom.ts'
 import type { StoryMaker } from '../Story.tsx'
+
+const LONG_DRAFT =
+  'A long draft that wraps over several lines, because the phone is narrow and the thought is not, and it keeps on going past where the field stops growing, so the field has to scroll inside itself by the end of it.'
 
 const FIELD = /Message|Reply|Sending is paused|Tell Claude/u
 const SEND = 'Send'
@@ -67,17 +70,16 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'draft',
     title: 'Composer, a draft typed',
+    shows: { selector: SEND_READY },
     events: CONVERSATION,
     settle: () => typesDraft(DRAFT),
   }),
   chatStory({
     slug: 'draft-long',
     title: 'Composer, a draft that grows the field',
+    shows: { field: LONG_DRAFT },
     events: CONVERSATION,
-    settle: () =>
-      typesDraft(
-        'A long draft that wraps over several lines, because the phone is narrow and the thought is not, and it keeps on going past where the field stops growing, so the field has to scroll inside itself by the end of it.',
-      ),
+    settle: () => typesDraft(LONG_DRAFT),
   }),
   chatStory({
     slug: 'working',
@@ -89,6 +91,7 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'working-with-draft',
     title: 'Composer, a draft typed while Claude works',
+    shows: { selector: SEND_READY },
     row: chatAgent('working'),
     events: CONVERSATION,
     settle: () => typesDraft(DRAFT),
@@ -96,6 +99,7 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'stopping',
     title: 'Composer, Stop pressed',
+    shows: { selector: '[data-slot="prompt-input-stop"][aria-busy="true"]' },
     row: chatAgent('working'),
     events: CONVERSATION,
     arrange: ({ link }) =>
@@ -108,6 +112,7 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'sending',
     title: 'Composer, Sending',
+    shows: { selector: '[data-slot="prompt-input-submit"][aria-busy="true"]' },
     events: CONVERSATION,
     arrange: (stage) => Effect.andThen(delivered(stage, DRAFT), stage.link.commandAnswers.close),
     settle: () => Effect.andThen(typesDraft(DRAFT), clicks(SEND)),
@@ -175,15 +180,22 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'slash-chosen',
     title: 'Slash commands, one chosen into the field',
+    shows: { field: '/handoff ' },
     events: [opened(), chunk(0, 10, [said(0, 'Ready.')]), caughtUp(10), SKILLS],
     settle: () => Effect.andThen(typesDraft('/'), clicks('/handoff')),
   }),
   chatStory({
     slug: 'slash-sent-no-bubble',
     title: 'Slash commands, sent with no Sent bubble',
+    shows: { absent: 'Sent' },
     events: CONVERSATION,
     arrange: (stage) => delivered(stage, '/compact'),
-    settle: () => Effect.andThen(typesDraft('/compact'), clicks(SEND)),
+    settle: () =>
+      Effect.gen(function* () {
+        yield* typesDraft('/compact')
+        yield* clicks(SEND)
+        yield* seesSelector('[data-slot="prompt-input-submit"][disabled]:not([aria-busy="true"])')
+      }),
   }),
   chatStory({
     slug: 'prompts-sent-and-queued',

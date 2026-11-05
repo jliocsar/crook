@@ -37,6 +37,9 @@ export const ENVIRONMENT_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'keyboard-new-agent',
     title: 'Keyboard up, New agent',
+    shows: {
+      selector: '[data-keyboard="open"] textarea[placeholder="What should Claude work on?"]',
+    },
     env: KEYBOARD_UP,
     path: NEW_AGENT_PATH,
     link: LIVE_TEAM,
@@ -53,6 +56,7 @@ export const ENVIRONMENT_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'reduced-machines',
     title: 'Reduced motion, Machines',
+    shows: { selector: '[data-slot="machine-card"]' },
     env: REDUCED,
     path: MACHINES_PATH,
     link: LIVE_TEAM,
@@ -60,6 +64,7 @@ export const ENVIRONMENT_STORIES: readonly StoryMaker[] = [
   linkStory({
     slug: 'reduced-settings',
     title: 'Reduced motion, Settings',
+    shows: { text: 'Live Activity' },
     env: REDUCED,
     path: SETTINGS_PATH,
     link: liveWith(herd([])),
