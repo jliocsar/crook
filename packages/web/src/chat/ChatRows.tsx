@@ -9,9 +9,17 @@ import { RowAction } from '@crook/web/chat/RowAction'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import { ThreadItem } from '@crook/web/chat/ThreadItem'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
-import { isCatchingUp } from '@crook/web/chat/TranscriptState'
-import type { TranscriptView } from '@crook/web/chat/TranscriptState'
+import { isWatching, machineLabelOf } from '@crook/web/chat/ChatModel'
+import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
+import { PresenceState } from '@crook/web/chat/PresenceMachine'
+import {
+  failureOf,
+  isRetrying,
+  knowsNothing,
+  TranscriptViewState,
+} from '@crook/web/chat/TranscriptMachine'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
+import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { Skeleton } from '@crook/web/components/ui/skeleton'
 import { ThinkingState } from '@crook/web/components/ui/thinking-state'
 import { useNow } from '@crook/web/time/Now'
@@ -20,6 +28,8 @@ const WORKING_KEY = 'working'
 const FAILURE_KEY = 'transcript failure'
 const WORKING_LABEL = 'Working'
 const NO_MESSAGES = 'No messages yet'
+const NOT_CLAUDE = 'Not a Claude pane'
+const NOTHING_CACHED = 'No messages on this phone yet'
 
 const itemRow = (
   rows: WeakMap<ChatItem, ThreadRow>,
@@ -58,18 +68,18 @@ export const workingRow = (elapsed: (now: DateTime.Utc) => string): ThreadRow =>
 })
 
 export const failureRows = (
-  view: Option.Option<TranscriptView>,
+  state: TranscriptViewState,
   onRetry: () => void,
 ): readonly ThreadRow[] =>
   pipe(
-    Option.flatMap(view, (found) => found.failure),
+    failureOf(state),
     Option.map((failure) => ({
       key: FAILURE_KEY,
       content: (
         <RowAction
           label="Try again"
           pendingLabel="Trying again"
-          pending={isCatchingUp(view)}
+          pending={isRetrying(state)}
           onAction={onRetry}
         >
           <ActionFailure className="px-1 text-center" message={Option.some(failure.message)} />
@@ -97,8 +107,31 @@ function LoadingThread() {
   )
 }
 
-export function TranscriptEmpty({ view }: { view: Option.Option<TranscriptView> }) {
-  return Option.isNone(view) ? (
+export function ThreadEmpty({
+  model,
+  state,
+}: {
+  model: ChatScreenModel
+  state: TranscriptViewState
+}) {
+  if (PresenceState.guards.NotClaude(model.presence)) {
+    return <EmptyState title={NOT_CLAUDE} />
+  }
+
+  if (PresenceState.guards.Away(model.presence)) {
+    return (
+      <EmptyState
+        title={NOTHING_CACHED}
+        description={`They show once ${machineLabelOf(model)} is back.`}
+      />
+    )
+  }
+
+  if (!isWatching(model) && knowsNothing(state)) {
+    return <EmptyState title={NOTHING_CACHED} />
+  }
+
+  return TranscriptViewState.guards.NoView(state) ? (
     <LoadingThread />
   ) : (
     <p className="text-muted-foreground py-10 text-center text-sm">{NO_MESSAGES}</p>

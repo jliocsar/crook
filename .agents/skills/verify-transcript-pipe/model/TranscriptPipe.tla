@@ -476,13 +476,14 @@ HubSends ==   \* inbox.take: one message, and the next only after the phone's ac
                  mode, view, cached, ghost>>
 
 -----------------------------------------------------------------------------
-(* @crook/web/chat/TranscriptState + atoms/Transcript.ts: the phone *)
+(* @crook/web/chat/TranscriptState + TranscriptMachine + atoms/Transcript.ts: the phone. A view is *)
+(* its fold; catching is every machine state that holds a fold back, failed is Failed and Retrying *)
 
 EMPTY_TRANSCRIPT == [position |-> NONE, lines |-> <<>>, catching |-> FALSE, failed |-> FALSE]
 
 isOpened(v) == v.position /= NONE
 
-isShowable(v) == (isOpened(v) /\ ~v.catching) \/ v.failed
+remembered(v) == isOpened(v) /\ ~v.catching
 
 chunkLines(c) ==
   LET first == IF c.omit > 0 THEN c.omit ELSE c.from
@@ -499,7 +500,9 @@ linesAfter(v, u) ==
 applyTranscriptEvent(v, u) ==
   [position |-> positionAfter(v.position, u),
    lines    |-> linesAfter(v, u),
-   catching |-> IF u.t = "caughtUp" THEN FALSE ELSE v.catching,
+   catching |-> CASE u.t = "caughtUp" -> FALSE
+                  [] u.t = "opened" /\ v.position /= NONE /\ ~inSession(v.position, u.s) -> TRUE
+                  [] OTHER -> v.catching,
    failed   |-> FALSE]
 
 PhoneApplies ==   \* Transcript.apply, one event at a time, so a drop can land between two
@@ -510,7 +513,7 @@ PhoneApplies ==   \* Transcript.apply, one event at a time, so a drop can land b
          next == applyTranscriptEvent(view, u)
      IN /\ view' = next
         /\ wire' = Tail(wire)
-        /\ cached' = IF isShowable(next) THEN next ELSE cached
+        /\ cached' = IF remembered(next) THEN next ELSE cached
         /\ ghost' = [ghost EXCEPT
              !.phoneEpoch = IF u.t = "opened" /\ u.e > @ THEN u.e ELSE @,
              !.rewound = @ \/ (u.t = "opened" /\ u.e < ghost.phoneEpoch),

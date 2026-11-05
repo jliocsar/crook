@@ -5,6 +5,7 @@ import type { JobKind, JobState } from '@crook/web/chat/BackgroundModel'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import type { ChatStatus, EdgeKind } from '@crook/web/chat/ChatModel'
 import type { PresenceState } from '@crook/web/chat/PresenceMachine'
+import type { TranscriptViewState } from '@crook/web/chat/TranscriptMachine'
 import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
 import type { HerdNotice } from '@crook/web/herd/HerdLayout'
 import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
@@ -56,6 +57,18 @@ export const STATE_COVERAGE = {
     Closed: ['chat/closed'],
     NotClaude: ['chat/not-claude'],
   } satisfies Record<PresenceState['_tag'], readonly string[]>,
+  transcriptView: {
+    NoView: ['chat/skeleton', 'transition/older-agent-open'],
+    Cached: ['transition/reopen-while-dialing'],
+    Holding: ['transition/cached-reopen-catch-up'],
+    CatchingUp: ['transition/slow-catch-up', 'chat/catching-up'],
+    NoticeLeaving: ['transition/catch-up-lands-under-words'],
+    LoadingEarlier: ['transition/show-earlier-loads', 'chat/show-earlier-pending'],
+    Current: ['chat/conversation'],
+    OpenedEmpty: ['transition/opened-empty'],
+    Failed: ['chat/failed-with-lines', 'chat/failed-empty', 'transition/failed-then-retry'],
+    Retrying: ['transition/failed-then-retry'],
+  } satisfies Record<TranscriptViewState['_tag'], readonly string[]>,
   edgeCard: {
     away: ['chat/away'],
     exited: ['chat/exited'],

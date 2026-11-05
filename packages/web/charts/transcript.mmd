@@ -1,0 +1,46 @@
+stateDiagram-v2
+  [*] --> NoView
+  state "from any state" as Anywhere
+  NoView --> Cached: CacheRead
+  NoView --> Current: EventArrived
+  NoView --> OpenedEmpty: EventArrived<br/>EmptyDue
+  Cached --> Holding: WatchResumed / WaitOutNotice<br/>WatchFailed
+  Cached --> LoadingEarlier: EarlierAsked / ReadAgain
+  Cached --> Current: WatchResumed<br/>EventArrived
+  Holding --> NoView: WatchFailed
+  Holding --> CatchingUp: NoticeDue / HoldNotice
+  Holding --> LoadingEarlier: EarlierAsked / ReadAgain
+  Holding --> Current: WatchResumed<br/>EventArrived
+  Holding --> OpenedEmpty: EventArrived
+  CatchingUp --> NoView: WatchFailed
+  CatchingUp --> Holding: WatchFailed<br/>WatchResumed
+  CatchingUp --> NoticeLeaving: EventArrived
+  CatchingUp --> LoadingEarlier: EarlierAsked / ReadAgain
+  CatchingUp --> Current: WatchResumed<br/>EventArrived
+  CatchingUp --> OpenedEmpty: EventArrived
+  NoticeLeaving --> Holding: WatchFailed
+  NoticeLeaving --> CatchingUp: WatchResumed / HoldNotice
+  NoticeLeaving --> LoadingEarlier: EarlierAsked / ReadAgain
+  NoticeLeaving --> Current: WatchResumed<br/>NoticeHeld
+  LoadingEarlier --> NoView: WatchFailed
+  LoadingEarlier --> Holding: WatchFailed
+  LoadingEarlier --> Current: EventArrived<br/>WatchResumed
+  LoadingEarlier --> OpenedEmpty: EventArrived
+  Current --> Holding: WatchResumed / WaitOutNotice<br/>WatchFailed
+  Current --> LoadingEarlier: EarlierAsked / ReadAgain
+  OpenedEmpty --> NoView: WatchFailed
+  OpenedEmpty --> Holding: WatchResumed / WaitOutNotice
+  OpenedEmpty --> Current: EventArrived
+  Failed --> NoView: WatchFailed
+  Failed --> Holding: WatchFailed<br/>EventArrived / WaitOutNotice<br/>EventArrived
+  Failed --> LoadingEarlier: EarlierAsked / ReadAgain
+  Failed --> Current: EventArrived
+  Failed --> OpenedEmpty: EventArrived
+  Failed --> Retrying: WatchResumed
+  Retrying --> NoView: WatchFailed
+  Retrying --> Holding: EventArrived / WaitOutNotice<br/>WatchFailed<br/>EventArrived
+  Retrying --> LoadingEarlier: EarlierAsked / ReadAgain
+  Retrying --> Current: EventArrived
+  Retrying --> OpenedEmpty: EventArrived
+  Anywhere --> NoView: EventArrived / WaitOutEmpty
+  Anywhere --> Failed: WatchFailed

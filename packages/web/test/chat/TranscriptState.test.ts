@@ -1,6 +1,5 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
-import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
@@ -8,20 +7,13 @@ import { SkillListing } from '@crook/domain/Skill'
 import { SubagentActivity } from '@crook/domain/Background'
 import { BackgroundChanged, SkillsChanged, SubagentsChanged } from '@crook/domain/Transcript'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
-import { MachineNotInHerd } from '@crook/protocol/ClientApi'
-import { LAPTOP } from '../HerdFixtures.ts'
 import {
   applyTranscriptEvent,
-  catchingUpFrom,
   EMPTY_TRANSCRIPT,
-  failedWith,
-  isShowable,
-  shownAfter,
   type TranscriptLine,
 } from '@crook/web/chat/TranscriptState'
 
 import {
-  caughtUp,
   chunk,
   NEXT_SESSION,
   opened,
@@ -131,98 +123,5 @@ describe('applyTranscriptEvent', () => {
       applyTranscriptEvent(cleared, new SkillsChanged({ session: NEXT_SESSION, skills: [] }))
         .skills,
     ).toEqual([])
-  })
-
-  it('keeps the lines it holds when the watch fails', () => {
-    const view = pipe(fold([opened(), chunk(0, 10, [prompt(0, 'hi')])]), (held) =>
-      failedWith(held, new MachineNotInHerd({ machine: LAPTOP })),
-    )
-
-    expect(offsets(view.lines)).toEqual(['old 0'])
-    expect(Option.isSome(view.failure)).toBe(true)
-  })
-
-  it('stops catching up once the watch fails', () => {
-    const failed = failedWith(
-      catchingUpFrom(fold([opened(), chunk(0, 10, [prompt(0, 'hi')])]), true),
-      new MachineNotInHerd({ machine: LAPTOP }),
-    )
-
-    expect(failed.catchingUp).toBe(false)
-  })
-
-  it('forgets the failure once a watch delivers again', () => {
-    const failed = failedWith(
-      fold([opened(), chunk(0, 10, [prompt(0, 'hi')])]),
-      new MachineNotInHerd({ machine: LAPTOP }),
-    )
-
-    expect(applyTranscriptEvent(failed, opened()).failure).toEqual(Option.none())
-    expect(applyTranscriptEvent(failed, chunk(10, 20, [said(10, 'back')])).failure).toEqual(
-      Option.none(),
-    )
-  })
-})
-
-describe('isShowable', () => {
-  const failure = new MachineNotInHerd({ machine: LAPTOP })
-
-  it('holds back a watch that awaits the agent catching up until it has', () => {
-    const awaiting = catchingUpFrom(EMPTY_TRANSCRIPT, true)
-    const partway = Arr.reduce(
-      [opened(), chunk(0, 10, [prompt(0, 'hi')])],
-      awaiting,
-      applyTranscriptEvent,
-    )
-    const done = applyTranscriptEvent(partway, caughtUp(10))
-
-    expect(isShowable(partway)).toBe(false)
-    expect(isShowable(done)).toBe(true)
-    expect(offsets(done.lines)).toEqual(['old 0'])
-    expect(isShowable(applyTranscriptEvent(done, chunk(10, 20, [said(10, 'hello')])))).toBe(true)
-  })
-
-  it('shows every opened view of a watch that does not await catching up', () => {
-    const opening = catchingUpFrom(EMPTY_TRANSCRIPT, false)
-
-    expect(isShowable(opening)).toBe(false)
-    expect(isShowable(applyTranscriptEvent(opening, opened()))).toBe(true)
-  })
-
-  it('shows a failure while the watch still catches up', () => {
-    expect(isShowable(failedWith(catchingUpFrom(EMPTY_TRANSCRIPT, true), failure))).toBe(true)
-  })
-})
-
-describe('shownAfter', () => {
-  const seen = fold([opened(), chunk(0, 10, [prompt(0, 'hi')]), caughtUp(10)])
-  const resuming = catchingUpFrom(seen, true)
-
-  it('keeps showing the last view, marked catching up, while a fresher one is held back', () => {
-    const [shown, emitted] = shownAfter(Option.some(seen), resuming)
-
-    expect(Arr.map(emitted, (view) => [offsets(view.lines), view.catchingUp])).toEqual([
-      [['old 0'], true],
-    ])
-    expect(Option.map(shown, (view) => view.catchingUp)).toEqual(Option.some(true))
-  })
-
-  it('emits nothing more until the held view can be shown', () => {
-    const [held] = shownAfter(Option.some(seen), resuming)
-    const partway = applyTranscriptEvent(resuming, chunk(10, 20, [said(10, 'hello')]))
-    const [, quiet] = shownAfter(held, partway)
-    const [, done] = shownAfter(held, applyTranscriptEvent(partway, caughtUp(20)))
-
-    expect(quiet).toEqual([])
-    expect(Arr.map(done, (view) => [offsets(view.lines), view.catchingUp])).toEqual([
-      [['old 0', 'old 10'], false],
-    ])
-  })
-
-  it('shows nothing while a first watch catches up', () => {
-    expect(shownAfter(Option.none(), catchingUpFrom(EMPTY_TRANSCRIPT, true))).toEqual([
-      Option.none(),
-      [],
-    ])
   })
 })

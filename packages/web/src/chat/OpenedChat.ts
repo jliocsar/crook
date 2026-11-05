@@ -7,8 +7,9 @@ import { canActAtom, dimsContentAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import {
   transcriptAtom,
+  transcriptEarlierAtom,
   transcriptRetryAtom,
-  transcriptWholeAtom,
+  transcriptStateOf,
 } from '@crook/web/atoms/Transcript'
 import type { TranscriptKey } from '@crook/web/atoms/Transcript'
 import { deriveChat, EMPTY_CHAT } from '@crook/web/chat/ChatItems'
@@ -34,17 +35,16 @@ export const useOpenedChat = (machine: MachineId, pane: PaneId) => {
 
 export const useTranscriptThread = (key: TranscriptKey) => {
   const result = useAtomValue(transcriptAtom(key))
-  const whole = useAtomValue(transcriptWholeAtom(key))
-  const showWhole = useAtomSet(transcriptWholeAtom(key))
+  const askEarlier = useAtomSet(transcriptEarlierAtom(key))
   const retry = useAtomSet(transcriptRetryAtom(key))
   const onShowEarlier = React.useCallback(() => {
-    showWhole(true)
-  }, [showWhole])
+    askEarlier((count) => count + 1)
+  }, [askEarlier])
   const onRetry = React.useCallback(() => {
     retry((count) => count + 1)
   }, [retry])
 
-  return { result, whole, onShowEarlier, onRetry }
+  return { state: transcriptStateOf(result), onShowEarlier, onRetry }
 }
 
 export const useChatItems = (
