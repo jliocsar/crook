@@ -17,6 +17,8 @@ export type MarkPair = readonly [string, string]
 const PRESENCE = 'presence'
 const COMPOSER_STATES = ['Loading', 'Live', 'Redialing', 'Reconnecting']
 const EDGE_CARD_STATES = ['Away', 'Exited', 'Closed']
+const ACTIVITY = 'activity'
+const ACTIVITY_QUIET_STATES = ['NoAgent', 'Still', 'Blocked', 'Finished', 'Away']
 
 export const MACHINE_ATTRIBUTE = 'data-machine'
 export const STATE_ATTRIBUTE = 'data-state'
@@ -66,7 +68,15 @@ export const MARKS: readonly MarkDefinition[] = [
   { mark: 'task-composer', track: 'new-agent', selector: '[data-slot="task-composer"]' },
   { mark: 'dimmed', track: 'dimmed', selector: `[${STATE_ATTRIBUTE}="dimmed"]` },
   { mark: 'catching-up', track: 'header', selector: '[data-slot="catching-up-pill"]' },
-  { mark: 'working', track: 'activity', selector: '[data-slot="thinking-state"]' },
+  { mark: 'working', track: 'activity', selector: '[data-row="working"]' },
+  {
+    mark: 'activity-quiet',
+    track: 'activity-state',
+    selector: machineSelector(ACTIVITY, ACTIVITY_QUIET_STATES),
+    machine: { name: ACTIVITY, states: ACTIVITY_QUIET_STATES },
+  },
+  { mark: 'stop-button', track: 'composer-button', selector: '[data-slot="prompt-input-stop"]' },
+  { mark: 'send-button', track: 'composer-button', selector: '[data-slot="prompt-input-submit"]' },
   {
     mark: 'composer',
     track: 'dock',
@@ -111,6 +121,8 @@ export const NEVER_TOGETHER: readonly MarkPair[] = [
   ['thread-empty', 'thread-rows'],
   ['herd-skeleton', 'herd-list'],
   ['composer', 'edge-card'],
+  ['working', 'activity-quiet'],
+  ['stop-button', 'activity-quiet'],
 ]
 
 export const isContentMark = (mark: string): boolean =>

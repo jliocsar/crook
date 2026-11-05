@@ -145,11 +145,11 @@ export const notification = (offset: number, toolUseId: string, status: string) 
     }),
   ])
 
-export const compactBoundary = (offset: number) =>
+export const compactBoundary = (offset: number, seconds = 0) =>
   new SystemMessage({
     offset: TranscriptOffset.make(offset),
     uuid: Option.none(),
-    timestamp: at(0),
+    timestamp: at(seconds),
     blocks: [
       new CompactBoundaryBlock({
         trigger: Option.some('manual'),

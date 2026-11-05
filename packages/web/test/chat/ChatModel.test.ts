@@ -11,8 +11,8 @@ import { PaneId } from '@crook/domain/Ids'
 import { MachineState } from '@crook/domain/MachineState'
 import { Pane } from '@crook/domain/Pane'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
+import { activityEventOf, activityMachine, activityView } from '@crook/web/chat/ActivityMachine'
 import {
-  activityOf,
   ChatStatus,
   chatScreenModel,
   chatStatus,
@@ -76,13 +76,23 @@ const step = (previous: ChatScreenModel, entry: HerdMachine, minutes = 0): ChatS
   return chatScreenModel(herdNow, LAPTOP, PANE, previous, presence)
 }
 
+const activityFrom = (model: ChatScreenModel) =>
+  activityMachine.transition(
+    activityMachine.initial,
+    activityEventOf(model.presence, model.row, Option.none()),
+  )[0]
+
+const statusOf = (model: ChatScreenModel) => chatStatus(model, activityFrom(model))
+
+const itemActivityOf = (model: ChatScreenModel) => activityView(activityFrom(model)).itemActivity
+
 const live = step(LOADING_CHAT, laptop([agent('w1:p1', 'working')]))
 
 describe('chatScreenModel', () => {
   it('reads a pane with Claude as live, with its status, place and activity', () => {
     expect(PresenceState.guards.Live(live.presence)).toBe(true)
-    expect(chatStatus(live)).toStrictEqual(ChatStatus.Agent({ status: 'working' }))
-    expect(activityOf(live)).toBe('working')
+    expect(statusOf(live)).toStrictEqual(ChatStatus.Agent({ status: 'working' }))
+    expect(itemActivityOf(live)).toBe('working')
     expect(live.workspaceLabel).toStrictEqual(Option.some('crook'))
   })
 
@@ -93,8 +103,8 @@ describe('chatScreenModel', () => {
     expect(PresenceState.guards.Exited(exited.presence)).toBe(true)
     expect(PresenceState.guards.Closed(closed.presence)).toBe(true)
     expect(Option.map(closed.row, (row) => row.pane)).toStrictEqual(Option.some(PANE))
-    expect(chatStatus(closed)).toStrictEqual(ChatStatus.Ended({ label: 'closed' }))
-    expect(activityOf(closed)).toBe('still')
+    expect(statusOf(closed)).toStrictEqual(ChatStatus.Ended({ label: 'closed' }))
+    expect(itemActivityOf(closed)).toBe('still')
   })
 
   it('stamps when the agent ended once, not on every later snapshot', () => {
@@ -117,8 +127,8 @@ describe('chatScreenModel', () => {
     const quiet = step(live, laptop([agent('w1:p1', 'working')], 'reconnecting'))
 
     expect(PresenceState.guards.Redialing(quiet.presence)).toBe(true)
-    expect(chatStatus(quiet)).toStrictEqual(ChatStatus.Agent({ status: 'working' }))
-    expect(activityOf(quiet)).toBe('working')
+    expect(statusOf(quiet)).toStrictEqual(ChatStatus.Agent({ status: 'working' }))
+    expect(itemActivityOf(quiet)).toBe('working')
     expect(Option.isNone(edgeKindOf(quiet))).toBe(true)
     expect(isWatching(quiet)).toBe(true)
   })
@@ -130,7 +140,7 @@ describe('chatScreenModel', () => {
       reconnecting(reconnectingLaptop.machine.connectionChangedAt),
     )
 
-    expect(chatStatus(said)).toStrictEqual(ChatStatus.Ended({ label: 'laptop reconnecting' }))
+    expect(statusOf(said)).toStrictEqual(ChatStatus.Ended({ label: 'laptop reconnecting' }))
     expect(Option.isNone(edgeKindOf(said))).toBe(true)
     expect(isWatching(said)).toBe(true)
   })
@@ -140,9 +150,9 @@ describe('chatScreenModel', () => {
 
     expect(PresenceState.guards.Away(away.presence)).toBe(true)
     expect(Option.isSome(away.row)).toBe(true)
-    expect(chatStatus(away)).toStrictEqual(ChatStatus.Ended({ label: 'laptop offline' }))
+    expect(statusOf(away)).toStrictEqual(ChatStatus.Ended({ label: 'laptop offline' }))
     expect(edgeKindOf(away)).toStrictEqual(Option.some('away'))
-    expect(activityOf(away)).toBe('working')
+    expect(itemActivityOf(away)).toBe('working')
   })
 
   it('keeps what it had while there is no snapshot', () => {

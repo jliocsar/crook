@@ -676,7 +676,6 @@ const draftsOf = (placed: Placed): readonly Draft[] => {
 const isSubagents = ChatItem.$is('Subagents')
 const isPlan = ChatItem.$is('Plan')
 const isCompacted = ChatItem.$is('Compacted')
-const isTool = ChatItem.$is('Tool')
 
 export const isUserPrompt = ChatItem.$is('UserPrompt')
 export const isOmitted = ChatItem.$is('Omitted')
@@ -961,14 +960,6 @@ const isRunning = (run: SubagentRun): boolean => run.status === 'running'
 
 export const runningCount = (items: readonly ChatItem[]): number =>
   Arr.filter(runsIn(items), isRunning).length
-
-export const hasToolRunning = (items: readonly ChatItem[]): boolean =>
-  Option.exists(
-    Arr.last(items),
-    (item) =>
-      (isTool(item) && item.call.status === 'running') ||
-      (isSubagents(item) && item.runs.some((run) => !run.background && isRunning(run))),
-  )
 
 export const firstRunningTreeKey = (items: readonly ChatItem[]): Option.Option<string> =>
   pipe(

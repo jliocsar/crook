@@ -40,7 +40,7 @@ import {
 import type { AlwaysNote } from '@crook/web/chat/AskModel'
 import { isOmitted, isUserPrompt } from '@crook/web/chat/ChatItems'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
-import { activityOf } from '@crook/web/chat/ChatModel'
+import { ActivityState, activityView } from '@crook/web/chat/ActivityMachine'
 import { isPresent } from '@crook/web/chat/PresenceMachine'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 import { useCommandAction } from '@crook/web/chat/CommandAction'
@@ -65,6 +65,7 @@ export interface ChatCommands {
 interface ChatCommandsInput {
   readonly opened: OpenedAgent
   readonly model: ChatScreenModel
+  readonly activity: ActivityState
   readonly canAct: boolean
   readonly items: readonly ChatItem[]
   readonly session: Option.Option<ClaudeSessionId>
@@ -343,6 +344,7 @@ const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
 export const useChatCommands = ({
   opened,
   model,
+  activity,
   canAct,
   items,
   session,
@@ -362,8 +364,8 @@ export const useChatCommands = ({
     () => pendingPromptRows(prompted.wait, items, promptInFlight),
     [prompted.wait, items, promptInFlight],
   )
-  const activity = activityOf(model)
-  const blocked = activity === 'blocked'
+  const working = Option.isSome(activityView(activity).workingSince)
+  const blocked = ActivityState.guards.Blocked(activity)
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(opened, answer, session)
   const openAsk = Option.flatMap(
@@ -382,7 +384,7 @@ export const useChatCommands = ({
     prompted.afterSend({
       replacesFailed: isFailed(prompt.state) && Option.exists(prompt.last, awaitsPrompt),
       prompt: promptTextOf(command),
-      working: activity === 'working',
+      working,
     })
     prompt.send(command)
   }
@@ -427,7 +429,7 @@ export const useChatCommands = ({
         }
       },
       mode,
-      working: activity === 'working',
+      working,
       disabled: !canAct || (blocked && mode === 'prompt') || (mode === 'decline' && answering),
       sending: isSending(prompt.state),
       stopping,

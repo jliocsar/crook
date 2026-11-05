@@ -1,6 +1,7 @@
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
 import type { Ask, AskedAction } from '@crook/domain/Ask'
 import type { AskAnswerState } from '@crook/web/chat/AskModel'
+import type { ActivityState } from '@crook/web/chat/ActivityMachine'
 import type { JobKind, JobState } from '@crook/web/chat/BackgroundModel'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import type { ChatStatus, EdgeKind } from '@crook/web/chat/ChatModel'
@@ -79,6 +80,20 @@ export const STATE_COVERAGE = {
     exited: ['chat/exited'],
     closed: ['chat/closed'],
   } satisfies Record<EdgeKind, readonly string[]>,
+  chatActivity: {
+    NoAgent: ['chat/presence-loading', 'chat/exited'],
+    Still: ['chat/conversation'],
+    Blocked: ['ask/permission-command'],
+    Working: [
+      'composer/working',
+      'chat/working-then-idle-hold',
+      'transition/turn-with-tools',
+      'transition/idle-before-answer',
+      'subagent/turn-with-tools',
+    ],
+    Finished: ['chat/answer-before-idle', 'transition/prompt-to-answer'],
+    Away: ['chat/away'],
+  } satisfies Record<ActivityState['_tag'], readonly string[]>,
   chatStatus: {
     Agent: ['chat/conversation'],
     Ended: ['chat/exited'],
@@ -144,6 +159,10 @@ export const REQUIRED_TRANSITIONS: readonly string[] = [
   'transition/clear',
   'transition/resume-other-session',
   'transition/prompt-to-answer',
+  'transition/turn-with-tools',
+  'transition/idle-before-answer',
+  'transition/compact-ends-the-turn',
+  'subagent/turn-with-tools',
   'transition/herd-first-load-from-cache',
 ]
 

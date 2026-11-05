@@ -1,6 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
 import { cn } from 'cn'
-import type * as DateTime from 'effect/DateTime'
 import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import { Ellipsis } from 'lucide-react'
@@ -12,6 +11,7 @@ import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/Agent
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
+import { activityMachine, activityView } from '@crook/web/chat/ActivityMachine'
 import {
   BackgroundContext,
   BackgroundDock,
@@ -27,15 +27,13 @@ import type {
   PendingPromptRow,
 } from '@crook/web/chat/ChatCommands'
 import { CatchingUpPill, ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
-import { firstRunningTreeKey, hasToolRunning, runningCount } from '@crook/web/chat/ChatItems'
+import { firstRunningTreeKey, runningCount } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import {
-  activityOf,
   chatStatus,
   cwdOf,
   edgeKindOf,
   endedAtOf,
-  herdrTurnOf,
   isWatching,
   machineLabelOf,
   placeOf,
@@ -49,7 +47,12 @@ import { isPresent, presenceMachine, PresenceState } from '@crook/web/chat/Prese
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
 import type { Restart } from '@crook/web/chat/EdgeCard'
 import { ImageViewer } from '@crook/web/chat/Images'
-import { useChatItems, useOpenedChat, useTranscriptThread } from '@crook/web/chat/OpenedChat'
+import {
+  useChatActivity,
+  useChatItems,
+  useOpenedChat,
+  useTranscriptThread,
+} from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -63,14 +66,6 @@ import {
   transcriptMachine,
 } from '@crook/web/chat/TranscriptMachine'
 import { linesOf, rostersOf } from '@crook/web/chat/TranscriptState'
-import {
-  holdingSince,
-  lastTurnEvidence,
-  nextWorkingHold,
-  NO_HOLD,
-  sameHold,
-} from '@crook/web/chat/WorkingHold'
-import type { WorkingSignals } from '@crook/web/chat/WorkingHold'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
 import { Message } from '@crook/web/components/ui/message'
@@ -113,17 +108,6 @@ const useThreadEpoch = (session: Option.Option<ClaudeSessionId>): number => {
   }
 
   return thread.epoch
-}
-
-const useWorkingHold = (signals: WorkingSignals): Option.Option<DateTime.Utc> => {
-  const [heldSince, setHeldSince] = React.useState(NO_HOLD)
-  const next = nextWorkingHold(heldSince, signals)
-
-  if (!sameHold(next, heldSince)) {
-    setHeldSince(next)
-  }
-
-  return holdingSince(next, signals.evidence)
 }
 
 function ChatDock({
@@ -241,13 +225,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const lines = linesOf(view)
   const session = threadSessionOf(state)
   const threadEpoch = useThreadEpoch(session)
-  const evidence = React.useMemo(() => lastTurnEvidence(lines), [lines])
-  const workingSince = useWorkingHold({
-    herdr: herdrTurnOf(model, hasFailed(state)),
-    evidence,
-  })
-  const activity = Option.isSome(workingSince) ? 'working' : activityOf(model)
-  const items = useChatItems(lines, { cwd, activity, rosters })
+  const activity = useChatActivity(model, lines, hasFailed(state))
+  const { workingSince, itemActivity } = activityView(activity)
+  const items = useChatItems(lines, { cwd, activity: itemActivity, rosters })
   const covered = useCoveredByPushedScreen()
   const scrollToEnd = React.useCallback(() => {
     thread.current?.scrollToEnd()
@@ -255,6 +235,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const commands = useChatCommands({
     opened,
     model,
+    activity,
     canAct,
     items,
     session,
@@ -322,7 +303,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   )
   const conversationRows = useItemRows(shownItems, environment)
   const landedRows = useCatchUp(view, conversationRows)
-  const workingAt = Option.getOrUndefined(Option.filter(workingSince, () => !hasToolRunning(items)))
+  const workingAt = Option.getOrUndefined(workingSince)
   const watching = isWatching(model)
   const notClaude = PresenceState.guards.NotClaude(model.presence)
   const rows = React.useMemo(
@@ -355,7 +336,14 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     <>
       <PushedHeader
         title={title}
-        subtitle={<ChatStatusLine status={chatStatus(model)} place={placeOf(model)} />}
+        subtitle={
+          <span
+            {...stateMark(activityMachine, activity)}
+            className="flex min-w-0 items-center gap-1.5"
+          >
+            <ChatStatusLine status={chatStatus(model, activity)} place={placeOf(model)} />
+          </span>
+        }
         backLabel={backLabel}
         trailing={
           <>
