@@ -6,7 +6,7 @@ import { pendingPromptRows, waitAfterSend } from '@crook/web/chat/ChatCommands'
 import type { PromptSend, PromptWait } from '@crook/web/chat/ChatCommands'
 import { ChatItem } from '@crook/web/chat/ChatItems'
 
-const NOTHING: PromptWait = { promptsAtSend: 0, pending: [] }
+const NOTHING: PromptWait = { promptsAtSend: 0, holesAtSend: 0, pending: [] }
 
 const prompts = (count: number): readonly ChatItem[] =>
   Arr.makeBy(count, (index) =>
@@ -34,35 +34,41 @@ describe('waitAfterSend', () => {
     const first = waitAfterSend(NOTHING, prompts(1), sending('second'))
     const second = waitAfterSend(first, prompts(1), sending('third'))
 
-    expect(first).toStrictEqual({ promptsAtSend: 1, pending: [sent('second')] })
+    expect(first).toStrictEqual({ promptsAtSend: 1, holesAtSend: 0, pending: [sent('second')] })
     expect(second).toStrictEqual({
       promptsAtSend: 1,
+      holesAtSend: 0,
       pending: [sent('second'), queued('third')],
     })
   })
 
   it('starts counting again from the thread once everything awaited arrived', () => {
-    const both = { promptsAtSend: 1, pending: [sent('second'), queued('third')] }
+    const both = { promptsAtSend: 1, holesAtSend: 0, pending: [sent('second'), queued('third')] }
 
     expect(waitAfterSend(both, prompts(3), sending('fourth'))).toStrictEqual({
       promptsAtSend: 3,
+      holesAtSend: 0,
       pending: [sent('fourth')],
     })
   })
 
   it('counts a failed prompt out once another send replaces it', () => {
     const replaced = waitAfterSend(
-      { promptsAtSend: 1, pending: [sent('second'), queued('failed')] },
+      { promptsAtSend: 1, holesAtSend: 0, pending: [sent('second'), queued('failed')] },
       prompts(1),
       sending('again', { replacesFailed: true }),
     )
 
-    expect(replaced).toStrictEqual({ promptsAtSend: 1, pending: [sent('second'), queued('again')] })
+    expect(replaced).toStrictEqual({
+      promptsAtSend: 1,
+      holesAtSend: 0,
+      pending: [sent('second'), queued('again')],
+    })
   })
 
   it('awaits nothing for a slash command, which never comes back as a prompt', () => {
     const slash = sending('/compact', { prompt: Option.none() })
-    const waiting = { promptsAtSend: 1, pending: [sent('second')] }
+    const waiting = { promptsAtSend: 1, holesAtSend: 0, pending: [sent('second')] }
 
     expect(waitAfterSend(NOTHING, prompts(1), slash)).toStrictEqual(NOTHING)
     expect(waitAfterSend(waiting, prompts(1), slash)).toStrictEqual(waiting)
@@ -74,25 +80,58 @@ describe('waitAfterSend', () => {
   it('queues a prompt sent while Claude works, as its own TUI does', () => {
     expect(
       waitAfterSend(NOTHING, prompts(1), sending('meanwhile', { working: true })),
-    ).toStrictEqual({ promptsAtSend: 1, pending: [queued('meanwhile')] })
+    ).toStrictEqual({ promptsAtSend: 1, holesAtSend: 0, pending: [queued('meanwhile')] })
   })
 
   it('queues a prompt behind one Claude has not taken yet, whatever the status says', () => {
     const behind = waitAfterSend(
-      { promptsAtSend: 1, pending: [sent('second'), queued('third')] },
+      { promptsAtSend: 1, holesAtSend: 0, pending: [sent('second'), queued('third')] },
       prompts(2),
       sending('fourth'),
     )
 
     expect(behind).toStrictEqual({
       promptsAtSend: 1,
+      holesAtSend: 0,
       pending: [sent('second'), queued('third'), queued('fourth')],
     })
   })
 })
 
+describe('a hole in the thread', () => {
+  const hole = ChatItem.Omitted({ key: 'hole', byteLength: 2048 })
+  const waiting = {
+    promptsAtSend: 1,
+    holesAtSend: 0,
+    pending: [sent('second'), queued('third')],
+  }
+
+  it('ends the wait, since what was waited for may be inside it', () => {
+    expect(pendingPromptRows(waiting, [...prompts(1), hole], false)).toStrictEqual([])
+  })
+
+  it('leaves the wait alone when it is the row a cold open starts with', () => {
+    expect(pendingPromptRows(waiting, [hole, ...prompts(1)], false)).toStrictEqual([
+      { key: 'pending prompt 1', ...sent('second') },
+      { key: 'pending prompt 2', ...queued('third') },
+    ])
+  })
+
+  it('that was there at the send says nothing about the prompt sent after it', () => {
+    const wait = waitAfterSend(NOTHING, [...prompts(1), hole, ...prompts(1)], sending('next'))
+
+    expect(pendingPromptRows(wait, [...prompts(1), hole, ...prompts(1)], false)).toStrictEqual([
+      { key: 'pending prompt 2', ...sent('next') },
+    ])
+  })
+})
+
 describe('pendingPromptRows', () => {
-  const waiting = { promptsAtSend: 1, pending: [sent('second'), queued('third'), queued('fourth')] }
+  const waiting = {
+    promptsAtSend: 1,
+    holesAtSend: 0,
+    pending: [sent('second'), queued('third'), queued('fourth')],
+  }
 
   it('keeps a row for each prompt the thread does not hold yet, keyed by its place', () => {
     expect(pendingPromptRows(waiting, prompts(2), false)).toStrictEqual([

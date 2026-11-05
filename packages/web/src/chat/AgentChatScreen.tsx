@@ -257,6 +257,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const latest = AsyncResult.value(transcript.result)
   const view = AsyncResult.value(React.useDeferredValue(transcript.result))
   const catchingUp = isWatching(model) && isCatchingUp(latest)
+  const landing = isWatching(model) && isCatchingUp(view)
   const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
   const [draft, setDraft] = React.useState('')
@@ -330,10 +331,10 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       cwd,
       paneClosed,
       onShowEarlier: transcript.onShowEarlier,
-      earlierPending: transcript.whole && catchingUp,
+      earlierPending: transcript.whole && (catchingUp || landing),
       onOpenRun: Option.some(openRun),
     }),
-    [cwd, paneClosed, transcript.onShowEarlier, transcript.whole, catchingUp, openRun],
+    [cwd, paneClosed, transcript.onShowEarlier, transcript.whole, catchingUp, landing, openRun],
   )
   const shownItems = React.useMemo(
     () =>

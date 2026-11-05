@@ -49,6 +49,38 @@ export const TIMELINE_EXPECTATIONS = {
     { thread: inSequence('thread-rows'), dock: inSequence('composer') },
     { watchFrom: 'first-step' },
   ),
+  'transition/reopen-over-big-gap': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step' },
+  ),
+  'transition/reopen-over-big-gap-long': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step' },
+  ),
+  'transition/show-earlier-at-hole': story(
+    {
+      thread: inSequence('thread-rows'),
+      dock: inSequence('composer'),
+      hole: inSequence('show-earlier', 'show-earlier-pending'),
+    },
+    { watchFrom: 'first-step' },
+  ),
+  'transition/show-earlier-at-hole-long': story(
+    {
+      thread: inSequence('thread-rows'),
+      dock: inSequence('composer'),
+      hole: inSequence('show-earlier', 'show-earlier-pending'),
+    },
+    { watchFrom: 'first-step' },
+  ),
+  'transition/show-earlier-at-hole-following': story(
+    {
+      thread: inSequence('thread-rows'),
+      dock: inSequence('composer'),
+      hole: inSequence('show-earlier', 'show-earlier-pending'),
+    },
+    { watchFrom: 'first-step' },
+  ),
   'transition/reconnect-chat-open': story(A_CHAT, { shiftBudget: BANNER_SHIFT_BUDGET }),
   'transition/foreground-return': story({ ...A_CHAT, link: NOTHING_ALLOWED }),
   'transition/send-through-redial': story(

@@ -9,6 +9,8 @@ import {
   following,
   ghost,
   historyOpen,
+  holeFills,
+  holeFillsWhileAway,
   liftOf,
   lifted,
   liftsWritten,
@@ -78,6 +80,25 @@ describe('Thread', () => {
       yield* afterSpring(() => {
         expect(liftOf()).toBe('translateY(0px)')
       })
+    }),
+  )
+
+  it.effect('lifts nothing when what grew filled a hole above the end', () =>
+    Effect.gen(function* () {
+      yield* holeFills(ANSWER_HEIGHT)
+
+      expect(lifted()).toBe(0)
+      expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('lifts the next answer after a hole filled while the thread was scrolled away', () =>
+    Effect.gen(function* () {
+      const { followedWhileAway, followedBack } = yield* holeFillsWhileAway(ANSWER_HEIGHT)
+
+      expect(followedWhileAway).toBe(false)
+      expect(followedBack).toBe(true)
+      expect(lifted()).toBe(ANSWER_HEIGHT)
     }),
   )
 

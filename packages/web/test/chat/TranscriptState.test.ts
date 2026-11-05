@@ -6,7 +6,15 @@ import * as Option from 'effect/Option'
 
 import { SkillListing } from '@crook/domain/Skill'
 import { SubagentActivity } from '@crook/domain/Background'
-import { BackgroundChanged, SkillsChanged, SubagentsChanged } from '@crook/domain/Transcript'
+import { TranscriptOffset } from '@crook/domain/Ids'
+import {
+  BackgroundChanged,
+  omittedBetween,
+  omittedUpTo,
+  SkillsChanged,
+  SubagentsChanged,
+} from '@crook/domain/Transcript'
+import { OmittedLines } from '@crook/domain/TranscriptMessage'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
 import { MachineNotInHerd } from '@crook/protocol/ClientApi'
 import { LAPTOP } from '../HerdFixtures.ts'
@@ -18,6 +26,7 @@ import {
   isShowable,
   shownAfter,
   type TranscriptLine,
+  withOneHole,
 } from '@crook/web/chat/TranscriptState'
 
 import {
@@ -40,6 +49,56 @@ const offsets = (lines: readonly TranscriptLine[]) =>
     lines,
     ({ session, message }) => `${session === SESSION ? 'old' : 'new'} ${message.offset}`,
   )
+
+describe('withOneHole', () => {
+  const gap = (from: number, start: number, text: string) => [
+    omittedBetween(SESSION, TranscriptOffset.make(from), TranscriptOffset.make(start)),
+    chunk(start, start + 10, [said(start, text)]),
+  ]
+
+  const crossed = (...gaps: readonly (readonly TranscriptEvent[])[]) =>
+    fold([opened(), chunk(0, 10, [prompt(0, 'First')]), ...gaps.flat()])
+
+  it('hands back a view with no hole, or one, as it is', () => {
+    const none = crossed()
+    const one = crossed(gap(10, 100, 'Second'))
+
+    expect(withOneHole(none)).toBe(none)
+    expect(withOneHole(one)).toBe(one)
+  })
+
+  it('folds all above the hole before the newest into one row at the start of the file', () => {
+    const held = crossed(gap(10, 100, 'Second'), gap(110, 200, 'Third'))
+    const opening = withOneHole(held)
+
+    expect(Arr.map(opening.lines, ({ message }) => message)).toEqual([
+      new OmittedLines({ offset: TranscriptOffset.make(0), byteLength: 100 }),
+      said(100, 'Second'),
+      new OmittedLines({ offset: TranscriptOffset.make(110), byteLength: 90 }),
+      said(200, 'Third'),
+    ])
+    expect(opening.position).toEqual(held.position)
+    expect(opening.rosters).toBe(held.rosters)
+  })
+
+  it('leaves no hole behind once the pane opens another session', () => {
+    const held = crossed(gap(10, 100, 'Second'))
+    const next = applyTranscriptEvent(held, opened(NEXT_SESSION))
+
+    expect(next.lines).toEqual([])
+  })
+
+  it("does not take a cold open's row at the start of the file for a hole", () => {
+    const cold = fold([
+      opened(),
+      omittedUpTo(SESSION, TranscriptOffset.make(90)),
+      chunk(90, 100, [said(90, 'Tail')]),
+      ...gap(100, 190, 'Later'),
+    ])
+
+    expect(withOneHole(cold)).toBe(cold)
+  })
+})
 
 describe('applyTranscriptEvent', () => {
   it('starts at the opened session and keeps every chunk in order', () => {

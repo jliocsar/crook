@@ -3,13 +3,14 @@ import { screen } from '@testing-library/react'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { PaneId, TranscriptOffset } from '@crook/domain/Ids'
-import { omittedUpTo, PaneTranscript } from '@crook/domain/Transcript'
+import { omittedBetween, omittedUpTo, PaneTranscript } from '@crook/domain/Transcript'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
@@ -165,6 +166,50 @@ describe('a chat catching up', () => {
 
       expect(yield* Effect.promise(() => screen.findByText('Early line.'))).toBeDefined()
       expect(screen.queryByRole('button', { name: 'Loading earlier messages' })).toBeNull()
+    }),
+  )
+
+  it.effect('keeps the rows it holds above a hole, and Show earlier fills the hole once', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, current())
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Held line.')]),
+        caughtUp(10),
+        omittedBetween(SESSION, TranscriptOffset.make(10), TranscriptOffset.make(4096)),
+        chunk(4096, 4106, [said(4096, 'Tail line.')]),
+        caughtUp(4106),
+      ])
+
+      const showEarlier = yield* findByRole('button', 'Show earlier messages')
+      const tail = yield* Effect.promise(() => screen.findByText('Tail line.'))
+      const held = screen.getByText('Held line.')
+
+      expect(held.compareDocumentPosition(showEarlier) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+        0,
+      )
+      expect(showEarlier.compareDocumentPosition(tail) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+        0,
+      )
+
+      yield* click(showEarlier)
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.resumes)).toHaveLength(2)
+      })
+
+      expect(Ref.getUnsafe(link.resumes)[1]).toEqual({ from: Option.none(), tail: Option.none() })
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 4106, [said(0, 'Held line.'), said(10, 'Filled line.'), said(4096, 'Tail line.')]),
+        caughtUp(4106),
+      ])
+
+      expect(yield* Effect.promise(() => screen.findByText('Filled line.'))).toBeDefined()
+      expect(screen.getAllByText('Held line.')).toHaveLength(1)
+      expect(screen.getAllByText('Tail line.')).toHaveLength(1)
+      expect(screen.queryByRole('button', { name: 'Show earlier messages' })).toBeNull()
     }),
   )
 

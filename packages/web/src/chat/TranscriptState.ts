@@ -13,11 +13,12 @@ import {
   type BackgroundChanged,
   inSession,
   positionAfter,
+  TRANSCRIPT_START,
   type TranscriptEvent,
   type TranscriptPosition,
   type TranscriptTailBytes,
 } from '@crook/domain/Transcript'
-import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
+import { OmittedLines, type TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import type { HubCallDefected, WatchTranscriptRefused } from '@crook/web/rpc/HubConnection'
 import type { TranscriptResume } from '@crook/web/rpc/HubLink'
 
@@ -157,6 +158,44 @@ export const applyTranscriptEvent = (
 export const failedWith = (view: TranscriptView, failure: TranscriptWatchFailure): TranscriptView =>
   new TranscriptView(
     Struct.evolve(view, { catchingUp: () => false, failure: () => Option.some(failure) }),
+  )
+
+const holeOf = ({ message }: TranscriptLine): Option.Option<OmittedLines> =>
+  Match.value(message).pipe(
+    Match.tag('Omitted', (omitted) =>
+      Option.liftPredicate(omitted, (hole) => hole.offset !== TRANSCRIPT_START),
+    ),
+    Match.orElse(() => Option.none<OmittedLines>()),
+  )
+
+const holesIn = (lines: readonly TranscriptLine[]) =>
+  Arr.flatMap(lines, (line, index) =>
+    Option.toArray(Option.map(holeOf(line), (hole) => ({ index, session: line.session, hole }))),
+  )
+
+export const withOneHole = (view: TranscriptView): TranscriptView =>
+  pipe(
+    holesIn(view.lines),
+    Arr.dropRight(1),
+    Arr.last,
+    Option.match({
+      onNone: () => view,
+      onSome: ({ index, session, hole }) =>
+        new TranscriptView(
+          Struct.evolve(view, {
+            lines: (lines) => [
+              {
+                session,
+                message: new OmittedLines({
+                  offset: TRANSCRIPT_START,
+                  byteLength: hole.offset + hole.byteLength,
+                }),
+              },
+              ...Arr.drop(lines, index + 1),
+            ],
+          }),
+        ),
+    }),
   )
 
 export const resumeOf = (

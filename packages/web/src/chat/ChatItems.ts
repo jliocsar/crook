@@ -271,6 +271,7 @@ const isHumanPrompt = (message: UserMessage): boolean =>
 const startsTurn = ({ message }: TranscriptLine): boolean =>
   Match.value(message).pipe(
     Match.tag('User', isHumanPrompt),
+    Match.tag('Omitted', () => true),
     Match.orElse(() => false),
   )
 
@@ -678,6 +679,7 @@ const isCompacted = ChatItem.$is('Compacted')
 const isTool = ChatItem.$is('Tool')
 
 export const isUserPrompt = ChatItem.$is('UserPrompt')
+export const isOmitted = ChatItem.$is('Omitted')
 
 const merge = (first: ChatItem, later: ChatItem): ChatItem => {
   if (isSubagents(first) && isSubagents(later)) {

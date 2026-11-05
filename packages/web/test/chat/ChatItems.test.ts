@@ -5,9 +5,11 @@ import * as Option from 'effect/Option'
 
 import type { Subagent } from '@crook/domain/Subagent'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
+import { TranscriptOffset } from '@crook/domain/Ids'
 import {
   LocalCommandBlock,
   LocalCommandOutputBlock,
+  OmittedLines,
   SubagentLaunch,
   TextBlock,
 } from '@crook/domain/TranscriptMessage'
@@ -274,6 +276,29 @@ describe('chatItems', () => {
     )
 
     expect(new Set(keys).size).toBe(2)
+  })
+})
+
+describe('a hole in the thread', () => {
+  const hole = new OmittedLines({ offset: TranscriptOffset.make(40), byteLength: 4056 })
+
+  it('ends the calls above it, whose results it may hold', () => {
+    const items = chatItems(
+      linesOf([
+        prompt(0, 'Read it'),
+        toolUse(10, 'toolu_read', 'Read', { file_path: `${CWD}/a.ts` }),
+        hole,
+        said(4096, 'Still going.'),
+      ]),
+      context('working'),
+    )
+
+    expect(Arr.map(items, describeItem)).toEqual([
+      'you: Read it',
+      'Read(a.ts) stopped',
+      'omitted 4056',
+      'claude: Still going.',
+    ])
   })
 })
 

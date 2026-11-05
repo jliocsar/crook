@@ -127,6 +127,49 @@ export const liveTail = Effect.fn('liveTail')(function* (trailing: readonly Thre
   }
 })
 
+export const holeFills = Effect.fn('holeFills')(function* (added: number) {
+  const before = [row('prompt'), { ...row('hole'), hole: true }, row('text')]
+  const { rerender } = render(thread(before, null))
+  const { grow } = scrollable(viewport())
+
+  yield* wait(SETTLE_MS)
+
+  grow(added)
+  rerender(thread([row('prompt'), row('filled'), row('text')], null))
+})
+
+export const holeFillsWhileAway = Effect.fn('holeFillsWhileAway')(function* (added: number) {
+  const before = [row('prompt'), { ...row('hole'), hole: true }, row('text')]
+  const filled = [row('prompt'), row('filled'), row('text')]
+  const { rerender } = render(thread(before, null))
+  const scrolling = viewport()
+  const { grow, bottom } = scrollable(scrolling)
+
+  fireEvent.scroll(scrolling)
+
+  yield* wait(SETTLE_MS)
+
+  fireEvent.touchStart(scrolling)
+  scrolling.scrollTop -= added
+  fireEvent.scroll(scrolling)
+  fireEvent.touchEnd(scrolling)
+  rerender(thread(filled, null))
+
+  const followedWhileAway = following()
+
+  yield* wait(SETTLE_MS)
+
+  scrolling.scrollTop = bottom()
+  fireEvent.scroll(scrolling)
+
+  yield* wait(SETTLE_MS)
+
+  grow(added)
+  rerender(thread([...filled, row('answer')], null))
+
+  return { followedWhileAway, followedBack: following() }
+})
+
 export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
   const tail = yield* liveTail()
 

@@ -4,6 +4,7 @@ import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
+import { isOmitted } from '@crook/web/chat/ChatItems'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { RowAction } from '@crook/web/chat/RowAction'
 import type { ThreadRow } from '@crook/web/chat/Thread'
@@ -32,7 +33,11 @@ const itemRow = (
     return known
   }
 
-  const row = { key: item.key, content: <ThreadItem item={item} environment={environment} /> }
+  const row = {
+    key: item.key,
+    content: <ThreadItem item={item} environment={environment} />,
+    hole: isOmitted(item),
+  }
 
   rows.set(item, row)
 

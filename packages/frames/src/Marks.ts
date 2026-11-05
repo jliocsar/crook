@@ -89,6 +89,12 @@ export const MARKS: readonly MarkDefinition[] = [
   { mark: 'sheet', track: 'sheet', selector: '[data-slot="sheet"]' },
   { mark: 'alert', track: 'alert', selector: '[role="alert"]' },
   { mark: 'catch-up-divider', track: 'catch-up', selector: '[data-slot="catch-up-divider"]' },
+  { mark: 'show-earlier', track: 'hole', selector: 'button[aria-label="Show earlier messages"]' },
+  {
+    mark: 'show-earlier-pending',
+    track: 'hole',
+    selector: 'button[aria-label="Loading earlier messages"]',
+  },
   { mark: 'background-dock', track: 'background', selector: '[data-slot="background-dock"]' },
   {
     mark: 'background-summary',
