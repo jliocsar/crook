@@ -38,6 +38,7 @@ import {
   UnrecognizedEntry,
   type UserBlock,
   UserMessage,
+  SHELL_COMMAND_NAME,
 } from '@crook/domain/TranscriptMessage'
 
 const UNKNOWN_KIND = 'unknown'
@@ -53,7 +54,14 @@ const TASK_OUTPUT_FILE_TAG = 'output-file'
 const TOOL_RESULT_KIND = 'tool_result'
 const COMMAND_NAME_TAG = 'command-name'
 const COMMAND_ARGS_TAG = 'command-args'
+const COMMAND_MESSAGE_TAG = 'command-message'
 const COMMAND_STDOUT_TAG = 'local-command-stdout'
+const COMMAND_STDERR_TAG = 'local-command-stderr'
+const BASH_INPUT_TAG = 'bash-input'
+const BASH_STDOUT_TAG = 'bash-stdout'
+const BASH_STDERR_TAG = 'bash-stderr'
+const LINE_BREAK = '\n'
+const TYPED_COMPACT = /^\/compact(\s|$)/u
 const HUMAN_ORIGIN = 'human'
 const QUEUED_PROMPT_MODE = 'prompt'
 const ANSI_ESCAPE = String.fromCodePoint(0x1b)
@@ -410,21 +418,73 @@ const taskNotificationBlock = (text: string) =>
       }),
   )
 
+const opensWithTag = (text: string, tag: string) => text.trimStart().startsWith(`<${tag}>`)
+
+const namedCommand = (text: string, name: string) => {
+  const args = Option.getOrElse(taggedText(text, COMMAND_ARGS_TAG), () => '')
+
+  return opensWithTag(text, COMMAND_MESSAGE_TAG)
+    ? new LocalCommandBlock({ name, args, opensTurn: true })
+    : new LocalCommandBlock({ name, args })
+}
+
+const namedCommandBlock = (text: string) =>
+  pipe(
+    Option.liftPredicate(
+      text,
+      (line) => opensWithTag(line, COMMAND_NAME_TAG) || opensWithTag(line, COMMAND_MESSAGE_TAG),
+    ),
+    Option.flatMap((line) => taggedText(line, COMMAND_NAME_TAG)),
+    Option.map((name) => namedCommand(text, name)),
+  )
+
+const shellCommandBlock = (text: string) =>
+  pipe(
+    Option.liftPredicate(text, (line) => opensWithTag(line, BASH_INPUT_TAG)),
+    Option.flatMap((line) => taggedText(line, BASH_INPUT_TAG)),
+    Option.map(
+      (args) => new LocalCommandBlock({ name: SHELL_COMMAND_NAME, args, opensTurn: true }),
+    ),
+  )
+
 const localCommandBlock = (text: string) =>
-  Option.map(
-    taggedText(text, COMMAND_NAME_TAG),
-    (name) =>
-      new LocalCommandBlock({
-        name,
-        args: Option.getOrElse(taggedText(text, COMMAND_ARGS_TAG), () => ''),
-      }),
+  Option.orElse(namedCommandBlock(text), () => shellCommandBlock(text))
+
+const outputBlock = (output: string) => new LocalCommandOutputBlock({ text: withoutAnsi(output) })
+
+const namedOutputOf = (text: string) =>
+  pipe(
+    Option.liftPredicate(
+      text,
+      (line) => opensWithTag(line, COMMAND_STDOUT_TAG) || opensWithTag(line, COMMAND_STDERR_TAG),
+    ),
+    Option.flatMap((line) =>
+      Option.orElse(taggedText(line, COMMAND_STDOUT_TAG), () =>
+        taggedText(line, COMMAND_STDERR_TAG),
+      ),
+    ),
+    Option.map(outputBlock),
+  )
+
+const shellOutputOf = (text: string) =>
+  pipe(
+    Option.liftPredicate(
+      text,
+      (line) => opensWithTag(line, BASH_STDOUT_TAG) || opensWithTag(line, BASH_STDERR_TAG),
+    ),
+    Option.map((line) =>
+      pipe(
+        [taggedText(line, BASH_STDOUT_TAG), taggedText(line, BASH_STDERR_TAG)],
+        Arr.getSomes,
+        Arr.filter((part) => part.trim().length > 0),
+        Arr.join(LINE_BREAK),
+        outputBlock,
+      ),
+    ),
   )
 
 const commandOutputOf = (text: string) =>
-  Option.map(
-    taggedText(text, COMMAND_STDOUT_TAG),
-    (output) => new LocalCommandOutputBlock({ text: withoutAnsi(output) }),
-  )
+  Option.orElse(namedOutputOf(text), () => shellOutputOf(text))
 
 const isTaskNotification = (raw: RawUser) => (text: string) =>
   raw.origin?.kind === TASK_NOTIFICATION_TAG ||
@@ -444,6 +504,9 @@ const stringContentBlock = (raw: RawUser, text: string): UserBlock =>
     Option.orElse((): Option.Option<UserBlock> => commandOutputOf(text)),
     Option.getOrElse(() => userTextBlock(text)),
   )
+
+const isTypedCompact = (raw: RawUser) =>
+  Predicate.isString(raw.message.content) && TYPED_COMPACT.test(raw.message.content.trim())
 
 const singleToolResultDetails = (raw: RawUser) =>
   Predicate.isString(raw.message.content) ||
@@ -484,7 +547,7 @@ const userEntry = (json: Schema.Json, offset: TranscriptOffset): readonly Transc
     onSome: (raw) => [
       new UserMessage({
         ...envelopeOf(json, offset),
-        isMeta: raw.isMeta ?? false,
+        isMeta: raw.isMeta === true || isTypedCompact(raw),
         origin: Option.fromUndefinedOr(raw.origin?.kind),
         queued: false,
         blocks: userBlocks(raw),
@@ -535,6 +598,18 @@ const systemMessage =
     new SystemMessage({ ...envelopeOf(json, offset), blocks: [block] }),
   ]
 
+const commandMessage =
+  (json: Schema.Json, offset: TranscriptOffset) =>
+  (block: LocalCommandBlock): readonly TranscriptMessage[] => [
+    new UserMessage({
+      ...envelopeOf(json, offset),
+      isMeta: false,
+      origin: Option.none(),
+      queued: false,
+      blocks: [block],
+    }),
+  ]
+
 const systemEntryOf = (
   raw: typeof RawSystem.Type,
   json: Schema.Json,
@@ -563,12 +638,16 @@ const systemEntryOf = (
       }),
     ),
     Match.when('local_command', () =>
-      pipe(
-        Option.fromUndefinedOr(raw.content),
-        Option.flatMap(commandOutputOf),
-        Option.filter((output) => output.text.trim().length > 0),
-        Option.match({ onNone: () => [], onSome: systemMessage(json, offset) }),
-      ),
+      Option.match(Option.flatMap(Option.fromUndefinedOr(raw.content), localCommandBlock), {
+        onSome: commandMessage(json, offset),
+        onNone: () =>
+          pipe(
+            Option.fromUndefinedOr(raw.content),
+            Option.flatMap(commandOutputOf),
+            Option.filter((output) => output.text.trim().length > 0),
+            Option.match({ onNone: () => [], onSome: systemMessage(json, offset) }),
+          ),
+      }),
     ),
     Match.when(
       (subtype) => HashSet.has(NOTICE_SYSTEM_SUBTYPES, subtype),
