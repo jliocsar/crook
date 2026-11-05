@@ -1,4 +1,5 @@
 import type * as Cause from 'effect/Cause'
+import * as Deferred from 'effect/Deferred'
 import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -284,6 +285,8 @@ export const makeMemoryTranscriptStore = Effect.fn('makeMemoryTranscriptStore')(
 
 export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: HubLinkState) {
   const state = yield* SubscriptionRef.make(initial)
+  const stateReads = yield* Latch.make(true)
+  const stateDefect = yield* Deferred.make<never>()
   const seen = yield* Ref.make<readonly SeenCall[]>([])
   const resyncs = yield* Ref.make(0)
   const forgotten = yield* Ref.make<readonly MachineId[]>([])
@@ -307,6 +310,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   const settings = yield* SubscriptionRef.make(readySettings)
   const account = yield* SubscriptionRef.make(new HubAccount({ email: OWNER_EMAIL }))
   const settingsReads = yield* Latch.make(true)
+  const settingsFailure = yield* Ref.make(Option.none<HubCallDefected>())
   const prefWrites = yield* Ref.make<readonly PrefWrite[]>([])
   const prefAttempts = yield* Ref.make<readonly PrefWrite[]>([])
   const prefRefusal = yield* Ref.make(
@@ -381,7 +385,10 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   const linkLayer = Layer.succeed(
     HubLink,
     HubLink.of({
-      changes: SubscriptionRef.changes(state),
+      changes: Stream.merge(
+        Stream.unwrap(Effect.as(stateReads.await, SubscriptionRef.changes(state))),
+        Stream.fromEffectDrain(Deferred.await(stateDefect)),
+      ),
       resync: Ref.update(resyncs, (count) => count + 1),
       markSeen: (machine, pane) => Ref.update(seen, (calls) => [...calls, { machine, pane }]),
       forgetMachine: (machine) =>
@@ -409,9 +416,19 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
           Effect.andThen(commandAnswers.await, Effect.flatten(Ref.get(commandAnswer))),
         ),
       notificationSettings: Stream.unwrap(
-        Effect.as(settingsReads.await, SubscriptionRef.changes(settings)),
+        settingsReads.await.pipe(
+          Effect.andThen(Ref.get(settingsFailure)),
+          Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: Effect.fail })),
+          Effect.as(SubscriptionRef.changes(settings)),
+        ),
       ),
-      account: Stream.unwrap(Effect.as(settingsReads.await, SubscriptionRef.changes(account))),
+      account: Stream.unwrap(
+        settingsReads.await.pipe(
+          Effect.andThen(Ref.get(settingsFailure)),
+          Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: Effect.fail })),
+          Effect.as(SubscriptionRef.changes(account)),
+        ),
+      ),
       setNotificationPref: (event, enabled) =>
         Effect.andThen(
           Ref.update(prefAttempts, (attempts) => [...attempts, { event, enabled }]),
@@ -467,6 +484,8 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     storedTranscripts: transcriptStore.entries,
     pageVisible,
     state,
+    stateReads,
+    stateDefect,
     seen,
     resyncs,
     forgotten,
@@ -483,6 +502,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     settings,
     account,
     settingsReads,
+    settingsFailure,
     prefWrites,
     prefAttempts,
     prefRefusal,
