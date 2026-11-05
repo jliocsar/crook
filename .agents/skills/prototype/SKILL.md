@@ -57,12 +57,37 @@ Before writing any code, list the set: a name and an axis for each. Names descri
 
 ### Phase 4 — Build the picker harness
 
-Two branches, by what exists:
+In crook, a prototype of the web app is a folder in the stories catalog's kitchen:
 
-- **In a project with a dev server** — an isolated route or page (`/prototypes/<slug>`, or the framework's equivalent), one file per variant plus a small harness file. Nothing imports from the prototype surface into production code.
-- **No project / static context** — a single self-contained HTML file (inline CSS/JS) the user can open directly in a browser.
+```
+packages/web/stories/kitchen/<slug>/
+  Prototype.tsx      exports `prototype`, the harness
+  <Variant>.tsx      one file per variant
+```
 
-The picker's markup, styles, keyboard wiring, and placement come from [PICKER.md](PICKER.md), verbatim — load it now and build exactly that. Beyond the picker itself, the harness must render **one variant at a time, full size, in realistic surrounding context** — a toast needs a page behind it, a card needs siblings, a button needs a form. Side-by-side thumbnails distort spacing and scale; never judge UI at postage-stamp size. Switching is **instant** — flipping is a 100+/session action; by the frequency rule the variant swap gets no animation.
+```tsx
+import type { Prototype } from '../../Kitchen.tsx'
+import { Quiet } from './Quiet.tsx'
+import { Editorial } from './Editorial.tsx'
+
+export const prototype: Prototype = {
+  title: 'Reconnect banner',
+  variants: [
+    { name: 'Quiet', axis: 'borders over shadows', Component: Quiet },
+    { name: 'Editorial', axis: 'large type', Component: Editorial },
+  ],
+}
+```
+
+The catalog finds the folder by itself: `bun run stories`, then `http://localhost:5192/stories/?story=kitchen/<slug>`. The bare page without the catalog is `/stories/frame.html?story=kitchen/<slug>`, and `&v=2` opens the second variant. The picker of [PICKER.md](PICKER.md) is already built into the kitchen: do not write another, and do not change it. `pickerPosition: 'top'` is its one allowed modification, `hasReplay: true` adds its replay button.
+
+A variant runs inside the real root, gates and shell, with the tab bar, banner and toast host around it, on the real tokens and fonts, over the same fake hub the stories use. It may import any real component or atom through `@crook/web/…`, and fixtures from `../../../test/…`. Its `link` sets the hub state (the full team, live, by default) and its `arrange` feeds the fake link, such as a transcript for a chat. Tailwind sees the folder through the catalog's stylesheet, so arbitrary classes work, in the catalog only.
+
+`stories/kitchen/*` is gitignored and stays out of every commit, and out of the gate: oxlint skips ignored files, `tsc` excludes the folder, and the catalog's own tests do not run it. Check your own with `bun run --cwd packages/web typecheck:kitchen`. A prototype that fails to load fails only its own story. Nothing outside the catalog imports from the kitchen, and a test holds that. Removing the prototype is deleting its folder.
+
+Anywhere else (no project, or not this web app), a single self-contained HTML file (inline CSS/JS) the user can open directly in a browser, with the picker's markup, styles, and keyboard wiring from [PICKER.md](PICKER.md), verbatim.
+
+Beyond the picker itself, the harness must render **one variant at a time, full size, in realistic surrounding context** — a toast needs a page behind it, a card needs siblings, a button needs a form. Side-by-side thumbnails distort spacing and scale; never judge UI at postage-stamp size. Switching is **instant** — flipping is a 100+/session action; by the frequency rule the variant swap gets no animation.
 
 ### Phase 5 — Verify and hand off
 

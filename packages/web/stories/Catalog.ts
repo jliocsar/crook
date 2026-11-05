@@ -16,6 +16,7 @@ import { LINK_STORIES } from './catalog/Link.tsx'
 import { MACHINE_STORIES, MACHINES_STORIES } from './catalog/Machines.tsx'
 import { NEW_AGENT_STORIES } from './catalog/NewAgent.tsx'
 import { SETTINGS_STORIES } from './catalog/Settings.tsx'
+import { KITCHEN_STORIES } from './Kitchen.tsx'
 import type { Story, StoryMaker } from './Story.tsx'
 
 const groupOf = (group: string, makers: readonly StoryMaker[]): readonly Story[] =>
@@ -41,4 +42,4 @@ export const CATALOG_STORIES: readonly Story[] = [
   ...groupOf('link', LINK_STORIES),
 ]
 
-export const STORIES: readonly Story[] = CATALOG_STORIES
+export const STORIES: readonly Story[] = [...CATALOG_STORIES, ...KITCHEN_STORIES]
