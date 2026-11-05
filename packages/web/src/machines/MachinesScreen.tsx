@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 import * as React from 'react'
 
 import { connectionAtom } from '@crook/web/atoms/Connection'
+import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
 import { machinesLayoutAtom } from '@crook/web/atoms/Machines'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
@@ -34,16 +35,16 @@ export function MachinesScreen() {
   return (
     <TabScreen title="Machines" action={<AddMachineButton onOpen={openSheet} />}>
       {Option.match(layout, {
-        onNone: () => (connection.ready ? <HerdSkeleton label="Loading your machines" /> : null),
+        onNone: () => <HerdSkeleton label="Loading your machines" />,
         onSome: (machines) => (
-          <Dimmed dimmed={connection.stale}>
+          <Dimmed dimmed={dimsContent(connection)}>
             {Arr.isReadonlyArrayEmpty(machines.machines) ? (
               <NoMachines onAddMachine={openSheet} />
             ) : (
               <MachineList
                 layout={machines}
                 now={now}
-                controlsEnabled={connection.controlsEnabled}
+                controlsEnabled={allowsActions(connection)}
                 onOpen={openMachine}
               />
             )}

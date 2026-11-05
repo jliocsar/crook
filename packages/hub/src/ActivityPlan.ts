@@ -10,6 +10,7 @@ import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
+import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
 import { type AgentRow, agentTitleOrPane, settledStatusOf } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
@@ -23,7 +24,7 @@ import {
   HARK_RATE_WINDOW,
   HarkActivityContent,
 } from '@crook/hub/HarkClient'
-import { type PublishedMachine, RECONNECT_GRACE } from '@crook/hub/Herd'
+import { type PublishedMachine } from '@crook/hub/Herd'
 import { cutForHark, permissionOf } from '@crook/hub/NotificationPlan'
 
 export type MachineAgents = HashMap.HashMap<PaneId, ActivityAgent>

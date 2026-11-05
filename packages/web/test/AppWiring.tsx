@@ -13,7 +13,8 @@ import { remountWhenParamsChange } from '@crook/web/navigation/Pushed'
 import { ROUTE_FALLBACKS } from '@crook/web/router/RouteFallbacks'
 import { routeTree } from '@crook/web/routeTree.gen'
 import type { HubLink } from '@crook/web/rpc/HubLink'
-import { HubLinkState, LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { HubLinkState, LIVE } from '@crook/web/rpc/HubLinkState'
+import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
 import { START } from './HerdFixtures.ts'
 
@@ -23,8 +24,7 @@ export const stateWith = (status: LinkStatus, view: Option.Option<HerdView>) =>
     herd: Option.map(view, (herd) => new HerdSnapshot({ view: herd, syncedAt: START })),
   })
 
-export const liveWith = (view: HerdView) =>
-  stateWith(LinkStatus.Live({ recovered: false }), Option.some(view))
+export const liveWith = (view: HerdView) => stateWith(LIVE, Option.some(view))
 
 export const appRouter = (path: string) =>
   createRouter({

@@ -22,6 +22,7 @@ const SLOWEST_MEASURED_SHELL_READY = Duration.millis(708)
 
 export const AGENT_PING_INTERVAL = Duration.seconds(5)
 export const AGENT_SOCKET_OPEN_TIMEOUT = Duration.seconds(10)
+export const RECONNECT_GRACE = Duration.sum(AGENT_SOCKET_OPEN_TIMEOUT, AGENT_PING_INTERVAL)
 export const COMMAND_TIMEOUT = AGENT_PING_INTERVAL
 export const AGENT_READY_TIMEOUT = Duration.seconds(30)
 export const SLOWEST_MEASURED_PROMPT_HOOKS = Duration.millis(58)

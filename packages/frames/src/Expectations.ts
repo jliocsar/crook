@@ -51,6 +51,10 @@ export const TIMELINE_EXPECTATIONS = {
   ),
   'transition/reconnect-chat-open': story(A_CHAT, { shiftBudget: BANNER_SHIFT_BUDGET }),
   'transition/foreground-return': story({ ...A_CHAT, link: NOTHING_ALLOWED }),
+  'transition/send-through-redial': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer'), link: NOTHING_ALLOWED },
+    { watchFrom: 'first-step' },
+  ),
   'transition/machine-redial': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),

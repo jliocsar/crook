@@ -4,6 +4,7 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 
 import type { NotificationEvent } from '@crook/domain/Notifications'
 import type { StatusTone } from '@crook/web/components/ui/status-pill'
+import { isVerified, noticeOf } from '@crook/web/connection/ConnectionView'
 import type { ConnectionNotice, ConnectionView } from '@crook/web/connection/ConnectionView'
 import type { HubCallDefected } from '@crook/web/rpc/HubConnection'
 
@@ -45,8 +46,8 @@ const NOTICE_STATUS = {
 } satisfies Record<ConnectionNotice, HubStatus>
 
 export const hubStatus = (view: ConnectionView): HubStatus =>
-  Option.match(view.notice, {
-    onNone: () => (view.controlsEnabled ? CONNECTED : CONNECTING),
+  Option.match(noticeOf(view), {
+    onNone: () => (isVerified(view) ? CONNECTED : CONNECTING),
     onSome: (notice) => NOTICE_STATUS[notice],
   })
 

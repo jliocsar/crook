@@ -10,7 +10,7 @@ import { TranscriptOffset } from '@crook/domain/Ids'
 import { CommandTimedOut } from '@crook/protocol/Commands'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
 import * as Duration from 'effect/Duration'
-import { COLD_START } from '@crook/web/rpc/HubLinkState'
+import { COLD_START, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
@@ -243,7 +243,7 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
   chatStory({
     slug: 'dimmed-stale',
     title: 'Chat, dimmed while the hub is away',
-    link: stateWith(COLD_START, Option.some(chatHerd())),
+    link: stateWith(UNREACHABLE, Option.some(chatHerd())),
     events: CONVERSATION,
     shows: { selector: '[data-state="dimmed"]' },
   }),

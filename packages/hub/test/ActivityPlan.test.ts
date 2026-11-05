@@ -5,6 +5,7 @@ import * as Duration from 'effect/Duration'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
+import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
@@ -30,7 +31,6 @@ import {
   HARK_IDEMPOTENCY_KEY_LIMIT,
   HarkActivityContent,
 } from '@crook/hub/HarkClient'
-import { RECONNECT_GRACE } from '@crook/hub/Herd'
 
 import { agentRow, bashAsk, herdrLinkOf, machineStateWith } from './Fixtures'
 

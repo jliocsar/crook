@@ -4,7 +4,16 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 
 import { HarkReachedNoDevice } from '@crook/protocol/Hark'
 import { connectionView } from '@crook/web/connection/ConnectionView'
-import { COLD_START, HubLinkState, LinkStatus, QUIET_DIALING } from '@crook/web/rpc/HubLinkState'
+import {
+  COLD_START,
+  HubLinkState,
+  LIVE,
+  OFFLINE,
+  RECOVERED,
+  REDIALING,
+  UNREACHABLE,
+} from '@crook/web/rpc/HubLinkState'
+import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
 import { hubStatus, testNotificationState } from '@crook/web/settings/SettingsLayout'
 
 const statusOf = (status: LinkStatus) =>
@@ -14,18 +23,18 @@ const refused = new HarkReachedNoDevice()
 
 describe('hubStatus', () => {
   it('reads connected while live, recovering or quietly resyncing', () => {
-    expect(statusOf(LinkStatus.Live({ recovered: false }))).toEqual({
+    expect(statusOf(LIVE)).toEqual({
       tone: 'ok',
       label: 'connected',
     })
-    expect(statusOf(LinkStatus.Live({ recovered: true })).label).toBe('connected')
-    expect(statusOf(QUIET_DIALING).label).toBe('connected')
+    expect(statusOf(RECOVERED).label).toBe('connected')
+    expect(statusOf(REDIALING).label).toBe('connected')
   })
 
   it('reads connecting on a cold start, and names every failure the banner names', () => {
     expect(statusOf(COLD_START)).toEqual({ tone: 'working', label: 'connecting' })
-    expect(statusOf(LinkStatus.Unreachable())).toEqual({ tone: 'warn', label: 'unreachable' })
-    expect(statusOf(LinkStatus.Offline())).toEqual({ tone: 'idle', label: 'offline' })
+    expect(statusOf(UNREACHABLE)).toEqual({ tone: 'warn', label: 'unreachable' })
+    expect(statusOf(OFFLINE)).toEqual({ tone: 'idle', label: 'offline' })
   })
 })
 

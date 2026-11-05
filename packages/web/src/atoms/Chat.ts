@@ -2,7 +2,7 @@ import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import * as Atom from 'effect/reactivity/Atom'
 
-import { connectionAtom } from '@crook/web/atoms/Connection'
+import { isVerifiedAtom } from '@crook/web/atoms/Connection'
 import type { OpenedAgent } from '@crook/web/atoms/Herd'
 import { herdAtom } from '@crook/web/atoms/Herd'
 import type { AlwaysNote } from '@crook/web/chat/AskModel'
@@ -23,7 +23,7 @@ export const chatScreenAtom = Atom.family((opened: OpenedAgent) =>
       opened.machine,
       opened.pane,
       Option.getOrElse(get.self<ChatScreenModel>(), () => LOADING_CHAT),
-      get(connectionAtom).stale,
+      !get(isVerifiedAtom),
     ),
   ).pipe(Atom.withEquality(Equal.equals)),
 )

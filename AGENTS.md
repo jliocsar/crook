@@ -581,6 +581,16 @@ that skill model-checks a separate TLA+ spec, a second copy of the table that ne
 while the walker runs the real function.
 :::
 
+:::tip
+The link's machine knows what it just went through, and the schedule and the page signals tell it what happened; it decides nothing about when to dial. Screens read one tagged view derived from it, and what dims, what is open and what the banner says are each an exhaustive match on that view, so a view that dims without saying why, or stays open while a call would be refused, fails the walk. A cold start used to dim a cached herd for its first second with no banner and paused the composer with it, which the frame tool read as a flash on every launch (measured: 15 frames, 524 to 567 ms). A dial now reads as live.
+
+A call made while the link dials holds in the fiber that made it. It goes out when the new connection has its first herd, and fails when a failure lands on the banner or after the 15 s the hub gives a machine to come back, whichever is first. A dial nobody answers would otherwise hold it for as long as the socket stays unanswered: effect's browser socket holds a write until it opens, with no bound of its own (read in its source).
+
+A herd update from another machine re-rendered everything above the screens, 10 of 10 updates for each of the gate, the shell, the toast host and the action sheets, because the connection view carried the sync time and was rebuilt on every herd. A sync time now sits only in the views that show one, under structural equality: 0 of 10 (measured by counting commits through React's devtools hook in the DOM tests).
+
+React registers with that hook when react-dom first loads, and Vitest leaves `node_modules` out of its module graph, so `vi.resetModules` cannot make it register again: a hook installed in a test file counted nothing (measured). The DOM setup installs it as its first import, before testing-library loads react-dom.
+:::
+
 ## Web
 
 The PWA is a Vite app, so it carries a few things the Bun members do not.

@@ -419,11 +419,7 @@ export const useChatCommands = ({
       },
       mode,
       working: activity === 'working',
-      disabled:
-        !canAct ||
-        (blocked && mode === 'prompt') ||
-        (mode === 'decline' && answering) ||
-        model.presence === 'loading',
+      disabled: !canAct || (blocked && mode === 'prompt') || (mode === 'decline' && answering),
       sending: isSending(prompt.state),
       stopping,
       placeholder: placeholderOf(canAct, mode, blocked),

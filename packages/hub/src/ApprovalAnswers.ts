@@ -5,6 +5,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schedule from 'effect/Schedule'
 
+import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
 import { commandAudit } from '@crook/domain/Audit'
 import { AnswerAsk, Approve, type AskAnswer, Decline } from '@crook/domain/Command'
 import { type AskId, type GlobalPaneId, IdempotencyKey } from '@crook/domain/Ids'
@@ -18,7 +19,6 @@ import {
   gaveUpOnBug,
   pauseOrGiveUp,
 } from '@crook/hub/HarkClient'
-import { RECONNECT_GRACE } from '@crook/hub/Herd'
 import { type SentNotification, notificationKey } from '@crook/hub/NotificationPlan'
 
 type WaitedApproval = HarkApprovalState | 'abandoned'

@@ -5,6 +5,7 @@ import * as Option from 'effect/Option'
 import { AgentActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom, linkFailureAtom } from '@crook/web/atoms/Connection'
 import { ConnectionLiveRegion } from '@crook/web/connection/ConnectionBanner'
+import { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { LOGGED_OUT, LoggedOutScreen, SESSION_EXPIRED } from '@crook/web/connection/LoggedOutScreen'
 import { logInAgain } from '@crook/web/connection/Login'
 import { Shell } from '@crook/web/navigation/Shell'
@@ -18,17 +19,17 @@ export function HubGate() {
     throw Cause.squash(failure.value)
   }
 
-  if (connection.expired) {
+  if (ConnectionView.$is('Expired')(connection)) {
     return <LoggedOutScreen copy={SESSION_EXPIRED} onLogIn={logInAgain} />
   }
 
-  if (connection.loggedOut) {
+  if (ConnectionView.$is('LoggedOut')(connection)) {
     return <LoggedOutScreen copy={LOGGED_OUT} onLogIn={logInAgain} />
   }
 
   return (
     <>
-      <ConnectionLiveRegion notice={connection.notice} />
+      <ConnectionLiveRegion />
       <Shell />
       <ToastHost />
       <AgentActions />

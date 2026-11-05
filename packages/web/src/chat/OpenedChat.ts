@@ -3,7 +3,7 @@ import * as React from 'react'
 
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
-import { canActAtom, staleAtom } from '@crook/web/atoms/Connection'
+import { canActAtom, dimsContentAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import {
   transcriptAtom,
@@ -19,11 +19,11 @@ export const useOpenedChat = (machine: MachineId, pane: PaneId) => {
   const opened = React.useMemo(() => new OpenedAgent({ machine, pane }), [machine, pane])
   const model = useAtomValue(chatScreenAtom(opened))
   const canAct = useAtomValue(canActAtom)
-  const stale = useAtomValue(staleAtom)
+  const connectionDims = useAtomValue(dimsContentAtom)
 
   useAtomMount(seenWhileOpenAtom(opened))
 
-  return { opened, model, canAct, dimmed: model.presence === 'away' || stale }
+  return { opened, model, canAct, dimmed: model.presence === 'away' || connectionDims }
 }
 
 export const useTranscriptThread = (key: TranscriptKey) => {

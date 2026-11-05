@@ -5,11 +5,13 @@ import * as Option from 'effect/Option'
 import { Check, ServerOff, WifiOff } from 'lucide-react'
 import type * as React from 'react'
 
-import { connectionAtom } from '@crook/web/atoms/Connection'
+import { useAtomValue } from '@effect/atom-react/Hooks'
+
+import { connectionAtom, linkMarkAtom } from '@crook/web/atoms/Connection'
 import { Collapse } from '@crook/web/components/Collapse'
 import { Swap } from '@crook/web/components/Swap'
 import { Spinner } from '@crook/web/components/ui/spinner'
-import { failedNotice } from '@crook/web/connection/ConnectionView'
+import { noticeOf, syncedAtOf } from '@crook/web/connection/ConnectionView'
 import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
 import { useShownAtomValue } from '@crook/web/navigation/Covered'
 import { shortElapsed } from '@crook/web/time/Elapsed'
@@ -65,7 +67,8 @@ function LastSynced({ at }: { at: DateTime.Utc }) {
 }
 
 export function HeaderBanner() {
-  const { notice, syncedAt } = useShownAtomValue(connectionAtom)
+  const connection = useShownAtomValue(connectionAtom)
+  const notice = noticeOf(connection)
 
   return (
     <Collapse open={Option.isSome(notice)}>
@@ -82,16 +85,14 @@ export function HeaderBanner() {
           >
             {NOTICE_ICON[shown]}
             <Swap id={shown}>{NOTICE_COPY[shown].line}</Swap>
-            {failedNotice(shown)
-              ? Option.match(syncedAt, {
-                  onNone: () => null,
-                  onSome: (at) => (
-                    <span className="ml-auto font-mono whitespace-nowrap opacity-70">
-                      <LastSynced at={at} />
-                    </span>
-                  ),
-                })
-              : null}
+            {Option.match(syncedAtOf(connection), {
+              onNone: () => null,
+              onSome: (at) => (
+                <span className="ml-auto font-mono whitespace-nowrap opacity-70">
+                  <LastSynced at={at} />
+                </span>
+              ),
+            })}
           </div>
         ),
       })}
@@ -99,10 +100,13 @@ export function HeaderBanner() {
   )
 }
 
-export function ConnectionLiveRegion({ notice }: { notice: Option.Option<ConnectionNotice> }) {
+export function ConnectionLiveRegion() {
+  const connection = useAtomValue(connectionAtom)
+  const mark = useAtomValue(linkMarkAtom)
+
   return (
-    <span className="sr-only" role="status">
-      {Option.match(notice, {
+    <span className="sr-only" role="status" {...mark}>
+      {Option.match(noticeOf(connection), {
         onNone: () => '',
         onSome: (shown) => `${NOTICE_COPY[shown].title}. ${NOTICE_COPY[shown].detail}`,
       })}

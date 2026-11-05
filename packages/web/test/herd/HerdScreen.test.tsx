@@ -8,7 +8,7 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
 import { AskId } from '@crook/domain/Ids'
-import { LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { ANNOUNCED, EXPIRED, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
 import { click, eventually, findByRole, wait } from '../Dom.ts'
@@ -160,13 +160,7 @@ describe('HerdScreen', () => {
 
   it.effect('shows skeleton sections on a first load and hides the badge', () =>
     Effect.gen(function* () {
-      yield* renderApp(
-        '/',
-        stateWith(
-          LinkStatus.Dialing({ announced: true, afterFailure: false, coldStart: true }),
-          Option.none(),
-        ),
-      )
+      yield* renderApp('/', stateWith(ANNOUNCED, Option.none()))
 
       const loading = yield* Effect.promise(() => screen.findByText('Loading your agents'))
 
@@ -234,7 +228,7 @@ describe('HerdScreen', () => {
 
   it.effect('dims the herd and disables hub actions while the hub is unreachable', () =>
     Effect.gen(function* () {
-      yield* renderApp('/', stateWith(LinkStatus.Unreachable(), Option.some(herd([busyLaptop]))))
+      yield* renderApp('/', stateWith(UNREACHABLE, Option.some(herd([busyLaptop]))))
       const banner = yield* Effect.promise(() =>
         screen.findByText("Can't reach the hub · retrying"),
       )
@@ -252,7 +246,7 @@ describe('HerdScreen', () => {
 
   it.effect('shows the logged-out screen when the session expired', () =>
     Effect.gen(function* () {
-      yield* renderApp('/', stateWith(LinkStatus.Expired(), Option.some(herd([busyLaptop]))))
+      yield* renderApp('/', stateWith(EXPIRED, Option.some(herd([busyLaptop]))))
 
       expect((yield* findByRole('heading', 'Your session expired')).tagName).toBe('H1')
       expect(screen.getByRole('button', { name: 'Log in with exe.dev' })).toBeDefined()

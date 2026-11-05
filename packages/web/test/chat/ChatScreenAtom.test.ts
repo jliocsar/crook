@@ -8,7 +8,7 @@ import { vi } from 'vitest'
 import { PaneId } from '@crook/domain/Ids'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
 import { pendingActionAtom, PendingActionKey } from '@crook/web/atoms/Commands'
-import { canActAtom, staleAtom } from '@crook/web/atoms/Connection'
+import { canActAtom, dimsContentAtom } from '@crook/web/atoms/Connection'
 import { OpenedAgent } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
@@ -56,7 +56,7 @@ const watched = Effect.fn('watched')(function* () {
         { immediate: true },
       ),
       registry.subscribe(
-        staleAtom,
+        dimsContentAtom,
         () => {
           wakes.stale += 1
         },

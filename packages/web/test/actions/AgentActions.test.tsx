@@ -20,7 +20,7 @@ import {
 } from '@crook/protocol/Commands'
 import { ActionsIntent, agentActionsAtom, PaneAddress } from '@crook/web/atoms/AgentActions'
 import { sendCommandAtom } from '@crook/web/atoms/Commands'
-import { LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { LIVE, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
 import { afterSpring, click, dragX, eventually, findByRole, present } from '../Dom.ts'
@@ -384,7 +384,7 @@ describe('the action sheet', () => {
 
   it.effect('keeps every action off while the hub cannot act', () =>
     Effect.gen(function* () {
-      yield* renderApp('/', stateWith(LinkStatus.Unreachable(), Option.some(herd([everyone]))))
+      yield* renderApp('/', stateWith(UNREACHABLE, Option.some(herd([everyone]))))
       const sheet = yield* openSheetOn('Port the herd screen')
 
       expect(within(sheet).getByRole('button', { name: 'Rename' })).toHaveProperty('disabled', true)
@@ -403,7 +403,7 @@ describe('the action sheet', () => {
     Effect.gen(function* () {
       const { link, registry } = yield* renderApp(
         '/m/laptop/p/w1%3Ap1',
-        stateWith(LinkStatus.Live({ recovered: false }), Option.none()),
+        stateWith(LIVE, Option.none()),
       )
 
       openFromChat(registry)

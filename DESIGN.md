@@ -725,15 +725,18 @@ rule.
   - No network: "You're offline", inverted.
   - "Syncing" and "Connecting to the hub", with a spinner, on muted.
   - "Back online" on accent for 1.5s after a failure, then the strip collapses.
-- **Stale content dims to 60%.** Headers and the back button stay at full strength.
-- **Hub actions are disabled** while the hub can't act, and nothing is queued: an action never
-  fires after a reconnect. Back, tabs, scrolling and opening chats keep working.
-- **A quick resync is silent.** "Syncing", the dim and the disabled actions show only after 1s,
-  Nielsen's limit for a delay that keeps the user's flow of thought. Inside that second a hub call
-  is still refused, never queued; nothing on the herd screen makes one. After a failure, "Syncing"
-  shows at once, so "Back online" never appears before the data is fresh.
-- **A cold start dims the cached herd at once,** since it may be days old, and disables the
-  actions with it. Only the banner waits the second.
+- **Failed content dims to 60%,** and only then: while the hub is unreachable, while the phone is
+  offline, and until the herd is back from either. Headers and the back button stay at full
+  strength.
+- **Hub actions are disabled** only while a failure is on the banner. Back, tabs, scrolling and
+  opening chats keep working.
+- **A dial looks live.** Nothing dims and every control stays open while crook dials, on a redial,
+  on a return from the background and on a cold start, and a call made meanwhile holds, showing its
+  own pending state, until the connection answers. It goes out over the new connection or fails
+  and says so: when the dial fails, or after 15s, the same time the hub gives a machine to come
+  back. Nothing outlives the hold, so an action never fires after a failure.
+- **"Syncing" waits a second,** Nielsen's limit for a delay that keeps the user's flow of thought.
+  After a failure it shows at once, so "Back online" never appears before the data is fresh.
 - **Machines keep their last-known status** while the hub is down. The hub, not the phone,
   decides that a machine is offline.
 - **Offline and hub unreachable read differently,** because their fixes differ.
@@ -843,8 +846,8 @@ This is the list in SPEC §8.1, plus Spinner, with what each component is for in
 | Side Panel      | Agent detail                                                |
 | Command Palette | Jump to an agent                                            |
 
-Some loading states don't use Skeleton. A cached snapshot paints dimmed, with "syncing" on it (SPEC
-§5.3).
+Some loading states don't use Skeleton. A cached snapshot paints as it was, with "Syncing" on it
+once the dial has taken a second.
 
 Mischief ships no Button; each component styles its own. crook's standalone button is shadcn's
 `base-nova` Button, the style Mischief's `components.json` declares.

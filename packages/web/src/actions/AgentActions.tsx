@@ -32,6 +32,7 @@ import {
 import type { ActionsOrigin, AgentActionsView } from '@crook/web/atoms/AgentActions'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { connectionAtom } from '@crook/web/atoms/Connection'
+import { allowsActions } from '@crook/web/connection/ConnectionView'
 import { ToastIntent, toastAtom } from '@crook/web/atoms/Toast'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Sheet } from '@crook/web/components/Sheet'
@@ -372,8 +373,8 @@ export function AgentActions() {
     <AgentActionsSheet
       open={Option.isSome(view) && Option.isSome(shown)}
       shown={shown}
-      canAct={connection.controlsEnabled && machineOnline}
-      canPin={connection.controlsEnabled}
+      canAct={allowsActions(connection) && machineOnline}
+      canPin={allowsActions(connection)}
       onRename={(label) => {
         dispatch(ActionsIntent.Rename({ label }))
       }}

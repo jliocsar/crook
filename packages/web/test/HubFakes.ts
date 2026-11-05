@@ -44,7 +44,7 @@ import type {
 } from '@crook/web/rpc/HubConnection'
 import { HubLink } from '@crook/web/rpc/HubLink'
 import type { HubNotConnected, TranscriptResume } from '@crook/web/rpc/HubLink'
-import { HubLinkState, LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { HubLinkState, LOGGED_OUT } from '@crook/web/rpc/HubLinkState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
 import type { LogOutFailed } from '@crook/web/rpc/SessionCheck'
@@ -458,10 +458,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
         logOutRefusal,
         Effect.andThen(
           Ref.update(logOuts, (count) => count + 1),
-          SubscriptionRef.set(
-            state,
-            new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
-          ),
+          SubscriptionRef.set(state, new HubLinkState({ status: LOGGED_OUT, herd: Option.none() })),
         ),
       ),
       watchTranscript: (_machine, source, resume) =>

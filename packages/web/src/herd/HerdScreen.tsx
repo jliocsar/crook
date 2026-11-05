@@ -8,6 +8,7 @@ import type { MachineId } from '@crook/domain/Ids'
 import { useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import type { OpenAgentActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
+import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
 import { herdLayoutAtom, resyncAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { Button } from '@crook/web/components/ui/button'
@@ -47,7 +48,7 @@ function NewAgentButton({ onOpen }: { onOpen: (opener: HTMLElement) => void }) {
       variant="ghost"
       size="icon-touch"
       aria-label="New agent"
-      disabled={!connection.controlsEnabled}
+      disabled={!allowsActions(connection)}
       onClick={(event) => {
         onOpen(event.currentTarget)
       }}
@@ -77,13 +78,13 @@ function HerdBody({
   const resync = useAtomSet(resyncAtom, { mode: 'promise' })
 
   return Option.match(layout, {
-    onNone: () => (connection.ready ? <HerdSkeleton label="Loading your agents" /> : null),
+    onNone: () => <HerdSkeleton label="Loading your agents" />,
     onSome: (herdLayout) => (
-      <PullToResync enabled={connection.controlsEnabled} onResync={() => resync(undefined)}>
-        <Dimmed dimmed={connection.stale}>
+      <PullToResync enabled={allowsActions(connection)} onResync={() => resync(undefined)}>
+        <Dimmed dimmed={dimsContent(connection)}>
           <HerdList
             layout={herdLayout}
-            controlsEnabled={connection.controlsEnabled}
+            controlsEnabled={allowsActions(connection)}
             isOpen={isOpen}
             onToggle={onToggle}
             onOpenAgent={onOpenAgent}

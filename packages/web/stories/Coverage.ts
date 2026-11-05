@@ -10,14 +10,13 @@ import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
 import type { TestNotificationState } from '@crook/web/settings/SettingsLayout'
 
 export const LINK_STATUS_MOMENTS = {
-  Dialing: [
-    'dialing-cold-cached',
-    'dialing-cold-empty',
-    'dialing-quiet',
-    'dialing-announced-syncing',
-    'dialing-announced-connecting',
-  ],
-  Live: ['live', 'live-recovered'],
+  ColdStart: ['dialing-cold-cached', 'dialing-cold-empty'],
+  Redialing: ['dialing-quiet'],
+  Parked: ['parked'],
+  Announced: ['dialing-announced-syncing', 'dialing-announced-connecting'],
+  Returning: ['returning', 'returning-empty'],
+  Live: ['live'],
+  Recovered: ['live-recovered'],
   Unreachable: ['unreachable', 'unreachable-empty'],
   Offline: ['offline'],
   Expired: ['expired'],

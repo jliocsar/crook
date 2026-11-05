@@ -12,6 +12,7 @@ import { herdAtom } from '@crook/web/atoms/Herd'
 import { machineScreenAtom } from '@crook/web/atoms/Machines'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { useOpenRow } from '@crook/web/components/swipe/SwipeRow'
+import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { SectionBody } from '@crook/web/herd/HerdLayout'
 import { AgentCards } from '@crook/web/herd/HerdList'
@@ -111,7 +112,7 @@ function MachineDetail({
   const { card } = model.detail
   const forgetting = useForgetMachine(card.machine.id, {
     connection: card.machine.connection,
-    controlsEnabled: connection.controlsEnabled,
+    controlsEnabled: allowsActions(connection),
   })
 
   React.useEffect(() => {
@@ -135,8 +136,8 @@ function MachineDetail({
         <div className="grid gap-6">
           <MachineAgents
             model={model}
-            stale={connection.stale}
-            controlsEnabled={connection.controlsEnabled}
+            stale={dimsContent(connection)}
+            controlsEnabled={allowsActions(connection)}
             onOpenAgent={onOpenAgent}
             onOpenActions={onOpenActions}
           />
@@ -144,7 +145,7 @@ function MachineDetail({
           {model.inHerd && isOffline(card.machine) ? (
             <ForgetMachine
               label={card.machine.label}
-              disabled={!connection.controlsEnabled || forgetting.pending}
+              disabled={!allowsActions(connection) || forgetting.pending}
               failure={forgetting.failure}
               onForget={forgetting.forget}
             />

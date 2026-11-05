@@ -1,9 +1,33 @@
 import { describe, expect, it } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
 
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
-import { connectionView } from '@crook/web/connection/ConnectionView'
-import { COLD_START, HubLinkState, LinkStatus, QUIET_DIALING } from '@crook/web/rpc/HubLinkState'
+import {
+  allowsActions,
+  connectionView,
+  ConnectionView,
+  dimsContent,
+  isConnected,
+  isVerified,
+  noticeOf,
+  syncedAtOf,
+} from '@crook/web/connection/ConnectionView'
+import {
+  ANNOUNCED,
+  COLD_START,
+  EXPIRED,
+  HubLinkState,
+  LIVE,
+  LOGGED_OUT,
+  OFFLINE,
+  PARKED,
+  RECOVERED,
+  REDIALING,
+  RETURNING,
+  UNREACHABLE,
+} from '@crook/web/rpc/HubLinkState'
+import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
 import { herd, START } from '../HerdFixtures.ts'
 
@@ -13,57 +37,72 @@ const viewOf = (status: LinkStatus, withHerd = true) =>
   connectionView(new HubLinkState({ status, herd: withHerd ? cached : Option.none() }))
 
 describe('connectionView', () => {
-  it('keeps a quick resync silent, readable and looking the same, yet refuses hub calls', () => {
-    const view = viewOf(QUIET_DIALING)
+  it('reads a quiet redial as live: nothing said, nothing dimmed, controls open', () => {
+    Arr.forEach([REDIALING, PARKED], (status) => {
+      const view = viewOf(status)
 
-    expect(view.notice).toEqual(Option.none())
-    expect(view.stale).toBe(false)
-    expect(view.controlsEnabled).toBe(true)
-    expect(view.canAct).toBe(false)
+      expect(view).toEqual(ConnectionView.Redialing())
+      expect(noticeOf(view)).toEqual(Option.none())
+      expect(dimsContent(view)).toBe(false)
+      expect(allowsActions(view)).toBe(true)
+      expect(isVerified(view)).toBe(true)
+      expect(isConnected(view)).toBe(false)
+    })
   })
 
-  it('dims a cached herd on a cold start at once, and waits the second to say so', () => {
+  it('shows a cold start with a cached herd as it was, without saying anything yet', () => {
     const view = viewOf(COLD_START)
 
-    expect(view.stale).toBe(true)
-    expect(view.notice).toEqual(Option.none())
-    expect(view.controlsEnabled).toBe(false)
+    expect(view).toEqual(ConnectionView.Resuming())
+    expect(dimsContent(view)).toBe(false)
+    expect(noticeOf(view)).toEqual(Option.none())
+    expect(allowsActions(view)).toBe(true)
+    expect(isVerified(view)).toBe(false)
   })
 
-  it('says syncing over a cached herd and connecting without one', () => {
-    const announced = LinkStatus.Dialing({ announced: true, afterFailure: false, coldStart: false })
-
-    expect(viewOf(announced).notice).toEqual(Option.some('syncing'))
-    expect(viewOf(announced, false).notice).toEqual(Option.some('connecting'))
-    expect(viewOf(announced).stale).toBe(true)
-    expect(viewOf(announced).controlsEnabled).toBe(false)
+  it('starts with nothing known when there is no herd yet', () => {
+    expect(viewOf(COLD_START, false)).toEqual(ConnectionView.Starting())
   })
 
-  it('lets hub actions through only while live', () => {
-    expect(viewOf(LinkStatus.Live({ recovered: false })).canAct).toBe(true)
-    expect(viewOf(LinkStatus.Unreachable()).canAct).toBe(false)
-    expect(viewOf(LinkStatus.Unreachable()).controlsEnabled).toBe(false)
-    expect(viewOf(LinkStatus.Offline()).canAct).toBe(false)
+  it('says syncing or connecting once a dial has taken a while, without dimming', () => {
+    expect(noticeOf(viewOf(ANNOUNCED))).toEqual(Option.some('syncing'))
+    expect(noticeOf(viewOf(ANNOUNCED, false))).toEqual(Option.some('connecting'))
+    expect(dimsContent(viewOf(ANNOUNCED))).toBe(false)
+    expect(allowsActions(viewOf(ANNOUNCED))).toBe(true)
   })
 
-  it('tells the hub being unreachable apart from the phone being offline', () => {
-    expect(viewOf(LinkStatus.Unreachable()).notice).toEqual(Option.some('unreachable'))
-    expect(viewOf(LinkStatus.Offline()).notice).toEqual(Option.some('offline'))
-    expect(viewOf(LinkStatus.Offline()).syncedAt).toEqual(Option.some(START))
+  it('stays dimmed and closed from offline until the herd is back', () => {
+    expect(noticeOf(viewOf(RETURNING))).toEqual(Option.some('syncing'))
+    expect(noticeOf(viewOf(RETURNING, false))).toEqual(Option.some('connecting'))
+    expect(dimsContent(viewOf(RETURNING))).toBe(true)
+    expect(allowsActions(viewOf(RETURNING))).toBe(false)
   })
 
-  it('says back online after a failure, and flags an expired session', () => {
-    expect(viewOf(LinkStatus.Live({ recovered: true })).notice).toEqual(Option.some('recovered'))
-    expect(viewOf(LinkStatus.Expired()).expired).toBe(true)
-    expect(viewOf(LinkStatus.Expired()).notice).toEqual(Option.none())
+  it('lets a live link act', () => {
+    expect(allowsActions(viewOf(LIVE))).toBe(true)
+    expect(isConnected(viewOf(LIVE))).toBe(true)
+    expect(noticeOf(viewOf(LIVE))).toEqual(Option.none())
   })
 
-  it('flags a logout apart from an expired session, with every hub action off', () => {
-    const view = viewOf(LinkStatus.LoggedOut())
+  it('says so when the hub is unreachable or the phone is offline, with the last sync', () => {
+    expect(noticeOf(viewOf(UNREACHABLE))).toEqual(Option.some('unreachable'))
+    expect(noticeOf(viewOf(OFFLINE))).toEqual(Option.some('offline'))
+    expect(allowsActions(viewOf(UNREACHABLE))).toBe(false)
+    expect(allowsActions(viewOf(OFFLINE))).toBe(false)
+    expect(syncedAtOf(viewOf(OFFLINE))).toEqual(Option.some(START))
+    expect(syncedAtOf(viewOf(UNREACHABLE))).toEqual(Option.some(START))
+  })
 
-    expect(view.loggedOut).toBe(true)
-    expect(view.expired).toBe(false)
-    expect(view.canAct).toBe(false)
-    expect(view.notice).toEqual(Option.none())
+  it('carries a sync time only where it is shown, so a herd update changes no live view', () => {
+    expect(viewOf(LIVE)).toEqual(ConnectionView.Live())
+    expect(viewOf(RECOVERED)).toEqual(ConnectionView.Recovered())
+    expect(syncedAtOf(viewOf(LIVE))).toEqual(Option.none())
+  })
+
+  it('says back online after a recovery and nothing when the session ended', () => {
+    expect(noticeOf(viewOf(RECOVERED))).toEqual(Option.some('recovered'))
+    expect(noticeOf(viewOf(EXPIRED))).toEqual(Option.none())
+    expect(noticeOf(viewOf(LOGGED_OUT, false))).toEqual(Option.none())
+    expect(allowsActions(viewOf(LOGGED_OUT, false))).toBe(false)
   })
 })

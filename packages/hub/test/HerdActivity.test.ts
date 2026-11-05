@@ -10,6 +10,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as TestClock from 'effect/testing/TestClock'
 
+import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import {
@@ -21,7 +22,7 @@ import * as Database from '@crook/hub/Database'
 import { HARK_ACTIVITY_LIFETIME } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
 import * as HerdActivity from '@crook/hub/HerdActivity'
-import { Herd, RECONNECT_GRACE } from '@crook/hub/Herd'
+import { Herd } from '@crook/hub/Herd'
 
 import {
   agentRow,

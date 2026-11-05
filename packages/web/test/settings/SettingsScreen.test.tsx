@@ -11,7 +11,7 @@ import { HerdView } from '@crook/domain/HerdView'
 import { defaultNotificationPrefs, NotificationSettings } from '@crook/domain/Notifications'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import { HarkNotConfigured, HarkReachedNoDevice } from '@crook/protocol/Hark'
-import { LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 import { LogOutRefused } from '@crook/web/rpc/SessionCheck'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
@@ -234,7 +234,7 @@ describe('SettingsScreen', () => {
       yield* eventually(() => {
         expect(switchOf('Approvals').hasAttribute('data-disabled')).toBe(false)
       })
-      yield* SubscriptionRef.set(link.state, stateWith(LinkStatus.Unreachable(), Option.some(view)))
+      yield* SubscriptionRef.set(link.state, stateWith(UNREACHABLE, Option.some(view)))
       yield* eventually(() => {
         expect(valueOf('Hub', 'Status')).toBe('unreachable')
       })

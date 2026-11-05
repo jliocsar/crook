@@ -4,7 +4,9 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
+import { identity, pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
@@ -22,7 +24,7 @@ import type {
   TranscriptSource,
   TranscriptTailBytes,
 } from '@crook/domain/Transcript'
-import { hubReconnectSchedule, stayedHealthy } from '@crook/protocol/AgentLink'
+import { hubReconnectSchedule, RECONNECT_GRACE, stayedHealthy } from '@crook/protocol/AgentLink'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import type { HubAccount, HubStorageFailed } from '@crook/protocol/ClientApi'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'
@@ -38,16 +40,24 @@ import type {
   WatchTranscriptRefused,
 } from '@crook/web/rpc/HubConnection'
 import {
-  announce,
-  beginAttempt,
+  ATTEMPT_BEGAN,
   COLD_START,
-  goLive,
+  CONNECTION_DROPPED,
+  DIAL_REFUSED,
+  HERD_RECEIVED,
   HubLinkState,
-  isRecovering,
+  linkMachine,
   LinkStatus,
+  LOGGED_OUT_CONFIRMED,
+  NOTICE_DELAY_PASSED,
+  PAGE_HIDDEN,
+  RECOVERED_NOTICE_ENDED,
+  refusesCalls,
+  SESSION_EXPIRED,
   settledSince,
-  settleRecovered,
+  WENT_OFFLINE,
 } from '@crook/web/rpc/HubLinkState'
+import type { LinkCommand, LinkEvent } from '@crook/web/rpc/HubLinkState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
 import type { LogOutFailed } from '@crook/web/rpc/SessionCheck'
@@ -63,8 +73,9 @@ export interface TranscriptResume {
 
 export const SYNC_NOTICE_DELAY = Duration.seconds(1)
 export const RECOVERED_NOTICE_DURATION = Duration.millis(1500)
+export const CALL_HOLD_LIMIT = RECONNECT_GRACE
 
-const isLoggedOut = LinkStatus.$is('LoggedOut')
+const isLoggedOut = LinkStatus.guards.LoggedOut
 
 export class HubWatchEnded extends Schema.TaggedError<HubWatchEnded>()('HubWatchEnded', {}) {
   override get message(): string {
@@ -78,17 +89,58 @@ export class HubNotConnected extends Schema.TaggedError<HubNotConnected>()('HubN
   }
 }
 
+const commandEvent = (command: LinkCommand): Effect.Effect<LinkEvent> =>
+  Match.value(command).pipe(
+    Match.when('StartNoticeTimer', () =>
+      Effect.as(Effect.sleep(SYNC_NOTICE_DELAY), NOTICE_DELAY_PASSED),
+    ),
+    Match.when('StartRecoveredTimer', () =>
+      Effect.as(Effect.sleep(RECOVERED_NOTICE_DURATION), RECOVERED_NOTICE_ENDED),
+    ),
+    Match.exhaustive,
+  )
+
+const callsOnceDialed = (
+  state: SubscriptionRef.SubscriptionRef<HubLinkState>,
+  connected: ConnectedCalls,
+) =>
+  SubscriptionRef.changes(state).pipe(
+    Stream.mapEffect((current) =>
+      Effect.map(SubscriptionRef.get(connected), (calls) => ({
+        calls,
+        refused: refusesCalls(current.status),
+      })),
+    ),
+    Stream.filter(({ calls, refused }) => Option.isSome(calls) || refused),
+    Stream.runHead,
+    Effect.timeoutOption(CALL_HOLD_LIMIT),
+    Effect.map((answer) =>
+      pipe(
+        answer,
+        Option.flatten,
+        Option.flatMap(({ calls }) => calls),
+      ),
+    ),
+  )
+
 const whenConnected = <Success, Failure>(
+  state: SubscriptionRef.SubscriptionRef<HubLinkState>,
   connected: ConnectedCalls,
   call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
 ) =>
-  Effect.flatMap(
-    SubscriptionRef.get(connected),
-    (hub): Effect.Effect<Success, Failure | HubNotConnected> =>
-      Option.match(hub, {
-        onNone: () => Effect.fail(new HubNotConnected()),
-        onSome: call,
-      }),
+  Effect.flatMap(SubscriptionRef.get(connected), (held) =>
+    Option.match(held, {
+      onSome: call,
+      onNone: () =>
+        Effect.flatMap(
+          callsOnceDialed(state, connected),
+          (answer): Effect.Effect<Success, Failure | HubNotConnected> =>
+            Option.match(answer, {
+              onNone: () => Effect.fail(new HubNotConnected()),
+              onSome: call,
+            }),
+        ),
+    }),
   )
 
 const whileConnected = <Success, Failure>(
@@ -140,10 +192,21 @@ const make = Effect.gen(function* () {
     Effect.forkScoped,
   )
 
-  const updateStatus = (step: (status: LinkStatus) => LinkStatus) =>
-    SubscriptionRef.update(
-      state,
-      (current) => new HubLinkState({ status: step(current.status), herd: current.herd }),
+  const step = (
+    event: LinkEvent,
+    herdAfter: (held: HubLinkState['herd']) => HubLinkState['herd'] = identity,
+  ) =>
+    SubscriptionRef.modify(state, (current) => {
+      const [status, commands] = linkMachine.transition(current.status, event)
+
+      return [commands, new HubLinkState({ status, herd: herdAfter(current.herd) })]
+    })
+
+  const startCommands = (commands: readonly LinkCommand[]) =>
+    Effect.forEach(
+      commands,
+      (command) => commandEvent(command).pipe(Effect.flatMap(step), Effect.forkScoped),
+      { discard: true },
     )
 
   const receive = Effect.fn('HubLink.receive')(function* (
@@ -159,18 +222,8 @@ const make = Effect.gen(function* () {
     }
 
     const snapshot = new HerdSnapshot({ view, syncedAt: yield* DateTime.now })
-    const next = yield* SubscriptionRef.updateAndGet(
-      state,
-      (current) =>
-        new HubLinkState({ status: goLive(current.status), herd: Option.some(snapshot) }),
-    )
 
-    if (firstOfSession && isRecovering(next.status)) {
-      yield* Effect.sleep(RECOVERED_NOTICE_DURATION).pipe(
-        Effect.andThen(updateStatus(settleRecovered)),
-        Effect.forkScoped,
-      )
-    }
+    yield* step(HERD_RECEIVED, () => Option.some(snapshot)).pipe(Effect.flatMap(startCommands))
   })
 
   const attempt = Effect.fn('HubLink.attempt')(function* (
@@ -178,7 +231,9 @@ const make = Effect.gen(function* () {
   ) {
     const hub = yield* connection.open
 
-    yield* Effect.addFinalizer(() => SubscriptionRef.set(connected, Option.none()))
+    yield* Effect.addFinalizer(() =>
+      Effect.andThen(SubscriptionRef.set(connected, Option.none()), step(CONNECTION_DROPPED)),
+    )
     yield* hub.watchHerd.pipe(Stream.runForEach((view) => receive(view, hub, liveSince)))
 
     return yield* new HubWatchEnded()
@@ -188,12 +243,12 @@ const make = Effect.gen(function* () {
     yield* Effect.logWarning(error.message)
 
     if (yield* sessionCheck.expired) {
-      yield* updateStatus(() => LinkStatus.Expired())
+      yield* step(SESSION_EXPIRED)
 
       return yield* Effect.never
     }
 
-    yield* updateStatus(() => LinkStatus.Unreachable())
+    yield* step(DIAL_REFUSED)
 
     return yield* error
   })
@@ -202,11 +257,7 @@ const make = Effect.gen(function* () {
     const liveSince = yield* Ref.make(Option.none<number>())
     const healthy = Effect.zipWith(Ref.get(liveSince), Clock.currentTimeMillis, stayedHealthy)
 
-    yield* updateStatus(beginAttempt)
-    yield* Effect.sleep(SYNC_NOTICE_DELAY).pipe(
-      Effect.andThen(updateStatus(announce)),
-      Effect.forkScoped,
-    )
+    yield* step(ATTEMPT_BEGAN).pipe(Effect.flatMap(startCommands))
     yield* attempt(liveSince).pipe(
       Effect.catch((error) =>
         Effect.flatMap(healthy, (stayed) =>
@@ -225,26 +276,18 @@ const make = Effect.gen(function* () {
   const follow = (visible: boolean, online: boolean, ended: boolean): Effect.Effect<never> => {
     if (ended) {
       const forget = cache.clear.pipe(
-        Effect.andThen(
-          SubscriptionRef.set(
-            state,
-            new HubLinkState({ status: LinkStatus.LoggedOut(), herd: Option.none() }),
-          ),
-        ),
+        Effect.andThen(step(LOGGED_OUT_CONFIRMED, () => Option.none())),
       )
 
       return cacheWrites.withPermit(forget).pipe(Effect.andThen(Effect.never))
     }
 
     if (!visible) {
-      return Effect.never
+      return Effect.andThen(step(PAGE_HIDDEN), Effect.never)
     }
 
     if (!online) {
-      return Effect.andThen(
-        updateStatus(() => LinkStatus.Offline()),
-        Effect.never,
-      )
+      return Effect.andThen(step(WENT_OFFLINE), Effect.never)
     }
 
     return stayConnected
@@ -279,12 +322,14 @@ const make = Effect.gen(function* () {
     pick: (calls: HubCalls) => (...args: Args) => Effect.Effect<Success, Failure>,
   ): ((...args: Args) => Effect.Effect<Success, Failure | HubNotConnected>) =>
     Effect.fn(name)(function* (...args: Args) {
-      return yield* whenConnected(connected, (calls) => pick(calls)(...args))
+      return yield* whenConnected(state, connected, (calls) => pick(calls)(...args))
     })
 
-  const sendTestNotification = whenConnected(connected, (calls) => calls.sendTestNotification).pipe(
-    Effect.withSpan('HubLink.sendTestNotification'),
-  )
+  const sendTestNotification = whenConnected(
+    state,
+    connected,
+    (calls) => calls.sendTestNotification,
+  ).pipe(Effect.withSpan('HubLink.sendTestNotification'))
 
   const logOut = Effect.uninterruptibleMask((restore) =>
     Effect.gen(function* () {

@@ -9,7 +9,7 @@ import { PaneClosed, PaneRenamed } from '@crook/domain/Command'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { CommandTimedOut, PaneNotCreatedByCrook } from '@crook/protocol/Commands'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
-import { LinkStatus } from '@crook/web/rpc/HubLinkState'
+import { UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 import { ActionsIntent, agentActionsAtom, PaneAddress } from '@crook/web/atoms/AgentActions'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
@@ -87,10 +87,7 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
     title: 'Actions sheet, while the hub cannot act',
     shows: { selector: '[data-slot="sheet"] button[disabled]' },
     path: AGENTS_PATH,
-    link: stateWith(
-      LinkStatus.Unreachable(),
-      Option.some(herd([laptopWith([porting, wiring, banner])])),
-    ),
+    link: stateWith(UNREACHABLE, Option.some(herd([laptopWith([porting, wiring, banner])]))),
     settle: openSheet,
   }),
   story({

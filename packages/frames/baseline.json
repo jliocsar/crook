@@ -1,25 +1,31 @@
 {
-  "actions/toast-after-chat-close": { "always": ["blank"] },
-  "ask/next-ask": { "always": ["shift:div[chat-dock]"] },
-  "machine/forgotten-while-open": { "always": ["shift:div[swipe-card]"] },
-  "new-agent/start-to-chat": { "always": ["shift:div[new-agent-dock]"] },
-  "transition/clear": { "always": ["shift:div[chat-dock]"] },
+  "actions/toast-after-chat-close": {
+    "always": ["blank"]
+  },
+  "ask/next-ask": {
+    "always": ["shift:div[chat-dock]"]
+  },
+  "machine/forgotten-while-open": {
+    "always": ["shift:div[swipe-card]"]
+  },
+  "new-agent/start-to-chat": {
+    "always": ["shift:div[new-agent-dock]"]
+  },
+  "transition/clear": {
+    "always": ["shift:div[chat-dock]"]
+  },
   "transition/foreground-return": {
     "always": [
       "flash:thread-skeleton",
-      "flash:dimmed",
-      "flash:composer-paused",
       "shift:div[conversation-viewport]",
       "flash:catching-up",
       "flash:spinner"
     ]
   },
-  "transition/herd-first-link-value": { "always": ["blank"] },
   "transition/herd-first-load-empty": {
     "always": [],
     "sometimes": ["flash:banner", "flash:spinner"]
   },
-  "transition/herd-first-load-fast": { "always": ["flash:dimmed"] },
   "transition/herd-first-load-from-cache": {
     "always": [],
     "sometimes": ["flash:banner", "flash:spinner"]
@@ -32,12 +38,6 @@
     ]
   },
   "transition/reconnect-chat-open": {
-    "always": [
-      "flash:thread-skeleton",
-      "flash:dimmed",
-      "flash:composer-paused",
-      "flash:catching-up",
-      "flash:spinner"
-    ]
+    "always": ["flash:thread-skeleton", "flash:catching-up", "flash:spinner"]
   }
 }
