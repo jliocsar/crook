@@ -17,7 +17,7 @@ lives between three processes, where a unit test holds one still.
 
 ## Does your change touch it?
 
-Sync commit: `64d271a`
+Sync commit: `c877e89`
 
 The command compares these files with that commit and exits 2 when any of them moved. Each line
 is the file, then the functions the model stands for.
