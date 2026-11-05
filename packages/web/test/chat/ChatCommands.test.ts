@@ -206,6 +206,28 @@ describe('a command send', () => {
     expect(shownOf(wait, landed('Unknown command'))).toEqual([])
   })
 
+  it('ends on the error a failed /compact writes with no row of its own', () => {
+    const wait = waitAfterSend(NOTHING, [], sending('/compact'))
+
+    expect(shownOf(wait, landed('No messages to compact'))).toEqual([])
+  })
+
+  it('stays through an interruption or a notice about something else', () => {
+    const wait = waitAfterSend(NOTHING, [], sending('/nosuchcommand'))
+
+    expect(
+      shownOf(
+        wait,
+        items(
+          [
+            '{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}',
+            '{"type":"system","subtype":"informational","content":"A made up plugin reloaded"}',
+          ].join('\n'),
+        ),
+      ),
+    ).toEqual(['/nosuchcommand'])
+  })
+
   it('ends on a shell line landing', () => {
     const wait = waitAfterSend(NOTHING, [], sending('!true'))
 

@@ -56,7 +56,7 @@ export type ChatItem = Data.TaggedEnum<{
   Tool: { readonly key: string; readonly call: ToolCallModel }
   Subagents: { readonly key: string; readonly runs: readonly SubagentRun[] }
   Plan: { readonly key: string; readonly steps: readonly PlanStep[] }
-  Note: { readonly key: string; readonly text: string }
+  Note: { readonly key: string; readonly text: string; readonly answersACommand: boolean }
   Command: {
     readonly key: string
     readonly text: string
@@ -154,6 +154,7 @@ const CLEAR_COMMAND = '/clear'
 const COMPACT_COMMAND = '/compact'
 const EMPTY_COMMAND_OUTPUT = '(no content)'
 const COMPACTED_OUTPUT_PREFIX = 'Compacted (ctrl+o'
+const UNKNOWN_COMMAND_PREFIX = 'Unknown command:'
 const AGENT_TOOL = 'Agent'
 const PLAN_TOOL = 'TodoWrite'
 
@@ -358,7 +359,7 @@ const outputDrafts = (
   }
 
   return Option.match(group, {
-    onNone: () => [draft(ChatItem.Note({ key, text: output }))],
+    onNone: () => [draft(ChatItem.Note({ key, text: output, answersACommand: true }))],
     onSome: (command) => [
       grouped(ChatItem.Command({ key, text: '', shell: false, output: [output] }), command),
     ],
@@ -628,7 +629,11 @@ const userNoteDrafts = (
         ],
         LocalCommand: (command) => commandDrafts(command, keyAt(index), commandGroup),
         LocalCommandOutput: (output) => outputDrafts(output.text, keyAt(index), commandGroup),
-        Interruption: () => [draft(ChatItem.Note({ key: keyAt(index), text: INTERRUPTED_NOTE }))],
+        Interruption: () => [
+          draft(
+            ChatItem.Note({ key: keyAt(index), text: INTERRUPTED_NOTE, answersACommand: false }),
+          ),
+        ],
       }),
     ),
   )
@@ -662,7 +667,15 @@ const systemDrafts = (
         ],
         TurnDuration: () => [],
         LocalCommandOutput: (output) => outputDrafts(output.text, keyAt(index), commandGroup),
-        Notice: (notice) => [draft(ChatItem.Note({ key: keyAt(index), text: notice.text }))],
+        Notice: (notice) => [
+          draft(
+            ChatItem.Note({
+              key: keyAt(index),
+              text: notice.text,
+              answersACommand: notice.text.startsWith(UNKNOWN_COMMAND_PREFIX),
+            }),
+          ),
+        ],
         Unrecognized: () => [],
       }),
     ),

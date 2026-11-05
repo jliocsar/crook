@@ -24,7 +24,7 @@ const SCOPE_LABELS = {
   builtin: 'Claude Code',
 } satisfies Record<SkillScope, string>
 
-const OPENS_A_DIALOG_BARE: readonly (readonly [string, string])[] = [
+const OPENS_A_DIALOG_BARE = new Map([
   ['add-dir', ''],
   ['bashes', ''],
   ['config', ''],
@@ -50,7 +50,7 @@ const OPENS_A_DIALOG_BARE: readonly (readonly [string, string])[] = [
   ['tasks', ''],
   ['theme', ''],
   ['usage', ''],
-]
+])
 
 const OPENS_A_DIALOG_WITH_ARGUMENTS = new Set(['theme'])
 
@@ -99,13 +99,10 @@ export const laptopOnlyNote = (
     Option.fromNullishOr(COMMAND_NAME.exec(text)),
     Option.flatMap(([whole, name = '']) =>
       pipe(
-        OPENS_A_DIALOG_BARE,
-        Arr.findFirst(([command]) => command === name),
+        Option.fromUndefinedOr(OPENS_A_DIALOG_BARE.get(name)),
         Option.filter(() => whole === text || OPENS_A_DIALOG_WITH_ARGUMENTS.has(name)),
         Option.filter(() => !Arr.some(skills, (skill) => skill.name === name)),
-        Option.map(
-          ([command, hint]) => `/${command} opens a dialog, so it needs the laptop.${hint}`,
-        ),
+        Option.map((hint) => `/${name} opens a dialog, so it needs the laptop.${hint}`),
       ),
     ),
   )

@@ -91,6 +91,9 @@ describe('a slash send', () => {
       expect(screen.queryByText(/needs the laptop/u)).toBeNull()
 
       fireEvent.change(field(), { target: { value: '/model' } })
+
+      expect(screen.queryByText(/needs the laptop/u)).toBeNull()
+
       yield* click(yield* findByRole('button', 'Send'))
       yield* Effect.promise(() => screen.findByText(/\/model opens a dialog/u))
       fireEvent.change(field(), { target: { value: '/model opus' } })
@@ -167,6 +170,35 @@ describe('a slash send', () => {
       })
 
       expect(screen.getByText('/login')).toBeDefined()
+    }),
+  )
+
+  it.effect('gives a command sent twice its bound again from the second send', () =>
+    Effect.gen(function* () {
+      const timers = vi.spyOn(globalThis, 'setTimeout')
+      const silences = () =>
+        timers.mock.calls.filter(([, delay]) => delay === Duration.toMillis(COMMAND_SILENCE)).length
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/login' }))),
+      )
+      yield* Queue.offerAll(transcript, [opened(), caughtUp(0)])
+      yield* Effect.promise(() => screen.findByText('No messages yet'))
+      fireEvent.change(field(), { target: { value: '/login' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* Effect.promise(() => screen.findByText('Sent'))
+      yield* eventually(() => {
+        expect(silences()).toBe(1)
+      })
+      fireEvent.change(field(), { target: { value: '/login' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* eventually(() => {
+        expect(screen.getByText('Queued')).toBeDefined()
+        expect(silences()).toBe(2)
+      })
     }),
   )
 

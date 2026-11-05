@@ -162,7 +162,7 @@ const answersACommand = (item: ChatItem): boolean =>
   ChatItem.$match(item, {
     Command: () => true,
     Cleared: () => true,
-    Note: () => true,
+    Note: (note) => note.answersACommand,
     Compacted: (compacted) => Option.contains(compacted.trigger, MANUAL_COMPACT),
     UserPrompt: () => false,
     AssistantText: () => false,
@@ -191,14 +191,10 @@ const withoutArrived = <Send extends PendingPrompt>(
   pipe(
     pending,
     Arr.mapAccum(arrived, (left, send): readonly [ArrivedSends, Option.Option<Send>] => {
-      if (send.command) {
-        return left.commands > 0
-          ? [{ ...left, commands: left.commands - 1 }, Option.none()]
-          : [left, Option.some(send)]
-      }
+      const kind = send.command ? 'commands' : 'prompts'
 
-      return left.prompts > 0
-        ? [{ ...left, prompts: left.prompts - 1 }, Option.none()]
+      return left[kind] > 0
+        ? [{ ...left, [kind]: left[kind] - 1 }, Option.none()]
         : [left, Option.some(send)]
     }),
     ([, kept]) => Arr.getSomes(kept),
@@ -344,6 +340,7 @@ const usePromptWait = (
   )
   const awaited = lastCommandOf(rows)
   const answers = commandAnswerCount(items)
+  const awaitedCommands = Arr.filter(rows, (row) => row.command).length
 
   if (waitedIn !== threadEpoch) {
     setWaitedIn(threadEpoch)
@@ -364,7 +361,7 @@ const usePromptWait = (
     return () => {
       window.clearTimeout(timer)
     }
-  }, [Option.getOrUndefined(awaited), answers, working])
+  }, [Option.getOrUndefined(awaited), awaitedCommands, answers, working])
 
   React.useEffect(() => {
     if (arrived && Arr.isReadonlyArrayNonEmpty(wait.pending)) {
@@ -484,6 +481,11 @@ export const useChatCommands = ({
     laptopOnlyNote(draft.trim(), skills),
     () => refused === draft.trim(),
   )
+
+  if (refused !== '' && refused !== draft.trim()) {
+    setRefused('')
+  }
+
   const blocked = ActivityState.guards.Blocked(activity)
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(opened, answer, session)
