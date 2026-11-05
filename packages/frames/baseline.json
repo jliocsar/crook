@@ -1,7 +1,4 @@
 {
-  "actions/toast-after-chat-close": {
-    "always": ["blank"]
-  },
   "ask/next-ask": {
     "always": ["shift:div[chat-dock]"]
   },
