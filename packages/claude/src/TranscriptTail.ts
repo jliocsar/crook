@@ -16,6 +16,7 @@ import { parseLine } from '@crook/claude/TranscriptParser'
 import { type ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
 import {
   CHUNK_READ_LIMIT,
+  TRANSCRIPT_START,
   TranscriptCaughtUp,
   TranscriptChunk,
   type TranscriptTailBytes,
@@ -184,6 +185,35 @@ const lineStartBefore = (
   )
 }
 
+const unskippedBytes = (from: TranscriptOffset, bytes: TranscriptTailBytes) =>
+  from === TRANSCRIPT_START ? bytes : Math.max(bytes, CHUNK_READ_LIMIT)
+
+const checkResume = Effect.fn('TranscriptTail.checkResume')(function* (
+  file: TranscriptFile,
+  handle: FileSystem.File,
+  size: number,
+  from: TranscriptOffset,
+) {
+  if (from > size) {
+    return yield* new TranscriptOffsetBeyondEnd({ path: file.path, offset: from, size })
+  }
+
+  const before = yield* Option.match(
+    Option.liftPredicate(from, (offset) => offset > 0),
+    {
+      onNone: () => Effect.succeed(Option.none<Uint8Array>()),
+      onSome: (offset) =>
+        handle
+          .readAlloc(1, { position: BigInt(offset - 1) })
+          .pipe(Effect.mapError(unreadableFile(file))),
+    },
+  )
+
+  return Option.exists(before, (byte) => byte[0] !== NEWLINE)
+    ? yield* new TranscriptOffsetMidLine({ path: file.path, offset: from })
+    : undefined
+})
+
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const fileWatch = yield* FileWatch
@@ -196,26 +226,7 @@ const make = Effect.gen(function* () {
     const unreadable = unreadableFile(file)
     const { handle, size: sizeAtOpen } = yield* openWithSize(fileSystem, file)
 
-    if (from > sizeAtOpen) {
-      return yield* new TranscriptOffsetBeyondEnd({
-        path: file.path,
-        offset: from,
-        size: sizeAtOpen,
-      })
-    }
-
-    const before = yield* Option.match(
-      Option.liftPredicate(from, (offset) => offset > 0),
-      {
-        onNone: () => Effect.succeed(Option.none<Uint8Array>()),
-        onSome: (offset) =>
-          handle.readAlloc(1, { position: BigInt(offset - 1) }).pipe(Effect.mapError(unreadable)),
-      },
-    )
-
-    if (Option.exists(before, (byte) => byte[0] !== NEWLINE)) {
-      return yield* new TranscriptOffsetMidLine({ path: file.path, offset: from })
-    }
+    yield* checkResume(file, handle, sizeAtOpen, from)
 
     const state = yield* Ref.make<TailState>({ consumed: from, pending: new Uint8Array(0) })
     const session = file.session
@@ -301,15 +312,18 @@ const make = Effect.gen(function* () {
 
   const tailStart = Effect.fn('TranscriptTail.tailStart')(function* (
     file: TranscriptFile,
+    from: TranscriptOffset,
     bytes: TranscriptTailBytes,
   ) {
     const { handle, size } = yield* openWithSize(fileSystem, file)
-    const start =
-      size <= bytes
-        ? 0
-        : yield* lineStartBefore(handle, size - bytes).pipe(Effect.mapError(unreadableFile(file)))
 
-    return TranscriptOffset.make(start)
+    yield* checkResume(file, handle, size, from)
+
+    return size - from <= unskippedBytes(from, bytes)
+      ? from
+      : TranscriptOffset.make(
+          yield* lineStartBefore(handle, size - bytes).pipe(Effect.mapError(unreadableFile(file))),
+        )
   }, Effect.scoped)
 
   const drain = (file: TranscriptFile, from: TranscriptOffset) => drainWith(file, from, parseLine)
@@ -342,8 +356,9 @@ export class TranscriptTail extends Context.Service<
     ) => Stream.Stream<TranscriptChunk, TailError>
     readonly tailStart: (
       file: TranscriptFile,
+      from: TranscriptOffset,
       bytes: TranscriptTailBytes,
-    ) => Effect.Effect<TranscriptOffset, TranscriptUnreadable>
+    ) => Effect.Effect<TranscriptOffset, TailError>
   }
 >()('@crook/claude/TranscriptTail') {
   static readonly layer = Layer.effect(this, make)

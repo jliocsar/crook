@@ -12,6 +12,7 @@ import {
   TranscriptOpened,
   TranscriptPosition,
   continuesFrom,
+  omittedBetween,
   omittedUpTo,
   positionAfter,
 } from '@crook/domain/Transcript'
@@ -87,6 +88,22 @@ describe('omittedUpTo', () => {
     expect(omitted.messages).toEqual([
       new OmittedLines({ offset: TranscriptOffset.make(0), byteLength: 800 }),
     ])
+  })
+})
+
+describe('omittedBetween', () => {
+  it('stands for a gap as a chunk that continues the position, and crosses the wire', () => {
+    const omitted = omittedBetween(FIRST, TranscriptOffset.make(800), TranscriptOffset.make(5000))
+    const line = Schema.fromJsonString(Schema.toCodecJson(TranscriptEvent))
+
+    expect(continuesFrom(Option.some(at(FIRST, 800)), omitted)).toBe(true)
+    expect(positionAfter(Option.some(at(FIRST, 800)), omitted)).toEqual(
+      Option.some(at(FIRST, 5000)),
+    )
+    expect(omitted.messages).toEqual([
+      new OmittedLines({ offset: TranscriptOffset.make(800), byteLength: 4200 }),
+    ])
+    expect(Schema.decodeSync(line)(Schema.encodeSync(line)(omitted))).toEqual(omitted)
   })
 })
 

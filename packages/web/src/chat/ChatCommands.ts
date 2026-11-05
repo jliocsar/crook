@@ -38,7 +38,7 @@ import {
   isAnswerUnderway,
 } from '@crook/web/chat/AskModel'
 import type { AlwaysNote } from '@crook/web/chat/AskModel'
-import { isUserPrompt } from '@crook/web/chat/ChatItems'
+import { isOmitted, isUserPrompt } from '@crook/web/chat/ChatItems'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { activityOf } from '@crook/web/chat/ChatModel'
 import { isPresent } from '@crook/web/chat/PresenceMachine'
@@ -85,6 +85,7 @@ export interface PendingPromptRow extends PendingPrompt {
 
 export interface PromptWait {
   readonly promptsAtSend: number
+  readonly holesAtSend: number
   readonly pending: readonly PendingPrompt[]
 }
 
@@ -96,7 +97,7 @@ export interface PromptSend {
 
 const SLASH = '/'
 const PENDING_PROMPT_KEY = 'pending prompt'
-const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, pending: [] }
+const NOTHING_AWAITED: PromptWait = { promptsAtSend: 0, holesAtSend: 0, pending: [] }
 
 export const STOP_SETTLE = Duration.millis(512)
 
@@ -132,8 +133,13 @@ const lastTextWhen = (
 
 const promptCount = (items: readonly ChatItem[]): number => Arr.filter(items, isUserPrompt).length
 
+const holeCount = (items: readonly ChatItem[]): number =>
+  pipe(items, Arr.drop(1), Arr.filter(isOmitted)).length
+
 const arrivedSince = (wait: PromptWait, items: readonly ChatItem[]): number =>
-  Math.max(promptCount(items) - wait.promptsAtSend, 0)
+  holeCount(items) > wait.holesAtSend
+    ? wait.pending.length
+    : Math.max(promptCount(items) - wait.promptsAtSend, 0)
 
 const hasArrived = (wait: PromptWait, items: readonly ChatItem[]): boolean =>
   arrivedSince(wait, items) >= wait.pending.length
@@ -161,16 +167,18 @@ export const waitAfterSend = (
   send: PromptSend,
 ): PromptWait => {
   const carried = carriedPrompts(wait, items, send)
-  const promptsAtSend = Arr.isReadonlyArrayNonEmpty(carried)
-    ? wait.promptsAtSend
-    : promptCount(items)
-  const aheadInLine = !hasArrived({ promptsAtSend, pending: carried }, items)
+  const waiting = Arr.isReadonlyArrayNonEmpty(carried)
+  const promptsAtSend = waiting ? wait.promptsAtSend : promptCount(items)
+  const holesAtSend = waiting ? wait.holesAtSend : holeCount(items)
+  const aheadInLine = !hasArrived({ promptsAtSend, holesAtSend, pending: carried }, items)
   const pending = Option.match(send.prompt, {
     onNone: () => carried,
     onSome: (text) => Arr.append(carried, { text, queued: send.working || aheadInLine }),
   })
 
-  return Arr.isReadonlyArrayNonEmpty(pending) ? { promptsAtSend, pending } : NOTHING_AWAITED
+  return Arr.isReadonlyArrayNonEmpty(pending)
+    ? { promptsAtSend, holesAtSend, pending }
+    : NOTHING_AWAITED
 }
 
 export const pendingPromptRows = (

@@ -17,7 +17,12 @@ import { agentsIn } from '@crook/domain/MachineState'
 import { Subagent } from '@crook/domain/Subagent'
 import { TranscriptPosition, type TranscriptSource } from '@crook/domain/Transcript'
 import { TranscriptMessage } from '@crook/domain/TranscriptMessage'
-import { NO_BACKGROUNDS, NO_CATCH_UP, TranscriptView } from '@crook/web/chat/TranscriptState'
+import {
+  NO_BACKGROUNDS,
+  NO_CATCH_UP,
+  TranscriptView,
+  withOneHole,
+} from '@crook/web/chat/TranscriptState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 
 export interface TranscriptStore {
@@ -210,10 +215,12 @@ const makeOver = (store: TranscriptStore) =>
         ),
       )
 
-      return yield* Option.match(HashMap.get(yield* Ref.get(memory), key), {
+      const found = yield* Option.match(HashMap.get(yield* Ref.get(memory), key), {
         onNone: () => fromStore,
         onSome: (remembered) => Effect.succeedSome(remembered.view),
       })
+
+      return Option.map(found, withOneHole)
     })
 
     const remember = (machine: MachineId, source: TranscriptSource, view: TranscriptView) =>

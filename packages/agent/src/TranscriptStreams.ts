@@ -45,7 +45,7 @@ import {
   type TranscriptPosition,
   type TranscriptSource,
   type TranscriptTailBytes,
-  omittedUpTo,
+  omittedBetween,
   positionAfter,
 } from '@crook/domain/Transcript'
 import {
@@ -349,24 +349,20 @@ const make = Effect.gen(function* () {
     tailBytes: Option.Option<TranscriptTailBytes>,
     read: (from: TranscriptOffset) => Stream.Stream<TranscriptEvent, FollowError>,
   ): Stream.Stream<TranscriptEvent, FollowError> =>
-    pipe(
-      tailBytes,
-      Option.filter(() => offset === TRANSCRIPT_START),
-      Option.match({
-        onNone: () => read(offset),
-        onSome: (bytes) =>
-          Stream.unwrap(
-            Effect.map(tail.tailStart(file, bytes), (start) =>
-              start === TRANSCRIPT_START
-                ? read(start)
-                : Stream.concat(
-                    Stream.succeed<TranscriptEvent>(omittedUpTo(file.session, start)),
-                    read(start),
-                  ),
-            ),
+    Option.match(tailBytes, {
+      onNone: () => read(offset),
+      onSome: (bytes) =>
+        Stream.unwrap(
+          Effect.map(tail.tailStart(file, offset, bytes), (start) =>
+            start === offset
+              ? read(offset)
+              : Stream.concat(
+                  Stream.succeed<TranscriptEvent>(omittedBetween(file.session, offset, start)),
+                  read(start),
+                ),
           ),
-      }),
-    )
+        ),
+    })
 
   const openSession = (
     { session, cwd }: PaneSession,

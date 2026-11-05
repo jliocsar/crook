@@ -9,7 +9,7 @@ import { ArrowDown } from 'lucide-react'
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react'
 import * as React from 'react'
 
-import { departedKeys, liftFor } from '@crook/web/chat/Reveal'
+import { departedKeys, liftFor, withTheEnd } from '@crook/web/chat/Reveal'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { RenderCacheScope } from '@crook/web/components/RenderCache'
 import { RowMemoryScope } from '@crook/web/components/RowMemory'
@@ -21,6 +21,7 @@ export interface ThreadRow {
   readonly key: string
   readonly content: React.ReactNode
   readonly placeholder?: boolean
+  readonly hole?: boolean
 }
 
 interface Ghost {
@@ -354,6 +355,7 @@ export function Thread({
   const [following, setFollowing] = React.useState(true)
   const followingRef = React.useRef(true)
   const lastTop = React.useRef(0)
+  const holesAtPin = React.useRef(0)
   const intent = useScrollIntent()
   const reduce = useReducedMotion() ?? false
   const lift = useLift()
@@ -386,12 +388,17 @@ export function Thread({
     paddingEnd: EDGE_PADDING,
     useFlushSync: false,
     rangeExtractor: (range) =>
-      defaultRangeExtractor({ ...range, startIndex: lift.firstIndex(range) }),
+      withTheEnd(
+        defaultRangeExtractor({ ...range, startIndex: lift.firstIndex(range) }),
+        range,
+        followingRef.current,
+      ),
     onChange: onScrollStop,
   })
   const totalSize = virtualizer.getTotalSize()
   const virtualItems = virtualizer.getVirtualItems()
   const landed = useLanded(virtualItems.length, totalSize)
+  const holes = Arr.filter(rows, ({ hole }) => hole === true).length
   const animates = landed && !reduce
   const { ghost, gone } = useGhost(rows, virtualItems, animates)
 
@@ -431,6 +438,9 @@ export function Thread({
 
   React.useLayoutEffect(() => {
     const element = viewport.current
+    const holeFilled = holes < holesAtPin.current
+
+    holesAtPin.current = holes
 
     if (!followingRef.current || element === null) {
       return
@@ -442,7 +452,7 @@ export function Thread({
 
     const grown = element.scrollTop - before
 
-    if (animates && grown > 0) {
+    if (animates && grown > 0 && !holeFilled) {
       raise({
         grown,
         ceiling: element.clientHeight,
@@ -454,7 +464,7 @@ export function Thread({
           ),
       })
     }
-  }, [totalSize, rows.length, toBottom, animates, raise, virtualizer])
+  }, [totalSize, rows.length, holes, toBottom, animates, raise, virtualizer])
 
   React.useEffect(() => {
     const element = viewport.current

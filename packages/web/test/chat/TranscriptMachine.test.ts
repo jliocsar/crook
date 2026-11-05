@@ -1,9 +1,17 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 
 import { TranscriptOffset } from '@crook/domain/Ids'
-import { omittedUpTo, SkillsChanged, TranscriptTailBytes } from '@crook/domain/Transcript'
+import {
+  omittedBetween,
+  omittedUpTo,
+  SkillsChanged,
+  TranscriptChunk,
+  TranscriptTailBytes,
+} from '@crook/domain/Transcript'
+import { OmittedLines } from '@crook/domain/TranscriptMessage'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import {
   afterAll,
@@ -233,6 +241,83 @@ describe('a reopened chat', () => {
   })
 })
 
+describe('a resume over a gap too big for one read', () => {
+  const GAP_END = TranscriptOffset.make(20_000_000)
+
+  const skipped = omittedBetween(SESSION, TranscriptOffset.make(10), GAP_END)
+  const overTheGap = new TranscriptChunk({
+    session: SESSION,
+    offset: skipped.offset,
+    nextOffset: TranscriptOffset.make(20_000_010),
+    messages: [...skipped.messages, said(20_000_000, 'the tail')],
+  })
+
+  const holding = after([watchResumed(true)], reopened)
+  const landed = after([eventArrived(overTheGap), eventArrived(caughtUp(20_000_010))], holding)
+
+  it('holds the skip back behind the cached rows, like any chunk', () => {
+    const reading = after([eventArrived(overTheGap)], holding)
+
+    expect(nameOf(reading)).toBe('Holding')
+    expect(shownOffsets(reading)).toEqual([0])
+    expect(saysCatchingUp(reading)).toBe(false)
+  })
+
+  it('lands the cached rows, the hole and the tail as one catch-up', () => {
+    expect(nameOf(landed)).toBe('Current')
+    expect(shownOffsets(landed)).toEqual([0, 10, 20_000_000])
+    expect(LaptopCatchUp.$is('Landed')(foldOf(landed).catchUp)).toBe(true)
+    expect(rememberedOf(landed)).toEqual(Option.some(foldOf(landed)))
+  })
+
+  it('restarts from nothing without a tail when Show earlier is pressed at the hole', () => {
+    const asking = after([EARLIER_ASKED], landed)
+
+    expect(isLoadingEarlier(asking)).toBe(true)
+    expect(shownOffsets(asking)).toEqual([0, 10, 20_000_000])
+    expect(resumeOf(foldOf(asking), Option.some(ANY_TAIL))).toEqual({
+      from: Option.none(),
+      tail: Option.none(),
+    })
+  })
+
+  it('fills the hole in one commit, each row once, when the whole read has ended', () => {
+    const reading = after(
+      [
+        EARLIER_ASKED,
+        watchResumed(true),
+        eventArrived(opened()),
+        eventArrived(
+          chunk(0, 20_000_010, [prompt(0, 'hi'), said(10, 'gap'), said(20_000_000, 'the tail')]),
+        ),
+      ],
+      landed,
+    )
+    const filled = after([eventArrived(caughtUp(20_000_010))], reading)
+
+    expect(isLoadingEarlier(reading)).toBe(true)
+    expect(shownOffsets(reading)).toEqual([0, 10, 20_000_000])
+    expect(nameOf(filled)).toBe('Current')
+    expect(shownOffsets(filled)).toEqual([0, 10, 20_000_000])
+    expect(
+      Arr.some(linesOf(shownOf(filled)), ({ message }) => Schema.is(OmittedLines)(message)),
+    ).toBe(false)
+  })
+
+  it('goes back to the tail when the session changes during Show earlier', () => {
+    const moved = after(
+      [EARLIER_ASKED, watchResumed(true), eventArrived(opened(NEXT_SESSION))],
+      landed,
+    )
+
+    expect(nameOf(moved)).toBe('NoView')
+    expect(resumeOf(foldOf(moved), Option.some(ANY_TAIL))).toEqual({
+      from: Option.none(),
+      tail: Option.some(ANY_TAIL),
+    })
+  })
+})
+
 describe('a session opening', () => {
   it('drops the old rows at once while the new session is read, so they never linger', () => {
     const reading = after([watchResumed(true), eventArrived(opened(NEXT_SESSION))], reopened)
@@ -453,6 +538,21 @@ describe('Show earlier', () => {
       from: Option.none(),
       tail: Option.some(ANY_TAIL),
     })
+  })
+
+  it('keeps reading whole when the chat reopens from a view read whole', () => {
+    const whole = after(
+      [
+        watchResumed(true),
+        eventArrived(opened()),
+        eventArrived(chunk(0, 4106, [said(0, 'whole')])),
+        eventArrived(caughtUp(4106)),
+      ],
+      asking,
+    )
+    const reopenedWhole = after([cacheRead(rememberedOf(whole)), watchResumed(true)])
+
+    expect(resumeOf(foldOf(reopenedWhole), Option.some(ANY_TAIL)).tail).toEqual(Option.none())
   })
 
   it('keeps reading whole through a plain reconnect', () => {

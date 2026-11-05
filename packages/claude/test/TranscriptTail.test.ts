@@ -198,9 +198,13 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
       const file = fixtureFile('plain-turn.jsonl')
       const whole = yield* fixtureBytes('plain-turn.jsonl')
       const bytes = TranscriptTailBytes.make(Math.floor(whole.length / 2))
-      const start = yield* tail.tailStart(file, bytes)
+      const start = yield* tail.tailStart(file, START, bytes)
       const resumed = yield* tail.drain(file, start).pipe(Stream.runCollect)
-      const everything = yield* tail.tailStart(file, TranscriptTailBytes.make(whole.length + 1))
+      const everything = yield* tail.tailStart(
+        file,
+        START,
+        TranscriptTailBytes.make(whole.length + 1),
+      )
       const expected = messagesIn(yield* drained(file)).filter((message) => message.offset >= start)
 
       expect(start).toBeGreaterThan(0)
@@ -222,9 +226,72 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
       content.set(first)
       content.set(long, first.length)
       const file = yield* scratchFile(content)
-      const start = yield* tail.tailStart(file, TranscriptTailBytes.make(TAIL_READ_SIZE))
+      const start = yield* tail.tailStart(file, START, TranscriptTailBytes.make(TAIL_READ_SIZE))
 
       expect(start).toBe(first.length)
+    }),
+  )
+
+  live.effect('keeps a resume where it is while one read covers what it has not seen', () =>
+    Effect.gen(function* () {
+      const tail = yield* TranscriptTail
+      const seen = encoder.encode('{"type":"seen"}\n')
+      const missed = encoder.encode(`{"type":"${'x'.repeat(CHUNK_READ_LIMIT - 20)}"}\n`)
+      const content = new Uint8Array(seen.length + missed.length)
+
+      content.set(seen)
+      content.set(missed, seen.length)
+      const file = yield* scratchFile(content)
+      const from = TranscriptOffset.make(seen.length)
+      const start = yield* tail.tailStart(file, from, TranscriptTailBytes.make(TAIL_READ_SIZE))
+
+      expect(missed.length).toBeLessThanOrEqual(CHUNK_READ_LIMIT)
+      expect(start).toBe(from)
+    }),
+  )
+
+  live.effect('moves a resume to the tail once one read cannot cover what it has not seen', () =>
+    Effect.gen(function* () {
+      const tail = yield* TranscriptTail
+      const seen = encoder.encode('{"type":"seen"}\n')
+      const missed = encoder.encode(`{"type":"${'x'.repeat(CHUNK_READ_LIMIT)}"}\n`)
+      const recent = encoder.encode('{"type":"recent"}\n')
+      const content = new Uint8Array(seen.length + missed.length + recent.length)
+
+      content.set(seen)
+      content.set(missed, seen.length)
+      content.set(recent, seen.length + missed.length)
+      const file = yield* scratchFile(content)
+      const start = yield* tail.tailStart(
+        file,
+        TranscriptOffset.make(seen.length),
+        TranscriptTailBytes.make(recent.length),
+      )
+
+      expect(start).toBe(seen.length + missed.length)
+    }),
+  )
+
+  live.effect('refuses to skip from an offset that is not a line of this file', () =>
+    Effect.gen(function* () {
+      const tail = yield* TranscriptTail
+      const seen = encoder.encode('{"type":"seen"}\n')
+      const missed = encoder.encode(`{"type":"${'x'.repeat(CHUNK_READ_LIMIT)}"}\n`)
+      const content = new Uint8Array(seen.length + missed.length)
+
+      content.set(seen)
+      content.set(missed, seen.length)
+      const file = yield* scratchFile(content)
+      const bytes = TranscriptTailBytes.make(TAIL_READ_SIZE)
+      const midLine = TranscriptOffset.make(seen.length + 1)
+      const beyond = TranscriptOffset.make(content.length + 1)
+
+      expect(yield* Effect.flip(tail.tailStart(file, midLine, bytes))).toEqual(
+        new TranscriptOffsetMidLine({ path: file.path, offset: midLine }),
+      )
+      expect(yield* Effect.flip(tail.tailStart(file, beyond, bytes))).toBeInstanceOf(
+        TranscriptOffsetBeyondEnd,
+      )
     }),
   )
 

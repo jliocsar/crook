@@ -78,13 +78,20 @@ export const TranscriptTailBytes = Schema.Int.check(Schema.isGreaterThan(0)).pip
 )
 export type TranscriptTailBytes = typeof TranscriptTailBytes.Type
 
-export const omittedUpTo = (session: ClaudeSessionId, start: TranscriptOffset) =>
+export const omittedBetween = (
+  session: ClaudeSessionId,
+  offset: TranscriptOffset,
+  start: TranscriptOffset,
+) =>
   new TranscriptChunk({
     session,
-    offset: TRANSCRIPT_START,
+    offset,
     nextOffset: start,
-    messages: [new OmittedLines({ offset: TRANSCRIPT_START, byteLength: start })],
+    messages: [new OmittedLines({ offset, byteLength: start - offset })],
   })
+
+export const omittedUpTo = (session: ClaudeSessionId, start: TranscriptOffset) =>
+  omittedBetween(session, TRANSCRIPT_START, start)
 
 export const continuesFrom = (
   position: Option.Option<TranscriptPosition>,

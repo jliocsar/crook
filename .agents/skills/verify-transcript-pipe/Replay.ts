@@ -17,7 +17,11 @@ import {
   TranscriptOpened,
   TranscriptPosition,
 } from '@crook/domain/Transcript'
-import { OmittedLines, UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
+import {
+  OmittedLines,
+  type TranscriptMessage,
+  UnrecognizedEntry,
+} from '@crook/domain/TranscriptMessage'
 import { type TranscriptAgentLink, TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import {
   EMPTY_BATCH,
@@ -36,6 +40,7 @@ import {
 } from '@crook/protocol/Transcripts'
 import {
   type TranscriptViewState,
+  EARLIER_ASKED,
   NO_VIEW,
   afterAll,
   cacheRead,
@@ -43,11 +48,12 @@ import {
   foldOf,
   hasFailed,
   holdsBack,
+  isRestarting,
   rememberedOf,
   watchFailed,
   watchResumed,
 } from '@crook/web/chat/TranscriptMachine'
-import { type TranscriptView, resumeOf } from '@crook/web/chat/TranscriptState'
+import { type TranscriptView, resumeOf, withOneHole } from '@crook/web/chat/TranscriptState'
 
 import type { TraceState } from './TraceReader'
 
@@ -113,32 +119,28 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
         })
       }
 
-      const first = update.omit > 0 ? update.omit : update.from
-      const omitted =
-        update.omit > 0
-          ? [
-              new OmittedLines({
-                offset: TranscriptOffset.make(0),
-                byteLength: update.omit * lineBytes,
-              }),
-            ]
-          : []
-      const lines = Arr.makeBy(
-        Math.max(update.to - first, 1),
-        (index) =>
-          new UnrecognizedEntry({
-            offset: TranscriptOffset.make((first + index) * lineBytes),
-            entryType: 'line',
-          }),
-      )
-
       return new TranscriptChunk({
         session,
         offset: TranscriptOffset.make(update.from * lineBytes),
         nextOffset: TranscriptOffset.make(update.to * lineBytes),
-        messages: update.to > first ? [...omitted, ...lines] : omitted,
+        messages: Arr.map(update.body as any[], (entry) =>
+          entry[0] === 'omitted'
+            ? new OmittedLines({
+                offset: TranscriptOffset.make(entry[2] * lineBytes),
+                byteLength: entry[3] * lineBytes,
+              })
+            : new UnrecognizedEntry({
+                offset: TranscriptOffset.make(entry[2] * lineBytes),
+                entryType: 'line',
+              }),
+        ),
       })
     }
+
+    const lineOfReal = (session: string, message: TranscriptMessage) =>
+      message._tag === 'Omitted'
+        ? ['omitted', session, message.offset / lineBytes, message.byteLength / lineBytes]
+        : ['line', session, message.offset / lineBytes]
 
     const fromReal = (update: TranscriptUpdate): any => {
       switch (update._tag) {
@@ -155,17 +157,16 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
             kind: update.failure._tag === 'TranscriptResumeRejected' ? 'rejected' : 'read',
             t: 'failed',
           }
-        case 'TranscriptChunk': {
-          const omitted = update.messages.find((message) => message._tag === 'Omitted')
-
+        case 'TranscriptChunk':
           return {
+            body: update.messages.map((message) =>
+              lineOfReal(SESSION_NAMES[update.session] as string, message),
+            ),
             from: update.offset / lineBytes,
-            omit: omitted === undefined ? 0 : (omitted as OmittedLines).byteLength / lineBytes,
             s: SESSION_NAMES[update.session],
             t: 'chunk',
             to: update.nextOffset / lineBytes,
           }
-        }
         default:
           return { t: 'other' }
       }
@@ -180,14 +181,11 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
     const foldView = (fold: TranscriptView, catching: boolean, failed: boolean) => ({
       catching,
       failed,
-      lines: fold.lines.map((line) => {
-        const session = SESSION_NAMES[line.session] as string
-
-        return line.message._tag === 'Omitted'
-          ? ['omitted', session, line.message.byteLength / lineBytes]
-          : ['line', session, line.message.offset / lineBytes]
-      }),
+      lines: fold.lines.map((line) =>
+        lineOfReal(SESSION_NAMES[line.session] as string, line.message),
+      ),
       position: positionOfReal(fold.position),
+      whole: fold.whole,
     })
 
     const realView = (state: TranscriptViewState) =>
@@ -198,6 +196,7 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
       failed: view.failed,
       lines: view.lines,
       position: isNone(view.position) ? { model: 'NONE' } : canonical(view.position),
+      whole: view.whole,
     })
 
     let view = afterAll(NO_VIEW, [watchResumed(true)])[0]
@@ -433,6 +432,10 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
           view = afterAll(view, [eventArrived(wire[0] as TranscriptEvent)])[0]
           wire = wire.slice(1)
           cached = Option.getOrElse(rememberedOf(view), () => cached)
+
+          if (isRestarting(view)) {
+            yield* resumeWith(view)
+          }
           break
         }
         case 'PhoneSeesFailure': {
@@ -463,7 +466,13 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
           break
         }
         case 'ChatReopens': {
-          yield* resumeWith(afterAll(NO_VIEW, [cacheRead(Option.fromUndefinedOr(cached))])[0])
+          yield* resumeWith(
+            afterAll(NO_VIEW, [cacheRead(Option.map(Option.fromUndefinedOr(cached), withOneHole))])[0],
+          )
+          break
+        }
+        case 'UserShowsEarlier': {
+          yield* resumeWith(afterAll(view, [EARLIER_ASKED])[0])
           break
         }
         default:
@@ -484,7 +493,10 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
 
       const heldByModel = flatOutbox(after['fiber'].outbox)
         .filter((update) => update.t === 'chunk')
-        .reduce((held, chunk) => held + chunk.to - chunk.from - chunk.omit, 0)
+        .reduce(
+          (held, chunk) => held + (chunk.body as any[]).filter((entry) => entry[0] === 'line').length,
+          0,
+        )
 
       if (isFull(outbox) !== heldByModel >= mailboxCapacity) {
         yield* fail(

@@ -56,6 +56,38 @@ export const TIMELINE_EXPECTATIONS = {
     { thread: inSequence('thread-rows'), dock: inSequence('composer') },
     { watchFrom: 'first-step' },
   ),
+  'transition/reopen-over-big-gap': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step' },
+  ),
+  'transition/reopen-over-big-gap-long': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step' },
+  ),
+  'transition/show-earlier-at-hole': story(
+    {
+      thread: inSequence('thread-rows'),
+      dock: inSequence('composer'),
+      hole: inSequence('show-earlier', 'show-earlier-pending'),
+    },
+    { watchFrom: 'first-step' },
+  ),
+  'transition/show-earlier-at-hole-long': story(
+    {
+      thread: inSequence('thread-rows'),
+      dock: inSequence('composer'),
+      hole: inSequence('show-earlier', 'show-earlier-pending'),
+    },
+    { watchFrom: 'first-step' },
+  ),
+  'transition/show-earlier-at-hole-following': story(
+    {
+      thread: inSequence('thread-rows'),
+      dock: inSequence('composer'),
+      hole: inSequence('show-earlier', 'show-earlier-pending'),
+    },
+    { watchFrom: 'first-step' },
+  ),
   'transition/slow-catch-up': story(A_REOPENED_CHAT, { watchFrom: 'first-step' }),
   'transition/catch-up-lands-under-words': story(A_REOPENED_CHAT, { watchFrom: 'first-step' }),
   'transition/opened-empty': story({
@@ -64,13 +96,16 @@ export const TIMELINE_EXPECTATIONS = {
   }),
   'transition/failed-then-retry': story(A_CHAT_WITH_ROWS),
   'transition/show-earlier-loads': story(A_CHAT_WITH_ROWS),
-  'transition/resume-after-show-earlier': story({
-    thread: fromTable({
-      'thread-rows': ['thread-skeleton'],
-      'thread-skeleton': ['thread-rows'],
-    }),
-    dock: inSequence('composer'),
-  }),
+  'transition/resume-after-show-earlier': story(
+    {
+      thread: fromTable({
+        'thread-rows': ['thread-skeleton'],
+        'thread-skeleton': ['thread-rows'],
+      }),
+      dock: inSequence('composer'),
+    },
+    { watchFrom: 'first-step' },
+  ),
   'transition/older-agent-open': story(A_CHAT),
   'transition/older-agent-rejected-resume': story(A_CHAT_WITH_ROWS),
   'transition/reopen-while-dialing': story(

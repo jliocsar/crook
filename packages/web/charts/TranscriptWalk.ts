@@ -3,11 +3,14 @@ import * as Schema from 'effect/Schema'
 
 import {
   BackgroundChanged,
+  omittedBetween,
   omittedUpTo,
   SkillsChanged,
   TranscriptCaughtUp,
+  TranscriptChunk,
   TranscriptOpened,
 } from '@crook/domain/Transcript'
+import { UserMessage } from '@crook/domain/TranscriptMessage'
 import { ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import {
@@ -48,6 +51,7 @@ import type { WalkSpec } from '@crook/web/machine/Walk'
 const SESSION_A = ClaudeSessionId.make('session-a')
 const SESSION_B = ClaudeSessionId.make('session-b')
 const SOME_OFFSET = TranscriptOffset.make(10)
+const PAST_A_GAP = TranscriptOffset.make(20)
 const READ_FAILED = new TranscriptReadFailed({ detail: 'disk unplugged' })
 const REJECTED = new TranscriptResumeRejected({ detail: 'the file shrank' })
 
@@ -63,6 +67,11 @@ const opensAnother = (state: TranscriptViewState, event: TranscriptViewEvent): b
   TranscriptViewEvent.guards.EventArrived(event) &&
   Schema.is(TranscriptOpened)(event.event) &&
   Option.exists(threadSessionOf(state), (session) => session !== event.event.session)
+
+const isSkipArrival = (event: TranscriptViewEvent): boolean =>
+  TranscriptViewEvent.guards.EventArrived(event) &&
+  Schema.is(TranscriptChunk)(event.event) &&
+  event.event.offset === SOME_OFFSET
 
 const isTimer = TranscriptViewEvent.isAnyOf(['NoticeDue', 'NoticeHeld', 'EmptyDue'])
 
@@ -121,6 +130,50 @@ const here = (state: TranscriptViewState): ClaudeSessionId =>
 const elsewhere = (state: TranscriptViewState): ClaudeSessionId =>
   here(state) === SESSION_A ? SESSION_B : SESSION_A
 
+const skipOver = (session: ClaudeSessionId) =>
+  eventArrived(omittedBetween(session, SOME_OFFSET, PAST_A_GAP))
+
+const linesOverSameGap = (session: ClaudeSessionId) =>
+  eventArrived(
+    new TranscriptChunk({
+      session,
+      offset: SOME_OFFSET,
+      nextOffset: PAST_A_GAP,
+      messages: [
+        new UserMessage({
+          offset: SOME_OFFSET,
+          uuid: Option.none(),
+          timestamp: Option.none(),
+          isMeta: false,
+          origin: Option.none(),
+          queued: false,
+          blocks: [],
+        }),
+      ],
+    }),
+  )
+
+const identityOf = (state: TranscriptViewState): string =>
+  [
+    caseName(TranscriptViewState, state),
+    Option.isSome(foldOf(state).position) ? 'opened' : 'unopened',
+    hasLines(foldOf(state)) ? 'read lines' : 'read nothing',
+    foldOf(state).whole ? 'whole' : 'tail',
+    catchUpName(foldOf(state)),
+    shownRelation(state),
+    flagsOf(state),
+  ].join(', ')
+
+const landsLikeLines = (
+  from: TranscriptViewState,
+  to: TranscriptViewState,
+  commands: readonly TranscriptCommand[],
+): boolean => {
+  const [plain, plainCommands] = transcriptMachine.transition(from, linesOverSameGap(here(from)))
+
+  return identityOf(plain) === identityOf(to) && plainCommands.length === commands.length
+}
+
 export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, TranscriptCommand> =
   {
     machine: transcriptMachine,
@@ -132,6 +185,7 @@ export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, 
       eventArrived(new TranscriptOpened({ session: here(state) })),
       eventArrived(new TranscriptOpened({ session: elsewhere(state) })),
       eventArrived(omittedUpTo(here(state), SOME_OFFSET)),
+      skipOver(here(state)),
       eventArrived(new BackgroundChanged({ session: here(state), tasks: [], activity: [] })),
       eventArrived(new SkillsChanged({ session: here(state), skills: [] })),
       eventArrived(new TranscriptCaughtUp({ session: here(state), offset: SOME_OFFSET })),
@@ -146,16 +200,7 @@ export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, 
       emptyDue(attemptOf(state) + 1),
     ],
     home: TranscriptViewState.guards.Current,
-    identity: (state) =>
-      [
-        caseName(TranscriptViewState, state),
-        Option.isSome(foldOf(state).position) ? 'opened' : 'unopened',
-        hasLines(foldOf(state)) ? 'read lines' : 'read nothing',
-        foldOf(state).whole ? 'whole' : 'tail',
-        catchUpName(foldOf(state)),
-        shownRelation(state),
-        flagsOf(state),
-      ].join(', '),
+    identity: identityOf,
     commandName: TranscriptCommand.$match({
       WaitOutNotice: () => 'WaitOutNotice',
       HoldNotice: () => 'HoldNotice',
@@ -180,6 +225,11 @@ export const transcriptWalk: WalkSpec<TranscriptViewState, TranscriptViewEvent, 
       },
     ],
     arrowRules: [
+      {
+        name: 'a chunk that skips a gap lands as a chunk of lines does, with no case of its own',
+        holds: ({ from, event, to, commands }) =>
+          !isSkipArrival(event) || landsLikeLines(from, to, commands),
+      },
       {
         name: 'rows leave only for another session, or a read that ended and found none',
         holds: ({ from, event, to }) =>

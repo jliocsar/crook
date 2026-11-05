@@ -37,7 +37,12 @@ export const STATE_COVERAGE = {
     Note: ['rows/note-interrupted', 'rows/note-notice', 'rows/slash-local-command'],
     Compacted: ['rows/compacted', 'rows/compacted-open'],
     Cleared: ['rows/cleared', 'real/clear-across-sessions'],
-    Omitted: ['chat/show-earlier', 'chat/show-earlier-pending'],
+    Omitted: [
+      'chat/show-earlier',
+      'chat/show-earlier-pending',
+      'transition/reopen-over-big-gap',
+      'transition/show-earlier-at-hole',
+    ],
     Unreadable: ['rows/unreadable', 'real/torn-mid-file'],
   } satisfies Record<ChatItem['_tag'], readonly string[]>,
   toolStatus: {

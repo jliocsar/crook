@@ -4,6 +4,7 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
@@ -12,9 +13,16 @@ import * as Struct from 'effect/Struct'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { HerdMachine } from '@crook/domain/HerdView'
-import { PaneId } from '@crook/domain/Ids'
+import { PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import type { ClaudeSessionId } from '@crook/domain/Ids'
-import { PaneTranscript, SubagentsChanged, SubagentTranscript } from '@crook/domain/Transcript'
+import {
+  omittedBetween,
+  PaneTranscript,
+  SubagentsChanged,
+  SubagentTranscript,
+  TranscriptPosition,
+} from '@crook/domain/Transcript'
+import { OmittedLines } from '@crook/domain/TranscriptMessage'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
 import {
   TranscriptCache,
@@ -98,7 +106,92 @@ const rewriteSaved = (
     yield* store.write(found.key, { ...saved, lines: rewrite(lines) })
   })
 
+const OMITTED_TAG = 'Omitted'
+
+const gapsOver = (gaps: number) =>
+  Arr.makeBy(gaps, (index) => {
+    const from = 20 + index * 1000
+    const start = from + 990
+
+    return [
+      omittedBetween(SESSION, TranscriptOffset.make(from), TranscriptOffset.make(start)),
+      chunk(start, start + 10, [said(start, `Tail ${index}`)]),
+      caughtUp(start + 10),
+    ]
+  })
+
 describe('TranscriptCache', () => {
+  it.effect('keeps one hole in what it hands back, however many gaps a chat has crossed', () =>
+    Effect.gen(function* () {
+      const { store } = yield* makeMemoryTranscriptStore()
+      const { cache } = yield* cacheOver(store)
+      const sizes = yield* Effect.forEach(gapsOver(40), (events) =>
+        Effect.gen(function* () {
+          const opening = Option.getOrElse(
+            yield* cache.load(LAPTOP, paneSource),
+            () => conversation,
+          )
+          const after = Arr.reduce(events, opening, applyTranscriptEvent)
+
+          yield* cache.remember(LAPTOP, paneSource, after)
+
+          return after.lines.length
+        }),
+      )
+      const reopened = Option.getOrThrow(yield* cache.load(LAPTOP, paneSource))
+
+      const settled = Arr.drop(sizes, 3)
+
+      expect(Arr.every(settled, (size) => size <= 6)).toBe(true)
+      expect(reopened.lines).toEqual([
+        {
+          session: SESSION,
+          message: new OmittedLines({ offset: TranscriptOffset.make(0), byteLength: 39010 }),
+        },
+        {
+          session: SESSION,
+          message: said(39010, 'Tail 38'),
+        },
+        {
+          session: SESSION,
+          message: new OmittedLines({ offset: TranscriptOffset.make(39020), byteLength: 990 }),
+        },
+        { session: SESSION, message: said(40010, 'Tail 39') },
+      ])
+      expect(reopened.position).toEqual(
+        Option.some(
+          new TranscriptPosition({ session: SESSION, offset: TranscriptOffset.make(40020) }),
+        ),
+      )
+    }),
+  )
+
+  it.effect('saves a hole and reads it back where it was', () =>
+    Effect.gen(function* () {
+      const { store } = yield* makeMemoryTranscriptStore()
+      const { cache } = yield* cacheOver(store)
+      const [gap] = gapsOver(1)
+      const crossed = Arr.reduce(gap ?? [], conversation, applyTranscriptEvent)
+
+      yield* cache.remember(LAPTOP, paneSource, crossed)
+      yield* cache.persist(LAPTOP, paneSource, running(SESSION))
+
+      const { cache: nextRun } = yield* cacheOver(store)
+      const restored = Option.getOrThrow(yield* nextRun.load(LAPTOP, paneSource))
+
+      expect(restored.lines).toEqual(crossed.lines)
+      expect(restored.position).toEqual(crossed.position)
+      expect(
+        Arr.filter(restored.lines, ({ message }) =>
+          Match.value(message).pipe(
+            Match.tag(OMITTED_TAG, () => true),
+            Match.orElse(() => false),
+          ),
+        ),
+      ).toHaveLength(1)
+    }),
+  )
+
   it.effect('hands a remembered chat back at once, and a saved one to the next app run', () =>
     Effect.gen(function* () {
       const { store, entries } = yield* makeMemoryTranscriptStore()

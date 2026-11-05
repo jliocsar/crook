@@ -1,6 +1,8 @@
+import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
@@ -10,9 +12,11 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { AgentRow } from '@crook/domain/AgentRow'
 import { Prompt } from '@crook/domain/Command'
 import { TranscriptOffset } from '@crook/domain/Ids'
-import { omittedUpTo } from '@crook/domain/Transcript'
+import { omittedBetween, omittedUpTo } from '@crook/domain/Transcript'
+import type { TranscriptEvent } from '@crook/domain/Transcript'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { LocalCommandBlock } from '@crook/domain/TranscriptMessage'
+import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
 
@@ -44,10 +48,11 @@ import {
   PANE,
   TEAM,
 } from '../Fixtures.ts'
-import { clicks, seesSelector, seesText, types, until } from '../StageDom.ts'
+import { manyLinesChunk } from '../ManyLines.ts'
+import { clicks, element, pause, seesSelector, seesText, types, until } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 import { BEFORE_FIRST_VALUE, browserStory, linkStory, step } from '../Story.tsx'
-import type { BrowserStage, LinkStage, StoryMaker } from '../Story.tsx'
+import type { BrowserStage, LinkStage, StoryMaker, StoryStepFailed } from '../Story.tsx'
 
 const CARD_BUTTON = new RegExp(CHAT_TITLE, 'u')
 const COMPOSER = /Message|Reply/u
@@ -60,12 +65,111 @@ const RETRY = 'Try again'
 const SHOW_EARLIER = 'Show earlier messages'
 const OLDER_AGENT_VERSION = '0.0.0'
 const CURRENT_THREAD = '[data-machine="transcript"][data-state="Current"]'
+const GAP_END = 4096
+const LONG_GAP_END = 5000
+const LONG_ABOVE_LINES = 6
+const LONG_LINE_BYTES = 10
+const LONG_SETTLE_MS = 1000
+const VIEWPORT = '[data-slot="conversation-viewport"]'
 
 const HELD_THREAD =
   '[data-machine="transcript"][data-state="Holding"], [data-machine="transcript"][data-state="CatchingUp"]'
 
 const FLIPS_WORKING_AT = DateTime.add(START, { seconds: CLOCK_AFTER_START_SECONDS })
 const FLIPS_IDLE_AT = DateTime.add(FLIPS_WORKING_AT, { seconds: 10 })
+
+const GAP_THEN_TAIL = [
+  omittedBetween(SESSION, TranscriptOffset.make(50), TranscriptOffset.make(GAP_END)),
+  chunk(GAP_END, GAP_END + 40, [
+    prompt(GAP_END, 'Is the banner fixed?'),
+    toolUse(GAP_END + 10, 'toolu_grep', 'Grep', { pattern: 'announce' }),
+    toolResult(GAP_END + 20, 'toolu_grep', 'src/rpc/HubLink.ts:64'),
+    answered(GAP_END + 30, 'Yes, the notice waits a second now.'),
+  ]),
+  caughtUp(GAP_END + 40),
+]
+
+const messagesOf = (event: TranscriptEvent): readonly TranscriptMessage[] =>
+  Match.value(event).pipe(
+    Match.tag('TranscriptChunk', (found) => found.messages),
+    Match.orElse(() => []),
+  )
+
+const reopenFromTheCard = () =>
+  Effect.gen(function* () {
+    yield* seesText('The quiet redial')
+    yield* clicks(BACK)
+    yield* seesText(CHAT_TITLE)
+  })
+
+const linesOver = (from: number, count: number, word: string) =>
+  chunk(
+    from,
+    from + count * LONG_LINE_BYTES,
+    Arr.makeBy(count, (index) => said(from + index * LONG_LINE_BYTES, `${word} ${index}`)),
+  )
+
+const scrollsToTheTop = Effect.flatMap(element(VIEWPORT), (viewport) =>
+  Effect.sync(() => {
+    viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -viewport.scrollTop }))
+    viewport.scrollTop = 0
+    viewport.dispatchEvent(new Event('scroll'))
+  }),
+)
+
+const showEarlierAtHoleStory = (
+  slug: string,
+  title: string,
+  tailLines: number,
+  reachTheHole: Effect.Effect<unknown, StoryStepFailed>,
+) => {
+  const tailEnd = LONG_GAP_END + tailLines * LONG_LINE_BYTES
+  const tail = linesOver(LONG_GAP_END, tailLines, 'Tail')
+
+  return linkStory({
+    slug,
+    title,
+    shows: { text: CHAT_TITLE },
+    ends: { all: [{ absent: SHOW_EARLIER }, { absent: 'Loading earlier messages' }] },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) =>
+      feed(link, [
+        opened(),
+        linesOver(0, LONG_ABOVE_LINES, 'Above'),
+        omittedBetween(
+          SESSION,
+          TranscriptOffset.make(LONG_ABOVE_LINES * LONG_LINE_BYTES),
+          TranscriptOffset.make(LONG_GAP_END),
+        ),
+        tail,
+        caughtUp(tailEnd),
+      ]),
+    settle: () =>
+      pause(LONG_SETTLE_MS).pipe(
+        Effect.andThen(reachTheHole),
+        Effect.andThen(pause(LONG_SETTLE_MS)),
+      ),
+    timeline: [
+      step<LinkStage>(700, 'Tap Show earlier, it reads the file again', () => clicks(SHOW_EARLIER)),
+      step<LinkStage>(900, 'The whole file lands', ({ link }) =>
+        feed(link, [
+          opened(),
+          linesOver(0, LONG_ABOVE_LINES, 'Above'),
+          chunk(
+            LONG_ABOVE_LINES * LONG_LINE_BYTES,
+            LONG_GAP_END,
+            Arr.makeBy(40, (index) =>
+              said(LONG_ABOVE_LINES * LONG_LINE_BYTES + index, `Filled ${index}`),
+            ),
+          ),
+          tail,
+          caughtUp(tailEnd),
+        ]),
+      ),
+    ],
+  })
+}
 
 const WORKING_HERD = liveWith(
   chatHerd(
@@ -200,6 +304,91 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
       step<LinkStage>(150, 'Caught up', ({ link }) => feed(link, [caughtUp(90)])),
     ],
   }),
+  linkStory({
+    slug: 'reopen-over-big-gap',
+    title: 'Reopen over a big gap, the rows it held above Show earlier',
+    shows: { text: CHAT_TITLE },
+    ends: {
+      all: [
+        { text: 'The quiet redial' },
+        { text: SHOW_EARLIER },
+        { text: 'Yes, the notice waits a second now.' },
+      ],
+    },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, CONVERSATION),
+    settle: reopenFromTheCard,
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(900, 'The agent skips the gap, and the tail lands', ({ link }) =>
+        feed(link, GAP_THEN_TAIL),
+      ),
+    ],
+  }),
+  linkStory({
+    slug: 'reopen-over-big-gap-long',
+    title: 'Reopen over a big gap, a tail longer than the screen',
+    shows: { text: CHAT_TITLE },
+    ends: { all: [{ selector: '[data-following]' }, { absent: 'Catching up' }] },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, CONVERSATION),
+    settle: reopenFromTheCard,
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(900, 'The agent skips the gap, and a long tail lands', ({ link }) =>
+        feed(link, [
+          omittedBetween(SESSION, TranscriptOffset.make(50), TranscriptOffset.make(GAP_END)),
+          manyLinesChunk(GAP_END),
+          caughtUp(GAP_END + 1200),
+        ]),
+      ),
+    ],
+  }),
+  linkStory({
+    slug: 'show-earlier-at-hole',
+    title: 'Show earlier at a hole, the whole file fills it',
+    shows: { text: SHOW_EARLIER },
+    ends: {
+      all: [
+        { text: 'What the gap held.' },
+        { text: 'The quiet redial' },
+        { absent: SHOW_EARLIER },
+        { absent: 'Loading earlier messages' },
+      ],
+    },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, [...CONVERSATION, ...GAP_THEN_TAIL]),
+    timeline: [
+      step<LinkStage>(700, 'Tap Show earlier, it reads the file again', () => clicks(SHOW_EARLIER)),
+      step<LinkStage>(900, 'The whole file lands', ({ link }) =>
+        feed(link, [
+          opened(),
+          chunk(0, 50, Arr.flatMap(CONVERSATION, messagesOf)),
+          chunk(50, GAP_END, [said(50, 'What the gap held.')]),
+          ...Arr.drop(GAP_THEN_TAIL, 1),
+        ]),
+      ),
+    ],
+  }),
+  showEarlierAtHoleStory(
+    'show-earlier-at-hole-long',
+    'Show earlier at a hole, scrolled up to it',
+    40,
+    scrollsToTheTop,
+  ),
+  showEarlierAtHoleStory(
+    'show-earlier-at-hole-following',
+    'Show earlier at a hole, still at the end',
+    12,
+    pause(0),
+  ),
   browserStory({
     slug: 'reconnect-chat-open',
     title: 'Reconnect with a chat open, on the real link',

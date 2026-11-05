@@ -31,6 +31,7 @@ import { ClaudeSessionId, PaneId, SubagentId, TranscriptOffset } from '@crook/do
 import type { MachineState } from '@crook/domain/MachineState'
 import { SkillListing } from '@crook/domain/Skill'
 import {
+  CHUNK_READ_LIMIT,
   PaneTranscript,
   SkillsChanged,
   SubagentTranscript,
@@ -386,6 +387,47 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           `opened ${FIRST_SESSION}`,
           `skills ${FIRST_SESSION}`,
           `chunk ${FIRST_SESSION} ${bytesOf(older + recent)}-${bytesOf(older + recent + later)} 1`,
+        ])
+      }),
+    )
+
+    it.effect('skips a gap one read cannot cover, marks it, and reads on from the tail', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const seen = userLine('seen')
+        const missed = userLine('x'.repeat(CHUNK_READ_LIMIT))
+        const recent = userLine('recent')
+        const all = seen + missed + recent
+
+        yield* append(transcriptPath(root, FIRST_SESSION), all)
+
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const skipping = yield* collect(
+          streams.follow(
+            new PaneTranscript({ pane: PANE }),
+            positionAt(FIRST_SESSION, bytesOf(seen)),
+            Option.some(TranscriptTailBytes.make(bytesOf(recent))),
+          ),
+        )
+        const whole = yield* collect(
+          streams.follow(
+            new PaneTranscript({ pane: PANE }),
+            positionAt(FIRST_SESSION, bytesOf(seen)),
+            Option.none(),
+          ),
+        )
+
+        expect(yield* takeAll(skipping, 4)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
+          `chunk ${FIRST_SESSION} ${bytesOf(seen + missed)}-${bytesOf(all)} 1`,
+        ])
+        expect(yield* takeAll(whole, 3)).toEqual([
+          `opened ${FIRST_SESSION}`,
+          `skills ${FIRST_SESSION}`,
+          `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(all)} 2`,
         ])
       }),
     )
