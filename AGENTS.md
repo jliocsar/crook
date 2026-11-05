@@ -1408,6 +1408,8 @@ A `!cmd` typed in Claude writes `<bash-input>…</bash-input>`, then `<bash-stdo
 `(no content)` is what a dialog command writes when it closes: 1 local line, from `/plugin`, and `/plugin` and `/feedback` in a probe. The phone shows nothing for it. Backticks in an output carry a name to show as code (4 local lines, all `/model`), and `/context` writes an ANSI grid in system entries, which the row leaves to its own scrolling box.
 
 All of it reuses the local command blocks on the wire, with one optional key saying the line opens a turn. A new block class would decode as unknown on every older phone, where a key it does not know is dropped and `! kill 1` reads as the note it always was. An agent too old to send the key still gets a command's bubble and output, with no turn start, and a plain `/compact` and raw bash lines stay as they were until it updates, since only the agent reads the file.
+
+A command's bubble holds its size and place as its output lands, read per frame in Chromium at 390x844 and 4x CPU throttling: 44 px tall and 4 px below its row's top through Sent, the command and the output, at speeds 1, 2 and 4. In a thread too short to scroll it stays at one position throughout. In a following thread at the end of 120 lines, output landing in a later batch grows the row from 52 to 89 px and glides the bubble up those 37 px over about 500 ms. In 2 of 7 runs the bubble read at its resting place for one frame before the glide began. The same happened by 5 px in 1 of 2 runs with command and output in one batch, so it belongs to the thread's lift and not to the row (the cause is not found). Giving way to a row with no Sent line drops a bubble 32 px in one frame in a following thread, the same for a plain prompt, 2 of 2 each; with its output in the same batch a command moves 0 to 5 px. A real command and its output arrived in the same write, 5 of 5 pairs the probes logged, so that batch is the usual one.
 :::
 
 :::tip
@@ -1639,7 +1641,9 @@ the screen once per animation frame and fails on what a settled screenshot canno
   reconnect pill in 2 of 3 sweeps and 24 in 3 of 3. The banner on a first load straddles 24 (6 to 37
   frames), so those stories list it as a finding only some runs show.
 - A story's layout shift budget is 0.01 in total, or 0.06 where a banner comes and goes, since a
-  banner pushes the content by design. Per-story totals fell at 0.0006 or under, or at 0.0125 or
+  banner pushes the content by design. A story that types a bare slash command opens and closes
+  the suggestion strip, and that alone measured 0.0535, so a story about something else types the
+  command with an argument, which opens no strip. Per-story totals fell at 0.0006 or under, or at 0.0125 or
   over per event, so 0.01 sits in that gap; banner stories measured 0.037 to 0.056. Synthetic
   events never set `hadRecentInput`, so a story's scripted press counts against it; a transform
   does not count at all.
