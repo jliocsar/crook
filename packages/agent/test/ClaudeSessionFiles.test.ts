@@ -128,7 +128,7 @@ layer(services, { excludeTestServices: true })('ClaudeSessionFiles', (it) => {
     }),
   )
 
-  it.effect('forgets a session once its pid file is gone, without saying anything moved', () =>
+  it.effect('says so when a pid file goes, and forgets its session', () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem
       const root = yield* rootWithSession(SESSION)
@@ -137,7 +137,7 @@ layer(services, { excludeTestServices: true })('ClaudeSessionFiles', (it) => {
       yield* awaitMove(files)
       yield* fileSystem.remove(`${root}/sessions/${PID}.json`)
 
-      expect(yield* staysStill(files)).toBe(true)
+      expect(yield* awaitMove(files)).toBe(true)
       expect(yield* files.holds(SESSION)).toBe(false)
     }),
   )
@@ -170,6 +170,7 @@ layer(services, { excludeTestServices: true })('ClaudeSessionFiles', (it) => {
       yield* awaitMove(files)
       yield* fileSystem.remove(`${root}/sessions`, { recursive: true })
 
+      expect(yield* awaitMove(files)).toBe(true)
       expect(yield* staysStill(files)).toBe(true)
 
       yield* fileSystem.makeDirectory(`${root}/sessions`)

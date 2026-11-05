@@ -1342,7 +1342,7 @@ From a file changing to the agent's publish leaving for the hub: 106 to 126 ms f
 
 A session change itself is dearer, re-read and publish and following the new session together: 28 to 97 ms of CPU over 100 changes, three runs. Waiting for a new session's transcript opens one watch per project folder, so with 37 folders the agent went from 4 watches to 40 and back on a change (a read every 2 ms saw 40 in 8 of 10 changes and fewer in the rest).
 
-herdr's reported session is trusted only while a pid file names it. Trusting it first can leave a `/clear` stale: the re-read the pid file asks for can arrive before the hook reports (herdr still carried the old id 55 ms after the pid file moved), and the report wakes nothing. When it no longer holds, the pane's process is asked, which costs one more read of herdr for that one refresh, and what herdr reports is the fallback if the process cannot say.
+herdr's reported session is trusted only while a pid file names it. Trusting it first can leave a `/clear` stale: the re-read the pid file asks for can arrive before the hook reports (herdr still carried the old id 55 ms after the pid file moved), and the report wakes nothing. When it no longer holds, the pane's process is asked, which costs one more read of herdr for that one refresh, and what herdr reports is the fallback if the process cannot say. A pid file left by a dead process still counts as naming its session, so a report of that session stays trusted until the next read after the hook lands (reasoned, not measured).
 :::
 
 :::tip

@@ -37,14 +37,13 @@ export const SessionFile = Schema.fromJsonString(
 
 const noteSession =
   (file: string, session: Option.Option<ClaudeSessionId>) =>
-  (known: SessionsByFile): readonly [boolean, SessionsByFile] =>
+  (known: SessionsByFile): readonly [boolean, SessionsByFile] => [
+    !Equal.equals(HashMap.get(known, file), session),
     Option.match(session, {
-      onNone: () => [false, HashMap.remove(known, file)],
-      onSome: (named) => [
-        !Equal.equals(HashMap.get(known, file), session),
-        HashMap.set(known, file, named),
-      ],
-    })
+      onNone: () => HashMap.remove(known, file),
+      onSome: (named) => HashMap.set(known, file, named),
+    }),
+  ]
 
 const make = (roots: readonly string[]) =>
   Effect.gen(function* () {

@@ -455,6 +455,34 @@ it.effect('follows the folders its agents sit in, again only when one or a branc
   }),
 )
 
+it.effect('lands a session change made while herdr is away with the read that brings it back', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, failures, replies, answerRead, sessionMoves, paneSessions } =
+      yield* startSync(working)
+    const first = yield* Queue.take(subscriptions)
+
+    yield* answerRead(working)
+    yield* TestClock.adjust(RECONNECT_CAP)
+    yield* Queue.offer(failures, herdrStopped)
+    yield* Queue.fail(first.events, new HerdrConnectionClosed({ method: 'events.subscribe' }))
+    yield* TestClock.adjust(HERDR_RECONNECT_BASE)
+    yield* stateAt(sync, 1)
+
+    paneSessions.set('w1:p1', CLEARED_SESSION)
+    yield* Queue.offer(sessionMoves, undefined)
+    yield* TestClock.adjust(HERDR_RECONNECT_BASE)
+    yield* Queue.take(subscriptions)
+    yield* Queue.offerAll(replies, [working, working])
+
+    const back = yield* stateAt(sync, 2)
+
+    yield* TestClock.adjust(0)
+
+    expect(back.agents.map((row) => row.claudeSession)).toEqual([Option.some(CLEARED_SESSION)])
+    expect((yield* sync.current).version).toBe(2)
+  }),
+)
+
 it.effect('coalesces a burst of events that lands during a read into one more read', () =>
   Effect.gen(function* () {
     const { sync, subscriptions, readStarted, replies, answerRead } = yield* startSync(working)
