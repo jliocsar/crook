@@ -12,6 +12,8 @@ export interface SlashGroup {
 }
 
 const SLASH_ONLY = /^\/\S*$/u
+const COMMAND_SEND = /^(?:\/[A-Za-z][\w:.-]*(?:\s|$)|!)/u
+const COMMAND_NAME = /^\/([^\s/]+)(\s*)/u
 const PLUGIN_SEPARATOR = ':'
 const SCOPE_ORDER: readonly SkillScope[] = ['project', 'personal', 'plugin', 'builtin']
 
@@ -21,6 +23,36 @@ const SCOPE_LABELS = {
   plugin: 'Plugins',
   builtin: 'Claude Code',
 } satisfies Record<SkillScope, string>
+
+const OPENS_A_DIALOG_BARE: readonly (readonly [string, string])[] = [
+  ['add-dir', ''],
+  ['bashes', ''],
+  ['config', ''],
+  ['cost', ''],
+  ['effort', ' Name a level instead, like /effort high.'],
+  ['export', ''],
+  ['fast', ' Say which instead, like /fast on.'],
+  ['feedback', ''],
+  ['help', ''],
+  ['hooks', ''],
+  ['mcp', ''],
+  ['memory', ''],
+  ['model', ''],
+  ['permissions', ''],
+  ['plugin', ''],
+  ['privacy-settings', ''],
+  ['release-notes', ''],
+  ['resume', ' Name a session instead, with its id.'],
+  ['rewind', ''],
+  ['sandbox', ''],
+  ['stats', ''],
+  ['status', ''],
+  ['tasks', ''],
+  ['theme', ''],
+  ['usage', ''],
+]
+
+const OPENS_A_DIALOG_WITH_ARGUMENTS = new Set(['theme'])
 
 const builtIn = (name: string, description: string, argumentHint: string) =>
   new SkillListing({
@@ -37,7 +69,6 @@ export const PTY_BUILT_INS: readonly SkillListing[] = [
   builtIn('effort', 'Set the effort level', '[level|auto|status]'),
   builtIn('fast', 'Turn fast mode on or off', '[on|off]'),
   builtIn('rename', 'Rename the session', '[name]'),
-  builtIn('cost', 'Show the session cost, plan limits and activity', ''),
 ]
 
 const BY_NAME = Order.mapInput(Order.String, (listing: SkillListing) => listing.name)
@@ -54,6 +85,30 @@ const startsWithQuery = (name: string, query: string) => {
     )
   )
 }
+
+export const isCommandSend = (text: string): boolean => COMMAND_SEND.test(text)
+
+export const noAnswerNote = (text: string): string =>
+  `No answer to ${text} yet. It may have opened a dialog on the laptop, which would take your next message.`
+
+export const laptopOnlyNote = (
+  text: string,
+  skills: readonly SkillListing[],
+): Option.Option<string> =>
+  pipe(
+    Option.fromNullishOr(COMMAND_NAME.exec(text)),
+    Option.flatMap(([whole, name = '']) =>
+      pipe(
+        OPENS_A_DIALOG_BARE,
+        Arr.findFirst(([command]) => command === name),
+        Option.filter(() => whole === text || OPENS_A_DIALOG_WITH_ARGUMENTS.has(name)),
+        Option.filter(() => !Arr.some(skills, (skill) => skill.name === name)),
+        Option.map(
+          ([command, hint]) => `/${command} opens a dialog, so it needs the laptop.${hint}`,
+        ),
+      ),
+    ),
+  )
 
 export const offeredCommands = (skills: readonly SkillListing[]): readonly SkillListing[] =>
   pipe(

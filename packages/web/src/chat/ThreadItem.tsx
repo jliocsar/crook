@@ -19,7 +19,8 @@ import * as React from 'react'
 
 import { relativeToFolder } from '@crook/domain/Ask'
 import type { ChatItem, PlanStep, SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
-import { ChatItem as ChatItems, stringField, toolTitle } from '@crook/web/chat/ChatItems'
+import { ChatItem as ChatItems } from '@crook/web/chat/ChatItems'
+import { stringField, toolTitle } from '@crook/web/chat/ToolSummary'
 import { useBackgroundMarker } from '@crook/web/chat/BackgroundMarker'
 import { Thumbs } from '@crook/web/chat/Images'
 import { RowAction } from '@crook/web/chat/RowAction'
@@ -49,6 +50,7 @@ import {
   languageOfPath,
   SHELL_LANGUAGE,
 } from '@crook/web/highlight/Highlighter'
+import { LINE_BREAK } from '@crook/web/text/Lines'
 import { useNow } from '@crook/web/time/Now'
 
 export interface ThreadEnvironment {
@@ -61,6 +63,7 @@ export interface ThreadEnvironment {
 
 const INLINE_ICON_SIZE = 15
 const OUTPUT_CLASS = 'max-h-56 overflow-y-auto'
+const INLINE_CODE = /`([^`\n]+)`/u
 
 const TOOL_ICON = new Map([
   ['Read', FileText],
@@ -312,6 +315,47 @@ function Note({ children }: { children: React.ReactNode }) {
   )
 }
 
+function WithInlineCode({ text }: { text: string }) {
+  return text.split(INLINE_CODE).map((part, index) =>
+    index % 2 === 0 ? (
+      part
+    ) : (
+      <code key={index} className="bg-muted rounded px-1.5 py-0.5 font-mono text-[0.85em]">
+        {part}
+      </code>
+    ),
+  )
+}
+
+function CommandOutput({ text, shell }: { text: string; shell: boolean }) {
+  return shell || text.includes(LINE_BREAK) ? (
+    <OutputText text={text} className={cn(OUTPUT_CLASS, 'text-muted-foreground mx-1')} />
+  ) : (
+    <p className="text-muted-foreground px-2 text-xs leading-4 break-words whitespace-pre-wrap">
+      <WithInlineCode text={text} />
+    </p>
+  )
+}
+
+function CommandRow({
+  text,
+  shell,
+  output,
+}: {
+  text: string
+  shell: boolean
+  output: readonly string[]
+}) {
+  return (
+    <div data-slot="command" className="grid grid-cols-1 gap-1">
+      <Message>{text}</Message>
+      {output.map((line, index) => (
+        <CommandOutput key={index} text={line} shell={shell} />
+      ))}
+    </div>
+  )
+}
+
 function Divider({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -385,7 +429,14 @@ function ThreadItemView({ item, environment }: { item: ChatItem; environment: Th
     Tool: (tool) => <ToolCard call={tool.call} environment={environment} />,
     Subagents: (subagents) => <SubagentRuns runs={subagents.runs} environment={environment} />,
     Plan: (plan) => <PlanChecklist steps={plan.steps} />,
-    Note: (note) => <Note>{note.text}</Note>,
+    Note: (note) => (
+      <Note>
+        <WithInlineCode text={note.text} />
+      </Note>
+    ),
+    Command: (command) => (
+      <CommandRow text={command.text} shell={command.shell} output={command.output} />
+    ),
     Compacted: (compacted) => <CompactedDivider summary={compacted.summary} />,
     Cleared: () => <Divider>Conversation cleared</Divider>,
     Omitted: (omitted) => (

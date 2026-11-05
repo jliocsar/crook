@@ -240,6 +240,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     items,
     session,
     threadEpoch,
+    skills: skillsOf(state),
     draft,
     setDraft,
     onPromptSent: scrollToEnd,

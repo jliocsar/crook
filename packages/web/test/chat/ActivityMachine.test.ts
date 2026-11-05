@@ -244,6 +244,22 @@ describe('the transcript evidence of a turn', () => {
     ).toEqual(Option.some(true))
   })
 
+  it('opens a turn at a skill or a shell line, and at no other command', () => {
+    expect(
+      ended([
+        answered(0, 'Fixed'),
+        user(10, [new LocalCommandBlock({ name: '/skill', args: '', opensTurn: true })]),
+        user(20, [new TextBlock({ text: 'the skill body' })], { isMeta: true }),
+      ]),
+    ).toEqual(Option.some(false))
+    expect(
+      ended([
+        answered(0, 'Fixed'),
+        user(10, [new LocalCommandBlock({ name: '/model', args: 'opus' })]),
+      ]),
+    ).toEqual(Option.some(true))
+  })
+
   it('leaves a turn open across an automatic compaction, which it carries on from', () => {
     const automatic = new SystemMessage({
       offset: TranscriptOffset.make(10),

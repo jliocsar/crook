@@ -73,6 +73,7 @@ const describeItem = (item: ChatItem): string =>
     Tool: () => 'tool',
     Plan: () => 'plan',
     Note: () => 'note',
+    Command: () => 'command',
     Compacted: () => 'compacted',
     Omitted: () => 'omitted',
     Unreadable: () => 'unreadable',

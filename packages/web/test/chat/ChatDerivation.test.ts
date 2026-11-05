@@ -11,6 +11,7 @@ import compactionAuto from '@crook/claude/fixtures/compaction-auto.jsonl?raw'
 import compactionManual from '@crook/claude/fixtures/compaction-manual.jsonl?raw'
 import oddEntries from '@crook/claude/fixtures/odd-entries.jsonl?raw'
 import plainTurn from '@crook/claude/fixtures/plain-turn.jsonl?raw'
+import slashCommands from '@crook/claude/fixtures/slash-commands.jsonl?raw'
 import stuckRunNotices from '@crook/claude/fixtures/stuck-runs/b449ab5a-d745-4976-919d-e9bd86d161fc.jsonl?raw'
 import subagentSession from '@crook/claude/fixtures/subagent/ff0f77be-1e98-4bb2-8b24-38d673361867.jsonl?raw'
 import toolResultVariants from '@crook/claude/fixtures/tool-result-variants.jsonl?raw'
@@ -132,6 +133,7 @@ const FIXTURES = {
   'tool result variants': toolResultVariants,
   'auto compaction': compactionAuto,
   'manual compaction': compactionManual,
+  'slash commands': slashCommands,
   'odd entries': oddEntries,
   'task notifications': stuckRunNotices,
   'subagent session': subagentSession,
