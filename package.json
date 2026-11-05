@@ -16,6 +16,7 @@
     "lint:fix": "oxlint --fix --deny-warnings --no-error-on-unmatched-pattern --disable-nested-config",
     "fmt": "oxfmt --disable-nested-config",
     "fmt:check": "oxfmt --check --disable-nested-config",
+    "verify:transcript-pipe": "bun .claude/skills/verify-transcript-pipe/verify.ts",
     "prepare": "husky && effect-tsgo patch --oxlint"
   },
   "devDependencies": {

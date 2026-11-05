@@ -1,0 +1,424 @@
+import { mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+import { followDisagreements } from './FollowReplay'
+import { replayOnce } from './Replay'
+import { type TraceState, behaviourIn } from './TraceReader'
+
+const SKILL = import.meta.dir
+const ROOT = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel'], { cwd: SKILL })
+  .stdout.toString()
+  .trim()
+const RUN = join(ROOT, 'tmp', 'verify-transcript-pipe')
+const TLC_VERSION = 'TLC2 Version 2.19'
+const HEAP = '-Xmx1g'
+
+const BASE = {
+  SessionPath: 'PathStraight',
+  FirstFileLines: 1,
+  TailLines: 1,
+  MailboxCapacity: 2,
+  SwitchQueueSize: 2,
+  Writes: 1,
+  PaneGaps: 0,
+  AgentDrops: 0,
+  PhoneDrops: 0,
+  WatchFailures: 0,
+  Reopens: 0,
+  SocketsMayReorder: false,
+  WalkLength: 60,
+  Jc147: false,
+  Broken: 'none',
+}
+
+type Constants = Partial<typeof BASE>
+
+interface Check {
+  readonly name: string
+  readonly says: string
+  readonly constants: Constants
+  readonly rules: readonly string[]
+  readonly property?: string
+  readonly breaks?: string
+  readonly replay?: boolean
+  readonly reach?: boolean
+}
+
+const HOLDS_ON_MAIN = [
+  'NoDuplicateLine',
+  'NoHole',
+  'NoFalseClear',
+  'NeverRewinds',
+  'NeverStuckCatchingUp',
+  'ShowsPaneSession',
+  'NeverBehindFile',
+]
+
+const finding = (
+  name: string,
+  says: string,
+  rule: string,
+  constants: Constants,
+): Check => ({ name, says, constants, rules: [rule], breaks: rule, replay: true })
+
+const holds = (name: string, says: string, constants: Constants): Check => ({
+  name,
+  says,
+  constants,
+  rules: HOLDS_ON_MAIN,
+})
+
+const mutant = (broken: string, rule: string, constants: Constants, says: string): Check => ({
+  name: `can-fail/${broken}`,
+  says,
+  constants: { ...constants, Broken: broken },
+  rules: rule === 'AlwaysSettles' ? [] : [rule],
+  ...(rule === 'AlwaysSettles' ? { property: rule } : {}),
+  breaks: rule,
+})
+
+const STALE_SOCKET: Constants = { AgentDrops: 1, SocketsMayReorder: true }
+const RETURN: Constants = { SessionPath: 'PathReturn' }
+const DROPS: Constants = { AgentDrops: 1 }
+const BACKLOG: Constants = { SessionPath: 'PathOne', FirstFileLines: 3, TailLines: 3, Writes: 0 }
+
+const HOLDING: readonly Check[] = [
+  holds('holds/agent-and-phone-drop', 'both connections die once, lines and a /clear racing them', {
+    AgentDrops: 1,
+    PhoneDrops: 1,
+  }),
+  holds('holds/follow-fails', 'the follow fails once, read or resume rejected, then Try again', {
+    WatchFailures: 1,
+  }),
+  holds('holds/chat-reopens', 'the chat closes and opens from the cache', { Reopens: 1 }),
+  holds('holds/pane-loses-claude', 'the agent row loses its session and gets it back', {
+    PaneGaps: 1,
+  }),
+  holds('holds/backlog-over-full-mailboxes', 'more lines than a mailbox takes, an agent drop among them', {
+    ...BACKLOG,
+    AgentDrops: 1,
+  }),
+  holds('holds/tail-then-writes', 'a cold open with a tail, more lines, an agent drop', {
+    SessionPath: 'PathOne',
+    FirstFileLines: 2,
+    Writes: 2,
+    AgentDrops: 1,
+    SwitchQueueSize: 1,
+  }),
+  {
+    name: 'holds/every-retry-ends',
+    says: 'no restart loop: the pipe always reaches a point with nothing left to do',
+    constants: { AgentDrops: 1, SwitchQueueSize: 1 },
+    rules: [],
+    property: 'AlwaysSettles',
+  },
+]
+
+const FINDINGS: readonly Check[] = [
+  finding('finding/F1-old-lines-stay', 'a session change leaves the old lines above the new ones', 'OneSessionShown', {}),
+  finding('finding/F2-return-duplicates', 'going back to a session shows its lines again', 'NoDuplicateLine', RETURN),
+  finding('finding/F3-stale-open-rewinds', 'a late publish from a dead socket takes the phone back', 'NeverRewinds', STALE_SOCKET),
+  finding('finding/F3-stale-open-duplicates', 'the same late publish repeats a line', 'NoDuplicateLine', STALE_SOCKET),
+  finding('finding/F3-stale-open-sticks', 'the same late publish drops the caught-up mark', 'NeverStuckCatchingUp', STALE_SOCKET),
+  finding('finding/F3-stale-open-wrong-session', 'the same late publish leaves the phone in the old session', 'ShowsPaneSession', STALE_SOCKET),
+  finding('finding/F4-return-race-behind', 'a return inside the switch queue leaves the hub at offset 0', 'NeverBehindFile', RETURN),
+  finding('finding/F5-cold-switch-drops-tail', 'a /clear right after a cold open never finishes the old session', 'FinishesSessionItLeaves', {}),
+]
+
+const AFTER_JC147: readonly Check[] = [
+  { name: 'jc147/F1-gone', says: 'with the view reset, a thread shows one session', constants: { Jc147: true }, rules: ['OneSessionShown'] },
+  { name: 'jc147/F2-gone', says: 'with the view reset, a return shows no line twice', constants: { ...RETURN, Jc147: true }, rules: ['NoDuplicateLine', 'OneSessionShown'] },
+  { name: 'jc147/F3-stays', says: 'the view reset does not stop a late publish rewinding the phone', constants: { ...STALE_SOCKET, Jc147: true }, rules: ['NeverRewinds'], breaks: 'NeverRewinds' },
+  { name: 'jc147/F4-stays', says: 'the view reset makes the return race an empty thread', constants: { ...RETURN, Jc147: true }, rules: ['NeverBehindFile'], breaks: 'NeverBehindFile' },
+]
+
+const reach = (name: string, says: string, property: string, constants: Constants): Check => ({
+  name,
+  says,
+  constants,
+  rules: [],
+  property,
+  breaks: property,
+  replay: true,
+  reach: true,
+})
+
+const REACHED: readonly Check[] = [
+  reach('reach/live-chunk-refused', 'a chunk that does not continue the position is refused, and the agent restarts from where the hub says', 'NoLiveChunkRefused', {}),
+  reach('reach/stale-chunk-refused', "a dead socket's chunk is refused, to nobody", 'NoStaleChunkRefused', STALE_SOCKET),
+  reach('reach/call-on-gone-watch', 'a call lands after its watch has failed and left the map', 'NoCallOnGoneWatch', { ...STALE_SOCKET, WatchFailures: 1 }),
+]
+
+const CAN_FAIL: readonly Check[] = [
+  mutant('relay-no-continuity', 'NoDuplicateLine', DROPS, 'append without continuesFrom'),
+  mutant('forward-two-steps', 'NoDuplicateLine', DROPS, 'forward moves the position after the transaction'),
+  mutant('relay-forgets-resume', 'NoDuplicateLine', { PhoneDrops: 1 }, 'delivered starts empty instead of at from'),
+  mutant('reset-keeps-lines', 'NoDuplicateLine', { WatchFailures: 1 }, 'settle clears the position but keeps the lines'),
+  mutant('omitted-not-marked', 'NoHole', { SessionPath: 'PathOne', FirstFileLines: 2 }, 'omittedUpTo without its OmittedLines'),
+  mutant('no-finish-session', 'FinishesSessionItLeaves', {}, 'fromSession opens the next session without finishSession'),
+  mutant('open-not-filtered', 'NoFalseClear', DROPS, 'deliver forwards every TranscriptOpened'),
+  mutant('caught-up-dropped', 'NeverStuckCatchingUp', {}, 'forwardInSession drops the caught-up mark'),
+  mutant('mailbox-holds-when-full', 'NeverStuckCatchingUp', BACKLOG, 'awaitsCatchUp without the isFull check'),
+  mutant('no-switch', 'ShowsPaneSession', {}, 'followPane ignores a session change'),
+  mutant('follow-stops-at-caught-up', 'NeverBehindFile', {}, 'tail.follow stops reading at its first caught-up'),
+  mutant('restart-from-watch-from', 'AlwaysSettles', { ...DROPS, SwitchQueueSize: 1 }, 'attempt(watch.from) instead of attempt(outOfStep.expected)'),
+  mutant('updates-out-of-order', 'AlwaysSettles', { SessionPath: 'PathStraight', SwitchQueueSize: 1 }, 'eventsOf puts chunks before their open'),
+]
+
+const ONLY_WHEN_BROKEN = ['ForwardMovesPosition']
+const WALK_SEEDS = [11, 23, 37, 41, 53, 67, 79, 83, 97, 101]
+const WALK_CONSTANTS: Constants = {
+  SessionPath: 'PathReturn',
+  Writes: 3,
+  PaneGaps: 1,
+  AgentDrops: 2,
+  PhoneDrops: 2,
+  WatchFailures: 2,
+  Reopens: 1,
+  SocketsMayReorder: true,
+}
+
+const tlaValue = (value: unknown) =>
+  typeof value === 'boolean'
+    ? value
+      ? 'TRUE'
+      : 'FALSE'
+    : typeof value === 'string' && value.startsWith('Path')
+      ? value
+      : typeof value === 'string'
+        ? `"${value}"`
+        : String(value)
+
+const configFor = (constants: Constants, rules: readonly string[], property?: string) => {
+  const all = { ...BASE, ...constants }
+  const lines = Object.entries(all).map(([name, value]) =>
+    name === 'SessionPath' ? `  ${name} <- ${value}` : `  ${name} = ${tlaValue(value)}`,
+  )
+
+  return [
+    'SPECIFICATION Spec',
+    'CONSTANTS',
+    '  NONE = NONE',
+    ...lines,
+    ...rules.map((rule) => `INVARIANT ${rule}`),
+    ...(property ? [`PROPERTY ${property}`] : []),
+    '',
+  ].join('\n')
+}
+
+const runTlc = async (name: string, config: string, flags: readonly string[] = []) => {
+  const slug = name.replaceAll('/', '-')
+  const configPath = join(RUN, `${slug}.cfg`)
+  const outPath = join(RUN, `${slug}.out`)
+  const metadir = join(RUN, 'states', slug)
+
+  writeFileSync(configPath, config)
+
+  const started = performance.now()
+  const tlc = Bun.spawn(
+    ['tlc', '-workers', '1', '-metadir', metadir, ...flags, '-config', `${slug}.cfg`, 'TranscriptPipe.tla'],
+    {
+      cwd: RUN,
+      env: { ...process.env, JAVA_TOOL_OPTIONS: HEAP },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  )
+  const [stdout, stderr] = await Promise.all([
+    new Response(tlc.stdout).text(),
+    new Response(tlc.stderr).text(),
+  ])
+
+  await tlc.exited
+  rmSync(metadir, { recursive: true, force: true })
+  writeFileSync(outPath, stdout + stderr)
+
+  const invariant = /Invariant (\w+) is violated/.exec(stdout)?.[1]
+  const actionProperty = /Action property (\w+) is violated/.exec(stdout)?.[1]
+  const temporal = /Temporal properties were violated/.test(stdout)
+  const clean = /Model checking completed\. No error has been found/.test(stdout)
+  const distinct = [...stdout.matchAll(/([\d,]+) distinct states found/g)].at(-1)?.[1] ?? '?'
+
+  return {
+    stdout,
+    outPath,
+    configPath,
+    seconds: Math.round((performance.now() - started) / 100) / 10,
+    distinct,
+    broke: invariant ?? actionProperty ?? (temporal ? 'AlwaysSettles' : undefined),
+    clean,
+    version: stdout.includes(TLC_VERSION),
+  }
+}
+
+const changedLines = (states: readonly TraceState[]) => {
+  const watched = (vars: TraceState['vars']) => ({
+    position: vars['view'].position,
+    lines: vars['view'].lines,
+    catching: vars['view'].catching,
+    delivered: vars['watcher'].delivered,
+    pane: vars['pane'].at,
+  })
+
+  return states.map((state, index) => {
+    const now = watched(state.vars)
+    const before = index === 0 ? undefined : watched((states[index - 1] as TraceState).vars)
+    const moved = Object.entries(now)
+      .filter(
+        ([key, value]) =>
+          before === undefined ||
+          JSON.stringify(value) !== JSON.stringify(before[key as keyof typeof before]),
+      )
+      .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+
+    return `  ${index + 1}. ${state.action}${moved.length > 0 ? `  ${moved.join(' ')}` : ''}`
+  })
+}
+
+const coverage = () => {
+  const skill = readFileSync(join(SKILL, 'SKILL.md'), 'utf8')
+  const sync = /^Sync commit: `([0-9a-f]+)`/m.exec(skill)?.[1]
+  const files = (/```coverage\n([\s\S]*?)```/.exec(skill)?.[1] ?? '')
+    .split('\n')
+    .map((line) => line.split(/\s+/)[0] ?? '')
+    .filter((line) => line.length > 0)
+  const diff = Bun.spawnSync(['git', 'diff', '--name-only', sync ?? 'HEAD', '--', ...files], {
+    cwd: ROOT,
+  })
+
+  return { sync, files, changed: diff.stdout.toString().split('\n').filter(Boolean) }
+}
+
+const stepsOfTheModel = () => {
+  const model = readFileSync(join(SKILL, 'model', 'TranscriptPipe.tla'), 'utf8')
+  const steps = model.slice(model.indexOf('HubStep =='), model.indexOf('Quiescent =='))
+
+  return [...steps.matchAll(/\\\/ (?:\\E \w+ \\in \w+ : )?(\w+)/g)]
+    .map((match) => match[1] ?? '')
+    .filter((step) => step !== 'HubStep' && !ONLY_WHEN_BROKEN.includes(step))
+}
+
+const only = process.argv.find((argument, index) => process.argv[index - 1] === '--only')
+const selected = (name: string) => only === undefined || name.includes(only)
+
+const main = async () => {
+  rmSync(RUN, { recursive: true, force: true })
+  mkdirSync(RUN, { recursive: true })
+  copyFileSync(join(SKILL, 'model', 'TranscriptPipe.tla'), join(RUN, 'TranscriptPipe.tla'))
+
+  const problems: string[] = []
+  const walked = new Set<string>()
+  const started = performance.now()
+  const report = (ok: boolean, line: string) => console.log(`${ok ? 'ok  ' : 'FAIL'} ${line}`)
+
+  const runCheck = async (check: Check) => {
+    const result = await runTlc(check.name, configFor(check.constants, check.rules, check.property))
+
+    if (!result.version) {
+      problems.push(`${check.name}: this is not ${TLC_VERSION}; see ${result.outPath}`)
+    }
+
+    const expected = check.breaks
+    const asExpected = expected === undefined ? result.clean : result.broke === expected
+    const states = behaviourIn(result.stdout)
+    const tail = `${result.distinct} states, ${result.seconds}s`
+
+    if (!asExpected) {
+      const seen =
+        result.broke !== undefined
+          ? `${result.broke} breaks`
+          : result.clean
+            ? 'every rule holds'
+            : 'TLC stopped on an error'
+
+      report(false, `${check.name}: ${seen}, expected ${expected ? `${expected} to break` : 'every rule to hold'} (${tail})`)
+      console.log(`     ${check.says}`)
+      console.log(changedLines(states).join('\n'))
+      console.log(`     config ${result.configPath}\n     output ${result.outPath}`)
+      problems.push(check.name)
+
+      return
+    }
+
+    if (check.replay === true) {
+      try {
+        const replayed = await replayOnce(states, check.constants.MailboxCapacity ?? BASE.MailboxCapacity)
+
+        report(true, `${check.name}: ${check.reach === true ? 'reached' : `${expected} breaks`}, and the real code walks the same ${states.length} steps (${tail})`)
+        console.log(`     ends with ${JSON.stringify(replayed.view)}`)
+        for (const state of states) walked.add(state.action)
+      } catch (error) {
+        report(false, `${check.name}: the real code does not walk this path: ${String(error)}`)
+        console.log(changedLines(states).join('\n'))
+        problems.push(check.name)
+      }
+
+      return
+    }
+
+    report(true, `${check.name}: ${expected ? `${expected} breaks as it should` : 'every rule holds'} (${tail})`)
+  }
+
+  for (const check of [...HOLDING, ...FINDINGS, ...REACHED, ...AFTER_JC147, ...CAN_FAIL]) {
+    if (selected(check.name)) await runCheck(check)
+  }
+
+  if (selected('replay/walks')) {
+    for (const seed of WALK_SEEDS) {
+      const walk = await runTlc(
+        `replay/walk-${seed}`,
+        configFor(WALK_CONSTANTS, ['WalkEnds']),
+        ['-simulate', '-depth', '200', '-seed', String(seed)],
+      )
+      const states = behaviourIn(walk.stdout)
+
+      try {
+        if (states.length === 0) throw new Error(`no walk came out; see ${walk.outPath}`)
+        await replayOnce(states, BASE.MailboxCapacity)
+        report(true, `replay/walk-${seed}: the real relay, mailbox and view agree over ${states.length} random steps`)
+        for (const state of states) walked.add(state.action)
+      } catch (error) {
+        report(false, `replay/walk-${seed}: ${String(error)}`)
+        console.log(changedLines(states).join('\n'))
+        console.log(`     output ${walk.outPath}`)
+        problems.push(`replay/walk-${seed}`)
+      }
+    }
+  }
+
+  if (selected('replay/follow')) {
+    const follow = await followDisagreements(join(RUN, 'claude-root'))
+
+    report(follow.problems.length === 0, `replay/follow: the real TranscriptStreams.follow agrees on ${follow.cases - follow.problems.length} of ${follow.cases} cases`)
+    for (const problem of follow.problems) {
+      console.log(`     ${problem}`)
+      problems.push(problem)
+    }
+  }
+
+  if (only === undefined) {
+    const missed = stepsOfTheModel().filter((step) => !walked.has(step))
+
+    report(missed.length === 0, `replay/every-step: ${missed.length === 0 ? 'the real code walked every step of the model' : `the real code never walked ${missed.join(', ')}; a break in them would go unseen`}`)
+    if (missed.length > 0) problems.push('replay/every-step')
+  }
+
+  const covered = coverage()
+  const seconds = Math.round((performance.now() - started) / 1000)
+
+  if (covered.changed.length > 0) {
+    console.log(`\nNEEDS ANOTHER LOOK: covered code changed since the sync commit ${covered.sync}:`)
+    for (const file of covered.changed) console.log(`  ${file}`)
+    console.log('Read the change against the model (SKILL.md, "When a change is intended"), then move the sync commit.')
+  }
+
+  console.log(
+    problems.length === 0
+      ? `\nEverything as expected in ${seconds}s. Output in ${RUN}.`
+      : `\n${problems.length} not as expected in ${seconds}s. Output in ${RUN}. Read SKILL.md, "Bug or modeling error".`,
+  )
+
+  process.exit(problems.length > 0 ? 1 : covered.changed.length > 0 ? 2 : 0)
+}
+
+await main()

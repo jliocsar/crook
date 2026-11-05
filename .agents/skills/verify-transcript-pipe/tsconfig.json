@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@crook/agent/*": ["../../../packages/agent/src/*.ts"],
+      "@crook/domain/*": ["../../../packages/domain/src/*.ts"],
+      "@crook/hub/*": ["../../../packages/hub/src/*.ts"],
+      "@crook/protocol/*": ["../../../packages/protocol/src/*.ts"],
+      "@crook/web/*": ["../../../packages/web/src/*.ts"],
+      "@effect/platform-bun/*": ["../../../packages/agent/node_modules/@effect/platform-bun/dist/*.js"]
+    }
+  }
+}
