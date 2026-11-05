@@ -66,7 +66,7 @@ import type { LogOutFailed } from '@crook/web/rpc/SessionCheck'
 
 type SessionFailure = HubCallFailed | HubWatchEnded
 
-type ConnectedCalls = SubscriptionRef.SubscriptionRef<Option.Option<HubCalls>>
+type HeldCalls = SubscriptionRef.SubscriptionRef<Option.Option<HubCalls>>
 
 export interface TranscriptResume {
   readonly from: Option.Option<TranscriptPosition>
@@ -104,7 +104,7 @@ const commandEvent = (command: LinkCommand): Effect.Effect<LinkEvent> =>
 
 const callsOnceReady = (
   state: SubscriptionRef.SubscriptionRef<HubLinkState>,
-  connected: ConnectedCalls,
+  connected: HeldCalls,
   isReady: (current: HubLinkState) => boolean,
 ) =>
   SubscriptionRef.changes(state).pipe(
@@ -121,7 +121,7 @@ const callsOnceReady = (
 
 const whenReady = <Success, Failure>(
   state: SubscriptionRef.SubscriptionRef<HubLinkState>,
-  connected: ConnectedCalls,
+  connected: HeldCalls,
   isReady: (current: HubLinkState) => boolean,
   call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
 ) =>
@@ -136,7 +136,7 @@ const whenReady = <Success, Failure>(
 
 const whenConnected = <Success, Failure>(
   state: SubscriptionRef.SubscriptionRef<HubLinkState>,
-  connected: ConnectedCalls,
+  connected: HeldCalls,
   call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
 ) =>
   Effect.flatMap(SubscriptionRef.get(connected), (held) =>
@@ -155,7 +155,7 @@ const machineIsThere = (current: HubLinkState, machine: MachineId): boolean =>
   )
 
 const whileDialed = <Success, Failure>(
-  dialed: ConnectedCalls,
+  dialed: HeldCalls,
   watch: (calls: HubCalls) => Stream.Stream<Success, Failure | HubCallFailed>,
 ) =>
   SubscriptionRef.changes(dialed).pipe(
@@ -169,7 +169,7 @@ const whileDialed = <Success, Failure>(
   )
 
 const transcriptWhileDialed =
-  (dialed: ConnectedCalls) =>
+  (dialed: HeldCalls) =>
   (
     machine: MachineId,
     source: TranscriptSource,

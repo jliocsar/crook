@@ -16,8 +16,9 @@ import { PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import { omittedBetween, omittedUpTo, PaneTranscript } from '@crook/domain/Transcript'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { SYNC_NOTICE_DELAY } from '@crook/web/rpc/HubLink'
+import { COLD_START } from '@crook/web/rpc/HubLinkState'
 
-import { liveWith, renderApp } from '../AppRender.tsx'
+import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
 import { click, eventually, findByRole, present } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
@@ -67,6 +68,25 @@ afterEach(() => {
 })
 
 describe('a chat catching up', () => {
+  it.live('asks for nothing until a herd says whether the agent marks where it caught up', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, stateWith(COLD_START, Option.none()))
+
+      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+
+      expect(Ref.getUnsafe(link.resumes)).toHaveLength(0)
+      expect(screen.queryByText('No messages yet')).toBeNull()
+
+      yield* SubscriptionRef.set(link.state, current())
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.resumes)).toHaveLength(1)
+      })
+      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+
+      expect(screen.queryByText('No messages yet')).toBeNull()
+    }),
+  )
+
   it.effect('says nothing for a quick read, and does not dim a reopened chat', () =>
     Effect.gen(function* () {
       const { link, router } = yield* renderApp(CHAT, current())

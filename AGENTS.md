@@ -1233,9 +1233,13 @@ a turn of its own, enqueued as a task notification.
   order. A resume on a fresh socket, through the real link, a local hub and agent and a proxy delaying
   each WebSocket message 150 ms, went from 960 to 1034 ms to 746 to 780 ms from the dial to the caught-up
   mark (five runs each). A tap on a live link was never affected, and neither are calls, which still
-  hold for the first herd. A resume then reads the last herd the phone knew to decide whether the agent
-  sends the caught-up mark, and with no herd at all it does not wait for one (reasoned, not measured),
-  which takes a cached chat with no cached herd.
+  hold for the first herd. A resume reads the last herd the phone knew to decide whether the agent
+  sends the caught-up mark, so with no herd at all it still waits for the first one. Read without one,
+  a chat with nothing cached says "No messages yet" a second later and a cached chat lands with no
+  catch-up (read in the chat's machine, not measured). A dial that fails before its first herd ends the watch quietly, as any lost connection
+  does, and the next dial asks again. Each dial resumes, so a failing backoff restarts the chat's
+  notice wait, and the link's own notice dims the chat at that same second, which hides the pill
+  (reasoned, not measured).
 - A covered screen reads atoms through a derived atom that returns its own previous value while
   the covered flag is set and reads nothing else, so a herd update wakes none of its components.
   The flag is an atom set in a layout effect rather than a context value, since a context change

@@ -764,6 +764,34 @@ describe('HubLink', () => {
     }),
   )
 
+  it.effect(
+    'asks for a transcript again on the next dial when one fails before its first herd',
+    () =>
+      Effect.gen(function* () {
+        const { link, nextSession, settle } = yield* start()
+        const watching = yield* link
+          .watchTranscript(
+            LAPTOP,
+            new PaneTranscript({ pane: PaneId.make('w1:p1') }),
+            Effect.succeed({ from: Option.none(), tail: Option.none() }),
+          )
+          .pipe(Stream.runDrain, Effect.forkScoped)
+        const first = yield* nextSession
+        const firstWatch = yield* Effect.andThen(settle, Queue.take(first.transcripts))
+
+        yield* Queue.fail(firstWatch, refused)
+        yield* dropSession(first, refused)
+        yield* settle
+        yield* TestClock.adjust(HUB_RECONNECT_BASE)
+        const second = yield* nextSession
+
+        yield* settle
+
+        expect(watching.pollUnsafe()).toBeUndefined()
+        expect(yield* Ref.get(second.transcriptRequests)).toHaveLength(1)
+      }),
+  )
+
   it.effect('resumes a transcript watch on the next connection from where the phone stands', () =>
     Effect.gen(function* () {
       const { link, current, nextSession, settle } = yield* start()

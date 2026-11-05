@@ -117,7 +117,19 @@ const transcriptViews = (machine: MachineId, source: TranscriptSource, signals: 
       const watchableChanges = yield* subscribed(registry, signals.watchable)
       const retryChanges = yield* subscribed(registry, signals.retries)
       const earlierChanges = yield* subscribed(registry, signals.earlier)
-      const readAwaitsCaughtUp = Effect.sync(() => registry.get(signals.awaitsCaughtUp))
+      const herdKnown = Effect.suspend(() =>
+        Option.isSome(registry.get(signals.herd))
+          ? Effect.void
+          : AtomRegistry.toStream(registry, signals.herd).pipe(
+              Stream.filter(Option.isSome),
+              Stream.take(1),
+              Stream.runDrain,
+            ),
+      )
+      const readAwaitsCaughtUp = Effect.andThen(
+        herdKnown,
+        Effect.sync(() => registry.get(signals.awaitsCaughtUp)),
+      )
       const cached = yield* cache.load(machine, source)
       const state = yield* SubscriptionRef.make<TranscriptViewState>(
         afterAll(NO_VIEW, [cacheRead(cached)])[0],
