@@ -40,9 +40,7 @@ const current = () => laptop('online')
 const catchingUpPill = () => document.querySelector('[data-slot="catching-up-pill"]')
 
 const dimmedFlags = () =>
-  Array.from(document.querySelectorAll('[data-dimmed]'), (element) =>
-    element.getAttribute('data-dimmed'),
-  )
+  Array.from(document.querySelectorAll('[data-state="dimmed"]'), () => 'true')
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])

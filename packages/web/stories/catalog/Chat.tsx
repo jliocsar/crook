@@ -245,7 +245,7 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     title: 'Chat, dimmed while the hub is away',
     link: stateWith(COLD_START, Option.some(chatHerd())),
     events: CONVERSATION,
-    shows: { selector: '[data-dimmed="true"]' },
+    shows: { selector: '[data-state="dimmed"]' },
   }),
   chatStory({
     slug: 'actions-sheet',

@@ -242,7 +242,7 @@ describe('HerdScreen', () => {
       expect(banner.closest('[data-slot="connection-banner"]')?.textContent).toContain(
         'Updated just now',
       )
-      expect(document.querySelector('[data-dimmed="true"]')).not.toBeNull()
+      expect(document.querySelector('[data-state="dimmed"]')).not.toBeNull()
       expect(screen.getByRole('button', { name: 'New agent' }).hasAttribute('disabled')).toBe(true)
       expect(screen.getAllByRole('status').map((region) => region.textContent)).toContainEqual(
         expect.stringContaining("Can't reach the hub. crook keeps retrying."),

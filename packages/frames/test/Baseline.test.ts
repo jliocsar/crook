@@ -20,6 +20,7 @@ const finding = (key: string): Finding => ({
   fromMs: 300,
   toMs: 350,
   marks: ['composer'],
+  states: '',
   words: 'It flashed.',
 })
 

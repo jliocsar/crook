@@ -12,7 +12,7 @@ export function Dimmed({
 }) {
   return (
     <div
-      data-dimmed={dimmed}
+      data-state={dimmed ? 'dimmed' : 'clear'}
       className={cn(
         'transition-opacity duration-(--motion) ease-(--ease-out)',
         dimmed && 'opacity-60',

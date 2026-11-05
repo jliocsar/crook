@@ -13,6 +13,7 @@
     "typecheck": "tsr generate && tsc && tsc -p src/sw",
     "test": "tsr generate && vitest run --fsModuleCachePath node_modules/.vitest-cache",
     "brand": "bun brand/Generate.ts",
+    "charts": "bun charts/Generate.ts",
     "stories": "tsr generate && vite --config vite.stories.config.ts --port 5192 --strictPort",
     "stories:list": "tsr generate && bun stories/List.ts",
     "typecheck:kitchen": "tsc -p tsconfig.kitchen.json"

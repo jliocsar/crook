@@ -2,10 +2,13 @@ import {
   CHROME_SELECTOR,
   COVER_SELECTOR,
   isContentMark,
+  MACHINE_ATTRIBUTE,
+  MACHINE_SELECTOR,
   MARKS,
   ROW_SELECTOR,
   SCREEN_SELECTOR,
   STAGE_SELECTOR,
+  STATE_ATTRIBUTE,
 } from '@crook/frames/Marks'
 import type { MarkDefinition } from '@crook/frames/Marks'
 
@@ -121,6 +124,14 @@ const seenElement = (element: Element, covers: readonly Element[]): SeenElement 
     ? undefined
     : seen
 }
+
+const readStates = (): Readonly<Record<string, string>> =>
+  Object.fromEntries(
+    Array.from(document.querySelectorAll(MACHINE_SELECTOR), (element) => [
+      element.getAttribute(MACHINE_ATTRIBUTE) ?? '',
+      element.getAttribute(STATE_ATTRIBUTE) ?? '',
+    ]),
+  )
 
 const readMark = (definition: MarkDefinition, covers: readonly Element[]) => {
   for (const element of document.querySelectorAll(definition.selector)) {
@@ -257,6 +268,7 @@ const install = (): void => {
       blank: mounted && !hasContentMark && !showsContent(stage, covers),
       rows: mounted ? document.querySelectorAll(ROW_SELECTOR).length : 0,
       marks: Object.fromEntries(readings),
+      states: mounted ? readStates() : {},
       added,
       removed,
       readMs: round(performance.now() - started),

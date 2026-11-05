@@ -146,7 +146,7 @@ describe('MachinesScreen', () => {
       expect(
         screen.getByRole('button', { name: 'Forget', hidden: true }).hasAttribute('disabled'),
       ).toBe(true)
-      expect(document.querySelector('[data-dimmed="true"]')).not.toBeNull()
+      expect(document.querySelector('[data-state="dimmed"]')).not.toBeNull()
     }),
   )
 

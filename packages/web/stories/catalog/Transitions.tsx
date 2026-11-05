@@ -51,7 +51,7 @@ const COMPOSER = /Message|Reply/u
 const SEND = 'Send'
 const BACK = 'Back to Agents'
 const QUESTION = 'Now check the toast too'
-const LIVE_HERD = '[data-slot="herd-list"] [data-dimmed="false"]'
+const LIVE_HERD = '[data-slot="herd-list"] [data-state="clear"]'
 const FLIPS_WORKING_AT = DateTime.add(START, { seconds: CLOCK_AFTER_START_SECONDS })
 const FLIPS_IDLE_AT = DateTime.add(FLIPS_WORKING_AT, { seconds: 10 })
 
@@ -335,7 +335,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'herd-first-load-from-cache',
     title: 'Herd first load from the cache, slow hub',
-    shows: { selector: '[data-dimmed="true"]' },
+    shows: { selector: '[data-state="dimmed"]' },
     ends: { selector: LIVE_HERD },
     path: AGENTS_PATH,
     cached: CACHED,
@@ -350,7 +350,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
   browserStory({
     slug: 'herd-first-load-fast',
     title: 'Herd first load from the cache, fast hub',
-    shows: { selector: '[data-dimmed="true"]' },
+    shows: { selector: '[data-state="dimmed"]' },
     ends: { selector: LIVE_HERD },
     path: AGENTS_PATH,
     cached: CACHED,

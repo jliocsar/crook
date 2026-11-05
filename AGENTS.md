@@ -541,6 +541,46 @@ without a major bump. The plugin's own test suite is what catches that — after
 bump and test it there too rather than assuming the pair still agree.
 :::
 
+## State machines
+
+:::warning
+A UI state with more than one way in or out is a machine, and every machine has one shape. Plain
+reducers, no library: a `Schema.TaggedUnion` of states, one of events, and a total
+`transition(state, event)` written with `Match` that returns `[state, commands]`. Thread scroll and
+the pushed-screen and covered flags stay out on purpose: they write to the DOM per frame and are
+heavily measured, so their frame-level writes do not belong in a table.
+
+Commands are data and `transition` runs nothing, so the table is what a test walks. Whatever drives
+the machine runs each command and feeds the event it returns back in. An atom drives a machine whose
+inputs are atoms, and it runs commands through an `Atom.fn` on the hub runtime, one at a time, so a
+new command interrupts the one running. A service that owns the connection drives its own machine
+the same way, through its state's ref, with the commands' fibers in the scope they belong to.
+
+A state that waits on a command carries a generation, the command and its finished event carry the
+same one, and `transition` drops a finished event whose generation is not the state's. Interrupting
+is not enough: a state that moves on without starting another command leaves the old one running to
+its end.
+
+Every machine has a walk, used from a test: the events to try from each state, a stale generation
+included, the invariants of a state, the rules of an arrow, the states it must always be able to get
+back to and the ones it may end in. The walker reports a broken invariant or arrow with the shortest
+path to it, a transition that throws or returns what the schema refuses, a state nothing reaches, a
+state that can no longer get home, an event nothing tried and a state space that keeps growing, and
+its own test shows each one failing. Two states that differ only by a generation are one state: the
+walk's identity drops it, or a counter makes the walk endless.
+
+The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
+through the union's guards since `_tag` stays unread. The frame tool's mark table is the one place
+that says which selector means which state: a mark on a machine names the machine and its states,
+and a test holds those names to the machine's table, so the table, the stories and the frames share
+one vocabulary. A state with no mark can still be named: the frame log records every machine's state
+per frame and the contact sheet prints it, and a state that shows nothing, such as a quiet redial,
+therefore cannot fail as a flash. A generated Mermaid chart sits beside the machines, regenerated
+with `bun run charts`, and a test holds it equal to the table. Plain Mermaid over `/statechart`:
+that skill model-checks a separate TLA+ spec, a second copy of the table that needs Java and TLC,
+while the walker runs the real function.
+:::
+
 ## Web
 
 The PWA is a Vite app, so it carries a few things the Bun members do not.

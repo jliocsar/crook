@@ -76,6 +76,10 @@ two lists equal), and add a mark to `packages/frames/src/Marks.ts` for a state n
 state story without a timeline runs too, with no declared order: blank, flash and shift still
 apply.
 
+An element carrying `data-machine` and `data-state` needs no mark to be seen: the log records every
+machine's state per frame, the contact sheet takes a tile when one changes and prints it, and a
+finding names the machines' states at its frame. A mark is for a state that must never flash.
+
 ## Which tool for which question
 
 | Tool | Use it for | It can see | It cannot see |

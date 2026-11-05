@@ -6,7 +6,7 @@ import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
 import type { Expectation, Order as StateOrder } from '@crook/frames/Expectations'
-import { marksOf, shows } from '@crook/frames/FrameLog'
+import { marksOf, shows, statesOf } from '@crook/frames/FrameLog'
 import type { FrameLog, RecordedFrame, ShiftEntry, ShiftSource } from '@crook/frames/FrameLog'
 import { MARKS, NEVER_TOGETHER } from '@crook/frames/Marks'
 import type { MarkPair } from '@crook/frames/Marks'
@@ -30,6 +30,7 @@ export const Finding = Schema.Struct({
   fromMs: Schema.Finite,
   toMs: Schema.Finite,
   marks: Schema.Array(Schema.String),
+  states: Schema.String,
   words: Schema.String,
 })
 export type Finding = typeof Finding.Type
@@ -100,6 +101,7 @@ const findingFromRun = (
   fromMs: Math.round(first(run).at),
   toMs: Math.round(endOf(run)),
   marks: marksOf(first(run)),
+  states: statesOf(first(run)),
   words,
 })
 
@@ -239,6 +241,7 @@ const shiftsOf = (
       fromMs: Math.round(opening.value.at),
       toMs: Math.round(closing.value.at),
       marks: marksOf(opening.value),
+      states: statesOf(opening.value),
       words: `Layout shifted by ${total.toFixed(4)} in total over ${watched.length} shifts, above this story's budget of ${expectation.shiftBudget}. What moved most: ${describeMove(mover.value)}.`,
     },
   ]
@@ -311,6 +314,7 @@ const brokenOrderOf = (
             fromMs: Math.round(frame.at),
             toMs: Math.round(frame.at),
             marks: marksOf(frame),
+            states: statesOf(frame),
             words: Option.match(from, {
               onNone: () =>
                 `"${state}" showed first on the ${track} track, and this story does not allow it there.`,

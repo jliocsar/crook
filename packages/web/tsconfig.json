@@ -16,6 +16,7 @@
     "stories/**/*.ts",
     "stories/**/*.tsx",
     "brand/**/*.ts",
+    "charts/**/*.ts",
     "vite.config.ts",
     "vitest.config.ts",
     "vite.stories.config.ts",
