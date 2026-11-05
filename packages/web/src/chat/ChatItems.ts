@@ -23,7 +23,11 @@ import type {
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
-import { NO_ROSTERS, type SessionRosters, TranscriptLine } from '@crook/web/chat/TranscriptState'
+import {
+  NO_ROSTERS,
+  type SessionRosters,
+  type TranscriptLine,
+} from '@crook/web/chat/TranscriptState'
 import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
 import { LINE_BREAK, PARAGRAPH_BREAK } from '@crook/web/text/Lines'
@@ -115,7 +119,6 @@ interface Evidence {
   readonly results: Stamps<ToolResultBlock>
   readonly notices: Stamps<string>
   readonly lastTurn: number
-  readonly currentSession: Option.Option<ClaudeSessionId>
   readonly context: ChatContext
 }
 
@@ -135,6 +138,7 @@ export interface ChatDerivation {
 
 const ASYNC_LAUNCH_STATUS = 'async_launched'
 const INTERRUPTED_NOTE = 'Interrupted'
+const CLEAR_COMMAND = '/clear'
 const PATH_FIELDS = new Set(['file_path', 'notebook_path', 'path'])
 const AGENT_TOOL = 'Agent'
 const PLAN_TOOL = 'TodoWrite'
@@ -264,40 +268,29 @@ const isHumanPrompt = (message: UserMessage): boolean =>
     ),
   )
 
-const startsTurn = (line: TranscriptLine): boolean =>
-  TranscriptLine.$match(line, {
-    SessionCleared: () => true,
-    Message: ({ message }) =>
-      Match.value(message).pipe(
-        Match.tag('User', isHumanPrompt),
-        Match.orElse(() => false),
-      ),
-  })
+const startsTurn = ({ message }: TranscriptLine): boolean =>
+  Match.value(message).pipe(
+    Match.tag('User', isHumanPrompt),
+    Match.orElse(() => false),
+  )
 
-const keyOf = (line: TranscriptLine, index: number): string =>
-  TranscriptLine.$match(line, {
-    SessionCleared: ({ session }) => `${session} cleared`,
-    Message: ({ session, message }) => `${session} ${message.offset} ${index}`,
-  })
+const keyOf = ({ session, message }: TranscriptLine, index: number): string =>
+  `${session} ${message.offset} ${index}`
 
-const boundaryOf = (line: TranscriptLine): Option.Option<string> =>
-  TranscriptLine.$match(line, {
-    SessionCleared: () => Option.none(),
-    Message: ({ session, message }) =>
-      Match.value(message).pipe(
-        Match.tag('System', (system) =>
-          Option.liftPredicate(`compact ${session} ${message.offset}`, () =>
-            system.blocks.some((block) =>
-              Match.value(block).pipe(
-                Match.tag('CompactBoundary', () => true),
-                Match.orElse(() => false),
-              ),
-            ),
+const boundaryOf = ({ session, message }: TranscriptLine): Option.Option<string> =>
+  Match.value(message).pipe(
+    Match.tag('System', (system) =>
+      Option.liftPredicate(`compact ${session} ${message.offset}`, () =>
+        system.blocks.some((block) =>
+          Match.value(block).pipe(
+            Match.tag('CompactBoundary', () => true),
+            Match.orElse(() => false),
           ),
         ),
-        Match.orElse(() => Option.none<string>()),
       ),
-  })
+    ),
+    Match.orElse(() => Option.none<string>()),
+  )
 
 const place = (lines: readonly TranscriptLine[], from: Placement) =>
   Arr.mapAccum(lines, from, (state, line): readonly [Placement, Placed] => {
@@ -310,15 +303,11 @@ const place = (lines: readonly TranscriptLine[], from: Placement) =>
     ]
   })
 
-const userMessageOf = (line: TranscriptLine): Option.Option<UserMessage> =>
-  TranscriptLine.$match(line, {
-    SessionCleared: () => Option.none(),
-    Message: ({ message }) =>
-      Match.value(message).pipe(
-        Match.tag('User', (user) => Option.some(user)),
-        Match.orElse(() => Option.none<UserMessage>()),
-      ),
-  })
+const userMessageOf = ({ message }: TranscriptLine): Option.Option<UserMessage> =>
+  Match.value(message).pipe(
+    Match.tag('User', (user) => Option.some(user)),
+    Match.orElse(() => Option.none<UserMessage>()),
+  )
 
 const stampedBlocks = <Value>(
   lines: readonly TranscriptLine[],
@@ -494,8 +483,7 @@ const subagentRun = (
     ),
     background,
     status,
-    sessionIdle:
-      evidence.context.activity === 'still' || !Option.contains(evidence.currentSession, session),
+    sessionIdle: evidence.context.activity === 'still',
     startedAt: at,
     finishedAt:
       status === 'running'
@@ -616,7 +604,12 @@ const userNoteDrafts = (
         ],
         LocalCommand: (command) => [
           draft(
-            ChatItem.Note({ key: keyAt(index), text: `${command.name} ${command.args}`.trim() }),
+            command.name === CLEAR_COMMAND
+              ? ChatItem.Cleared({ key: keyAt(index) })
+              : ChatItem.Note({
+                  key: keyAt(index),
+                  text: `${command.name} ${command.args}`.trim(),
+                }),
           ),
         ],
         LocalCommandOutput: (output) => outputNote(output.text, keyAt(index)),
@@ -663,24 +656,20 @@ const systemDrafts = (
 const draftsOf = (placed: Placed): readonly Draft[] => {
   const keyAt = (index: number) => keyOf(placed.line, index)
 
-  return TranscriptLine.$match(placed.line, {
-    SessionCleared: () => [draft(ChatItem.Cleared({ key: keyAt(0) }))],
-    Message: ({ session, message }) =>
-      Match.value(message).pipe(
-        Match.tagsExhaustive({
-          User: (user) => userDrafts(user, keyAt, placed.boundary),
-          Assistant: (assistant) => assistantDrafts(session, assistant, keyAt, placed.turn),
-          System: (system) => systemDrafts(system, keyAt, placed.boundary),
-          UnrecognizedEntry: () => [],
-          Malformed: (malformed) => [
-            draft(ChatItem.Unreadable({ key: keyAt(0), byteLength: malformed.byteLength })),
-          ],
-          Omitted: (omitted) => [
-            draft(ChatItem.Omitted({ key: keyAt(0), byteLength: omitted.byteLength })),
-          ],
-        }),
-      ),
-  })
+  return Match.value(placed.line.message).pipe(
+    Match.tagsExhaustive({
+      User: (user) => userDrafts(user, keyAt, placed.boundary),
+      Assistant: (assistant) => assistantDrafts(placed.line.session, assistant, keyAt, placed.turn),
+      System: (system) => systemDrafts(system, keyAt, placed.boundary),
+      UnrecognizedEntry: () => [],
+      Malformed: (malformed) => [
+        draft(ChatItem.Unreadable({ key: keyAt(0), byteLength: malformed.byteLength })),
+      ],
+      Omitted: (omitted) => [
+        draft(ChatItem.Omitted({ key: keyAt(0), byteLength: omitted.byteLength })),
+      ],
+    }),
+  )
 }
 
 const isSubagents = ChatItem.$is('Subagents')
@@ -813,9 +802,6 @@ const slotsOfIds = (
     }),
   )
 
-const sessionOf = (lines: readonly TranscriptLine[]): Option.Option<ClaudeSessionId> =>
-  Option.map(Arr.last(lines), (line) => line.session)
-
 const startOf = (context: ChatContext): ChatDerivation => ({
   lines: [],
   context,
@@ -863,7 +849,6 @@ const advance = (
   )
   const turnMoved = placement.turn !== previous.placement.turn
   const activityMoved = context.activity !== previous.context.activity
-  const currentSession = Option.orElse(sessionOf(fresh), () => sessionOf(previous.lines))
   const slotsOfCall = slotsOfCallAfter(previous.slotsOfCall, targets)
   const lastTurnSlots = HashSet.union(
     turnMoved ? HashSet.empty<number>() : previous.lastTurnSlots,
@@ -872,10 +857,7 @@ const advance = (
     ),
   )
   const agentSlots = HashSet.union(previous.agentSlots, indexesWhere(targets, isAgentCall))
-  const agentsMoved =
-    activityMoved ||
-    context.rosters !== previous.context.rosters ||
-    !Equal.equals(currentSession, sessionOf(previous.lines))
+  const agentsMoved = activityMoved || context.rosters !== previous.context.rosters
   const dirty = pipe(
     HashSet.fromIterable(HashMap.keys(joined)),
     HashSet.union(
@@ -897,7 +879,6 @@ const advance = (
     results,
     notices,
     lastTurn: placement.turn,
-    currentSession,
     context,
   }
 

@@ -10,6 +10,8 @@ import {
   ghost,
   historyOpen,
   liftOf,
+  lifted,
+  liftsWritten,
   liveTail,
   fades,
   openedOn,
@@ -27,6 +29,8 @@ const NUDGE = 20
 const MANY_ROWS = 60
 const RENDERED_ROW_HEIGHT = 120
 const SHORT_ROW_HEIGHT = 20
+const OPENING_ROW_HEIGHTS = [130, 140, 150, 160, 170]
+const OPENING_MEASURE_GAP_MS = 100
 
 beforeEach(() => {
   stubMediaQueries([])
@@ -266,6 +270,39 @@ describe('Thread', () => {
       yield* answerGrows(LONG_ANSWER_HEIGHT)
 
       expect(liftOf()).toBe(`translateY(${VIEWPORT_HEIGHT}px)`)
+    }),
+  )
+
+  it.effect('lifts nothing while the first measures of an open keep growing it', () =>
+    Effect.gen(function* () {
+      const opened = rowsShrinkAfterOpen(MANY_ROWS, RENDERED_ROW_HEIGHT, SHORT_ROW_HEIGHT)
+      const lifts = liftsWritten()
+
+      yield* Effect.forEach(
+        OPENING_ROW_HEIGHTS,
+        (height) =>
+          Effect.andThen(
+            Effect.sync(() => {
+              opened.measured(height)
+            }),
+            wait(OPENING_MEASURE_GAP_MS),
+          ),
+        { discard: true },
+      )
+
+      expect(lifts().filter((pixels) => pixels !== 0)).toStrictEqual([])
+    }),
+  )
+
+  it.effect('lifts what grows once the first measures of an open have gone quiet', () =>
+    Effect.gen(function* () {
+      const opened = rowsShrinkAfterOpen(MANY_ROWS, RENDERED_ROW_HEIGHT, SHORT_ROW_HEIGHT)
+
+      opened.measured(RENDERED_ROW_HEIGHT)
+      yield* wait(SETTLE_MS)
+      opened.measured(RENDERED_ROW_HEIGHT + SHORT_ROW_HEIGHT)
+
+      expect(lifted()).toBeGreaterThan(0)
     }),
   )
 

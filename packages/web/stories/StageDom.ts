@@ -38,6 +38,7 @@ const someFieldHolds = (text: string): boolean =>
 
 const holds = (witness: Witness): boolean =>
   Match.value(witness).pipe(
+    Match.when({ all: Match.any }, ({ all }) => all.every(holds)),
     Match.when({ text: Match.string }, ({ text }) => pageText().includes(text)),
     Match.when(
       { selector: Match.string },
@@ -50,6 +51,7 @@ const holds = (witness: Witness): boolean =>
 
 const witnessName = (witness: Witness): string =>
   Match.value(witness).pipe(
+    Match.when({ all: Match.any }, ({ all }) => all.map(witnessName).join(', ')),
     Match.when({ text: Match.string }, ({ text }) => `sees "${text}"`),
     Match.when({ selector: Match.string }, ({ selector }) => `sees ${selector}`),
     Match.when({ absent: Match.string }, ({ absent }) => `no longer sees "${absent}"`),

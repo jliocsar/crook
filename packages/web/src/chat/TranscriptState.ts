@@ -11,6 +11,7 @@ import type { SkillListing } from '@crook/domain/Skill'
 import type { Subagent } from '@crook/domain/Subagent'
 import {
   type BackgroundChanged,
+  inSession,
   positionAfter,
   type TranscriptEvent,
   type TranscriptPosition,
@@ -20,18 +21,16 @@ import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import type { HubCallDefected, WatchTranscriptRefused } from '@crook/web/rpc/HubConnection'
 import type { TranscriptResume } from '@crook/web/rpc/HubLink'
 
-export type TranscriptLine = Data.TaggedEnum<{
-  Message: { readonly session: ClaudeSessionId; readonly message: TranscriptMessage }
-  SessionCleared: { readonly session: ClaudeSessionId }
-}>
+export interface TranscriptLine {
+  readonly session: ClaudeSessionId
+  readonly message: TranscriptMessage
+}
 
 export type TranscriptWatchFailure = WatchTranscriptRefused | HubCallDefected
 
 export type SessionRosters = HashMap.HashMap<ClaudeSessionId, readonly Subagent[]>
 
 export type SessionBackgrounds = HashMap.HashMap<ClaudeSessionId, BackgroundChanged>
-
-export const TranscriptLine = Data.taggedEnum<TranscriptLine>()
 
 export class TranscriptView extends Data.Class<{
   readonly position: Option.Option<TranscriptPosition>
@@ -83,20 +82,27 @@ export const shownAfter = (
     }),
   )
 
-const freshLines = (view: TranscriptView, event: TranscriptEvent): readonly TranscriptLine[] =>
+const opensAnotherSession = (view: TranscriptView, event: TranscriptEvent): boolean =>
   Match.value(event).pipe(
-    Match.tagsExhaustive({
-      TranscriptOpened: (opened) =>
-        isOpened(view) ? [TranscriptLine.SessionCleared({ session: opened.session })] : [],
-      TranscriptChunk: (chunk) =>
-        chunk.messages.map((message) =>
-          TranscriptLine.Message({ session: chunk.session, message }),
-        ),
-      SubagentsChanged: () => [],
-      SkillsChanged: () => [],
-      TranscriptCaughtUp: () => [],
-      BackgroundChanged: () => [],
+    Match.tag('TranscriptOpened', (opened) => !inSession(view.position, opened.session)),
+    Match.orElse(() => false),
+  )
+
+const withoutSession = (view: TranscriptView): TranscriptView =>
+  new TranscriptView(
+    Struct.evolve(view, {
+      lines: () => [],
+      rosters: () => NO_ROSTERS,
+      backgrounds: () => NO_BACKGROUNDS,
     }),
+  )
+
+const freshLines = (event: TranscriptEvent): readonly TranscriptLine[] =>
+  Match.value(event).pipe(
+    Match.tag('TranscriptChunk', (chunk) =>
+      Arr.map(chunk.messages, (message) => ({ session: chunk.session, message })),
+    ),
+    Match.orElse(() => []),
   )
 
 const rostersAfter = (view: TranscriptView, event: TranscriptEvent): SessionRosters =>
@@ -134,16 +140,19 @@ const catchingUpAfter = (view: TranscriptView, event: TranscriptEvent): boolean 
 export const applyTranscriptEvent = (
   view: TranscriptView,
   event: TranscriptEvent,
-): TranscriptView =>
-  new TranscriptView({
-    position: positionAfter(view.position, event),
-    lines: [...view.lines, ...freshLines(view, event)],
-    rosters: rostersAfter(view, event),
-    backgrounds: backgroundsAfter(view, event),
-    skills: skillsAfter(view, event),
-    catchingUp: catchingUpAfter(view, event),
+): TranscriptView => {
+  const current = opensAnotherSession(view, event) ? withoutSession(view) : view
+
+  return new TranscriptView({
+    position: positionAfter(current.position, event),
+    lines: [...current.lines, ...freshLines(event)],
+    rosters: rostersAfter(current, event),
+    backgrounds: backgroundsAfter(current, event),
+    skills: skillsAfter(current, event),
+    catchingUp: catchingUpAfter(current, event),
     failure: Option.none(),
   })
+}
 
 export const failedWith = (view: TranscriptView, failure: TranscriptWatchFailure): TranscriptView =>
   new TranscriptView(
@@ -164,9 +173,12 @@ export const hasFailed = (view: Option.Option<TranscriptView>): boolean =>
 export const linesOf = (view: Option.Option<TranscriptView>): readonly TranscriptLine[] =>
   Option.match(view, { onNone: () => [], onSome: (found) => found.lines })
 
-export const currentSessionOf = (
-  lines: readonly TranscriptLine[],
-): Option.Option<ClaudeSessionId> => Option.map(Arr.last(lines), (line) => line.session)
+export const sessionOf = (view: Option.Option<TranscriptView>): Option.Option<ClaudeSessionId> =>
+  pipe(
+    view,
+    Option.flatMap((found) => found.position),
+    Option.map((position) => position.session),
+  )
 
 export const rostersOf = (view: Option.Option<TranscriptView>): SessionRosters =>
   Option.match(view, { onNone: () => NO_ROSTERS, onSome: (found) => found.rosters })

@@ -20,7 +20,7 @@ import { eventually, present } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
-import { chunk, opened, prompt, user } from '../TranscriptFixtures.ts'
+import { chunk, NEXT_SESSION, opened, prompt, user } from '../TranscriptFixtures.ts'
 
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
@@ -45,6 +45,37 @@ afterEach(() => {
 })
 
 describe('prompts sent while Claude has others to read', () => {
+  it.effect('strands no row when the session moves on and the prompt count falls', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        chunk(0, 20, [prompt(0, 'first'), prompt(10, 'second')]),
+      ])
+      yield* Effect.promise(() => screen.findByText('second'))
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'third' }))),
+      )
+      yield* Effect.promise(() => userEvent.type(field(), 'third{Enter}'))
+      yield* eventually(() => {
+        expect(screen.getByText('Sent')).toBeDefined()
+      })
+      yield* Queue.offerAll(transcript, [
+        opened(NEXT_SESSION),
+        chunk(0, 10, [prompt(0, 'third')], NEXT_SESSION),
+      ])
+      yield* eventually(() => {
+        expect(screen.queryByText('first')).toBeNull()
+        expect(screen.queryByText('Sent')).toBeNull()
+      })
+
+      expect(screen.getAllByText('third')).toHaveLength(1)
+    }),
+  )
+
   it.effect('queues a second prompt behind the first until the transcript holds both', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))

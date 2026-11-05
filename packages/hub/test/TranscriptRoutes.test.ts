@@ -180,8 +180,7 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
 
       yield* SubscriptionRef.set(state, stateOn(machine, 2, CLEARED_SESSION))
 
-      expect(yield* takeAll(events, 5)).toEqual([
-        `subagents ${FIRST_SESSION} 0`,
+      expect(yield* takeAll(events, 4)).toEqual([
         `opened ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,
         `caught up ${CLEARED_SESSION} ${bytesOf(cleared)}`,
@@ -217,7 +216,7 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
     }),
   )
 
-  live.effect('resumes a phone from its byte offset, finishing the session it was reading', () =>
+  live.effect("opens the pane's session for a phone that resumes from one it left", () =>
     Effect.gen(function* () {
       const machine = MachineId.make('transcript-resume')
       const root = yield* claudeRoot()
@@ -242,9 +241,7 @@ layer(testHub, { excludeTestServices: true })('Transcripts through HttpRoutes', 
         Option.none(),
       )
 
-      expect(yield* takeAll(events, 6)).toEqual([
-        `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
-        `subagents ${FIRST_SESSION} 0`,
+      expect(yield* takeAll(events, 4)).toEqual([
         `opened ${CLEARED_SESSION}`,
         `chunk ${CLEARED_SESSION} 0-${bytesOf(cleared)} 1`,
         `caught up ${CLEARED_SESSION} ${bytesOf(cleared)}`,

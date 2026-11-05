@@ -672,12 +672,11 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   WebSocket message). Fewer, larger events are the lever; a smaller read size is a regression.
 - Neither the agent nor the hub waits on the phone per event. Each keeps what is pending for a
   watch in a mailbox that merges as it goes: chunks that continue each other join into one, a
-  later skill list or subagent roster replaces the earlier one of its session, and the final
-  roster of a session the pane left stays ahead of the session it opened. The agent publishes
+  later skill list or subagent roster replaces the earlier one of its session. The agent publishes
   everything its mailbox holds as one call and keeps reading while it waits for the reply; the
   hub replies once the updates are in the phone's mailbox, and the phone gets everything held
   since its last acknowledgement as one message. A caught-up mark merged that way can name an
-  offset before the end of the joined chunk; nothing reads its offset. A mailbox takes no more
+  offset before the end of the joined chunk, which the hub lets through. A mailbox takes no more
   once it holds 1 MiB of read lines, so a slow phone holds the agent back instead of filling the
   hub, but always takes a failure. There is no time debounce: merging only happens while a
   message is already out, so an idle pipe adds no delay.
@@ -690,13 +689,30 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   already in and any roster, skill list or caught-up mark of another session, and refuses a chunk
   that does not continue the position, so the agent restarts from there. The phone applies
   whatever arrives and keeps a position only to resume from. The agent sends from where its own
-  read reached and resends freely, a repeated open on every resume included; that cursor is
-  what drains the rest of a session the pane left, and the hub could only hand it over after a
-  round trip. An older agent gets the same filtering, since it happens at the hub.
+  read reached and resends freely, a repeated open on every resume included; the hub could only
+  hand that cursor over after a round trip. An older agent gets the same filtering, since it
+  happens at the hub.
   The position moves in the same transaction that puts the update in the phone's mailbox. Done
   as two steps, an agent connection dropping between them would leave the position behind what
   the phone holds, and the agent's resend from that position would reach the phone twice, with
   nothing downstream left to drop it (reasoned from the interrupt points, not measured).
+- A caught-up mark names the offset the agent read to, so the hub refuses one past the position it
+  holds, exactly as it refuses a chunk that does not continue it, and the agent restarts from there.
+  A pane going A, B, A while the open of B still sat in the agent's switch queue read its cursor as
+  the end of A and sent only the open and the mark, while the hub's position fell to the start of A:
+  an empty thread saying it was caught up (found by the model, and walked through the real relay).
+  The refusal is at the hub, since every agent that sends the mark names that offset and restarts
+  when refused, so an older agent is covered too.
+- A publish that dies of a defect ends its watch with nothing to restart it, because the agent's
+  demand stream only moves when the set of watches does (measured in a probe of the agent's real
+  serve loop). The agent tells the phone the watch failed, so the hub drops the watch and the phone
+  offers Try again, the same as a read that dies. If that call dies too, the watch waits for the next
+  connection or re-watch.
+- A watch's stream cannot end with the connection lost while the phone still reads the link as
+  connected. An RPC socket's failures, a message that will not decode included, reach every live
+  request, the herd's among them, and the link reads as connected only while that herd stream runs,
+  so the link flips and the watch restarts (read in the RPC client's and the link's source, not
+  measured).
 - A publish from an agent connection that has died can still run at the hub after its successor's.
   The RPC server forks a handler for each request frame it reads, and nothing orders two sockets.
   With a proxy holding the client's bytes, the client dead by its own ping timeout and its successor
@@ -815,11 +831,28 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   at 2.8 KB a line on average (measured in Bun on the laptop, 200 appends, four runs). The count
   is an optional key on the wire, so a row from an agent too old to send it decodes as not knowing
   it, and its card shows none.
-- The phone keeps the last roster of every session a pane has shown, keyed by session, and the
-  agent sends a session's final roster when a watch crosses into the next one, so the runs of a
-  session the pane left keep their outcome. A background run outlives Claude's turn, so an idle
-  session does not end it; it only stops the run's elapsed time, since nothing then says the run
-  is still going.
+- A background run outlives Claude's turn, so an idle session does not end it; it only stops the
+  run's elapsed time, since nothing then says the run is still going.
+- A thread shows one session, and there is no way back to an earlier one on the phone: the old file
+  stays on the laptop and `/resume` reaches it. An open of another session starts the view over,
+  and the agent reads nothing further of the session the pane left, since the phone would throw it
+  away. Everything that counts on a thread only growing starts over with it: the wait for a sent
+  prompt, whose count can fall and strand a row (measured), the catch-up, the always notes, and
+  the thread's following, size cache and lift. The draft is the user's words about the pane rather
+  than about one session, so it stays.
+- The transcript says which of `/clear` and `/resume` changed a pane's session. Measured on a real
+  Claude Code 2.1.317, the pid file's session id changing within 5 s of either: `/clear` starts a
+  new file holding a meta caveat, a `user` entry `<command-name>/clear</command-name>` and an empty
+  `local_command` output; `/resume <id>` keeps that id and file, with no fork, and appends only
+  bookkeeping (`last-prompt`, `session-owner`, `atis-latch`, `cost-state`), no command line and no
+  user line. Over 151 local main transcripts all 9 `/clear` entries are `user` entries at line 3 or
+  4, near 1.2 KB, so any tail of a short new session holds one. A session that itself began with
+  `/clear` keeps that row at the top whenever a read reaches its start, a resume or a cold open
+  alike (reasoned, not measured). A bare `/resume` that is cancelled writes a `local_command` entry
+  reading `Resume cancelled`, and changes nothing.
+- A thread remounts when a session it knows changes to another, not when its first session
+  arrives. Remounting on the first one threw away the following that had already pinned the
+  thread to its end (measured: a test opened at the top instead of at the bottom).
 - A `translateY` on the thread's content extends its scroll container's scrollable overflow by
   the same amount: in Chromium 156 a 1000 px child lifted by 100 px gave the container a
   `scrollHeight` of 1100 and a bottom `scrollTop` 100 px further down (measured). While the
@@ -1043,18 +1076,22 @@ a turn of its own, enqueued as a task notification.
   up: the view that ends the catch-up counts as one only if the cached view's last line sits at
   the same index in it (lines are appended, so the same object), and its new rows are the row
   keys the cached view did not show. A chat that opened current, a cold open, a watch that failed
-  or started over, and a catch-up that added no row get nothing. A resume that sends an open of
-  the session the phone already holds appends a session-cleared line, so a test fake that does
-  so shows a divider for a row the real hub never sends: the hub drops that open (measured: a
-  test of a catch-up with nothing new saw a divider until its fake stopped sending the open).
-- The catch-up's line spans rows the virtualizer may have unmounted, so it is drawn in the
-  thread's content layer from the virtualizer's measurement cache, which holds a start and end
-  for every row, the estimate for one never measured. The content layer carries the glide's
-  lift, so the line and the chip move with the rows without reading it.
+  or started over, and a catch-up that added no row get nothing.
 - The catch-up shows nothing while it waits for the fresher view: the header's "Catching up"
-  pill covers that, and a reopen that brings nothing new would otherwise show a chip that leaves
-  with no divider. A catch-up of more than 22 rows, the most the design's long catch-up released
-  one at a time, lands the rows before the last 22 at once, where they are off screen anyway.
+  pill covers that. Its rows then land in one commit under one ordinary lift capped at a screen,
+  with a static divider above the first new row. Releasing them one row at a time, with a chip
+  carried down a trail, held a reopen back from its end: reopening a thread of 120 lines with 40
+  new ones took 267 to 273 frames, 5.1 to 5.5 s of lift, and ran past a story's wait for its last
+  line. Landed at once it takes one lift of 25 to 26 frames, about 490 ms, of at most the 660 px
+  screen (all measured in Chromium at 390x844 and 4x CPU throttling, four runs each).
+- A thread starts lifting only once its rows are rendered and its height has held still for a
+  fade's length. A fixed fade's length from the first row armed it while the first measures were
+  still arriving, so a thread opened already holding 120 lines glided 151 to 156 px for about
+  400 ms, 219 to 271 ms after it first showed: on its first mount in 4 of 4 runs, and on a reopen in
+  2 of 4. With the wait restarting on each change of height no open lifted in 16 of 16 runs, long or
+  short, cold or cached, and a catch-up landing after it still lifted (measured as above). A cold
+  open tapped from a card did not lift with the fixed wait either, in 8 of 8 runs, so the race
+  belongs to a thread that mounts holding its rows.
 
 :::tip
 Checking the web app against real data, measured:
@@ -1314,9 +1351,10 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
 - Vite discovers the highlighter's languages only when a chat first renders, and reloads the page
   once on each fresh server (measured), so the first story of a run can restart, and a sweep
   started in that page dies with it. Load a chat first and wait for the reload.
-- A timeline's end witness has to hold at every playback speed. The catch-up's trail showed at
-  full length, where the missed rows land 900 ms after the tap, and not at twice the speed, where
-  they land 450 ms after it, so its transition ends on the rows instead (measured in Chromium).
+- A timeline's end witness has to hold at every playback speed. A catch-up's trail, since removed,
+  showed at full length, where the missed rows land 900 ms after the tap, and not at twice the
+  speed, where they land 450 ms after it, so that transition ended on the rows instead (measured in
+  Chromium).
 
 :::warning
 A production build must get nothing from the catalog, and Tailwind is what would leak it. Its

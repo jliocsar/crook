@@ -1,11 +1,12 @@
 import { useNavigate } from '@tanstack/react-router'
 import type * as DateTime from 'effect/DateTime'
+import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import { Ellipsis } from 'lucide-react'
 import * as React from 'react'
 
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { ClaudeSessionId, MachineId, PaneId } from '@crook/domain/Ids'
 import type { SkillListing } from '@crook/domain/Skill'
 import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
@@ -18,7 +19,7 @@ import {
 } from '@crook/web/chat/BackgroundDock'
 import type { BackgroundJob } from '@crook/web/chat/BackgroundModel'
 import { askAnnouncement, withAlwaysNotes, withoutAskedCall } from '@crook/web/chat/AskModel'
-import { useCatchUp } from '@crook/web/chat/CatchUpTrail'
+import { useCatchUp } from '@crook/web/chat/CatchUpDivider'
 import { useChatCommands } from '@crook/web/chat/ChatCommands'
 import type {
   AskDockCommands,
@@ -51,11 +52,11 @@ import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import {
-  currentSessionOf,
   hasFailed,
   isCatchingUp,
   linesOf,
   rostersOf,
+  sessionOf,
   skillsOf,
 } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
@@ -112,6 +113,16 @@ const emptyThread = (model: ChatScreenModel, view: Option.Option<TranscriptView>
 
 const hasActions = (model: ChatScreenModel): boolean =>
   Option.isSome(model.row) && (model.presence === 'live' || model.presence === 'away')
+
+const useThreadEpoch = (session: Option.Option<ClaudeSessionId>): number => {
+  const [thread, setThread] = React.useState({ session, epoch: 0 })
+
+  if (!Equal.equals(thread.session, session)) {
+    setThread({ session, epoch: Option.isSome(thread.session) ? thread.epoch + 1 : thread.epoch })
+  }
+
+  return thread.epoch
+}
 
 const useWorkingHold = (signals: WorkingSignals): Option.Option<DateTime.Utc> => {
   const [heldSince, setHeldSince] = React.useState(NO_HOLD)
@@ -221,6 +232,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const cwd = cwdOf(model)
   const rosters = rostersOf(view)
   const lines = linesOf(view)
+  const session = sessionOf(view)
+  const threadEpoch = useThreadEpoch(session)
   const evidence = React.useMemo(() => lastTurnEvidence(lines), [lines])
   const workingSince = useWorkingHold({
     herdr: herdrTurnOf(model, hasFailed(view)),
@@ -237,6 +250,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     model,
     canAct,
     items,
+    session,
+    threadEpoch,
     draft,
     setDraft,
     onPromptSent: scrollToEnd,
@@ -267,8 +282,6 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   )
   const openSubagentJob = React.useCallback(
     (job: BackgroundJob) => {
-      const session = currentSessionOf(lines)
-
       if (Option.isSome(job.subagent) && Option.isSome(session)) {
         void navigate({
           to: '/m/$machine/p/$pane/sub/$session/$subagent',
@@ -276,7 +289,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         })
       }
     },
-    [navigate, machine, pane, lines],
+    [navigate, machine, pane, session],
   )
   const backgroundWork = useBackgroundWork(view, items, openSubagentJob)
   const backgroundContext = React.useMemo(() => Option.some(backgroundWork), [backgroundWork])
@@ -300,7 +313,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     [items, commands.alwaysNotes, askedCall],
   )
   const conversationRows = useItemRows(shownItems, environment)
-  const catchUp = useCatchUp(view, conversationRows)
+  const landedRows = useCatchUp(view, conversationRows)
   const workingAt = Option.getOrUndefined(Option.filter(workingSince, () => !hasToolRunning(items)))
   const watching = isWatching(model)
   const notClaude = model.presence === 'notClaude'
@@ -309,7 +322,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       notClaude
         ? []
         : [
-            ...catchUp.rows,
+            ...landedRows,
             ...(commands.pendingPrompts.length === 0
               ? summaryRows(episodeSummary, backgroundWork.open)
               : []),
@@ -321,7 +334,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           ],
     [
       notClaude,
-      catchUp.rows,
+      landedRows,
       episodeSummary,
       backgroundWork.open,
       commands.pendingPrompts,
@@ -371,11 +384,11 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       <BackgroundContext.Provider value={backgroundContext}>
         <div className="min-h-0 flex-1">
           <Thread
+            key={threadEpoch}
             handle={thread}
             rows={rows}
             dimmed={dimmed}
             empty={emptyThread(model, view)}
-            overlay={catchUp.overlay}
           />
         </div>
       </BackgroundContext.Provider>

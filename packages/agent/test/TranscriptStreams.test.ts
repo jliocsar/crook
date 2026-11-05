@@ -48,6 +48,7 @@ import {
   type TranscriptUpdate,
   TranscriptWatch,
   TranscriptWatchId,
+  isWatchFailed,
 } from '@crook/protocol/Transcripts'
 
 import { agentRow, machineStateWith } from './Fixtures'
@@ -315,8 +316,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
 
         yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
 
-        expect(yield* takeAll(events, 4)).toEqual([
-          `subagents ${FIRST_SESSION} `,
+        expect(yield* takeAll(events, 3)).toEqual([
           `opened ${CLEARED_SESSION}`,
           `skills ${CLEARED_SESSION}`,
           `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
@@ -419,8 +419,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
 
         yield* SubscriptionRef.set(state, stateOn(Option.some(CLEARED_SESSION)))
 
-        expect(yield* takeAll(events, 5)).toEqual([
-          `subagents ${FIRST_SESSION} `,
+        expect(yield* takeAll(events, 4)).toEqual([
           `opened ${CLEARED_SESSION}`,
           `skills ${CLEARED_SESSION}`,
           `chunk ${CLEARED_SESSION} 0-${bytesOf(skipped)} 1`,
@@ -484,108 +483,17 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
       }),
     )
 
-    it.effect('finishes the session a resume names before opening the one cleared into', () =>
-      Effect.gen(function* () {
-        const root = yield* claudeRoot()
-        const seen = userLine('seen')
-        const missed = userLine('missed')
-        const after = userLine('after')
-
-        yield* append(transcriptPath(root, FIRST_SESSION), seen + missed)
-        yield* append(transcriptPath(root, CLEARED_SESSION), after)
-
-        const state = yield* SubscriptionRef.make(stateOn(Option.some(CLEARED_SESSION)))
-        const streams = yield* streamsAt(root, state)
-        const events = yield* collect(
-          streams.follow(
-            new PaneTranscript({ pane: PANE }),
-            positionAt(FIRST_SESSION, bytesOf(seen)),
-            Option.none(),
-          ),
-        )
-
-        expect(yield* takeAll(events, 5)).toEqual([
-          `chunk ${FIRST_SESSION} ${bytesOf(seen)}-${bytesOf(seen + missed)} 1`,
-          `subagents ${FIRST_SESSION} `,
-          `opened ${CLEARED_SESSION}`,
-          `skills ${CLEARED_SESSION}`,
-          `chunk ${CLEARED_SESSION} 0-${bytesOf(after)} 1`,
-        ])
-      }),
-    )
-
     it.effect(
-      'settles the runs of the session a resume names before it opens the one cleared into',
+      'opens the session cleared into from its start, reading nothing of the one left',
       () =>
         Effect.gen(function* () {
-          const fileSystem = yield* FileSystem.FileSystem
-          const root = yield* claudeRoot()
-          const seen = userLine('launch the reviewer')
-          const finished = `${encodeJson({
-            type: 'attachment',
-            uuid: 'e193f484-3ab2-4f97-bfb0-1c6e19889174',
-            timestamp: '2026-10-16T16:25:05.395Z',
-            attachment: {
-              type: 'queued_command',
-              prompt: `<task-notification>\n<task-id>${SUBAGENT}</task-id>\n<tool-use-id>toolu_reviewer</tool-use-id>\n<status>completed</status>\n</task-notification>`,
-              commandMode: 'task-notification',
-              origin: { kind: 'task-notification' },
-            },
-          })}\n`
-
-          yield* append(transcriptPath(root, FIRST_SESSION), seen + finished)
-          yield* append(transcriptPath(root, CLEARED_SESSION), userLine('after'))
-          yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
-          yield* fileSystem.writeFileString(
-            `${subagentsPath(root, FIRST_SESSION)}/agent-${SUBAGENT}.meta.json`,
-            encodeJson({
-              agentType: 'general-purpose',
-              description: 'Review the diff',
-              toolUseId: 'toolu_reviewer',
-              spawnDepth: 1,
-              requestShape: 'background',
-            }),
-          )
-
-          const state = yield* SubscriptionRef.make(stateOn(Option.some(CLEARED_SESSION)))
-          const streams = yield* streamsAt(root, state)
-          const events = yield* streams
-            .follow(
-              new PaneTranscript({ pane: PANE }),
-              positionAt(FIRST_SESSION, bytesOf(seen)),
-              Option.none(),
-            )
-            .pipe(Stream.take(2), Stream.runCollect)
-
-          expect(
-            Match.value(events[1]).pipe(
-              Match.tag('SubagentsChanged', (changed) =>
-                changed.subagents.map((subagent) => `${changed.session} ${subagent.status}`),
-              ),
-              Match.orElse(() => []),
-            ),
-          ).toEqual([`${FIRST_SESSION} completed`])
-        }),
-    )
-
-    it.effect(
-      'opens the session cleared into even when the one it left has unreadable subagents',
-      () =>
-        Effect.gen(function* () {
-          const fileSystem = yield* FileSystem.FileSystem
           const root = yield* claudeRoot()
           const seen = userLine('seen')
+          const missed = userLine('missed')
           const after = userLine('after')
 
-          yield* append(transcriptPath(root, FIRST_SESSION), seen)
+          yield* append(transcriptPath(root, FIRST_SESSION), seen + missed)
           yield* append(transcriptPath(root, CLEARED_SESSION), after)
-          yield* fileSystem.makeDirectory(subagentsPath(root, FIRST_SESSION), { recursive: true })
-          yield* fileSystem.chmod(subagentsPath(root, FIRST_SESSION), 0o000)
-          yield* Effect.addFinalizer(() =>
-            Effect.ignore(fileSystem.chmod(subagentsPath(root, FIRST_SESSION), 0o700), {
-              log: 'Debug',
-            }),
-          )
 
           const state = yield* SubscriptionRef.make(stateOn(Option.some(CLEARED_SESSION)))
           const streams = yield* streamsAt(root, state)
@@ -758,6 +666,47 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           `0 caught up ${FIRST_SESSION} ${bytesOf(seen + missed)}`,
           `0 skills ${FIRST_SESSION}`,
         ])
+      }),
+    )
+
+    it.effect('tells the phone a watch failed when its publish dies', () =>
+      Effect.gen(function* () {
+        const root = yield* claudeRoot()
+        const first = userLine('first')
+
+        yield* append(transcriptPath(root, FIRST_SESSION), first)
+
+        const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+        const streams = yield* streamsAt(root, state)
+        const demands = yield* Queue.unbounded<TranscriptDemand>()
+        const published = yield* Queue.unbounded<readonly TranscriptUpdate[]>()
+        const calls = yield* Ref.make(0)
+        const link: TranscriptLink = {
+          demands: Stream.fromQueue(demands),
+          publish: (_watch, updates) =>
+            Effect.flatMap(
+              Ref.getAndUpdate(calls, (count) => count + 1),
+              (count) =>
+                count === 0 ? Effect.die('cannot encode this') : Queue.offer(published, updates),
+            ),
+        }
+
+        yield* Effect.forkScoped(streams.serve(link))
+        yield* Queue.offer(
+          demands,
+          new TranscriptDemand({
+            watches: [
+              new TranscriptWatch({
+                id: WATCH,
+                source: new PaneTranscript({ pane: PANE }),
+                from: Option.none(),
+                tail: Option.none(),
+              }),
+            ],
+          }),
+        )
+
+        expect((yield* Queue.take(published)).map(isWatchFailed)).toEqual([true])
       }),
     )
 

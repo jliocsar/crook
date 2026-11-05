@@ -17,7 +17,7 @@ import { agentsIn } from '@crook/domain/MachineState'
 import { Subagent } from '@crook/domain/Subagent'
 import { TranscriptPosition, type TranscriptSource } from '@crook/domain/Transcript'
 import { TranscriptMessage } from '@crook/domain/TranscriptMessage'
-import { NO_BACKGROUNDS, TranscriptLine, TranscriptView } from '@crook/web/chat/TranscriptState'
+import { NO_BACKGROUNDS, TranscriptView } from '@crook/web/chat/TranscriptState'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 
 export interface TranscriptStore {
@@ -47,10 +47,7 @@ const SUBAGENT_KIND = 'subagent'
 export const StoredKey = Schema.Tuple([MachineId, Schema.String, Schema.String, ClaudeSessionId])
 export type StoredKey = typeof StoredKey.Type
 
-const StoredLine = Schema.Union([
-  Schema.TaggedStruct('Message', { session: ClaudeSessionId, message: TranscriptMessage }),
-  Schema.TaggedStruct('SessionCleared', { session: ClaudeSessionId }),
-])
+const StoredLine = Schema.Struct({ session: ClaudeSessionId, message: TranscriptMessage })
 
 export class StoredTranscript extends Schema.Class<StoredTranscript>('StoredTranscript')({
   position: TranscriptPosition,
@@ -104,19 +101,10 @@ const storedOf = (view: TranscriptView): Option.Option<StoredTranscript> =>
     (position) => new StoredTranscript({ position, lines: view.lines, rosters: view.rosters }),
   )
 
-const lineOf = (stored: typeof StoredLine.Type): TranscriptLine =>
-  Match.value(stored).pipe(
-    Match.tagsExhaustive({
-      Message: (message) =>
-        TranscriptLine.Message({ session: message.session, message: message.message }),
-      SessionCleared: (cleared) => TranscriptLine.SessionCleared({ session: cleared.session }),
-    }),
-  )
-
 const viewOf = (stored: StoredTranscript): TranscriptView =>
   new TranscriptView({
     position: Option.some(stored.position),
-    lines: Arr.map(stored.lines, lineOf),
+    lines: stored.lines,
     rosters: stored.rosters,
     backgrounds: NO_BACKGROUNDS,
     skills: [],

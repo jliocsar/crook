@@ -15,15 +15,13 @@ import {
 import { useBackgroundWorkOf } from '@crook/web/chat/BackgroundDock'
 import { backgroundJobs } from '@crook/web/chat/BackgroundModel'
 import { lastPromptAt, useEpisodeSummary } from '@crook/web/chat/BackgroundSummary'
-import { TranscriptLine } from '@crook/web/chat/TranscriptState'
 
 import { at, SESSION, user } from '../TranscriptFixtures.ts'
 
 const NOW = DateTime.makeUnsafe('2026-10-30T14:00:00Z')
 const SETTLE_SECONDS = 14
 
-const lineOf = (message: ReturnType<typeof user>) =>
-  TranscriptLine.Message({ session: SESSION, message })
+const lineOf = (message: ReturnType<typeof user>) => ({ session: SESSION, message })
 
 const endedAgo = (seconds: number) =>
   new ShellTask({

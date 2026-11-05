@@ -3,13 +3,21 @@ import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 import { describe, expect, it } from 'vitest'
 
-import { CatchUp, lapseLabel, lapseOf, nextCatchUp, releasedRows } from '@crook/web/chat/CatchUp'
+import {
+  CatchUp,
+  lapseLabel,
+  lapseOf,
+  nextCatchUp,
+  withCatchUpDivider,
+} from '@crook/web/chat/CatchUp'
 import type { ThreadRow } from '@crook/web/chat/Thread'
+import { TranscriptOffset } from '@crook/domain/Ids'
+import { UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
 import {
   catchingUpFrom,
   EMPTY_TRANSCRIPT,
   failedWith,
-  TranscriptLine,
+  type TranscriptLine,
   TranscriptView,
 } from '@crook/web/chat/TranscriptState'
 import { HubCallDefected } from '@crook/web/rpc/HubConnection'
@@ -17,8 +25,10 @@ import { clockTime } from '@crook/web/time/Clock'
 
 import { assistant, prompt, said, SESSION } from '../TranscriptFixtures.ts'
 
-const line = (offset: number) =>
-  TranscriptLine.Message({ session: SESSION, message: said(offset, `line ${offset}`) })
+const line = (offset: number): TranscriptLine => ({
+  session: SESSION,
+  message: said(offset, `line ${offset}`),
+})
 
 const row = (key: string): ThreadRow => ({ key, content: key })
 
@@ -121,45 +131,47 @@ describe('nextCatchUp', () => {
   })
 })
 
-describe('releasedRows', () => {
-  const all = rows('a', 'b', 'c', 'd', 'later')
+describe('withCatchUpDivider', () => {
   const fresh = ['c', 'd']
 
-  it('holds every new row back before the first release, with the divider under the cache', () => {
-    expect(keysOf(releasedRows(all, fresh, 0, MARKER))).toStrictEqual(['a', 'b', 'catch-up'])
-  })
-
-  it('puts the divider right under the last released row', () => {
-    expect(keysOf(releasedRows(all, fresh, 1, MARKER))).toStrictEqual(['a', 'b', 'c', 'catch-up'])
-  })
-
-  it('lets what came after the catch-up follow the divider once every row is out', () => {
-    expect(keysOf(releasedRows(all, fresh, 2, MARKER))).toStrictEqual([
+  it('puts the divider above the first new row', () => {
+    expect(keysOf(withCatchUpDivider(rows('a', 'b', 'c', 'd'), fresh, MARKER))).toStrictEqual([
       'a',
       'b',
+      'catch-up',
       'c',
       'd',
+    ])
+  })
+
+  it('stays above the first new row when later rows follow', () => {
+    expect(keysOf(withCatchUpDivider(rows('a', 'c', 'd', 'later'), fresh, MARKER))).toStrictEqual([
+      'a',
       'catch-up',
+      'c',
+      'd',
       'later',
     ])
   })
 
-  it('keeps the divider when a released row is no longer shown', () => {
-    expect(keysOf(releasedRows(rows('a', 'b', 'c'), fresh, 2, MARKER))).toStrictEqual([
+  it('moves down to the next new row when the first is no longer shown', () => {
+    expect(keysOf(withCatchUpDivider(rows('a', 'd'), fresh, MARKER))).toStrictEqual([
       'a',
-      'b',
-      'c',
       'catch-up',
+      'd',
     ])
+  })
+
+  it('shows no divider once no new row is shown', () => {
+    expect(keysOf(withCatchUpDivider(rows('a', 'b'), fresh, MARKER))).toStrictEqual(['a', 'b'])
   })
 })
 
 describe('lapseOf', () => {
   it('spans the first and last stamped line', () => {
     const lapse = lapseOf([
-      TranscriptLine.SessionCleared({ session: SESSION }),
-      TranscriptLine.Message({ session: SESSION, message: prompt(0, 'go') }),
-      TranscriptLine.Message({ session: SESSION, message: assistant(10, [], 42) }),
+      { session: SESSION, message: prompt(0, 'go') },
+      { session: SESSION, message: assistant(10, [], 42) },
     ])
 
     expect(Option.map(lapse, (found) => DateTime.formatIso(found.to))).toStrictEqual(
@@ -171,9 +183,14 @@ describe('lapseOf', () => {
   })
 
   it('is none when no line carries a time', () => {
-    expect(lapseOf([TranscriptLine.SessionCleared({ session: SESSION })])).toStrictEqual(
-      Option.none(),
-    )
+    expect(
+      lapseOf([
+        {
+          session: SESSION,
+          message: new UnrecognizedEntry({ offset: TranscriptOffset.make(0), entryType: 'mode' }),
+        },
+      ]),
+    ).toStrictEqual(Option.none())
   })
 })
 

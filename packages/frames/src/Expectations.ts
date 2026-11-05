@@ -56,6 +56,10 @@ export const TIMELINE_EXPECTATIONS = {
     dock: inSequence('composer'),
   }),
   'transition/clear': story({ thread: inSequence('thread-rows'), dock: inSequence('composer') }),
+  'transition/resume-other-session': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
   'transition/prompt-to-answer': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),

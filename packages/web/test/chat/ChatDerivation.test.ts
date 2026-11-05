@@ -2,6 +2,7 @@ import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
+import * as Option from 'effect/Option'
 
 import { parseLine } from '@crook/claude/TranscriptParser'
 import clearNewSession from '@crook/claude/fixtures/clear-new-session.jsonl?raw'
@@ -20,6 +21,7 @@ import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import {
   type AgentActivity,
+  ChatItem,
   chatItems,
   type ChatContext,
   type ChatDerivation,
@@ -159,8 +161,6 @@ const backgroundRun = linesOf([
     compactSummary(80, 'Summary of the work so far'),
     notification(90, 'toolu_agent', 'completed'),
   ]),
-  opened(NEXT_SESSION),
-  chunk(0, 1, [prompt(0, 'after the clear'), answered(10, 'fresh start')], NEXT_SESSION),
 ])
 
 describe('deriveChat', () => {
@@ -170,18 +170,26 @@ describe('deriveChat', () => {
     })
   }
 
-  it('equals a full recompute across a /clear into the next session', () => {
-    expectEqualAlong(
-      linesOf([
-        opened(),
-        chunk(0, 1, messagesOf(clearOldSessionTail)),
-        opened(NEXT_SESSION),
-        chunk(0, 1, messagesOf(clearNewSession), NEXT_SESSION),
-      ]),
-    )
+  it('starts over when the view starts over on the next session', () => {
+    const before = fixtureLines(clearOldSessionTail)
+    const after = linesOf([
+      opened(),
+      chunk(0, 1, messagesOf(clearOldSessionTail)),
+      opened(NEXT_SESSION),
+      chunk(0, 1, messagesOf(clearNewSession), NEXT_SESSION),
+    ])
+    const context = contextAt(0, NO_ROSTERS)
+    const crossed = deriveChat(deriveChat(EMPTY_CHAT, before, context), after, context)
+
+    expect(crossed.items).toEqual(chatItems(after, context))
+    expect(Arr.filter(crossed.items, ChatItem.$is('Cleared'))).toHaveLength(1)
+    expect(Option.map(Arr.head(crossed.items), ChatItem.$is('Cleared'))).toEqual(Option.some(true))
+    expect(new Set(Arr.map(after, (line) => line.session))).toEqual(new Set([NEXT_SESSION]))
+
+    expectEqualAlong(after)
   })
 
-  it('equals a full recompute while results, notices, rosters and sessions arrive late', () => {
+  it('equals a full recompute while results, notices and rosters arrive late', () => {
     const rosters = HashMap.make([SESSION, [subagent({ toolUseId: 'toolu_agent' })]])
     const finished = HashMap.make([
       SESSION,

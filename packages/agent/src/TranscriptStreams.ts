@@ -138,11 +138,14 @@ const FOLLOW_ENDED: TranscriptUpdate = new TranscriptWatchFailed({
 const followFailed = (error: FollowError) =>
   failedWith(toWireFailure(error), Effect.logWarning(error.message))
 
+const stoppedByDefect = (defect: Cause.Cause<never>) =>
+  new TranscriptReadFailed({
+    detail: `a bug in the crook agent stopped the watch: ${Cause.pretty(defect)}`,
+  })
+
 const followDefected = (defect: Cause.Cause<never>) =>
   failedWith(
-    new TranscriptReadFailed({
-      detail: `a bug in the crook agent stopped the watch: ${Cause.pretty(defect)}`,
-    }),
+    stoppedByDefect(defect),
     Effect.logError('A transcript watch died of a defect; the phone is told it failed.', defect),
   )
 
@@ -157,23 +160,6 @@ const rosterOf =
   (session: ClaudeSessionId) =>
   (subagents: readonly Subagent[]): TranscriptEvent =>
     new SubagentsChanged({ session, subagents })
-
-const finalRoster = Effect.fn('TranscriptStreams.finalRoster')(function* (
-  roster: SubagentRoster['Service'],
-  file: TranscriptFile,
-) {
-  return yield* roster.read(file).pipe(
-    Effect.map((subagents) => Stream.succeed(rosterOf(file.session)(subagents))),
-    Effect.catch((error) =>
-      Effect.as(
-        Effect.logWarning(
-          `Sent no final subagent list for the session the pane left: ${error.message}`,
-        ),
-        Stream.empty,
-      ),
-    ),
-  )
-})
 
 const backgroundOf =
   (session: ClaudeSessionId) =>
@@ -410,40 +396,6 @@ const make = Effect.gen(function* () {
     )
   }
 
-  const finishSession = (
-    position: TranscriptPosition,
-    tailBytes: Option.Option<TranscriptTailBytes>,
-  ) =>
-    Stream.unwrap(
-      Effect.map(
-        locator.locate(position.session),
-        Option.match({
-          onNone: () => Stream.empty,
-          onSome: (file) =>
-            Stream.concat(
-              fromLineNearEnd(file, position.offset, tailBytes, (from) => tail.drain(file, from)),
-              Stream.unwrap(finalRoster(roster, file)),
-            ),
-        }),
-      ),
-    )
-
-  const fromSession = (
-    paneSession: PaneSession,
-    position: Option.Option<TranscriptPosition>,
-    tailBytes: Option.Option<TranscriptTailBytes>,
-  ) =>
-    Option.match(position, {
-      onNone: () => openSession(paneSession, TRANSCRIPT_START, tailBytes),
-      onSome: (at) =>
-        at.session === paneSession.session
-          ? openSession(paneSession, at.offset, tailBytes)
-          : Stream.concat(
-              finishSession(at, tailBytes),
-              openSession(paneSession, TRANSCRIPT_START, tailBytes),
-            ),
-    })
-
   const sessionsOf = (pane: PaneId) =>
     sync.changes.pipe(
       Stream.map((state) =>
@@ -470,7 +422,9 @@ const make = Effect.gen(function* () {
               onNone: () => Stream.never,
               onSome: (paneSession) =>
                 Stream.unwrap(
-                  Effect.map(Ref.get(position), (at) => fromSession(paneSession, at, tailBytes)),
+                  Effect.map(Ref.get(position), (at) =>
+                    openSession(paneSession, startIn(paneSession.session, at), tailBytes),
+                  ),
                 ),
             }),
           ),
@@ -522,8 +476,23 @@ const make = Effect.gen(function* () {
         ),
       )
 
+    const publishDefected = (defect: Cause.Cause<never>) =>
+      Effect.logError(
+        'Publishing a transcript watch died of a defect; the phone is told it failed.',
+        defect,
+      ).pipe(
+        Effect.andThen(
+          link.publish(watch.id, [new TranscriptWatchFailed({ failure: stoppedByDefect(defect) })]),
+        ),
+        Effect.catch((error) => Effect.logWarning(error.message)),
+        Effect.catchDefect((again) =>
+          Effect.logError('Telling the phone its transcript watch failed died too.', again),
+        ),
+      )
+
     return attempt(watch.from).pipe(
       Effect.catchTag('RpcClientError', (error) => Effect.logDebug(error.message)),
+      Effect.catchDefect((defect) => publishDefected(Cause.die(defect))),
       Effect.annotateLogs('transcriptWatch', watch.id),
     )
   }

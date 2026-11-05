@@ -95,6 +95,15 @@ export const continuesFrom = (
     (current) => current.session === chunk.session && current.offset === chunk.offset,
   )
 
+export const reachesPast = (
+  position: Option.Option<TranscriptPosition>,
+  caughtUp: TranscriptCaughtUp,
+) =>
+  Option.exists(
+    position,
+    (current) => current.session === caughtUp.session && caughtUp.offset > current.offset,
+  )
+
 export const inSession = (position: Option.Option<TranscriptPosition>, session: ClaudeSessionId) =>
   Option.exists(position, (current) => current.session === session)
 

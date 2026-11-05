@@ -13,7 +13,7 @@ import type {
   UserBlock,
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
-import { TranscriptLine } from '@crook/web/chat/TranscriptState'
+import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
 
 export type HerdrTurn = Data.TaggedEnum<{
   Working: { readonly since: DateTime.Utc }
@@ -101,23 +101,18 @@ const signed = (
   at: Option.Option<DateTime.Utc>,
 ): Option.Option<TurnEvidence> => Option.map(ends, (found): TurnEvidence => ({ ends: found, at }))
 
-const turnEvidenceOf = (line: TranscriptLine): Option.Option<TurnEvidence> =>
-  TranscriptLine.$match(line, {
-    SessionCleared: () => Option.none(),
-    Message: ({ message }) =>
-      Match.value(message).pipe(
-        Match.tagsExhaustive({
-          User: (user) => signed(userEnds(user), user.timestamp),
-          Assistant: (assistant) =>
-            signed(Option.some(assistantEnds(assistant)), assistant.timestamp),
-          System: (system) =>
-            signed(Option.as(Option.liftPredicate(system, closesTurn), true), system.timestamp),
-          UnrecognizedEntry: () => Option.none<TurnEvidence>(),
-          Malformed: () => Option.none<TurnEvidence>(),
-          Omitted: () => Option.none<TurnEvidence>(),
-        }),
-      ),
-  })
+const turnEvidenceOf = ({ message }: TranscriptLine): Option.Option<TurnEvidence> =>
+  Match.value(message).pipe(
+    Match.tagsExhaustive({
+      User: (user) => signed(userEnds(user), user.timestamp),
+      Assistant: (assistant) => signed(Option.some(assistantEnds(assistant)), assistant.timestamp),
+      System: (system) =>
+        signed(Option.as(Option.liftPredicate(system, closesTurn), true), system.timestamp),
+      UnrecognizedEntry: () => Option.none<TurnEvidence>(),
+      Malformed: () => Option.none<TurnEvidence>(),
+      Omitted: () => Option.none<TurnEvidence>(),
+    }),
+  )
 
 export const lastTurnEvidence = (lines: readonly TranscriptLine[]): Option.Option<TurnEvidence> =>
   Arr.findLast(lines, turnEvidenceOf)

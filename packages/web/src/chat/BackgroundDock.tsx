@@ -23,12 +23,7 @@ import * as React from 'react'
 
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { runsIn } from '@crook/web/chat/ChatItems'
-import {
-  backgroundsOf,
-  currentSessionOf,
-  linesOf,
-  type TranscriptView,
-} from '@crook/web/chat/TranscriptState'
+import { backgroundsOf, sessionOf, type TranscriptView } from '@crook/web/chat/TranscriptState'
 
 import {
   backgroundJobs,
@@ -211,7 +206,7 @@ export const useBackgroundWork = (
   items: readonly ChatItem[],
   onOpenSubagent: (job: BackgroundJob) => void,
 ): BackgroundHandle => {
-  const session = Option.getOrUndefined(currentSessionOf(linesOf(view)))
+  const session = Option.getOrUndefined(sessionOf(view))
   const background = Option.getOrUndefined(
     Option.flatMap(Option.fromUndefinedOr(session), (current) =>
       HashMap.get(backgroundsOf(view), current),

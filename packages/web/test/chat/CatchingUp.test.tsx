@@ -99,7 +99,7 @@ describe('a chat catching up', () => {
   )
 
   it.effect(
-    'lands a laptop catch-up at once, its divider already drawn, when motion is reduced',
+    'lands a laptop catch-up at once, its divider above the first new row, when motion is reduced',
     () =>
       Effect.gen(function* () {
         const { link, router } = yield* renderApp(CHAT, current())
@@ -132,11 +132,10 @@ describe('a chat catching up', () => {
 
         expect(screen.getByText('First missed.')).toBeDefined()
         expect(divider.textContent).toContain('On laptop')
-        expect(divider.querySelector('.invisible')).toBeNull()
-        expect(document.querySelector('[data-slot="catch-up-chip"]')).toBeNull()
         expect(
-          document.querySelector('[data-slot="catch-up-trail"] path')?.getAttribute('d'),
-        ).toMatch(/^M7 \d+ V\d+ A8 8 0 0 0 15 \d+ H\d+$/u)
+          divider.compareDocumentPosition(screen.getByText('First missed.')) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).not.toBe(0)
       }),
   )
 

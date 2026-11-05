@@ -9,6 +9,9 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { AgentRow } from '@crook/domain/AgentRow'
 import { Prompt } from '@crook/domain/Command'
+import { TranscriptOffset } from '@crook/domain/Ids'
+import { omittedUpTo } from '@crook/domain/Transcript'
+import { LocalCommandBlock } from '@crook/domain/TranscriptMessage'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
 
@@ -25,6 +28,7 @@ import {
   said,
   toolResult,
   toolUse,
+  user,
 } from '../../test/TranscriptFixtures.ts'
 import { chatHerd, chatStory, delivered, SEND_READY } from '../ChatFixtures.ts'
 import {
@@ -95,7 +99,12 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     slug: 'cached-reopen-catch-up',
     title: 'Cached reopen, then a catch-up',
     shows: { text: CHAT_TITLE },
-    ends: { text: 'Yes, the notice waits a second now.' },
+    ends: {
+      all: [
+        { text: 'Yes, the notice waits a second now.' },
+        { selector: '[data-row="catch-up"] + [data-row]:has([data-role="user"])' },
+      ],
+    },
     path: CHAT_PATH,
     link: liveWith(chatHerd()),
     arrange: ({ link }) => feed(link, CONVERSATION),
@@ -223,20 +232,56 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     slug: 'clear',
     title: '/clear, from the old session to the new one',
     shows: { text: 'The quiet redial' },
-    ends: { text: 'A fresh start.' },
+    ends: {
+      all: [
+        { text: 'A fresh start.' },
+        { text: 'Conversation cleared' },
+        { absent: 'The quiet redial' },
+      ],
+    },
     events: CONVERSATION,
     arrange: (stage) => delivered(stage, '/clear'),
     settle: () => types(COMPOSER, '/clear'),
     timeline: [
       step<LinkStage>(500, 'Send /clear', () => clicks(SEND)),
-      step<LinkStage>(500, 'The pane opens a new session', ({ link }) =>
-        feed(link, [opened(NEXT_SESSION)]),
-      ),
-      step<LinkStage>(300, 'Caught up on the empty session', ({ link }) =>
-        feed(link, [caughtUp(0, NEXT_SESSION)]),
+      step<LinkStage>(500, 'The pane opens a new session, and the thread starts over', ({ link }) =>
+        feed(link, [
+          opened(NEXT_SESSION),
+          chunk(
+            0,
+            10,
+            [user(0, [new LocalCommandBlock({ name: '/clear', args: '' })])],
+            NEXT_SESSION,
+          ),
+          caughtUp(10, NEXT_SESSION),
+        ]),
       ),
       step<LinkStage>(800, 'The first prompt of the new session', ({ link }) =>
-        feed(link, [chunk(0, 10, [prompt(0, 'A fresh start.')], NEXT_SESSION)]),
+        feed(link, [chunk(10, 20, [prompt(10, 'A fresh start.')], NEXT_SESSION)]),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'resume-other-session',
+    title: '/resume, from one session to the tail of another',
+    shows: { text: 'The quiet redial' },
+    ends: {
+      all: [
+        { text: 'Where we left off.' },
+        { text: 'Show earlier messages' },
+        { absent: 'Conversation cleared' },
+        { absent: 'The quiet redial' },
+      ],
+    },
+    events: CONVERSATION,
+    timeline: [
+      step<LinkStage>(600, 'The pane resumes another session, and its tail lands', ({ link }) =>
+        feed(link, [
+          opened(NEXT_SESSION),
+          omittedUpTo(NEXT_SESSION, TranscriptOffset.make(4096)),
+          chunk(4096, 4106, [said(4096, 'Where we left off.')], NEXT_SESSION),
+          caughtUp(4106, NEXT_SESSION),
+        ]),
       ),
     ],
   }),

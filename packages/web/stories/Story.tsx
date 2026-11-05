@@ -46,6 +46,7 @@ export type Witness =
   | { readonly selector: string }
   | { readonly absent: string }
   | { readonly field: string }
+  | { readonly all: readonly Witness[] }
 
 export interface Story {
   readonly id: string

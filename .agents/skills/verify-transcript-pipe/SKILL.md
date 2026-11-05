@@ -17,19 +17,19 @@ lives between three processes, where a unit test holds one still.
 
 ## Does your change touch it?
 
-Sync commit: `9b712e0`
+Sync commit: `e42fc8a`
 
 The command compares these files with that commit and exits 2 when any of them moved. Each line
 is the file, then the functions the model stands for.
 
 ```coverage
-packages/domain/src/Transcript.ts           positionAfter continuesFrom inSession omittedUpTo
+packages/domain/src/Transcript.ts           positionAfter continuesFrom reachesPast inSession omittedUpTo
 packages/protocol/src/TranscriptBatch.ts    batchWith withChunk withOpened intoSession eventsOf updatesOf isFull awaitsCatchUp isCaughtUp takeWhen
 packages/protocol/src/Transcripts.ts        TranscriptOutOfStep TranscriptWatchFailed
-packages/claude/src/TranscriptTail.ts       open available follow drain tailStart
-packages/agent/src/TranscriptStreams.ts     fromLineNearEnd openSession finishSession fromSession sessionsOf followPane publishAll runWatch serve
+packages/claude/src/TranscriptTail.ts       open available follow tailStart
+packages/agent/src/TranscriptStreams.ts     fromLineNearEnd openSession sessionsOf followPane publishAll runWatch serve
 packages/agent/src/HubLink.ts               session transcriptLinkOf
-packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append fail deliver publish
+packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append passOnCaughtUp fail deliver publish
 packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript TranscriptDemands PublishTranscriptBatch
 packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines catchingUpAfter catchingUpFrom failedWith resumeOf isShowable isOpened
 packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
@@ -61,18 +61,15 @@ Output lands in `tmp/verify-transcript-pipe/`: one `.cfg` and one `.out` per che
 | 1 | A check came out differently: read "Bug or modeling error" |
 | 2 | Every check came out as expected, but covered code moved since the sync commit: the model may no longer describe it. Read "When a change is intended" |
 
-The run has six parts, each a line per check:
+The run has five parts, each a line per check:
 
 - `holds/*`: rules that must hold on the code as it is.
 - `finding/*`: rules the code as it is breaks, below. Each breaks exactly as expected, and the
   real code walks the same steps to the same state.
 - `reach/*`: steps no bug path or random walk reaches, such as a refused chunk, walked through the
   real code on a path TLC finds to them.
-- `jc147/*`: the same model with the phone's view reset that JC-147 plans. This is a prediction:
-  it runs nothing real.
 - `can-fail/*`: each rule failing on a broken variant of the code it guards. A check never seen
-  failing proves nothing. `OneSessionShown` has no line here because the code as it is already
-  breaks it: `finding/F1` against `jc147/F1-gone` shows it failing and holding.
+  failing proves nothing.
 - `replay/*`: fixed random walks through the real relay, mailbox and view, comparing every
   position, line and mailbox after every step, plus nine cases through the real
   `TranscriptStreams.follow` over real files. `replay/every-step` fails if any step of the model
@@ -85,9 +82,8 @@ The run has six parts, each a line per check:
 |---|---|---|
 | `NoDuplicateLine` | The phone never shows the same line twice | Repeated rows, and row keys that collide in React and the virtualizer |
 | `NoHole` | Everything before a shown line is shown or marked as left out | Part of the conversation is missing and nothing says so |
-| `FinishesSessionItLeaves` | A session the phone started showing is finished before it leaves it | The old session's last lines are gone with no mark |
-| `OneSessionShown` | A thread shows one session | The old conversation stays above the new one |
-| `NoFalseClear` | "Conversation cleared" appears only when the session changed | A divider that lies |
+| `OneSessionShown` | A thread shows one session, and no lines before it knows which | The old conversation stays above the new one |
+| `NoRepeatedOpen` | The hub never tells the phone to open the session it is already in | The phone would rely on its own filter, which an older phone does not have |
 | `NeverRewinds` | The phone never goes back to a session the pane already left | The chat jumps back to a conversation that is over |
 | `NeverStuckCatchingUp` | With a live link and nothing left to do, the phone is not catching up | The pill and held rows stay until something else happens |
 | `ShowsPaneSession` | With a live link and nothing left to do, the phone is in the pane's session | The chat shows the wrong conversation |
@@ -96,56 +92,29 @@ The run has six parts, each a line per check:
 
 ## What it found
 
-These are bugs in the code, kept as findings: never weaken a rule or the model to make one go
-away. Each runs as `finding/*`, so its line stops being "ok" the day the code changes.
+A bug found here is kept as a finding until it is fixed: never weaken a rule or the model to make
+one go away. Each runs as `finding/*`, so its line stops being "ok" the day the code changes. None
+is open today.
 
-**F1, `OneSessionShown`: old lines stay under the new session.** Fixed by JC-147.
-
-1. The pane's `claudeSession` changes from A to B, and `switchMap` starts `fromSession(B, A@n)`.
-2. `finishSession` drains A, then `opened(B)` goes out, and `deliver` forwards it.
-3. `applyTranscriptEvent` on the phone: `freshLines` appends `SessionCleared` and keeps every line
-   of A.
-
-Harm: the thread shows A's conversation above B's. It is the design today, and this rule says what
-the user wants instead.
-
-**F2, `NoDuplicateLine`: going back to a session shows its lines again.** Fixed by JC-147.
-
-1. The pane goes A, B, A, with the phone holding A's line 0 and the hub at B.
-2. `fromSession(A, B@n)` finishes B, then `openSession(A, TRANSCRIPT_START)`.
-3. `deliver` forwards `opened(A)`, since the hub's position is in B, and moves it to A@0.
-4. `continuesFrom` accepts the chunk from 0. The phone appends line 0 again.
-
-Harm: repeated rows, and row keys that collide (measured in
-`tmp/redesign/research-bugs.md`, bug 3).
-
-**F4, `NeverBehindFile`: a return inside the switch queue leaves the hub at offset 0.** Not fixed
-by JC-147, which makes it worse. Needs the pane to go A, B, A while `opened(B)` is still in
-`mergeAll`'s queue: microseconds on an idle pipe, longer while a full mailbox holds the queue up
-behind a slow phone.
+**Settled: a return inside the switch queue.** Needs the pane to go A, B, A while `opened(B)` is
+still in `mergeAll`'s queue: microseconds on an idle pipe, longer while a full mailbox holds the
+queue up behind a slow phone.
 
 1. The pane leaves A, and `opened(B)` is queued, ahead of `Stream.tap`, so the `Ref` still says A@n,
    the end of the file.
-2. The pane returns to A. The next inner stream reads that `Ref`, and `fromSession(A, A@n)` sends
-   `opened(A)` and `caughtUp A`, with no chunk: it believes it is at the end.
-3. `deliver` forwards `opened(B)`, then `opened(A)`, since the position is in B: the position is
-   A@0, and the phone's too.
-4. The phone is caught up and holds position A@0 while the agent idles at A@n.
+2. The pane returns to A. The next inner stream reads that `Ref`, and `openSession` from A@n sends
+   `opened(A)` and `caughtUp A@n`, with no chunk: it believes it is at the end.
+3. `deliver` forwards `opened(B)`, then `opened(A)`, since the position is in B, and the phone
+   starts over: both are at A@0, with nothing shown.
 
-Harm today: a position behind, until the next line is refused and the restart re-reads the tail,
-repeating lines. With JC-147's reset: an empty thread that says it is caught up, until Claude
-writes again.
-
-**F5, `FinishesSessionItLeaves`: a session change right after a cold open drops the old session's
-end.** JC-147 makes it moot, since it shows no old session. Needs the session to change while
-`opened(A)` is still in `mergeAll`'s queue on a cold open, which is a very short window.
-
-1. A cold watch: `opened(A)` and a chunk are queued, and a further line lands in A.
-2. The pane moves to B. The next inner stream reads `Ref` as `None`, so `fromSession` has no session
-   to finish and only opens B.
-3. The queue drains: `opened(A)`, the chunk, `opened(B)`. A's later line never arrives.
-
-Harm: A's last lines are missing above the divider, with no mark.
+It used to end there, an empty thread saying it was caught up until Claude wrote again. The mark
+names the offset the agent read to, and that offset is past the position, so the relay now refuses
+the mark with `TranscriptOutOfStep`, and the agent restarts from A@0. The fix lives at the hub only:
+every agent that sends the mark has named that offset since the mark exists, and every agent answers
+a refusal by restarting, so an agent older than the hub is covered too. A mark merged behind a later
+chunk names an offset before the position, and passes. `holds/return-inside-switch-queue` and
+`can-fail/caught-up-unchecked` show the rule holding with the refusal and failing without it, and
+`reach/caught-up-refused` walks the refusal through the real relay.
 
 **Settled: a late publish from a dead socket.** It used to rewind the hub: the agent's first
 attempt published `[opened A, chunk 0-1, caughtUp A]`, its socket died with that call undelivered,
@@ -160,8 +129,8 @@ what is left of its updates and still replies. `holds/late-publish-from-dead-soc
 `reach/fenced-call-dropped` walks the drop through the real relay.
 
 A refusal is not a finding on its own: `reach/live-chunk-refused` gets one with no drop at all. A
-cold watch has `opened(A)` tapped and its chunk 0-1 still in `mergeAll`'s queue when the pane
-leaves A, so `Ref` says A@0 and `finishSession` reads chunk 0-1 again. The batch
+cold watch has `opened(A)` tapped and its chunk 0-1 still in `mergeAll`'s queue when the pane goes
+to B and back, so `Ref` still says A@0 and the return reads chunk 0-1 again. The batch
 `[opened A, chunk 0-1, chunk 0-1]` reaches the relay, `continuesFrom` refuses the second, and the
 agent restarts from A@1. It costs one round trip, and the phone sees no repeat.
 
@@ -213,19 +182,12 @@ is a modeling error, and the replay is what tells.
    its code in a comment.
 2. Change the model to say what the code now says, and keep the comment true. Change `Replay.ts`
    or the `FollowReplay.ts` cases where the wire or the view changed shape.
-3. Run the command. A `finding/*` that no longer breaks means the code fixed it: delete the check,
-   delete its entry under "What it found", and if a `jc147/*` predicted it, delete that too.
+3. Run the command. A `finding/*` that no longer breaks means the code fixed it: delete the check
+   and its entry under "What it found".
 4. A new rule gets a `can-fail/*` line: add a `Broken` value to the model that undoes the check
    in the code, and see it fail.
 5. Only once you have confirmed the model describes the code at the new commit, move the sync
    commit above to that commit. Moving it without reading the diff makes this check lie.
-
-**When JC-147 lands:** set `Jc147` to the code's behaviour by making the reset the model's only
-behaviour, remove the flag, and turn `SessionCleared` out of `linesAfter` and `Replay.ts`.
-`finding/F1` and `finding/F2` go away as `jc147/F1-gone` and `jc147/F2-gone` predict.
-`finding/F4` stays, and turns from a position behind into an empty thread.
-Removing the drain from `fromSession` (its change 6) means removing `DRAIN` from `startInner`;
-`FollowReplay.ts`'s cases that finish a session change with it.
 
 ## Bounds and assumptions
 
@@ -233,7 +195,7 @@ Every check is one pane, one chat, one agent, one hub, with lines counted, not b
 
 | Bound | Value |
 |---|---|
-| Sessions | `A, B` for the `holds/*` checks; `A, B, A` for the return findings |
+| Sessions | `A, B` for most checks; `A, B, A` for the return checks |
 | Lines in a file | 1 at the start, 1 written later; 3 in the backlog check; 2 and 2 more in the tail check |
 | Tail | 1 line; 3 in the backlog check |
 | Mailbox | full at 2 lines |
@@ -259,9 +221,8 @@ agent.
 - An agent older than the hub (`awaitsCaughtUp` false), and several phones on one pane, whose
   watches are independent.
 - A hub restart, except as both connections dropping.
-- A `watchTranscript` stream that ends with `HubConnectionLost` while `connected` stays the same,
-  and a publish that dies of a defect: both would leave a watch nothing restarts, and neither is
-  modelled.
+- A publish that dies of a defect: the agent tells the phone the watch failed, and a test holds it.
+  If that call dies too, the watch stays dead until the next connection or re-watch.
 - `transcriptViews`' fibers are replayed by hand in `Replay.ts` from the pure functions it calls;
   the atom itself is not run.
 - A mailbox that holds a step back. The replay compares the agent's outbox fullness after each
