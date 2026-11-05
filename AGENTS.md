@@ -1348,6 +1348,79 @@ prototype must not fail anyone's push. Its own typecheck is `typecheck:kitchen`.
 does not load fails its own story and no other. Deleting the folder removes it; nothing else names
 it.
 
+## Frames
+
+`bun run frames <story...>` plays timeline stories at real speed, 390x844 at 4x CPU throttling, reads
+the screen once per animation frame and fails on what a settled screenshot cannot show. The
+`qa-frames` skill says how to use it beside the other browser tools.
+
+- The recorder is an init script handed to the browser, not code in the catalog, so it is there
+  before any page module and the catalog carries nothing of the tool's. The table of which selector
+  means which state lives in one place, so a state attribute can replace its selectors later.
+- A state has to hold 24 frames, 400 ms at 60 Hz. Over the sweeps "Catching up" held 15 to 22
+  frames on a reconnect and 11 to 15 on a foreground return, and the paused composer 22 to 23, while
+  states a story holds on purpose start at about 29: 30 to 31 for a card, 36 to 37 for the
+  composer, 44 to 50 for a cold chat's skeleton (all measured). A threshold of 20 caught the
+  reconnect pill in 2 of 3 sweeps and 24 in 3 of 3. The banner on a first load straddles 24 (6 to 37
+  frames), so those stories list it as a finding only some runs show.
+- A story's layout shift budget is 0.01 in total, or 0.06 where a banner comes and goes, since a
+  banner pushes the content by design. Per-story totals fell at 0.0006 or under, or at 0.0125 or
+  over per event, so 0.01 sits in that gap; banner stories measured 0.037 to 0.056. Synthetic
+  events never set `hadRecentInput`, so a story's scripted press counts against it; a transform
+  does not count at all.
+- A sweep of the 17 timeline stories took 106, 107, 108 and 115 s, contact sheets included, on a
+  shared 15 GB laptop. It stays out of the gate: it needs a browser and a dev server, it costs two
+  minutes per push, and its counts move with what else the machine runs. The detection runs in the
+  gate, over recorded logs, with no browser.
+- A loaded machine can make a false finding. One story's frames dropped to 19 per second with
+  another agent working: a pill that held 51 to 52 frames in three other sweeps held 6 and read as
+  a flash. That run had 13.5% of its frames over 50 ms, and every other run at most 6%, so more
+  than a tenth means the run is starved: the tool runs it again, twice at most, and says so if it
+  stays starved.
+- The rAF log and the screencast were checked against each other over one sweep's 3725 frames and
+  2829 pictures: 75 of 84 mark changes showed a pixel change in that element's box, 48 of those
+  within 33 ms of the log either way, 2 earlier, 24 up to 300 ms later and 1 over that. Blank frames
+  had a content region with a standard deviation of 0.00. Screencast and trace screenshots agree
+  with each other (307 against 307 and 281 against 278 pictures in joint runs), holes included, so
+  the holes are not the screencast's.
+- The log overstates time on screen on this setup. A pill the log held from 4590 to 4924 ms was in
+  pictures from about 4818 to about 4935. Chromium's frame reporter kept saying frames were
+  presented every 16 ms through that hole, with no damage, on the software renderer (trace). That
+  raster lag causes it is inferred, and a phone with a GPU is not measured. So the log says what the
+  DOM asked to show, and a frame image can honestly lack a state that the log found; the tool
+  prints how far each image sits from its frame for that reason. On a foreground return the pill
+  got at most one picture in 5 of 5 runs, and a reconnect's got 7 to 13.
+- Pixels change without an animation frame: 47 of 61 main-thread gaps over 50 ms had compositor
+  pictures inside. No DOM state can change in one, so the marks miss no state there.
+- Tracing moves what it measures: frame times at p90 went from 18 to as high as 58 ms, and the
+  pill's count ranged from 10 to 20. The recorder alone costs little: a p50 read of 0.5 to 2.5 ms
+  and at most 18.5 ms at 4x, and frame p90 stayed 17.5 to 18.5 ms; adding the screencast made it
+  18 to 20. Screencast yes, trace never, under a frame count.
+- `agent-browser react renders` overcounts. Over one idle herd window it reported 1030 renders where a
+  hook using DevTools' own did-render test counted 175 (7 per card per second, matching the 105 per
+  second at fifteen cards above), and it listed components already mounted as mounts. Its
+  component names and change reasons are usable; its counts are not.
+- `agent-browser record` works alone at 30 and 60 fps. With `--contact-sheet` it failed on this laptop
+  at both ("analyzer fell behind by more than 16 buffered frames") and left a 0-byte video
+  (measured, version 0.41.1). `agent-browser skills get core --full`, which its help recommends,
+  answers "Skill not found" here.
+- `Arr.groupWith` compares each element with its group's head, not its neighbour (measured), so it
+  does not find runs of consecutive frames: a frame's index minus its position within a filter is
+  the key that stays the same along a run.
+- No timeline story reached the herd's blank before the link's first value, since the fake browser
+  hands the real link its first value before first render: 12 of 12 loads at 4x had the skeleton
+  in their first DOM read (measured). A story with the link held before that value shows it, 2
+  frames lasting 58 to 87 ms. That production's IndexedDB read makes this gap longer is reasoned,
+  not measured.
+- A settle that clicks Back has the story report ready during the slide-out, so a chat's marks
+  from before the first step read as flashes. A story that reopens a screen is judged from its
+  first step instead.
+- A flash's image is the last frame at its highest opacity, because the first frame of a state
+  often predates any picture of it.
+- A baseline entry lists what a story always shows and what it only sometimes shows. A new key
+  fails the story, an always key that did not happen fails it too and says to remove it, and a
+  sometimes key does neither.
+
 ## Release
 
 :::warning

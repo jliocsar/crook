@@ -1,0 +1,21 @@
+{
+  "name": "@crook/frames",
+  "version": "0.0.8",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts",
+    "./fixtures/*": "./test/fixtures/*"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "bun --bun vitest run --fsModuleCachePath node_modules/.vitest-cache"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.5",
+    "effect": "4.0.5"
+  },
+  "devDependencies": {
+    "@crook/tsconfig": "workspace:*"
+  }
+}

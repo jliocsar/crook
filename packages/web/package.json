@@ -46,6 +46,7 @@
   },
   "devDependencies": {
     "@crook/claude": "workspace:*",
+    "@crook/frames": "workspace:*",
     "@crook/tsconfig": "workspace:*",
     "@effect/platform-bun": "4.0.5",
     "@tailwindcss/node": "4.3.3",

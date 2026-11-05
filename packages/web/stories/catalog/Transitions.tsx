@@ -39,7 +39,7 @@ import {
 } from '../Fixtures.ts'
 import { clicks, seesText, types } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
-import { browserStory, linkStory, step } from '../Story.tsx'
+import { BEFORE_FIRST_VALUE, browserStory, linkStory, step } from '../Story.tsx'
 import type { BrowserStage, LinkStage, StoryMaker } from '../Story.tsx'
 
 const CARD_BUTTON = new RegExp(CHAT_TITLE, 'u')
@@ -315,6 +315,18 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
       step<BrowserStage>(200, 'The hub answers before the notice would show', (stage) =>
         Effect.flatMap(currentSession(stage), (session) => Queue.offer(session.views, TEAM)),
       ),
+    ],
+  }),
+  linkStory({
+    slug: 'herd-first-link-value',
+    title: 'Herd first load, the frames before the link has a first value',
+    note: 'The fake browser gives the real link its first value before the first render, so herd-first-load-empty never shows this. The first value here is what a slower cache read would make late.',
+    shows: { selector: 'nav[aria-label="Sections"]' },
+    ends: { text: 'Loading your agents' },
+    path: AGENTS_PATH,
+    link: BEFORE_FIRST_VALUE,
+    timeline: [
+      step<LinkStage>(0, 'The link gives its first value', ({ link }) => link.stateReads.open),
     ],
   }),
   browserStory({

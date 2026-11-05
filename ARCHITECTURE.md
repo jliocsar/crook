@@ -33,6 +33,7 @@ packages/
   hub/        @crook/hub        exe.dev server (compiled binary, embeds web build)
   web/        @crook/web        PWA (React + Vite)
   release/    @crook/release    release build: compile per target, version check, installer
+  frames/     @crook/frames     per-frame QA of the catalog's stories, run by hand, not shipped
 ```
 
 ### 2.1 `@crook/domain`
