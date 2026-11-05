@@ -1352,7 +1352,7 @@ Bare `/model`, `/effort` and `/fast` each open a dialog over the prompt, and the
 :::tip
 Deleting a folder under a Bun `fs.watch` reports the folder's own name, and after that the watch hears nothing, though it neither closes nor fails: a folder made again under the same path stayed silent (measured on Bun 1.4.4). Renaming it away reported nothing at all. A watch that must outlive its folder opens again when it hears its own name. Claude touches its pid folder as it starts, which reports that same name, so each new Claude costs one reopen and one read of the folder.
 
-`fs.watch` throws on a folder it may not read, and the effect file system opens its watcher inside a synchronous effect, so `EACCES` arrives as a defect rather than a `PlatformError`, and a retry alone would let it through (measured). A watch that must keep trying turns the defect into its own failure first.
+`fs.watch` throws on a folder it may not read, and the effect file system opens its watcher inside a synchronous effect, so `EACCES` arrives as a defect rather than a `PlatformError`, and a retry alone would let it through (measured). A watch that must keep trying turns the defect into its own failure first. The retry starts from the same 100 ms as the reconnect to herdr, a guard and not a measurement: nothing measured says how soon a failed watch is worth trying again.
 :::
 
 :::warning
