@@ -14,7 +14,7 @@ import { COLD_START, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
-import { STARTED_PANE } from '../../test/HubFakes.ts'
+import { keepOnThisDevice, STARTED_PANE } from '../../test/HubFakes.ts'
 import { manyLinesChunk } from '../ManyLines.ts'
 import {
   answered,
@@ -24,9 +24,11 @@ import {
   prompt,
   said,
   SESSION,
+  toolResult,
+  toolUse,
 } from '../../test/TranscriptFixtures.ts'
 import { chatHerd, chatStory, shellOnlyHerd } from '../ChatFixtures.ts'
-import { CHAT_SOURCE, chatAgent, CONVERSATION, AGENTS_PATH } from '../Fixtures.ts'
+import { CHAT_SOURCE, chatAgent, CONVERSATION, AGENTS_PATH, PANE } from '../Fixtures.ts'
 import { clicks, element, pause, role, seesSelector, seesText } from '../StageDom.ts'
 import type { LinkStage, StoryMaker } from '../Story.tsx'
 
@@ -66,6 +68,22 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     title: 'Chat, idle with a conversation',
     events: CONVERSATION,
     shows: { text: 'The quiet redial keeps the old notice' },
+  }),
+  chatStory({
+    slug: 'catch-up-landed-before-it-showed',
+    title: 'Chat kept on this device, with what was missed landed before its first commit',
+    arrange: ({ link }) =>
+      keepOnThisDevice(link, { machine: LAPTOP, pane: PANE, session: SESSION }, CONVERSATION),
+    events: [
+      chunk(50, 90, [
+        prompt(50, 'Is the banner fixed?'),
+        toolUse(60, 'toolu_grep', 'Grep', { pattern: 'announce' }),
+        toolResult(70, 'toolu_grep', 'src/rpc/HubLink.ts:64'),
+        answered(80, 'Yes, the notice waits a second now.'),
+      ]),
+      caughtUp(90),
+    ],
+    shows: { selector: '[data-row="catch-up"] + [data-row]:has([data-role="user"])' },
   }),
   chatStory({
     slug: 'skeleton',

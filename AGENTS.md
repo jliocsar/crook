@@ -745,9 +745,15 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   1.1 s after the tap went from held rows to landed rows with the state that says catching up never
   committed, so the pill first showed in the frame the rows landed, and held its 400 ms over a read
   already done, 37 frames with its fades (measured as above). The atom cannot know what committed.
-- A catch-up that lands before the cached rows ever committed gets no divider, since the divider's
-  keys are the rows the chat showed and nobody saw those (reasoned, not measured). A story that
-  needs the divider waits to see the held rows before the agent's next event.
+- A catch-up that lands before the cached rows ever committed gets its divider like any other. What
+  is new is what the cache did not hold, whichever rows the chat got to show: the fold keeps the
+  lines the cache held when the read ends, and the screen turns those into row keys. A chat kept on
+  the device with its answer already waiting goes from nothing to rows and divider in one commit,
+  with no layout shift, where judging from the first rows rendered showed no divider and failed its
+  story (both measured in Chromium at 4x). Only a chat read from the store can get there, since one
+  reopened from memory holds the cached view in its first render (measured). Turning the lines into
+  keys costs one pass at the landing: 4.7 ms at 62 lines, 11.4 at 586, 14.5 to 19.5 at 1110 to 1406
+  (measured on the dev server at 4x).
 - The agent applies a watch's tail only from offset 0 and keeps it per watch (read in its source),
   so a watch that read one session whole reads the next one whole too. The phone restarts the watch
   when a session read whole changes, with the tail, and drops what the old watch still delivers
@@ -890,7 +896,8 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - A browser asks for a font only once text needing it lays out, so a chat whose rows were the first text to want it measured them in the fallback font. The font landed before the next frame, while the commits after the mount still held the main thread: a prompt measured 76 px where it renders 52, and 36 px stayed empty between rows for one frame of 47 to 87 ms in 11 of 11 runs at 390 wide; at 430 three tall rows measured 608 where they render 560, 60 and 64 px empty on the first frame (measured at 4x CPU throttling). Asking for the three families when the app's entry runs has them in hand before those rows commit, and waits for nothing: no band in 3 of 3 runs at 390 wide and 1 of 1 at 430, the band back in all four with only that ask taken out, and the first frames' worst frame at 325 to 338 ms against 325 to 343 (measured as above). In a production build, unthrottled and on a screen with no mono text, all three answered 64 ms before the first contentful paint (measured once). The ask names no text, so of the 11 faces only the three whose range covers a space load, and a chat in another script still swaps its own faces late (reasoned, not measured). A font slower than the first rows still swaps under them, and a phone with the service worker behind it is not measured.
 - A scroll position written further than the rendered rows reach shows an empty thread for one frame when the frame comes before the virtualizer's render: a story's write of 0 from the end of 47 rows read 660 px with no row at the lift of 0, and the screencast shows that frame with nothing between the header and the dock, so the tool told the truth (measured once at 4x, 1 of 43 stories in a sweep; 2 of 229 story runs before it). The write was 0.7 ms before the frame and the render landed 30 ms after. A finger's scroll moves far less than the overscan per frame (reasoned, not measured); the writes the app makes itself are the jump to the end, which renders the end beside the range, and a jump to a row under reduced motion, which is not measured.
 - Filling a hole is not new content at the end, so it lifts nothing. With the lift, a thread still following when the whole file landed lost its rows for 115 ms and glided the row under the hole from 668 px back to the 361 px it had been at. Without it, that row read 185 px in every frame before and after the landing, and a thread scrolled up to the hole kept the row above it at 293 px while the filled rows opened under it and pushed the rest down (all measured at 4x CPU throttling, 390x844).
-- A catch-up's divider depends on the rows landing well after the tap. A story whose rows land 900 ms after the tap shows it; at twice the speed, 450 ms, no divider shows and its end witness fails, at twice and at four times, with or without any of the skip's changes and under the transcript machine too (measured in Chromium). A chat decides from the first view it renders whether a catch-up is pending, and rows that land before that first render read as no catch-up (read in its source, not measured). What a real resume does in that window is not measured.
+- A playback speed scales only the delays between a story's steps, and a chat's slide-out does not scale. The reopen catch-up story lost its divider at twice and four times the speed because its tap fell inside the slide-out, so the chat never left and the rows landed as live lines: its thread went from Current to Current and never held anything, 4 of 4 runs with the wait for the chat to leave taken out. With that wait it ends on its divider at 0.5, 1, 2 and 4 times the speed, 2 of 2 each, and at 8 and 16 with even the wait for the held rows taken out (all measured in Chromium, at 4x CPU throttling except the 16). How fast the rows land was never the cause.
+- A real resume does not land before the chat's first commit. The chat's first commit with a view comes before the request even leaves, so a shorter round trip cannot get ahead of it. Tapping a card on a local hub and agent, a real transcript and a stand-in Claude, the Chromium dev server at 4x and at an emulated 300 ms round trip: first commit 55 to 91 ms after the tap, the resume going out 267 to 391 ms after it, the caught-up mark arriving at 899 to 1055 ms and the rows committed at 1038 to 1327 ms, a 1.3 MB gap among them. At 1x those were 18 to 22, 94 to 105, 710 to 735 and 746 to 768 ms. With the proxy delaying nothing, at 4x: 68 to 114, 450 to 473, 619 to 663 and 783 to 859 ms. Reloading the page onto the chat, timed from navigation at 4x, the first commit takes 909 to 2887 ms and the mark still arrives 782 to 981 ms after it; with the proxy delaying nothing, 381 to 486 ms after it. At 20x with the proxy delaying nothing the first commit still came first: 406 and 420 ms against a mark at 2267 and 2310 on a tap, and 6251 to 8308 against 8083 to 10207 on a reload. A production build and a phone are not measured.
 - Effect RPC sends each array a stream handler emits as one message and waits for the client's
   acknowledgement before pulling again (read in its server source), so a stream that emits a
   whole mailbox take as one array costs one round trip. `Stream.fromEffectRepeat` followed by
@@ -1213,12 +1220,13 @@ a turn of its own, enqueued as a task notification.
   link holds and coalesces the updates that land while a write is out, with no time debounce, like
   the transcript pipe. Logout clears the cache and forgets the herd while holding that writer's
   permit, so a write still out lands before the clear and none can start after it.
-- A laptop catch-up is judged once per open, from the view the chat first showed while catching
-  up: the view that ends the catch-up counts as one only if the cached view's last line sits at
-  the same index in it (lines are appended, so the same object), and its new rows are the row
-  keys the cached view did not show. A chat that opened current, a cold open, a watch that failed
-  or started over, and a catch-up that added no row get nothing. The fold judges the lines when the
-  read ends, and the screen turns them into row keys, since only it has rows.
+- A laptop catch-up is judged once per open, from the lines the cache held: the view that ends the
+  catch-up counts as one only if the cached view's last line sits at the same index in it (lines
+  are appended, so the same object), and its new rows are the row keys the cached lines do not
+  give. A row the cache held keeps its key as more lines land, which a test holds over real
+  transcripts at every cut. A chat that opened current, a cold open, a watch that failed or started
+  over, and a catch-up that added no row get nothing. The fold judges the lines when the read ends,
+  and the screen turns them into row keys, since only it has rows.
 - The catch-up shows nothing but the header's "Catching up" pill, past its first second, while it
   waits for the fresher view. Its rows then land in one commit under one ordinary lift capped at a screen,
   with a static divider above the first new row. Releasing them one row at a time, with a chip
@@ -1274,7 +1282,7 @@ Checking the web app against real data, measured:
   `LANG` hands none of Claude's variables to its panes. `command claude --permission-mode default`
   typed into one skips a user's shell function that turns auto mode on, and starts in manual mode,
   so a Bash command it runs asks first (measured).
-- `herdr pane report-agent --agent-session-id` does not put the id where the agent reads it: `agent get` showed no `agent_session` afterwards (measured on herdr 0.9.5). A probe that needs a pane's Claude session without a real Claude runs a copy of `sleep` named `claude` in the pane with `CLAUDE_CONFIG_DIR` set, and writes `<that dir>/sessions/<pid>.json` holding the session id and the process start time from field 22 of `/proc/<pid>/stat`, which is the pid-file route the agent resolves sessions through.
+- `herdr pane report-agent --agent-session-id` does not put the id where the agent reads it: `agent get` showed no `agent_session` afterwards (measured on herdr 0.9.5). A probe that needs a pane's Claude session without a real Claude runs a copy of `sleep` named `claude` in the pane with `CLAUDE_CONFIG_DIR` set, and writes `<that dir>/sessions/<pid>.json` holding the pid, the session id and the process start time from field 22 of `/proc/<pid>/stat`, which is the pid-file route the agent resolves sessions through. A file without the pid is refused with a warning in the agent's log and the chat waits on "Loading the conversation" (measured).
 - The installed agent's `run` dials `CROOK_HUB_URL` (the `/rpc/agent` path included) with its token, and a local hub wants the two exe.dev headers instead, so a probe puts a small Bun WebSocket proxy between them that adds `X-ExeDev-Email` and `X-ExeDev-Token-Ctx`.
 - agent-browser scrolls an element into view before it clicks it, which moves the scroll container
   around it. A scroll position read after such a click is the tool's, not the app's.

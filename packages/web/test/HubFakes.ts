@@ -1,3 +1,4 @@
+import * as Arr from 'effect/Array'
 import type * as Cause from 'effect/Cause'
 import * as Deferred from 'effect/Deferred'
 import type * as Duration from 'effect/Duration'
@@ -9,7 +10,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
-import type * as Schema from 'effect/Schema'
+import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
@@ -17,7 +18,7 @@ import { InputDelivered, targetPane } from '@crook/domain/Command'
 import type { Command, CommandReceipt, PaneCommand } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import { PaneId, TerminalId } from '@crook/domain/Ids'
-import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
+import type { ClaudeSessionId, IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import {
   defaultNotificationPrefs,
   NotificationSettings,
@@ -31,8 +32,9 @@ import type { CommandFailure } from '@crook/protocol/Commands'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
-import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
+import { StoredTranscript, TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import type { StoredKey, TranscriptStore } from '@crook/web/cache/TranscriptCache'
+import { applyTranscriptEvent, EMPTY_TRANSCRIPT } from '@crook/web/chat/TranscriptState'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
 import type {
   ForgetMachineRefused,
@@ -478,6 +480,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
 
   return {
     layer,
+    transcriptStore: transcriptStore.store,
     storedTranscripts: transcriptStore.entries,
     pageVisible,
     state,
@@ -512,6 +515,24 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     logOutAnswers,
   }
 })
+
+export type FakeHubLink = Effect.Success<ReturnType<typeof makeFakeHubLink>>
+
+const encodeStoredTranscript = Schema.encodeEffect(Schema.toCodecJson(StoredTranscript))
+
+export const keepOnThisDevice = Effect.fn('keepOnThisDevice')(function* (
+  link: FakeHubLink,
+  key: { readonly machine: MachineId; readonly pane: PaneId; readonly session: ClaudeSessionId },
+  events: readonly TranscriptEvent[],
+) {
+  const view = Arr.reduce(events, EMPTY_TRANSCRIPT, applyTranscriptEvent)
+  const position = yield* Effect.fromOption(view.position)
+  const stored = yield* encodeStoredTranscript(
+    new StoredTranscript({ position, lines: view.lines, rosters: view.rosters }),
+  )
+
+  yield* link.transcriptStore.write([key.machine, 'pane', key.pane, key.session], stored)
+}, Effect.orDie)
 
 export const dropSession = (session: FakeSession, error: HubCallFailed) =>
   Queue.fail(session.views, error)
