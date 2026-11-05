@@ -571,7 +571,7 @@ path to it, a transition that throws or returns what the schema refuses, a state
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
 its own test shows each one failing. Two states that differ only by a token are one state: the
 walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
-guard and not a measurement: the machines here have 11, 8 and 130 (measured), so reaching it means a
+guard and not a measurement: the machines here have 11, 8 and 117 (measured), so reaching it means a
 token got into a state's identity.
 
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
@@ -754,8 +754,8 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   itself before its transcript arrived says so too as it leaves, where it used to go blank
   (measured: the frame tool's blank finding on that close is gone).
 - The thread skeleton on a cold reload of a chat stays in the frame baseline, explained rather than
-  fixed. With nothing cached, it held 12 frames (333 ms) on a reconnect story and 11 (290 ms) on a
-  foreground return, because the catalog's fake hub answers as soon as the screen mounts; a real
+  fixed. With nothing cached, over three sweeps it held 9 to 13 frames (233 to 369 ms) on a reconnect
+  story and 10 to 17 (232 to 489 ms) on a foreground return, because the catalog's fake hub answers as soon as the screen mounts; a real
   hub takes its round trip (measured for the fake; the real one is not). Dropping it means either a
   delay, which shows a blank panel while the chat slides in, or a minimum hold, which delays rows
   that have arrived (both reasoned, not measured), and each is a skeleton design call.
