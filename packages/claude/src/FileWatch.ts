@@ -1,12 +1,38 @@
 import * as Context from 'effect/Context'
 import * as Deferred from 'effect/Deferred'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
+import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
+
+export const SECOND_LOOK_QUIET = Duration.millis(20)
+
+const withSecondLook = <Failure>(names: Stream.Stream<string, Failure>) =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const heard = yield* Ref.make(HashSet.empty<string>())
+      const burst = yield* Queue.sliding<void>(1)
+      const secondLooks = Stream.fromQueue(burst).pipe(
+        Stream.debounce(SECOND_LOOK_QUIET),
+        Stream.mapEffect(() => Ref.getAndSet(heard, HashSet.empty<string>())),
+        Stream.flatMap((held) => Stream.fromIterable(held)),
+      )
+
+      return names.pipe(
+        Stream.tap((name) =>
+          Effect.andThen(Ref.update(heard, HashSet.add(name)), Queue.offer(burst, undefined)),
+        ),
+        Stream.merge(secondLooks, { haltStrategy: 'left' }),
+      )
+    }),
+  )
 
 export const readyOr =
   (changed: (name: string) => boolean) =>
@@ -28,7 +54,11 @@ const make = Effect.gen(function* () {
                 Deferred.doneUnsafe(ready, Effect.void)
               },
             })
-            .pipe(Stream.map((event) => Option.some(path.basename(event.path)))),
+            .pipe(
+              Stream.map((event) => path.basename(event.path)),
+              withSecondLook,
+              Stream.map(Option.some),
+            ),
         ),
       ),
     )

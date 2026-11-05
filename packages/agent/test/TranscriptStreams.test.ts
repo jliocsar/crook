@@ -22,7 +22,7 @@ import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TaskLiveness } from '@crook/agent/TaskLiveness'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { BackgroundWork } from '@crook/claude/BackgroundWork'
-import { FileWatch } from '@crook/claude/FileWatch'
+import { FileWatch, SECOND_LOOK_QUIET } from '@crook/claude/FileWatch'
 import { SkillCatalog } from '@crook/claude/SkillCatalog'
 import { SessionScans } from '@crook/claude/SessionScans'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
@@ -816,6 +816,60 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
 
           expect(publishes.length).toBeLessThan(burst.length)
           expect(publishes[0]?.[0]).toContain(`0 chunk ${FIRST_SESSION} ${bytesOf(first)}-`)
+        }),
+    )
+
+    it.effect(
+      'publishes nothing more when the second look behind an append finds nothing new',
+      () =>
+        Effect.gen(function* () {
+          const root = yield* claudeRoot()
+          const path = transcriptPath(root, FIRST_SESSION)
+          const first = userLine('first')
+          const second = userLine('second')
+
+          yield* append(path, first)
+
+          const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
+          const streams = yield* streamsAt(root, state)
+          const demands = yield* Queue.unbounded<TranscriptDemand>()
+          const published = yield* Queue.unbounded<readonly string[]>()
+          const link: TranscriptLink = {
+            demands: Stream.fromQueue(demands),
+            publish: (watch, updates) =>
+              Queue.offer(
+                published,
+                Arr.map(updates, (update) => `${watch} ${describeUpdate(update)}`),
+              ),
+          }
+
+          yield* Effect.forkScoped(streams.serve(link))
+          yield* Queue.offer(
+            demands,
+            new TranscriptDemand({
+              watches: [
+                new TranscriptWatch({
+                  id: WATCH,
+                  source: new PaneTranscript({ pane: PANE }),
+                  from: Option.none(),
+                  tail: Option.none(),
+                }),
+              ],
+            }),
+          )
+
+          yield* Queue.take(published)
+          yield* Effect.sleep(Duration.sum(SECOND_LOOK_QUIET, WATCHERS_SETTLED))
+          yield* Queue.clear(published)
+          yield* append(path, second)
+
+          expect(yield* Queue.take(published)).toEqual([
+            `0 chunk ${FIRST_SESSION} ${bytesOf(first)}-${bytesOf(first + second)} 1`,
+          ])
+
+          yield* Effect.sleep(Duration.sum(SECOND_LOOK_QUIET, WATCHERS_SETTLED))
+
+          expect(yield* Queue.size(published)).toBe(0)
         }),
     )
 

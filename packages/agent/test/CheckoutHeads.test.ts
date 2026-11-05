@@ -91,6 +91,7 @@ layer(services, { excludeTestServices: true })('CheckoutHeads', (it) => {
       yield* moveHead(root, branchHead('feature'))
 
       expect(yield* awaitMove(heads)).toBe(true)
+      expect(yield* staysStill(heads)).toBe(true)
     }),
   )
 

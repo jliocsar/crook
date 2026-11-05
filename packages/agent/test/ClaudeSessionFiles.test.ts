@@ -80,6 +80,7 @@ layer(services, { excludeTestServices: true })('ClaudeSessionFiles', (it) => {
       expect(yield* awaitMove(files)).toBe(true)
       expect(yield* files.holds(CLEARED)).toBe(true)
       expect(yield* files.holds(SESSION)).toBe(false)
+      expect(yield* staysStill(files)).toBe(true)
     }),
   )
 
