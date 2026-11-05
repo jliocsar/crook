@@ -270,7 +270,7 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     shows: {
       all: [
         { selector: '[data-slot="thinking-state-label"]' },
-        { selector: '[data-machine="activity"][data-state="Holding"]' },
+        { selector: '[data-machine="activity"][data-state="Working"]' },
         { selector: '[data-slot="prompt-input-stop"]' },
       ],
     },

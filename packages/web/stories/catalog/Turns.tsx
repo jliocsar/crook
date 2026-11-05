@@ -1,3 +1,4 @@
+import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Struct from 'effect/Struct'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -42,13 +43,13 @@ export const IDLE_HERD = liveWith(
 
 const TURN_START = CLOCK_AFTER_START_SECONDS + 1
 
-const TURN_WITH_TOOLS = (
-  [
-    ['toolu_grep', 'Grep', { pattern: 'toast' }, 'src/toast/Toast.tsx:24'],
-    ['toolu_read', 'Read', { file_path: 'src/toast/Toast.tsx' }, 'export function Toast() {}'],
-    ['toolu_test', 'Bash', { command: 'bun run test' }, '42 passed'],
-  ] as const
-).flatMap(([id, name, input, result], index) => {
+const TOOL_CALLS = [
+  ['toolu_grep', 'Grep', { pattern: 'toast' }, 'src/toast/Toast.tsx:24'],
+  ['toolu_read', 'Read', { file_path: 'src/toast/Toast.tsx' }, 'export function Toast() {}'],
+  ['toolu_test', 'Bash', { command: 'bun run test' }, '42 passed'],
+] as const
+
+const TURN_WITH_TOOLS = Arr.flatMap(TOOL_CALLS, ([id, name, input, result], index) => {
   const start = 60 + index * 20
   const seconds = TURN_START + 1 + index * 2
 

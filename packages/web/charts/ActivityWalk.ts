@@ -13,6 +13,7 @@ import {
   machineAway,
   quietTurnOpen,
   quietTurnOver,
+  sameActivity,
   STATUS_UNKNOWN,
 } from '@crook/web/chat/ActivityMachine'
 import { caseName } from '@crook/web/machine/Machine'
@@ -20,8 +21,7 @@ import type { WalkSpec } from '@crook/web/machine/Walk'
 
 const A_FLIP = DateTime.makeUnsafe(1000)
 
-const isTurnUnderway = ActivityState.isAnyOf(['Working', 'Holding'])
-const sawWorking = ActivityState.isAnyOf(['Working', 'Holding', 'Finished'])
+const isTurnUnderway = ActivityState.guards.Working
 
 const says = (state: ActivityState, status: string): boolean =>
   Option.contains(activityView(state).status, status)
@@ -32,7 +32,6 @@ const carried = (state: ActivityState): string =>
     Still: ({ status }) => status,
     Blocked: () => '',
     Working: () => '',
-    Holding: () => '',
     Finished: () => '',
     Away: ({ was }) => was,
   })
@@ -85,8 +84,9 @@ export const activityWalk: WalkSpec<ActivityState, ActivityEvent, never> = {
   ],
   arrowRules: [
     {
-      name: 'only a turn seen working holds after herdr goes quiet',
-      holds: ({ from, to }) => !ActivityState.guards.Holding(to) || sawWorking(from),
+      name: 'only a turn seen working holds after herdr goes quiet, and it keeps its start',
+      holds: ({ from, event, to }) =>
+        !ActivityEvent.guards.QuietTurnOpen(event) || !isTurnUnderway(to) || sameActivity(from, to),
     },
     {
       name: 'a turn that is over never holds',

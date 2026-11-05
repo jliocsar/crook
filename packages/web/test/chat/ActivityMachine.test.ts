@@ -22,7 +22,6 @@ import {
   away,
   BLOCKED,
   finished,
-  holding,
   lastTurnEvidence,
   machineAway,
   NO_AGENT,
@@ -92,7 +91,7 @@ describe('the activity machine', () => {
   })
 
   it('stays far under the walk limit, since a flip time is not part of a state', () => {
-    expect(walk(activityWalk).states).toHaveLength(11)
+    expect(walk(activityWalk).states).toHaveLength(10)
   })
 
   it('is one table for the row, Stop and Queued, the header word and the rows', () => {
@@ -101,7 +100,6 @@ describe('the activity machine', () => {
       workingSince: Option.some(STARTED),
       itemActivity: 'working',
     })
-    expect(activityView(holding(STARTED))).toEqual(activityView(working(STARTED)))
     expect(activityView(finished(STARTED))).toEqual({
       status: Option.some('done'),
       workingSince: Option.none(),
@@ -118,9 +116,14 @@ describe('the activity machine', () => {
   })
 
   it('holds a turn it saw working after herdr goes quiet, and keeps its start', () => {
-    expect(after(working(STARTED), [quietTurnOpen('idle')])).toEqual(holding(STARTED))
-    expect(after(holding(STARTED), [quietTurnOpen('done')])).toEqual(holding(STARTED))
-    expect(after(finished(STARTED), [quietTurnOpen('idle')])).toEqual(holding(STARTED))
+    expect(after(working(STARTED), [quietTurnOpen('idle')])).toEqual(working(STARTED))
+    expect(after(working(STARTED), [quietTurnOpen('idle'), quietTurnOpen('done')])).toEqual(
+      working(STARTED),
+    )
+  })
+
+  it('holds nothing for a prompt landing after a turn ended, or its start would be the old one', () => {
+    expect(after(finished(STARTED), [quietTurnOpen('idle')])).toEqual(still('idle'))
   })
 
   it('holds nothing for a chat opened on an idle agent whose transcript looks unfinished', () => {
@@ -144,16 +147,15 @@ describe('the activity machine', () => {
   })
 
   it('drops the turn when Claude asks, the machine leaves or the pane goes', () => {
-    expect(after(holding(STARTED), [AGENT_ASKS])).toEqual(BLOCKED)
+    expect(after(working(STARTED), [AGENT_ASKS])).toEqual(BLOCKED)
     expect(after(working(STARTED), [machineAway('working')])).toEqual(away('working'))
-    expect(after(holding(STARTED), [AGENT_MISSING])).toEqual(NO_AGENT)
-    expect(after(holding(STARTED), [STATUS_UNKNOWN])).toEqual(still('unknown'))
+    expect(after(working(STARTED), [AGENT_MISSING])).toEqual(NO_AGENT)
+    expect(after(working(STARTED), [STATUS_UNKNOWN])).toEqual(still('unknown'))
   })
 
   it('tells two states apart by what they carry, a flip time included', () => {
     expect(sameActivity(working(STARTED), working(STARTED))).toBe(true)
     expect(sameActivity(working(STARTED), working(LATER))).toBe(false)
-    expect(sameActivity(working(STARTED), holding(STARTED))).toBe(false)
     expect(sameActivity(still('idle'), still('done'))).toBe(false)
   })
 })

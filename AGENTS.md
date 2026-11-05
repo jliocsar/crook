@@ -571,7 +571,7 @@ path to it, a transition that throws or returns what the schema refuses, a state
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
 its own test shows each one failing. Two states that differ only by a token are one state: the
 walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
-guard and not a measurement: the machines here have 11, 11, 8 and 117 (measured), so reaching it means a
+guard and not a measurement: the machines here have 10, 11, 8 and 117 (measured), so reaching it means a
 token got into a state's identity.
 
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read

@@ -85,7 +85,7 @@ describe('the Working row', () => {
         yield* Effect.promise(() => screen.findByText('Working', WORKING_ROW))
         yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'idle', { seq: 2 })]))
         yield* eventually(() => {
-          expect(activityState()).toBe('Holding')
+          expect(activityState()).toBe('Working')
         })
 
         expect(screen.getByText('Working', WORKING_ROW)).toBeDefined()
@@ -176,6 +176,20 @@ describe('the Working row', () => {
     }),
   )
 
+  it.effect('shows no row on a chat opened after herdr went idle, its transcript unanswered', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'Fix the herd')])])
+      yield* Effect.promise(() => screen.findByText('Fix the herd'))
+
+      expect(screen.queryByText('Working', WORKING_ROW)).toBeNull()
+      expect(screen.getByRole('button', { name: SEND })).toBeDefined()
+      expect(activityState()).toBe('Still')
+    }),
+  )
+
   it.effect('holds no row once a typed /compact has ended, with its command still unanswered', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
@@ -227,7 +241,7 @@ describe('the queued label', () => {
       yield* Effect.promise(() => screen.findByText('Fix the herd'))
       yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'idle', { seq: 2 })]))
       yield* eventually(() => {
-        expect(activityState()).toBe('Holding')
+        expect(activityState()).toBe('Working')
       })
       yield* Ref.set(link.commandAnswer, delivered('And the tests'))
       yield* Effect.promise(() => userEvent.type(field(), 'And the tests{Enter}'))

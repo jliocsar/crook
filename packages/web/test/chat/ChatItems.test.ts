@@ -27,7 +27,7 @@ import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
 import {
   activityEventOf,
   activityMachine,
-  holding,
+  working,
   lastTurnEvidence,
   still,
 } from '@crook/web/chat/ActivityMachine'
@@ -272,11 +272,11 @@ describe('chatItems', () => {
     const idleRow = Option.some(agent('w1:p1', 'idle'))
     const stepOver = (lines: Parameters<typeof lastTurnEvidence>[0]) =>
       activityMachine.transition(
-        holding(since),
+        working(since),
         activityEventOf(PANE_LIVE, idleRow, lastTurnEvidence(lines)),
       )[0]
 
-    expect(stepOver(before.lines)).toEqual(holding(since))
+    expect(stepOver(before.lines)).toEqual(working(since))
     expect(stepOver(after.lines)).toEqual(still('idle'))
   })
 

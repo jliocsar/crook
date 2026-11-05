@@ -36,13 +36,14 @@ const MANUAL_COMPACT = 'manual'
 
 const QuietStatus = Schema.Literals(['idle', 'done'])
 const SeenActivity = Schema.Literals(['working', 'blocked', 'still'])
+const isTurnDuration = Schema.is(TurnDurationBlock)
+const isCompactBoundary = Schema.is(CompactBoundaryBlock)
 
 export const ActivityState = Schema.TaggedUnion({
   NoAgent: {},
   Still: { status: Schema.Union([QuietStatus, Schema.Literal('unknown')]) },
   Blocked: {},
   Working: { since: Schema.DateTimeUtc },
-  Holding: { since: Schema.DateTimeUtc },
   Finished: { since: Schema.DateTimeUtc },
   Away: { was: SeenActivity },
 })
@@ -69,7 +70,6 @@ export const STATUS_UNKNOWN = ActivityEvent.cases.StatusUnknown.make({})
 export const still = (status: 'idle' | 'done' | 'unknown') =>
   ActivityState.cases.Still.make({ status })
 export const working = (since: DateTime.Utc) => ActivityState.cases.Working.make({ since })
-export const holding = (since: DateTime.Utc) => ActivityState.cases.Holding.make({ since })
 export const finished = (since: DateTime.Utc) => ActivityState.cases.Finished.make({ since })
 export const away = (was: AgentActivity) => ActivityState.cases.Away.make({ was })
 export const machineAway = (was: AgentActivity) => ActivityEvent.cases.MachineAway.make({ was })
@@ -96,15 +96,7 @@ const activityTransition = (state: ActivityState, event: ActivityEvent): Step<Ac
         AnswerLanded: ({ since }) => finished(since),
         QuietTurnOver: ({ status }) => still(status),
         QuietTurnOpen: ({ status }) =>
-          Match.value(state).pipe(
-            Match.withReturnType<ActivityState>(),
-            Match.tags({
-              Working: ({ since }) => holding(since),
-              Holding: ({ since }) => holding(since),
-              Finished: ({ since }) => holding(since),
-            }),
-            Match.orElse(() => still(status)),
-          ),
+          ActivityState.guards.Working(state) ? state : still(status),
       }),
     ),
   )
@@ -135,11 +127,6 @@ export const activityView = (state: ActivityState): ActivityView =>
       itemActivity: 'blocked',
     }),
     Working: ({ since }) => ({
-      status: Option.some('working'),
-      workingSince: Option.some(since),
-      itemActivity: 'working',
-    }),
-    Holding: ({ since }) => ({
       status: Option.some('working'),
       workingSince: Option.some(since),
       itemActivity: 'working',
@@ -253,8 +240,8 @@ const assistantEnds = (message: AssistantMessage): boolean =>
 const closesTurn = (message: SystemMessage): boolean =>
   message.blocks.some(
     (block) =>
-      Schema.is(TurnDurationBlock)(block) ||
-      (Schema.is(CompactBoundaryBlock)(block) && Option.contains(block.trigger, MANUAL_COMPACT)),
+      isTurnDuration(block) ||
+      (isCompactBoundary(block) && Option.contains(block.trigger, MANUAL_COMPACT)),
   )
 
 const signed = (
