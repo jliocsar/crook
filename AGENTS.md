@@ -869,7 +869,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   built from, so only a watch that comes or goes works out a machine's demand again. Updating
   the position inside that set recomputed the demand once per event: 21 events cost 21
   recomputations before, and none after (measured with a counting tracer).
-- A burst of writes behind a publish arrives in fewer publishes than writes, not always in one. A test that wrote three lines and waited 80 ms for the agent to read them saw two in the next publish in one loaded gate, and all three in 12 of 12 runs with sixteen busy loops beside it (measured). The rest follows in the next publish, since a file event that lands during a read is kept (read in the tail). So a test holds that everything arrives in fewer publishes than writes.
+- A burst of writes behind a publish arrives in fewer publishes than writes, not always in one. A test that wrote three lines and waited 80 ms for the agent to read them saw two in the next publish in one loaded gate, and all three in 12 of 12 runs with sixteen busy loops beside it (measured). A file event that lands during a read is kept (read in the tail), but a write landing right after a delivered event gets no event of its own, so then the rest follows on the watch's second look. So a test holds that everything arrives in fewer publishes than writes.
 - A test that publishes twice and expects two deliveries takes the first before it publishes
   the second. The mailbox joins whatever the phone has not taken yet, and whether the phone's
   fiber got a turn in between hung on unrelated work in the hub: dropping a per-event update
@@ -960,6 +960,22 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - Scanning a whole transcript for notifications parses only the lines that carry the tag: a
   118 MB transcript of 24363 lines took 40 to 87 ms that way and 280 to 315 ms parsing every
   line (measured in Bun on the laptop).
+- A whole-file read for notifications and background work cost a chat twice on every phone unlock,
+  since the chat's roster and its background watch each read from byte 0 again: on the 118 MB
+  transcript 1057 to 1175 ms of CPU, 550 to 619 ms of wall time and a peak of 143 to 144 MB, on a
+  process that idles at 54 MB. Their markers are one set, so one read per session feeds both, and
+  the running count already keeps that read alive for every Claude pane. A chat arriving at it
+  then cost 7 to 25 ms of CPU and 3 to 13 ms of wall time, reading nothing (three runs of five
+  arrivals each). With no count holding it, one arrival reads the file once: 292 to 718 ms of
+  CPU, a peak of 129 to 137 MB. Searching a line's bytes for the markers rather than decoding it
+  first took the two old reads from 1057 to 1175 ms to 737 to 800 ms, and left the peak alone;
+  neither `--smol` nor reads of 64 or 256 KiB lowered the peak (all measured in Bun on the laptop).
+  The price lands on the running count, which now carries the whole scan for every Claude pane
+  once per agent start or session: on the 118 MB transcript, its first read went from 451 to 475 ms
+  of CPU to 571 to 691 ms, on an otherwise quiet laptop. Run side by side at a load average near 18, the
+  count's own markers alone took 729 to 747 ms and the whole scan 1159 to 1239 ms, at 118 MB, 476 to
+  527 and 758 to 782 at 32 MB, and 42 to 46 and 41 to 56 at 0.4 MB, with the peak the same at each.
+  So one chat opened per agent start already pays for it (reasoned from those numbers).
 - Claude Code 2.1.312 names background work in the transcript like this (measured in local
   transcripts and a probe session). A background Bash's tool result opens with `Command running
   in background with ID: <id>. Output is being written to: <…>/tasks/<id>.output`, and its
@@ -1069,6 +1085,40 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   upgrade with `Host: attacker.example` was proxied). A proxy rule that trusts an upgrade does
   its own host check, and the `Host` it compares against must be a fixed name, never another
   request header: a DNS-rebound page sends a matching `Host` and `Origin`.
+
+:::tip
+What the agent costs over an hour, measured on the laptop, which decided what got changed.
+
+Claude Code runs a hook command three times per tool call: 33 hook runs for 11 calls in a real
+session (pre, post and batch). The busiest recent hour held 292 tool calls and the median active
+hour 19, against 6.1 CPU-seconds an hour for the whole running agent, watched for 600 s beside
+three busy Claudes. A hook that started the whole compiled agent took 125 ms of CPU and a peak
+of 52 MB per run, so hook processes were the largest cost by far: 110 CPU-seconds in that busiest
+hour. Bun parses what a binary imports at its start, so only parsing less helps. Bytecode reached
+68 ms, a lazy import without splitting 47 ms, Effect's core with splitting 17 ms, and a forwarder
+importing nothing with splitting 4.4 ms of CPU, 4.2 ms of wall time and 19.7 MB, with 30 of 30
+payloads delivered.
+
+A real Claude's 22 s turn of 12 tool calls made herdr send 4 events: two status flips, one title
+change and one tab rename. A title set by escape code sends one `pane_updated` per change, and
+printing output sent 1 in 20 s, so nothing a working Claude does floods the subscription. The
+last week's transcripts held a median of 4 turns per active hour, a 90th percentile of 26 and at
+most 40. A re-read of 8 Claude panes and 15 recent places cost 20 to 38 ms of the agent's CPU and
+4 to 20 ms of herdr's, about 10 CPU-seconds at the busiest and under one in a median hour, so the
+re-read stayed as it is. Waiting for a session's file costs 16.95 ms of CPU against a look's 1.92 ms
+across 37 project folders, about 0.17 CPU-seconds an hour at 11 sessions, so that stayed too.
+:::
+
+:::tip
+Bun, measured on 1.4.3, for a client that writes to a Unix socket:
+
+- `socket.write` returns how many bytes it took, and the rest has to wait for `drain`. A 4 MiB
+  write that ignored it lost what did not fit.
+- `socket.end()` closes at once, so the client's `close` fires before the server has handled the
+  bytes, which still arrive: 0.2 to 1.3 ms against a half-open server holding the connection for
+  300 ms. A test polls for what the server did rather than trusting the close.
+  `allowHalfOpen` with `shutdown(true)` hung: the client got `end` and never `close`.
+:::
 
 :::warning
 A probe that starts a real Claude closes its pane, stops its named herdr session and deletes it in the same command that started it, never in a later one. A run cut off between the two left 19 Claudes running for about 11 hours and ran the laptop out of memory (measured). Deleting matters as much as stopping: the session file keeps the agents herdr started, so the next `server` on that name may bring them back (inferred, not measured). Start one real Claude at a time, never from a loop, a retry or a test, and use `herdr pane report-agent` whenever the state is all the probe needs.
@@ -1426,6 +1476,12 @@ A command's bubble holds its size and place as its output lands, read per frame 
 :::
 
 :::tip
+Bun's `fs.watch` drops a change event that lands about 1 ms after the one it just delivered for that name, and nothing tells the reader (measured on Bun 1.4.4). Whoever reads only on an event then stays short until the file's next write. Three appends to one file in one process, reading the size on each event, then 120 to 150 ms of quiet: `fs.promises.appendFile` back to back left the last read short in 144 of 200 rounds and in 415 of 450 beside 12 busy loops, at about 1 event per round; `appendFileSync` with a spin gap of 0 ms in 4 of 40, 0.5 ms in 15 of 40, 3 ms in 2 of 40, and at gaps of 1, 2, 5, 8, 12, 20, 50 and 200 ms in 0 of 40 each. With the writer in a process of its own, 100 rounds each, the same appends left it short in 60 rounds and 0.5 ms gaps in 96; watching the folder instead read the same, 61 and 93; 12 busy loops beside them made it 84 and 91 on the file and 81 and 90 on the folder. A watch's lost write never came long after its last event: at most 0.99 ms idle and 1.26 ms loaded on the file, and 1.62 ms idle and 1.52 ms loaded across two names in a folder. Another name in the same folder lost nothing: 0 of 400 rounds, 200 of them loaded, its event arriving while the first name's were dropped. That it is a debounce per path inside Bun is what this looks like and is not read in its source.
+
+Real Claude writes that close together. Over four windows of 270 to 285 s, busy-polling the size of the running transcripts of one project with a loop whose 99.9th percentile was 20 us and whose slowest pass was 7 ms, 73 of 143 consecutive size changes on a file sat under 1.5 ms apart. 71 of those were under 0.25 ms and were one append split in two: its first write ended on a 4096-byte offset every time, 71 of 71, so a file can hold a cut line for that long even though a 10 ms poll never saw one. None of those left a read short, since an event takes longer than that to reach a read (reasoned, not measured). The other 2 were separate appends, 1.03 and 1.28 ms apart. Of 79 bursts on those files a raw watch left one short, the 1.03 ms pair: the last 1177 bytes stayed unread for 981 ms, until the next write happened to come.
+
+So a watch hands every event on at once and, once 20 ms have passed with no event, hands on each name heard since the last look once more, and a new event restarts that wait. Twenty is a guard, twelve times the slowest lost write above, and it sits inside the gap real bursts leave: none of the 143 changes came between 1.5 ms and 100 ms after the one before, so a burst gets one second look, and a lost line arrives about 20 ms late rather than at the next write. Only names heard are repeated, and only until the look, so a filter by name spares everything it spared before and a folder repeats nothing it was not told about. It runs only behind an event, and an idle file costs nothing. A second look that finds a file as it was reads and publishes nothing: 1.07 ms of CPU per look more than the same loop with no looks for a tail, and 7.0 ms more for a screen's subagent activity, which reads a 64 KiB tail again (a median over five runs of 1000 looks in Bun on the laptop). Waiting for a session's file rebuilds its project folders' watches on every event from the folder that holds them, so a new project folder rebuilds them once more on its look: left alone, since that folder only moves when a new project appears and one wasted rebuild costs less than a second way of watching (reasoned, not measured). The burst test that started this, its whole file on Bun beside 12 busy loops, failed 5 of 78 runs without the look and 0 of 106 with it.
+
 Deleting a folder under a Bun `fs.watch` reports the folder's own name, and after that the watch hears nothing, though it neither closes nor fails: a folder made again under the same path stayed silent (measured on Bun 1.4.4). Renaming it away reported nothing at all. A watch that must outlive its folder opens again when it hears its own name. Claude touches its pid folder as it starts, which reports that same name, so each new Claude costs one reopen and one read of the folder.
 
 The effect file system stats each rename event in a fiber of its own before it hands the event on, so two events that arrive together reach the stream in the order their stats finish. The folder's own name overtook the deleted file's in 11 of 60 deletes, even though the raw watch reported the file first in 40 of 40 (measured). A stream that stops at the folder's name therefore never hears the file, so that name means reading the whole folder again and forgetting what it no longer holds. Before this, a session file deleted that way stayed known and the deletion woke nothing, in 8 of 60 deletes, and in none of 60 after (measured).

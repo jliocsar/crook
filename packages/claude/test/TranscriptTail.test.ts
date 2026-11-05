@@ -1,13 +1,16 @@
 import { expect, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
+import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
+import { FileWatch } from '@crook/claude/FileWatch'
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import {
   NEWLINE,
@@ -30,6 +33,7 @@ import {
   FIXTURES,
   SESSION,
   START,
+  WATCHERS_SETTLED,
   drained,
   encodeMessages,
   fixtureFile,
@@ -124,6 +128,56 @@ const repeatedPast = (turn: Uint8Array, minimum: number) => {
 }
 
 layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
+  live.effect(
+    'reads whatever landed since on the next wake, and sends nothing when no more has',
+    () =>
+      Effect.gen(function* () {
+        const first = encoder.encode('{}\n')
+        const second = encoder.encode('{"a":1}\n')
+        const third = encoder.encode('{"a":2}\n')
+        const file = yield* scratchFile(first)
+        const wakes = yield* Queue.unbounded<Option.Option<string>>()
+        const context = yield* Layer.build(
+          Layer.provide(
+            TranscriptTail.layer,
+            Layer.mock(FileWatch, { watchReady: () => Stream.fromQueue(wakes) }),
+          ),
+        )
+        const tail = Context.get(context, TranscriptTail)
+        const events = yield* Queue.unbounded<TailEvent>()
+        const offsetsOf = (chunk: TailEvent) =>
+          isChunk(chunk) ? [chunk.offset, chunk.nextOffset] : []
+
+        yield* tail.follow(file, START).pipe(
+          Stream.runForEach((event) => Queue.offer(events, event)),
+          Effect.forkScoped,
+        )
+        yield* Queue.offer(wakes, Option.none())
+
+        expect((yield* takeThroughCaughtUp(events)).flatMap(offsetsOf)).toEqual([0, first.length])
+
+        yield* append(file, second)
+        yield* Queue.offer(wakes, Option.some(SESSION))
+
+        const afterFirst = first.length + second.length
+
+        expect(offsetsOf(yield* Queue.take(events))).toEqual([first.length, afterFirst])
+
+        yield* Queue.offer(wakes, Option.some(SESSION))
+        yield* Effect.sleep(WATCHERS_SETTLED)
+
+        expect(yield* Queue.size(events)).toBe(0)
+
+        yield* append(file, third)
+        yield* Queue.offer(wakes, Option.some(SESSION))
+
+        expect(offsetsOf(yield* Queue.take(events))).toEqual([
+          afterFirst,
+          afterFirst + third.length,
+        ])
+      }),
+  )
+
   live.effect('holds back a line cut at a 4096-byte page and emits it once the rest lands', () =>
     Effect.gen(function* () {
       const whole = yield* fixtureBytes('plain-turn.jsonl')

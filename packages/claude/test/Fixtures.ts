@@ -11,6 +11,7 @@ import * as Stream from 'effect/Stream'
 import { FileWatch } from '@crook/claude/FileWatch'
 import { HookPayload } from '@crook/claude/HookPayload'
 import { LastTurn } from '@crook/claude/LastTurn'
+import { SessionScans } from '@crook/claude/SessionScans'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import { TranscriptTail, messagesIn } from '@crook/claude/TranscriptTail'
@@ -30,9 +31,11 @@ export const watchedPlatform = Layer.provideMerge(FileWatch.layer, platform)
 
 const transcriptTail = Layer.provideMerge(TranscriptTail.layer, watchedPlatform)
 
+const sessionScans = Layer.provideMerge(SessionScans.layer, transcriptTail)
+
 export const services = Layer.provideMerge(
   Layer.mergeAll(SubagentRoster.layer, LastTurn.layer),
-  transcriptTail,
+  sessionScans,
 )
 
 export const encodeMessages = Schema.encodeSync(Schema.Array(TranscriptMessage))

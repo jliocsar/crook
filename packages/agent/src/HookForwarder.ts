@@ -1,35 +1,77 @@
-import * as BunSocket from '@effect/platform-bun/BunSocket'
-import * as Duration from 'effect/Duration'
-import * as Effect from 'effect/Effect'
-import * as Socket from 'effect/socket/Socket'
-import * as Stdio from 'effect/Stdio'
-import * as Stream from 'effect/Stream'
+/* oxlint-disable effecttsgo/global-timers, promise/always-return */
+const HOOK_SUBCOMMAND = 'hook'
+const ARGUMENTS_BEFORE_SUBCOMMAND = 2
+const HOOK_SOCKET_FILE = 'crook/hook.sock'
+const EMPTY_VARIABLE = ''
+const SLOWEST_MEASURED_DELIVERY_MILLIS = 15.139
+const HOOK_DELIVERY_TIMEOUT_MILLIS = SLOWEST_MEASURED_DELIVERY_MILLIS * 10
 
-import { CrookHookSocketPath } from '@crook/agent/HookInbox'
+export const isBareHookCall = (argv: readonly string[]): boolean =>
+  argv.length === ARGUMENTS_BEFORE_SUBCOMMAND + 1 &&
+  argv[ARGUMENTS_BEFORE_SUBCOMMAND] === HOOK_SUBCOMMAND
 
-const SLOWEST_MEASURED_DELIVERY = Duration.millis(15.139)
-const HOOK_DELIVERY_TIMEOUT = Duration.times(SLOWEST_MEASURED_DELIVERY, 10)
+export const hookSocketPath = (
+  environment: Readonly<Record<string, string | undefined>>,
+): string | undefined => {
+  const explicit = environment.CROOK_HOOK_SOCKET_PATH
+  const stateHome = environment.XDG_STATE_HOME
+  const home = environment.HOME
 
-const deliverHook = Effect.fn('HookForwarder.deliverHook')(function* (
-  path: string,
-  payload: readonly Uint8Array[],
-) {
-  const socket = yield* BunSocket.makeNet({ path })
+  if (explicit !== undefined && explicit !== EMPTY_VARIABLE) {
+    return explicit
+  }
 
-  return yield* Stream.fromIterable(payload).pipe(
-    Stream.pipeThroughChannel(Socket.toChannel(socket)),
-    Stream.catchReason('SocketError', 'SocketCloseError', () => Stream.empty),
-    Stream.runDrain,
-  )
-})
+  if (stateHome?.startsWith('/') === true) {
+    return `${stateHome}/${HOOK_SOCKET_FILE}`
+  }
 
-export const forwardHook = Effect.gen(function* () {
-  const stdio = yield* Stdio.Stdio
-  const path = yield* CrookHookSocketPath
-  const payload = yield* stdio.stdin.pipe(Stream.runCollect)
+  return home === undefined || home === EMPTY_VARIABLE
+    ? undefined
+    : `${home}/.local/state/${HOOK_SOCKET_FILE}`
+}
 
-  yield* deliverHook(path, payload).pipe(Effect.timeout(HOOK_DELIVERY_TIMEOUT))
-}).pipe(
-  Effect.catchCause((cause) => Effect.logDebug('Dropped a hook payload', cause)),
-  Effect.withSpan('HookForwarder.forwardHook'),
-)
+export const deliverPayload = (path: string, payload: Uint8Array, finished: () => void): void => {
+  const timeout = setTimeout(finished, HOOK_DELIVERY_TIMEOUT_MILLIS)
+
+  const finishedInTime = () => {
+    clearTimeout(timeout)
+    finished()
+  }
+
+  let unsent = payload
+
+  const sendMore = (socket: Bun.Socket) => {
+    unsent = unsent.subarray(socket.write(unsent))
+
+    if (unsent.length === 0) {
+      socket.end()
+    }
+  }
+
+  void Bun.connect({
+    unix: path,
+    socket: {
+      open: sendMore,
+      drain: sendMore,
+      data: () => undefined,
+      close: finishedInTime,
+      error: finishedInTime,
+      connectError: finishedInTime,
+    },
+  }).catch(finishedInTime)
+}
+
+export const forwardStdin = (finished: () => void): void => {
+  const path = hookSocketPath(Bun.env)
+
+  void Bun.stdin
+    .bytes()
+    .then((payload) => {
+      if (path === undefined) {
+        finished()
+      } else {
+        deliverPayload(path, payload, finished)
+      }
+    })
+    .catch(finished)
+}
