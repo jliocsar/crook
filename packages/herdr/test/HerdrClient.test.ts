@@ -160,6 +160,11 @@ const PANE_CLOSED_LINE =
 const STATUS_CHANGED_LINE =
   '{"data":{"agent":"claude","agent_status":"blocked","pane_id":"w1:p1","workspace_id":"w1"},"event":"pane.agent_status_changed"}'
 
+const UNKNOWN_EVENT_LINE = '{"event":"pane_teleported","data":{"pane_id":42}}'
+
+const CHANGED_EVENT_LINE =
+  '{"event":"pane_updated","data":{"pane":{"pane_id":null,"revision":"x"}}}'
+
 const EVENTS_LOST_LINE =
   '{"id":"events.subscribe","error":{"code":"events_lost","message":"subscriber fell behind"}}'
 
@@ -568,6 +573,22 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
         'pane.agent_status_changed',
       ])
       expect(request).toBe(SUBSCRIBE_REQUEST_LINE)
+    }),
+  )
+
+  it.effect('keeps the subscription through an event it has never seen, or one that changed', () =>
+    Effect.gen(function* () {
+      const { client } = yield* fakeHerdr([
+        replyOnce(STARTED_LINE, UNKNOWN_EVENT_LINE, CHANGED_EVENT_LINE, PANE_CLOSED_LINE),
+      ])
+      const events = yield* client.subscribe([{ type: 'pane.closed' }])
+      const collected = yield* events.pipe(Stream.take(3), Stream.runCollect)
+
+      expect(collected.map((event) => event.event)).toEqual([
+        'pane_teleported',
+        'pane_updated',
+        'pane_closed',
+      ])
     }),
   )
 
