@@ -28,6 +28,7 @@ import {
   HerdrRequestRejected,
   HerdrResponseInvalid,
   type HerdrSubscriptionError,
+  HerdrTimedOut,
   HerdrUnreachable,
   scriptedRejection,
   scriptedResult,
@@ -35,10 +36,14 @@ import {
 import {
   AgentPromptMethod,
   AgentStartMethod,
+  AgentWaitMethod,
+  EventsSubscribeMethod,
+  HERDR_READ_TIMEOUT,
   PaneCloseMethod,
   PaneProcessInfoMethod,
   PaneRenameMethod,
   PaneSendInputMethod,
+  PaneWaitForOutputMethod,
   Ping,
   SessionSnapshotMethod,
   WorktreeCreateMethod,
@@ -251,6 +256,52 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
       expect(hungUp).toEqual(Option.none())
       expect(yield* Fiber.join(pong)).toEqual({ type: 'pong', version: '0.9.1', protocol: 22 })
     }),
+  )
+
+  it.effect('names a read herdr never answers as a timeout, instead of waiting for good', () =>
+    Effect.gen(function* () {
+      const { client } = yield* fakeHerdr([{ replies: [], keepOpen: true }])
+      const error = yield* client.request(Ping, {}).pipe(Effect.flip)
+
+      expect(error).toEqual(
+        new HerdrTimedOut({
+          method: Ping.name,
+          timeoutMillis: Duration.toMillis(HERDR_READ_TIMEOUT),
+        }),
+      )
+    }),
+  )
+
+  it.effect('names a subscribe herdr never starts as a timeout', () =>
+    Effect.gen(function* () {
+      const { client } = yield* fakeHerdr([{ replies: [], keepOpen: true }])
+      const error = yield* client
+        .subscribe([{ type: 'pane.closed' }])
+        .pipe(Effect.flip, Effect.scoped)
+
+      expect(error).toEqual(
+        new HerdrTimedOut({
+          method: EventsSubscribeMethod.name,
+          timeoutMillis: Duration.toMillis(HERDR_READ_TIMEOUT),
+        }),
+      )
+    }),
+  )
+
+  it.effect(
+    'leaves the calls that legitimately wait to the budget of the command around them',
+    () =>
+      Effect.sync(() => {
+        expect(
+          [
+            Option.isNone(AgentPromptMethod.replyTimeout),
+            Option.isNone(AgentStartMethod.replyTimeout),
+            Option.isNone(AgentWaitMethod.replyTimeout),
+            Option.isNone(PaneWaitForOutputMethod.replyTimeout),
+            Option.isNone(WorktreeCreateMethod.replyTimeout),
+          ].every(Boolean),
+        ).toBe(true)
+      }),
   )
 
   it.effect('sends one request line and decodes the typed result', () =>

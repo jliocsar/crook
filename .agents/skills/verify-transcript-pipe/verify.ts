@@ -90,6 +90,7 @@ const HOLDING: readonly Check[] = [
   holds('holds/follow-fails', 'the follow fails once, read or resume rejected, then Try again', {
     WatchFailures: 1,
   }),
+  holds('holds/late-publish-from-dead-socket', "a dead socket's call lands after its successor has spoken, with a /clear between", STALE_SOCKET),
   holds('holds/chat-reopens', 'the chat closes and opens from the cache', { Reopens: 1 }),
   holds('holds/pane-loses-claude', 'the agent row loses its session and gets it back', {
     PaneGaps: 1,
@@ -117,10 +118,6 @@ const HOLDING: readonly Check[] = [
 const FINDINGS: readonly Check[] = [
   finding('finding/F1-old-lines-stay', 'a session change leaves the old lines above the new ones', 'OneSessionShown', {}),
   finding('finding/F2-return-duplicates', 'going back to a session shows its lines again', 'NoDuplicateLine', RETURN),
-  finding('finding/F3-stale-open-rewinds', 'a late publish from a dead socket takes the phone back', 'NeverRewinds', STALE_SOCKET),
-  finding('finding/F3-stale-open-duplicates', 'the same late publish repeats a line', 'NoDuplicateLine', STALE_SOCKET),
-  finding('finding/F3-stale-open-sticks', 'the same late publish drops the caught-up mark', 'NeverStuckCatchingUp', STALE_SOCKET),
-  finding('finding/F3-stale-open-wrong-session', 'the same late publish leaves the phone in the old session', 'ShowsPaneSession', STALE_SOCKET),
   finding('finding/F4-return-race-behind', 'a return inside the switch queue leaves the hub at offset 0', 'NeverBehindFile', RETURN),
   finding('finding/F5-cold-switch-drops-tail', 'a /clear right after a cold open never finishes the old session', 'FinishesSessionItLeaves', {}),
 ]
@@ -128,7 +125,6 @@ const FINDINGS: readonly Check[] = [
 const AFTER_JC147: readonly Check[] = [
   { name: 'jc147/F1-gone', says: 'with the view reset, a thread shows one session', constants: { Jc147: true }, rules: ['OneSessionShown'] },
   { name: 'jc147/F2-gone', says: 'with the view reset, a return shows no line twice', constants: { ...RETURN, Jc147: true }, rules: ['NoDuplicateLine', 'OneSessionShown'] },
-  { name: 'jc147/F3-stays', says: 'the view reset does not stop a late publish rewinding the phone', constants: { ...STALE_SOCKET, Jc147: true }, rules: ['NeverRewinds'], breaks: 'NeverRewinds' },
   { name: 'jc147/F4-stays', says: 'the view reset makes the return race an empty thread', constants: { ...RETURN, Jc147: true }, rules: ['NeverBehindFile'], breaks: 'NeverBehindFile' },
 ]
 
@@ -145,7 +141,8 @@ const reach = (name: string, says: string, property: string, constants: Constant
 
 const REACHED: readonly Check[] = [
   reach('reach/live-chunk-refused', 'a chunk that does not continue the position is refused, and the agent restarts from where the hub says', 'NoLiveChunkRefused', {}),
-  reach('reach/stale-chunk-refused', "a dead socket's chunk is refused, to nobody", 'NoStaleChunkRefused', STALE_SOCKET),
+  reach('reach/fenced-call-dropped', "a dead socket's call lands after a later link asked for demands, and the hub drops it", 'NoFencedCallDropped', STALE_SOCKET),
+  reach('reach/dead-socket-interrupted', "the hub sees a dead socket and interrupts its call between two updates", 'NoDeadSocketSeen', STALE_SOCKET),
   reach('reach/call-on-gone-watch', 'a call lands after its watch has failed and left the map', 'NoCallOnGoneWatch', { ...STALE_SOCKET, WatchFailures: 1 }),
 ]
 
@@ -157,15 +154,16 @@ const CAN_FAIL: readonly Check[] = [
   mutant('omitted-not-marked', 'NoHole', { SessionPath: 'PathOne', FirstFileLines: 2 }, 'omittedUpTo without its OmittedLines'),
   mutant('no-finish-session', 'FinishesSessionItLeaves', {}, 'fromSession opens the next session without finishSession'),
   mutant('open-not-filtered', 'NoFalseClear', DROPS, 'deliver forwards every TranscriptOpened'),
+  mutant('no-fence', 'NeverRewinds', STALE_SOCKET, "a dead socket's call counts after a later link asked for demands"),
   mutant('caught-up-dropped', 'NeverStuckCatchingUp', {}, 'forwardInSession drops the caught-up mark'),
   mutant('mailbox-holds-when-full', 'NeverStuckCatchingUp', BACKLOG, 'awaitsCatchUp without the isFull check'),
   mutant('no-switch', 'ShowsPaneSession', {}, 'followPane ignores a session change'),
   mutant('follow-stops-at-caught-up', 'NeverBehindFile', {}, 'tail.follow stops reading at its first caught-up'),
-  mutant('restart-from-watch-from', 'AlwaysSettles', { ...DROPS, SwitchQueueSize: 1 }, 'attempt(watch.from) instead of attempt(outOfStep.expected)'),
+  mutant('restart-from-watch-from', 'AlwaysSettles', { PaneGaps: 1, SwitchQueueSize: 1 }, 'attempt(watch.from) instead of attempt(outOfStep.expected)'),
   mutant('updates-out-of-order', 'AlwaysSettles', { SessionPath: 'PathStraight', SwitchQueueSize: 1 }, 'eventsOf puts chunks before their open'),
 ]
 
-const ONLY_WHEN_BROKEN = ['ForwardMovesPosition']
+const ONLY_WHEN_BROKEN = ['ForwardMovesPosition', 'HubDropsCaughtUp']
 const WALK_SEEDS = [11, 23, 37, 41, 53, 67, 79, 83, 97, 101]
 const WALK_CONSTANTS: Constants = {
   SessionPath: 'PathReturn',

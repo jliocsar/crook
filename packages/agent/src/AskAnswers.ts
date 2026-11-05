@@ -148,6 +148,7 @@ const make = Effect.gen(function* () {
     const { dialog } = yield* screens.read(answer.pane).pipe(
       Effect.catchTags({
         HerdrConnectionClosed: unreadable,
+        HerdrTimedOut: unreadable,
         HerdrResponseInvalid: unreadable,
       }),
     )

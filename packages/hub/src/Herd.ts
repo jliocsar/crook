@@ -21,7 +21,7 @@ import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView, byMachineId } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { Machine, type MachineConnection } from '@crook/domain/Machine'
-import { type MachineState, agentsIn } from '@crook/domain/MachineState'
+import { type MachineState, agentsIn, isHerdrLost } from '@crook/domain/MachineState'
 import {
   AGENT_PING_INTERVAL,
   AGENT_SOCKET_OPEN_TIMEOUT,
@@ -198,11 +198,15 @@ const published = (state: MachineState) => {
   return (entry: MachineEntry, now: DateTime.Utc): MachineEntry => ({
     ...entry,
     lastSeenAt: now,
-    herdrVersion: Option.some(state.herdrVersion),
+    herdrVersion: isHerdrLost(state) ? entry.herdrVersion : Option.some(state.herdrVersion),
     state: Option.some(state),
-    seen: HashMap.filter(entry.seen, (mark, pane) =>
-      Option.exists(HashMap.get(currentMarks, pane), (current) => isSameSeenMark(mark, current)),
-    ),
+    seen: isHerdrLost(state)
+      ? entry.seen
+      : HashMap.filter(entry.seen, (mark, pane) =>
+          Option.exists(HashMap.get(currentMarks, pane), (current) =>
+            isSameSeenMark(mark, current),
+          ),
+        ),
   })
 }
 

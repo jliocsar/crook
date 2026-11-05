@@ -21,6 +21,7 @@ import { PaneId } from '@crook/domain/Ids'
 import {
   HerdrClient,
   type HerdrConnectionClosed,
+  type HerdrTimedOut,
   type HerdrRequestError,
   type HerdrRequestInvalid,
   type HerdrResponseInvalid,
@@ -76,7 +77,11 @@ interface TransportFailures<Failure> {
 
 type HerdrRefusalError = Exclude<
   HerdrRequestError,
-  HerdrUnreachable | HerdrConnectionClosed | HerdrResponseInvalid | HerdrRequestInvalid
+  | HerdrUnreachable
+  | HerdrConnectionClosed
+  | HerdrTimedOut
+  | HerdrResponseInvalid
+  | HerdrRequestInvalid
 >
 
 const AGENT_NAME_PREFIX = 'crook-'
@@ -181,6 +186,7 @@ const fromHerdr = <Success, Lost, Refused>(
     Effect.catchTags({
       HerdrUnreachable: transport.unreachable,
       HerdrConnectionClosed: transport.lost,
+      HerdrTimedOut: transport.lost,
       HerdrResponseInvalid: transport.unreadable,
       HerdrRequestInvalid: (invalid) => Effect.die(invalid),
       HerdrRequestRejected: refuse,

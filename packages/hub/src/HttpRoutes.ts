@@ -130,19 +130,20 @@ const routes = Effect.gen(function* () {
     )
 
   const serveAgentAs = (machine: MachineId) =>
-    serveGroup(
-      AgentLink,
-      { machine },
-      AgentLink.toHandlers({
-        Attach: ({ hello }) =>
-          Stream.merge(Stream.fromEffectDrain(herd.hold(machine, hello)), router.attach(machine)),
-        PublishState: ({ state }) => herd.publish(machine, state),
-        CompleteCommand: ({ id, result }) => router.complete(machine, id, result),
-        TranscriptDemands: () => transcripts.demands(machine),
-        PublishTranscript: ({ watch, update }) => transcripts.publish(machine, watch, [update]),
-        PublishTranscriptBatch: ({ watch, updates }) =>
-          transcripts.publish(machine, watch, updates),
-      }),
+    Effect.flatMap(transcripts.linkFor(machine), (link) =>
+      serveGroup(
+        AgentLink,
+        { machine },
+        AgentLink.toHandlers({
+          Attach: ({ hello }) =>
+            Stream.merge(Stream.fromEffectDrain(herd.hold(machine, hello)), router.attach(machine)),
+          PublishState: ({ state }) => herd.publish(machine, state),
+          CompleteCommand: ({ id, result }) => router.complete(machine, id, result),
+          TranscriptDemands: () => link.demands,
+          PublishTranscript: ({ watch, update }) => link.publish(watch, [update]),
+          PublishTranscriptBatch: ({ watch, updates }) => link.publish(watch, updates),
+        }),
+      ),
     )
 
   return [

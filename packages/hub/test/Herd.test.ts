@@ -7,6 +7,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import { SqlError, UnknownError } from 'effect/sql/SqlError'
 import * as Stream from 'effect/Stream'
+import * as Struct from 'effect/Struct'
 import * as TestClock from 'effect/testing/TestClock'
 
 import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
@@ -14,6 +15,7 @@ import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { findMachine } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import { MachineState } from '@crook/domain/MachineState'
 import * as Database from '@crook/hub/Database'
 import { Herd, RECONNECT_GRACE, hubVersion } from '@crook/hub/Herd'
 import { HerdStore } from '@crook/hub/HerdStore'
@@ -405,6 +407,33 @@ it.effect('marks a pane seen at its current state_change_seq, until the next cha
     expect(seen).toEqual(Option.some([PANE]))
     expect(changed).toEqual(Option.some([]))
   }).pipe(withFreshHerd),
+)
+
+it.effect(
+  'keeps seen marks and the herdr version through an agent that started with herdr lost',
+  () =>
+    Effect.gen(function* () {
+      const herd = yield* Herd
+      const restartedWithoutHerdr = machineStateWith(LAPTOP, 0, [], {
+        herdr: herdrLinkOf(2, Option.some(DateTime.makeUnsafe(0))),
+      })
+
+      yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+      yield* herd.markSeen(LAPTOP, PANE)
+      yield* herd.publish(
+        LAPTOP,
+        new MachineState(Struct.evolve(restartedWithoutHerdr, { herdrVersion: () => '' })),
+      )
+
+      const whileLost = yield* currentView
+
+      yield* herd.publish(LAPTOP, stateOf(LAPTOP, 1, [agentAt(PANE, 7)]))
+
+      expect(
+        Option.map(findMachine(whileLost, LAPTOP), (entry) => entry.machine.herdrVersion),
+      ).toEqual(Option.some(Option.some('0.9.1')))
+      expect(seenOf(yield* currentView, LAPTOP)).toEqual(Option.some([PANE]))
+    }).pipe(withFreshHerd),
 )
 
 it.effect('treats a state_change_seq that went backwards as unseen', () =>

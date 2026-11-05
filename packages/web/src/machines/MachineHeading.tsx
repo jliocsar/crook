@@ -1,4 +1,5 @@
 import type * as DateTime from 'effect/DateTime'
+import * as Option from 'effect/Option'
 
 import { MachineBadge } from '@crook/web/components/MachineBadge'
 import { StatusPill } from '@crook/web/components/ui/status-pill'
@@ -16,10 +17,23 @@ function UpdatePill({ behindHub }: { behindHub: boolean }) {
   )
 }
 
+function HerdrLostPill({ lostAt }: { lostAt: Option.Option<DateTime.Utc> }) {
+  if (Option.isNone(lostAt)) {
+    return null
+  }
+
+  return (
+    <StatusPill tone="warn" plain className="shrink-0">
+      herdr lost
+    </StatusPill>
+  )
+}
+
 export function MachineStatus({ card, now }: { card: MachineCardModel; now: DateTime.Utc }) {
   return (
     <>
       <MachineBadge machine={card.machine} now={now} plain />
+      <HerdrLostPill lostAt={card.herdrLostAt} />
       <UpdatePill behindHub={card.behindHub} />
     </>
   )

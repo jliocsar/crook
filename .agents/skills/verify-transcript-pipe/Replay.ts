@@ -18,7 +18,7 @@ import {
   TranscriptPosition,
 } from '@crook/domain/Transcript'
 import { OmittedLines, UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
-import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
+import { type TranscriptAgentLink, TranscriptRelay } from '@crook/hub/TranscriptRelay'
 import {
   EMPTY_BATCH,
   type TranscriptBatch,
@@ -197,10 +197,14 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
     let watchScope = yield* Scope.make()
     let pull: Effect.Effect<readonly TranscriptEvent[], any> = Effect.succeed([])
     let watchId: any
+    let liveLink = yield* relay.linkFor(MACHINE)
+    let staleLink = liveLink
+    let askingLink = liveLink
 
-    const currentDemand = Effect.map(
-      Stream.runHead(relay.demands(MACHINE)),
-      Option.match({ onNone: () => [] as any[], onSome: (demand) => [...demand.watches] }),
+    const currentDemand = Effect.suspend(() => Stream.runHead(askingLink.demands)).pipe(
+      Effect.map(
+        Option.match({ onNone: () => [] as any[], onSome: (demand) => [...demand.watches] }),
+      ),
     )
 
     const openWatch = (from: Option.Option<TranscriptPosition>) =>
@@ -228,8 +232,8 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
         yield* openWatch(from)
       })
 
-    const publishOne = (update: TranscriptUpdate) =>
-      relay.publish(MACHINE, watchId, [update]).pipe(
+    const publishOne = (link: TranscriptAgentLink, update: TranscriptUpdate) =>
+      link.publish(watchId, [update]).pipe(
         Effect.timeoutOrElse({
           duration: STEP_TIMEOUT,
           orElse: () =>
@@ -249,6 +253,7 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
 
       const who =
         !same(before['call'], after['call']) || isNone(before['stale']) ? 'live' : 'stale'
+      const whoseLink = () => (who === 'live' ? liveLink : staleLink)
       const takeUpdate = () => {
         const left = who === 'live' ? live : stale
         const head = left[0] as TranscriptUpdate
@@ -281,14 +286,22 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
           break
         }
         case 'AgentConnectionDrops': {
-          if (!isNone(before['call'])) stale = live
+          if (!isNone(before['call'])) {
+            stale = live
+            staleLink = liveLink
+          }
           live = []
           outbox = EMPTY_BATCH
+          break
+        }
+        case 'AgentReconnects': {
+          liveLink = yield* relay.linkFor(MACHINE)
           break
         }
         case 'DemandStartsWatch': {
           outbox = EMPTY_BATCH
           live = []
+          askingLink = liveLink
           const watches = yield* currentDemand
           const from = watches[0]?.from
 
@@ -304,13 +317,24 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
         case 'HubForwardsChunk':
         case 'HubForwardsCaughtUp':
         case 'HubDropsCaughtUp': {
-          const exit = yield* publishOne(takeUpdate())
+          const link = whoseLink()
+          const exit = yield* publishOne(link, takeUpdate())
 
           if (Exit.isFailure(exit)) yield* fail('the code refuses what the model accepts')
           break
         }
+        case 'HubDropsFencedCall': {
+          for (const update of stale) {
+            const exit = yield* publishOne(staleLink, update)
+
+            if (Exit.isFailure(exit)) yield* fail('the code refuses a call of a replaced link')
+          }
+          stale = []
+          break
+        }
         case 'HubRefusesChunk': {
-          const exit = yield* publishOne(takeUpdate())
+          const link = whoseLink()
+          const exit = yield* publishOne(link, takeUpdate())
           const expected = canonical(after['watcher'].delivered)
 
           if (Exit.isSuccess(exit)) yield* fail('the code accepts a chunk the model refuses')
@@ -334,7 +358,8 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
           break
         }
         case 'HubFailsWatch': {
-          const exit = yield* publishOne(takeUpdate())
+          const link = whoseLink()
+          const exit = yield* publishOne(link, takeUpdate())
 
           if (Exit.isFailure(exit)) yield* fail('the code refuses a failure')
           live = []
@@ -345,7 +370,7 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
           const left = who === 'live' ? live : stale
 
           if (left.length > 0) {
-            const exit = yield* publishOne(left[0] as TranscriptUpdate)
+            const exit = yield* publishOne(whoseLink(), left[0] as TranscriptUpdate)
 
             if (Exit.isFailure(exit)) yield* fail('the code refuses a call on a gone watch')
           }

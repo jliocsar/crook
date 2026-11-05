@@ -21,6 +21,7 @@ export interface MachineCardModel {
   readonly agents: number
   readonly needsYou: number
   readonly behindHub: boolean
+  readonly herdrLostAt: Option.Option<DateTime.Utc>
 }
 
 export interface MachinesLayout {
@@ -49,11 +50,17 @@ const UNKNOWN_VERSION = 'unknown'
 const agentBehindHub = (machine: Machine, hubVersion: CrookVersion): boolean =>
   Option.exists(machine.agentVersion, (version) => isBehind(version, hubVersion))
 
+const herdrLostAtOf = ({ machine, state }: HerdMachine): Option.Option<DateTime.Utc> =>
+  machine.connection === 'online'
+    ? Option.flatMap(state, (shown) => shown.herdr.lostAt)
+    : Option.none()
+
 const machineCard = (herdMachine: HerdMachine, hubVersion: CrookVersion): MachineCardModel => ({
   machine: herdMachine.machine,
   agents: agentsIn(herdMachine.state).length,
   needsYou: needsYouCount(herdMachine),
   behindHub: agentBehindHub(herdMachine.machine, hubVersion),
+  herdrLostAt: herdrLostAtOf(herdMachine),
 })
 
 export const machinesLayout = (view: HerdView): MachinesLayout => ({
@@ -142,6 +149,16 @@ export const agentVersionText = (machine: Machine, hubVersion: CrookVersion): st
 export const herdrVersionText = (machine: Machine): string =>
   Option.getOrElse(machine.herdrVersion, () => UNKNOWN_VERSION)
 
+const herdrRow = (card: MachineCardModel, now: DateTime.Utc): InfoRow =>
+  Option.match(card.herdrLostAt, {
+    onNone: () => ({ label: 'Herdr', value: herdrVersionText(card.machine), warn: false }),
+    onSome: (lostAt) => ({
+      label: 'Herdr',
+      value: `lost for ${shortElapsed(now, lostAt)}`,
+      warn: true,
+    }),
+  })
+
 export const aboutRows = (detail: MachineDetailModel, now: DateTime.Utc): readonly InfoRow[] => [
   connectionRow(detail.card.machine, now),
   {
@@ -149,6 +166,6 @@ export const aboutRows = (detail: MachineDetailModel, now: DateTime.Utc): readon
     value: agentVersionText(detail.card.machine, detail.hubVersion),
     warn: detail.card.behindHub,
   },
-  { label: 'Herdr', value: herdrVersionText(detail.card.machine), warn: false },
+  herdrRow(detail.card, now),
   { label: 'Machine id', value: detail.card.machine.id, warn: false },
 ]
