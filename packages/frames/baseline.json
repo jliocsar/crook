@@ -8,6 +8,13 @@
   "new-agent/start-to-chat": {
     "always": ["shift:div[new-agent-dock]"]
   },
+  "new-agent/shows-after-giving-up": {
+    "always": ["shift:div[new-agent-dock]"]
+  },
+  "actions/toast-after-chat-close": {
+    "always": [],
+    "sometimes": ["flash:spinner"]
+  },
   "transition/clear": {
     "always": ["shift:div[chat-dock]"]
   },

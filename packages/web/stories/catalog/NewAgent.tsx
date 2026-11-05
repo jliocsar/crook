@@ -26,6 +26,7 @@ const TASK = 'Fix the banner'
 const TASK_FIELD = 'First message to Claude'
 const START_CLAUDE = 'Start Claude'
 const COMMAND_TIMEOUT_SECONDS = 45
+const STORY_SENT_BOUND = Duration.millis(200)
 
 const place = (folder: string, minutesAgo: number, branch: string) =>
   new Place({
@@ -200,6 +201,31 @@ export const NEW_AGENT_STORIES: readonly StoryMaker[] = [
     arrange: ({ link }) => Ref.set(link.commandAnswer, started),
     settle: () => Effect.andThen(types(TASK_FIELD, TASK), clicks(START_CLAUDE)),
     shows: { text: 'Opening the chat…' },
+  }),
+  story({
+    slug: 'not-shown',
+    title: 'New agent, started, its pane never showing',
+    link: liveWith(herd([laptop, desk])),
+    sentBound: STORY_SENT_BOUND,
+    arrange: ({ link }) => Ref.set(link.commandAnswer, started),
+    settle: () => Effect.andThen(types(TASK_FIELD, TASK), clicks(START_CLAUDE)),
+    shows: { all: [{ text: 'has not shown its pane yet' }, { text: 'Open the chat' }] },
+  }),
+  story({
+    slug: 'shows-after-giving-up',
+    title: 'New agent, its pane landing after the wait gave up, the chat still opening',
+    shows: { text: 'Opening the chat…' },
+    ends: { text: 'Loading the conversation' },
+    link: liveWith(herd([laptop, desk])),
+    sentBound: Duration.seconds(1.5),
+    arrange: ({ link }) => Ref.set(link.commandAnswer, started),
+    settle: () => Effect.andThen(types(TASK_FIELD, TASK), clicks(START_CLAUDE)),
+    timeline: [
+      step<LinkStage>(1800, 'The bound runs out', () => seesText('has not shown its pane yet')),
+      step<LinkStage>(900, 'The herd shows the new pane', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(herd([laptopWithNewAgent, desk]))),
+      ),
+    ],
   }),
   story({
     slug: 'failed',

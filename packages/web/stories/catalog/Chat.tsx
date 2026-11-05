@@ -10,6 +10,7 @@ import { TranscriptOffset } from '@crook/domain/Ids'
 import { CommandTimedOut } from '@crook/protocol/Commands'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
 import * as Duration from 'effect/Duration'
+import { UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
 import { COLD_START, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
@@ -171,6 +172,23 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
         yield* SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])])))
         yield* clicks('Start Claude here again')
       }),
+  }),
+  chatStory({
+    slug: 'restart-gives-up',
+    title: 'Chat, Start Claude here again, its pane never showing',
+    sentBound: Duration.millis(200),
+    events: CONVERSATION,
+    arrange: ({ link }) =>
+      Ref.set(link.commandAnswer, Exit.succeed(new AgentStarted({ pane: STARTED_PANE }))),
+    settle: ({ link }) =>
+      Effect.gen(function* () {
+        yield* seesText('The quiet redial')
+        yield* SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])])))
+        yield* clicks('Start Claude here again')
+      }),
+    shows: {
+      all: [{ text: UNCONFIRMED_NOTE }, { selector: 'button[data-slot="button"]:not([disabled])' }],
+    },
   }),
   chatStory({
     slug: 'restart-failed',

@@ -203,6 +203,22 @@ export const TIMELINE_EXPECTATIONS = {
     herd: inSequence('herd-list'),
   }),
   'machine/forgotten-while-open': story({ cards: inSequence('agent-card', 'empty-state') }),
+  'machine/forget-stays-pending': story({}),
+  'composer/send-answered-past-the-delay': story(A_CHAT_WITH_ROWS),
+  'composer/send-failed-then-edited': story(A_CHAT_WITH_ROWS, {
+    shiftBudget: BANNER_SHIFT_BUDGET,
+  }),
+  'composer/stop-failed-then-turn-ends': story(A_CHAT_WITH_ROWS, {
+    shiftBudget: BANNER_SHIFT_BUDGET,
+  }),
+  'actions/rename-gives-up': story({}, { shiftBudget: BANNER_SHIFT_BUDGET }),
+  'actions/close-gives-up': story({}, { shiftBudget: BANNER_SHIFT_BUDGET }),
+  'new-agent/shows-after-giving-up': story({
+    'new-agent': inSequence('task-composer'),
+    thread: inSequence('thread-skeleton', 'thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'settings/test-sent-clears': story({}),
   'new-agent/start-to-chat': story({
     'new-agent': inSequence('task-composer'),
     thread: inSequence('thread-skeleton', 'thread-rows'),

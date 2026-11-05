@@ -1,3 +1,4 @@
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
@@ -28,6 +29,8 @@ import { liveWith } from '../../test/AppWiring.tsx'
 import { agent, herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
 import { inputDelivered } from '../../test/HubFakes.ts'
 import { caughtUp, chunk, CWD, opened, prompt, toolUse } from '../../test/TranscriptFixtures.ts'
+import { UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
+
 import { chatStory } from '../ChatFixtures.ts'
 import { CHAT_TITLE, PANE } from '../Fixtures.ts'
 import { clicks, seesText, types, typesInto } from '../StageDom.ts'
@@ -236,6 +239,17 @@ export const ASK_STORIES: readonly StoryMaker[] = [
       Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(answeredApprove))),
     settle: () => clicks('Yes'),
     shows: { text: 'Answered. Waiting for Claude to move on.' },
+  }),
+  chatStory({
+    slug: 'answer-gives-up',
+    title: 'Ask, answered and the dialog never moving on',
+    link: blocked(bashAsk()),
+    sentBound: Duration.millis(200),
+    events: LEAD_IN,
+    arrange: ({ link }) =>
+      Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(answeredApprove))),
+    settle: () => clicks('Yes'),
+    shows: { text: UNCONFIRMED_NOTE },
   }),
   chatStory({
     slug: 'already-answered',

@@ -11,6 +11,9 @@ import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
 import type { HerdNotice } from '@crook/web/herd/HerdLayout'
 import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
 import type { TestNotificationState } from '@crook/web/settings/SettingsLayout'
+import type { SentWaitState } from '@crook/web/actions/SentWaitMachine'
+import type { ComposerFailureState } from '@crook/web/chat/ComposerFailureMachine'
+import type { IndicatorState } from '@crook/web/machine/IndicatorMachine'
 
 export const LINK_STATUS_MOMENTS = {
   ColdStart: ['dialing-cold-cached', 'dialing-cold-empty'],
@@ -151,10 +154,34 @@ export const STATE_COVERAGE = {
     monitor: ['background/sheet-monitor'],
   } satisfies Record<JobKind, readonly string[]>,
   testNotification: {
-    idle: ['settings/shown'],
+    idle: ['settings/shown', 'settings/test-sent-clears'],
     sending: ['settings/test-sending'],
     sent: ['settings/test-sent'],
   } satisfies Record<TestNotificationState, readonly string[]>,
+  indicator: {
+    Hidden: ['composer/ready'],
+    Delaying: ['composer/sending-quiet'],
+    Holding: ['composer/sending'],
+    Showing: ['composer/sending'],
+    Lingering: ['composer/send-answered-past-the-delay'],
+    Leaving: ['composer/send-answered-past-the-delay'],
+  } satisfies Record<IndicatorState['_tag'], readonly string[]>,
+  sentWait: {
+    NotSent: ['actions/idle'],
+    Awaiting: ['actions/rename-gives-up'],
+    Unconfirmed: [
+      'actions/rename-gives-up',
+      'actions/close-gives-up',
+      'chat/restart-gives-up',
+      'new-agent/not-shown',
+      'ask/answer-gives-up',
+    ],
+  } satisfies Record<SentWaitState['_tag'], readonly string[]>,
+  composerFailure: {
+    NoFailure: ['composer/ready'],
+    PromptFailed: ['composer/send-failed', 'composer/send-failed-then-edited'],
+    StopFailed: ['composer/stop-failed', 'composer/stop-failed-then-turn-ends'],
+  } satisfies Record<ComposerFailureState['_tag'], readonly string[]>,
 }
 
 export const REQUIRED_TRANSITIONS: readonly string[] = [

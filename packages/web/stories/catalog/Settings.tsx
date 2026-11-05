@@ -16,7 +16,7 @@ import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { herd } from '../../test/HerdFixtures.ts'
 import { SETTINGS_PATH } from '../Fixtures.ts'
 import { clicks, role, seesText } from '../StageDom.ts'
-import { linkStory } from '../Story.tsx'
+import { linkStory, step } from '../Story.tsx'
 import type { LinkStage, LinkStorySpec, StoryMaker } from '../Story.tsx'
 
 const EMPTY_LIVE = liveWith(herd([]))
@@ -106,6 +106,16 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
     title: 'Settings, test notification Sent',
     settle: () => clicks(TEST_BUTTON),
     shows: { text: 'Sent to your phone' },
+  }),
+  story({
+    slug: 'test-sent-clears',
+    title: 'Settings, test notification Sent, back to Send a test once it has had its time',
+    shows: { text: 'Send a test' },
+    ends: { text: 'Send a test' },
+    timeline: [
+      step<LinkStage>(400, 'Tap Send a test', () => clicks(TEST_BUTTON)),
+      step<LinkStage>(600, 'It went out', () => seesText('Sent to your phone')),
+    ],
   }),
   story({
     slug: 'test-failed',
