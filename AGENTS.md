@@ -1052,6 +1052,10 @@ a turn of its own, enqueued as a task notification.
   header held at the top, the thread took the height that was left, and the dock sat on the
   keyboard's edge, also with `offsetTop` panned. What iOS reports for `scrollY` and `offsetTop`
   on focus is not measured yet.
+- A script moving focus off a text field draws the focus ring, because Chromium reads focus coming
+  from an input as keyboard focus: the card that takes over from the composer showed its Back button
+  ringed in red on a phone-size screen, with nothing pressed (measured). A move no key caused passes
+  `focusVisible: false`.
 - A focus test compares `document.activeElement` with the element itself. Focus that fell to the
   body still passes a check on its `textContent`, which holds every label on the page (measured: a
   test asserting the tab's text passed with focus on the body).
@@ -1453,6 +1457,11 @@ prototype must not fail anyone's push. Its own typecheck is `typecheck:kitchen`.
 does not load fails its own story and no other. Deleting the folder removes it; nothing else names
 it.
 
+- A prototype reaches the app's `.tsx` leaves through an alias only the catalog's server has. Vite
+  applies a tsconfig's `paths` only to the files that tsconfig includes, and the member's excludes
+  the kitchen, so such a file fell through to the `exports` map, which reaches `.ts` leaves alone
+  (measured, and a prototype importing `.tsx` leaves loads with the alias and no tsconfig of its
+  own).
 - `bun run frames` opens a kitchen story with no variant in its address, so it plays only the first
   variant, and it records for 2 s after a story that is done at once (measured). A comparison gets
   one kitchen story per variant.

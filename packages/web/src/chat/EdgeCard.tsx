@@ -97,7 +97,7 @@ export function EdgeCard(props: EdgeCardProps) {
 
   React.useEffect(() => {
     if (takeFocus) {
-      firstButton.current?.focus({ preventScroll: true })
+      firstButton.current?.focus({ preventScroll: true, focusVisible: false })
     }
   }, [takeFocus])
 

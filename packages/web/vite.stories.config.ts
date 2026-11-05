@@ -6,6 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 const CATALOG_PATH = '/stories/'
 const KITCHEN_FOLDER = new URL('stories/kitchen/', import.meta.url).pathname
+const WEB_SOURCE_FOLDER = new URL('src/', import.meta.url).pathname
 const CATALOG_STYLESHEET = new URL('stories/stories.css', import.meta.url).pathname
 
 export default defineConfig({
@@ -41,5 +42,8 @@ export default defineConfig({
       },
     },
   ],
-  resolve: { tsconfigPaths: true },
+  resolve: {
+    tsconfigPaths: true,
+    alias: [{ find: /^@crook\/web\//u, replacement: WEB_SOURCE_FOLDER }],
+  },
 })
