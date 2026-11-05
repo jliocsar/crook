@@ -571,7 +571,7 @@ path to it, a transition that throws or returns what the schema refuses, a state
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
 its own test shows each one failing. Two states that differ only by a token are one state: the
 walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
-guard and not a measurement: the machines here have 11, 8 and 117 (measured), so reaching it means a
+guard and not a measurement: the machines here have 11, 11, 8 and 117 (measured), so reaching it means a
 token got into a state's identity.
 
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
@@ -584,6 +584,14 @@ therefore cannot fail as a flash. A generated Mermaid chart sits beside the mach
 with `bun run charts`, and a test holds it equal to the table. Plain Mermaid over `/statechart`:
 that skill model-checks a separate TLA+ spec, a second copy of the table that needs Java and TLC,
 while the walker runs the real function.
+:::
+
+:::tip
+Whether a chat's agent is working is one machine, and the header's word, the Working row, the composer's Stop and the queued label all read one table derived from its state, so a word and a row that disagree cannot be written. Its inputs are the herd and the transcript's turn evidence, and the transcript reaches the screen deferred, so it folds during render over the deferred lines rather than in an atom: the row and the answer that ends it have to commit together, and an atom sits on the latest lines, ahead of the rows (reasoned, not measured). A subagent's screen folds the same machine over its own run.
+
+Before it, each read its own check. The row left whenever the newest item was a running tool and came back on the next line, while Stop went on herdr's word, so a turn with tools showed Stop with no row for 98 to 100 frames, and an answered prompt 51 to 52. The check looked only at the last item, so a running tool grouped under another kept the row beside it for 1415 ms. Measured at 390x844 and 4x CPU throttling in Chromium, three runs each, from each story's first step, a turn with two tools went from 3 row mounts and 3 ghosts to 1 and 1, an answered prompt from 2 and 2 to 1 and 1, and a subagent's turn from 3 and 3, one of each before its first step, to 1 and 1. Layout shift held: 0.0006 and 0.0006, 0.0004 and 0.0004, 0.0039 and 0.0037 to 0.0039. One story gains a shift or two, the header's word changing twice as herdr catches up with an answer.
+
+An answer that lands before herdr's flip off reads as `done`, with Send, and the flip that follows carries no news: the row and Stop leave on the answer. A pane in the focused tab goes to `idle` instead of `done`, so the word there reads `done` for the gap and then changes (reasoned from herdr's states; the gap was 150 ms in a story, not measured on a real pane). A failed watch has no evidence to read, so the row and Stop follow herdr alone beside Try again; before, the row left while Stop stayed.
 :::
 
 :::tip
@@ -910,6 +918,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   transcript. With herdr's idle flip reaching the phone before the answer, the row used to leave on
   the flip and the answer land on its own afterwards; now both change in one frame (measured in
   Chromium at 4x CPU throttling).
+- A compaction someone typed ends its turn, and an automatic one does not. Over 48 compact boundaries in local transcripts, none of the 34 `manual` ones was followed by an assistant line (28 by a user line, 6 by nothing), and 10 of the 14 `auto` ones were (the other 4 by a user line). Before a manual boundary counted as the end, a typed `/compact` left the turn open for good: the Working row stayed after herdr went idle, beside Send, for 359 to 362 frames, until its story ran out (measured in Chromium at 4x CPU throttling).
 - A background task that finishes while Claude is busy reaches the transcript as an `attachment`
   entry of type `queued_command` whose `commandMode` and `origin.kind` are `task-notification`,
   carrying the same `<task-notification>` text a `user` entry carries when Claude was idle. A
@@ -1468,6 +1477,8 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   Raising the find limit would have hidden the first and done nothing for the second. A third
   tapped a card while the chat it had just left was still sliding out, so nothing reopened (measured:
   1 of 14 runs, the chat still mounted and current). A story that goes back waits for the chat to go.
+- The chat stays mounted under a subagent's screen, so the page's text still holds the chat's own rows, and a witness that a word is absent can only fail there (measured: `Working` from the covered chat). A story there names the state of the machine on top instead.
+- A working flip stamped before the transcript's last line reads as a turn already answered, so a fixture that means working now stamps its flip after its lines (measured: the composer's working stories read `done` with the fixtures' 42 s old flip).
 - A witness that a typed draft landed reads the send button, not the field. The field held the
   text in Chromium while React's state stayed empty, so a check of the value alone would have
   passed the bug it exists to catch.
@@ -1611,6 +1622,7 @@ the screen once per animation frame and fails on what a settled screenshot canno
   from a page whose recorder was gone, and passed when run again (1 run; that Vite's reload caused
   it is a guess). A failed browser step now runs its story again like a starved one, so one bad
   page does not cost the sweep, and it prints that it did.
+- The Working row's ghost takes no mark. It lives for a fade, under the 24 frames a state has to hold, so a mark on it read as a flash on every turn (measured).
 - A contact sheet that added a tile only when the marks changed never showed a `/clear`, since that
   swaps rows for rows with the same marks around them (read in how it picks tiles). It also takes a tile
   when the row count changes and always shows the last frame.

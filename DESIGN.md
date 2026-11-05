@@ -412,8 +412,9 @@ screen" on the Ask.
   - **Notes** are centred muted 12px lines: "Interrupted", or an Always grant. "Conversation
     compacted" (with "Show summary") and "Conversation cleared" are dividers across the thread.
     History not loaded yet reads "Earlier messages not loaded (N KB)", and tapping it loads it.
-  - **Working** is Thinking State, "Working", timed from the status change. It shows only while
-    no tool is running, so there's never a second spinner.
+  - **Working** is Thinking State, "Working", timed from the status change. It holds its place
+    at the end of the thread for the whole turn, under any running tool, until the answer lands
+    or the turn ends. Stop shows for exactly as long, and the header says working.
   - The tool call an open Ask is about is hidden, so its diff isn't shown twice.
   - **A laptop catch-up** marks what was written since this phone last looked. A reopened chat
     shows its cached thread at once. When the fresher view lands, its new rows land together, in
