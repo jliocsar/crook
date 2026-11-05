@@ -326,7 +326,7 @@ Effect atoms end to end. See `ARCHITECTURE.md` §3.7.
 - Herdr server 0.9.1 supports `pane.report_agent_session`; `agent_session` is set from `agent start` onward and follows `/clear` to the new session id.
 - The nulls came from panes running Claude with `CLAUDE_CONFIG_DIR=~/.claude-work`, whose `settings.json` has no Herdr `SessionStart` hook.
 - Fallback that needs no hook: `pane.process_info` → pid of `claude` → `CLAUDE_CONFIG_DIR` from `/proc/<pid>/environ` (default `~/.claude`) → `<config>/sessions/<pid>.json` (`sessionId`, `cwd`, `procStart`, `status`, `updatedAt`) → `<config>/projects/<slug(cwd)>/<sessionId>.jsonl`. `procStart` matches `/proc/<pid>/stat` field 22, which guards against pid reuse. Also follows `/clear`.
-- Decision: `agent_session` first, pid file second. Claude roots come from the process env, not only from config.
+- Decision: `agent_session` first while a pid file names it, pid file otherwise, since the hook reports a `/clear` later than the pid file says it and with no event. Claude roots come from the process env, not only from config.
 
 **S8 — seen (verified on a 0.9.5 test server; assumed same on 0.9.1).**
 

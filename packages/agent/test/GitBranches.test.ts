@@ -97,7 +97,11 @@ layer(Layer.provideMerge(GitBranches.layer, services), { excludeTestServices: tr
         const outside = yield* fileSystem.makeTempDirectoryScoped()
 
         expect(yield* gitBranches.checkoutOf(`${detached}/repo/packages/agent`)).toEqual(
-          Option.some({ root: `${detached}/repo`, branch: Option.none() }),
+          Option.some({
+            root: `${detached}/repo`,
+            gitDirectory: `${detached}/repo/.git`,
+            branch: Option.none(),
+          }),
         )
         expect(yield* gitBranches.checkoutOf(outside)).toEqual(Option.none())
       }),

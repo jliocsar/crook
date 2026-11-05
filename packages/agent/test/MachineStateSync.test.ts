@@ -19,6 +19,8 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
+import { CheckoutHeads } from '@crook/agent/CheckoutHeads'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
@@ -56,7 +58,10 @@ interface FakeSubscription {
 
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 const HANDOFF_SESSION = ClaudeSessionId.make('5f0c2a8e-91d4-4b6e-a3c7-2e8d6b1f4a90')
+const CLEARED_SESSION = ClaudeSessionId.make('e2a3f1f3-4470-47aa-b7aa-59b053a3ead5')
+const LATER_SESSION = ClaudeSessionId.make('edc67541-7435-412f-8d59-25e6abe64625')
 const BRANCH = 'feat/jc-97-98-registry-seen'
+const CWD = '/home/jliocsar/Projects/crook'
 const BACKOFF_ATTEMPTS = 8
 
 const expectedBackoffMillis = Arr.makeBy(BACKOFF_ATTEMPTS, (attempt) =>
@@ -150,6 +155,14 @@ const startSync = Effect.fn('startSync')(function* (
   const attempts = yield* Ref.make(0)
   const runningCounts = yield* SubscriptionRef.make(NO_RUNNING_COUNTS)
   const followed = yield* Queue.unbounded<HashSet.HashSet<ClaudeSessionId>>()
+  const sessionMoves = yield* Queue.unbounded<void>()
+  const headMoves = yield* Queue.unbounded<void>()
+  const followedFolders = yield* Queue.unbounded<HashSet.HashSet<string>>()
+  const paneSessions = new Map([
+    ['w1:p1', SESSION],
+    ['w1:p6', HANDOFF_SESSION],
+  ])
+  const folderBranches = new Map([[CWD, BRANCH]])
 
   yield* Queue.offer(replies, initial)
   yield* Queue.offerAll(failures, subscribeFailures)
@@ -172,13 +185,12 @@ const startSync = Effect.fn('startSync')(function* (
       RunningSubagents.layerTest(runningCounts, (sessions) => Queue.offer(followed, sessions)),
       PendingAsks.layerTest(asks),
       recentPlaces,
-      ClaudeSessions.layerTest(
-        new Map([
-          ['w1:p1', SESSION],
-          ['w1:p6', HANDOFF_SESSION],
-        ]),
+      ClaudeSessions.layerTest(paneSessions),
+      ClaudeSessionFiles.layerTest([], Stream.fromQueue(sessionMoves)),
+      GitBranches.layerTest(folderBranches),
+      CheckoutHeads.layerTest(Stream.fromQueue(headMoves), (folders) =>
+        Queue.offer(followedFolders, folders),
       ),
-      GitBranches.layerTest(new Map([['/home/jliocsar/Projects/crook', BRANCH]])),
       ConfigProvider.layer(ConfigProvider.fromUnknown({ CROOK_MACHINE_ID: 'laptop' })),
     ]),
   )
@@ -199,6 +211,11 @@ const startSync = Effect.fn('startSync')(function* (
     failures,
     attempts,
     answerRead,
+    sessionMoves,
+    headMoves,
+    followedFolders,
+    paneSessions,
+    folderBranches,
   }
 })
 
@@ -327,6 +344,143 @@ it.effect(
       expect(forgotten.agents.map((row) => row.createdByCrook)).toEqual([false])
       expect(yield* Queue.size(readStarted)).toBe(0)
     }),
+)
+
+it.effect('re-reads when a pid file names another session, with no event from herdr', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, answerRead, sessionMoves, paneSessions } =
+      yield* startSync(working)
+
+    yield* Queue.take(subscriptions)
+    yield* answerRead(working)
+    paneSessions.set('w1:p1', CLEARED_SESSION)
+    yield* Queue.offer(sessionMoves, undefined)
+    yield* answerRead(working)
+
+    const state = yield* stateAt(sync, 1)
+
+    expect(state.agents.map((row) => row.claudeSession)).toEqual([Option.some(CLEARED_SESSION)])
+  }),
+)
+
+it.effect('re-reads when a HEAD moves to another branch, with no event from herdr', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, answerRead, headMoves, folderBranches } = yield* startSync(working)
+
+    yield* Queue.take(subscriptions)
+    yield* answerRead(working)
+    folderBranches.set(CWD, 'feature')
+    yield* Queue.offer(headMoves, undefined)
+    yield* answerRead(working)
+
+    const state = yield* stateAt(sync, 1)
+
+    expect(state.agents.map((row) => row.branch)).toEqual([Option.some('feature')])
+  }),
+)
+
+it.effect('publishes nothing when a re-read after a file change finds nothing new', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, answerRead, sessionMoves, headMoves, readStarted } =
+      yield* startSync(working)
+
+    yield* Queue.take(subscriptions)
+    yield* answerRead(working)
+    yield* Queue.offer(sessionMoves, undefined)
+    yield* answerRead(working)
+    yield* Queue.offer(headMoves, undefined)
+    yield* answerRead(working)
+    yield* TestClock.adjust(0)
+
+    expect((yield* sync.current).version).toBe(0)
+    expect(yield* Queue.size(readStarted)).toBe(0)
+  }),
+)
+
+it.effect('ends a burst of session changes on the latest, with one more read at most', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, readStarted, replies, answerRead, sessionMoves, paneSessions } =
+      yield* startSync(working)
+
+    yield* Queue.take(subscriptions)
+    yield* answerRead(working)
+    yield* Queue.offer(sessionMoves, undefined)
+    yield* Queue.take(readStarted)
+    paneSessions.set('w1:p1', CLEARED_SESSION)
+    yield* Queue.offerAll(sessionMoves, [undefined, undefined, undefined])
+    yield* TestClock.adjust(0)
+    paneSessions.set('w1:p1', LATER_SESSION)
+    yield* Queue.offer(replies, working)
+    yield* answerRead(working)
+
+    const state = yield* sync.changes.pipe(
+      Stream.filter((next) =>
+        Arr.some(next.agents, (row) => Option.contains(row.claudeSession, LATER_SESSION)),
+      ),
+      Stream.runHead,
+      Effect.flatMap(Effect.fromOption),
+    )
+
+    yield* TestClock.adjust(0)
+
+    expect(state.version).toBeLessThanOrEqual(2)
+    expect((yield* sync.current).version).toBe(state.version)
+    expect(yield* Queue.size(readStarted)).toBe(0)
+  }),
+)
+
+it.effect('follows the folders its agents sit in, again only when one or a branch changes', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, answerRead, followedFolders, headMoves, folderBranches } =
+      yield* startSync(working)
+
+    yield* Queue.take(subscriptions)
+
+    const first = yield* Queue.take(followedFolders)
+
+    yield* answerRead(sessionSnapshot([agentInfo({ agent_status: 'blocked' })]))
+    yield* stateAt(sync, 1)
+    yield* TestClock.adjust(0)
+
+    expect(yield* Queue.size(followedFolders)).toBe(0)
+
+    folderBranches.set(CWD, 'feature')
+    yield* Queue.offer(headMoves, undefined)
+    yield* answerRead(sessionSnapshot([agentInfo({ agent_status: 'blocked' })]))
+
+    const second = yield* Queue.take(followedFolders)
+
+    expect(Array.from(first)).toEqual([CWD])
+    expect(Array.from(second)).toEqual([CWD])
+  }),
+)
+
+it.effect('lands a session change made while herdr is away with the read that brings it back', () =>
+  Effect.gen(function* () {
+    const { sync, subscriptions, failures, replies, answerRead, sessionMoves, paneSessions } =
+      yield* startSync(working)
+    const first = yield* Queue.take(subscriptions)
+
+    yield* answerRead(working)
+    yield* TestClock.adjust(RECONNECT_CAP)
+    yield* Queue.offer(failures, herdrStopped)
+    yield* Queue.fail(first.events, new HerdrConnectionClosed({ method: 'events.subscribe' }))
+    yield* TestClock.adjust(HERDR_RECONNECT_BASE)
+    yield* stateAt(sync, 1)
+
+    paneSessions.set('w1:p1', CLEARED_SESSION)
+    yield* Queue.offer(sessionMoves, undefined)
+    yield* TestClock.adjust(HERDR_RECONNECT_BASE)
+    yield* Queue.take(subscriptions)
+    yield* Queue.offerAll(replies, [working, working])
+
+    const back = yield* stateAt(sync, 2)
+
+    yield* TestClock.adjust(0)
+
+    expect(back.agents.map((row) => row.claudeSession)).toEqual([Option.some(CLEARED_SESSION)])
+    expect((yield* sync.current).version).toBe(2)
+  }),
 )
 
 it.effect('coalesces a burst of events that lands during a read into one more read', () =>
@@ -722,7 +876,9 @@ const syncOverRealClient = Effect.fn('syncOverRealClient')(function* (socketPath
       PendingAsks.layerTest(new Map()),
       RecentPlaces.layerTest(),
       ClaudeSessions.layerTest(new Map([['w1:p1', SESSION]])),
+      ClaudeSessionFiles.layerTest(),
       GitBranches.layerTest(new Map()),
+      CheckoutHeads.layerTest(),
       ConfigProvider.layer(ConfigProvider.fromUnknown({ CROOK_MACHINE_ID: 'laptop' })),
     ]),
   )

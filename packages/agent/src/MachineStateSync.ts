@@ -17,6 +17,8 @@ import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import { CheckoutHeads } from '@crook/agent/CheckoutHeads'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
@@ -83,6 +85,20 @@ const agentPanes = (state: MachineState) =>
 const claudeSessionsOf = (state: MachineState) =>
   HashSet.fromIterable(Arr.flatMap(state.agents, (row) => Option.toArray(row.claudeSession)))
 
+const followedFoldersOf = (state: MachineState) =>
+  HashSet.fromIterable(Arr.map(state.agents, (row) => ({ cwd: row.cwd, branch: row.branch })))
+
+const followCheckouts = (
+  state: SubscriptionRef.SubscriptionRef<MachineState>,
+  checkoutHeads: CheckoutHeads['Service'],
+) =>
+  SubscriptionRef.changes(state).pipe(
+    Stream.map(followedFoldersOf),
+    Stream.changes,
+    Stream.map(HashSet.map((folder) => folder.cwd)),
+    Stream.runForEach(checkoutHeads.follow),
+  )
+
 const STATE_SUBSCRIPTIONS = Arr.map(STATE_EVENT_KINDS, (type): Subscription => ({ type }))
 
 const subscriptionsFor = (panes: HashSet.HashSet<string>) =>
@@ -101,7 +117,9 @@ const logHerdrFailure = (error: HerdrSubscriptionError) =>
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
   const claudeSessions = yield* ClaudeSessions
+  const sessionFiles = yield* ClaudeSessionFiles
   const gitBranches = yield* GitBranches
+  const checkoutHeads = yield* CheckoutHeads
   const createdPanes = yield* CreatedPanes
   const asks = yield* PendingAsks
   const recentPlaces = yield* RecentPlaces
@@ -237,7 +255,11 @@ const make = Effect.gen(function* () {
       Effect.flatMap((events) =>
         Stream.concat(
           Stream.succeed(undefined),
-          Stream.merge(events, Stream.fromQueue(suspectedHangs)),
+          events.pipe(
+            Stream.merge(Stream.fromQueue(suspectedHangs)),
+            Stream.merge(sessionFiles.changes),
+            Stream.merge(checkoutHeads.changes),
+          ),
         ).pipe(
           Stream.buffer({ capacity: 1, strategy: 'sliding' }),
           Stream.mapEffect(() => refresh),
@@ -291,6 +313,8 @@ const make = Effect.gen(function* () {
     Stream.runForEach(runningSubagents.follow),
     Effect.forkScoped,
   )
+
+  yield* Effect.forkScoped(followCheckouts(state, checkoutHeads))
 
   yield* runningSubagents.changes.pipe(
     Stream.runForEach((counts) =>
