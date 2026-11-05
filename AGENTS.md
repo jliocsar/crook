@@ -960,9 +960,8 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   once per agent start or session: on the 118 MB transcript, its first read went from 451 to 475 ms
   of CPU to 571 to 691 ms, on an otherwise quiet laptop. Run side by side at a load average near 18, the
   count's own markers alone took 729 to 747 ms and the whole scan 1159 to 1239 ms, at 118 MB, 476 to
-  527 and 758 to 782 at 32 MB, and about the same at 0.4 MB, with the peak the same at each. So one
-  chat opened per agent start already pays for it, and most of the difference is the search for
-  more markers over every byte rather than the 243 further lines parsed.
+  527 and 758 to 782 at 32 MB, and 42 to 46 and 41 to 56 at 0.4 MB, with the peak the same at each.
+  So one chat opened per agent start already pays for it (reasoned from those numbers).
 - Claude Code 2.1.312 names background work in the transcript like this (measured in local
   transcripts and a probe session). A background Bash's tool result opens with `Command running
   in background with ID: <id>. Output is being written to: <…>/tasks/<id>.output`, and its
@@ -1102,7 +1101,8 @@ Bun, measured on 1.4.3, for a client that writes to a Unix socket:
 - `socket.write` returns how many bytes it took, and the rest has to wait for `drain`. A 4 MiB
   write that ignored it lost what did not fit.
 - `socket.end()` closes at once, so the client's `close` fires before the server has handled the
-  bytes, which still arrive. A test polls for what the server did rather than trusting the close.
+  bytes, which still arrive: 0.2 to 1.3 ms against a half-open server holding the connection for
+  300 ms. A test polls for what the server did rather than trusting the close.
   `allowHalfOpen` with `shutdown(true)` hung: the client got `end` and never `close`.
 :::
 
