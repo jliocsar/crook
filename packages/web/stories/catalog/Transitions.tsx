@@ -95,12 +95,17 @@ const messagesOf = (event: TranscriptEvent): readonly TranscriptMessage[] =>
     Match.orElse(() => []),
   )
 
-const reopenFromTheCard = () =>
-  Effect.gen(function* () {
-    yield* seesText('The quiet redial')
-    yield* clicks(BACK)
-    yield* seesText(CHAT_TITLE)
-  })
+const goesBackToTheHerd = clicks(BACK).pipe(
+  Effect.andThen(
+    until(
+      'the chat to leave',
+      () => document.querySelector('[data-machine="transcript"]') === null,
+    ),
+  ),
+  Effect.andThen(seesText(CHAT_TITLE)),
+)
+
+const reopenFromTheCard = () => Effect.andThen(seesText('The quiet redial'), goesBackToTheHerd)
 
 const linesOver = (from: number, count: number, word: string) =>
   chunk(
@@ -209,16 +214,6 @@ const CACHED = Option.some(new HerdSnapshot({ view: TEAM, syncedAt: START }))
 
 const takeSession = ({ browser, session }: BrowserStage) =>
   Effect.flatMap(Queue.take(browser.sessions), (next) => Ref.set(session, Option.some(next)))
-
-const goesBackToTheHerd = clicks(BACK).pipe(
-  Effect.andThen(
-    until(
-      'the chat to leave',
-      () => document.querySelector('[data-machine="transcript"]') === null,
-    ),
-  ),
-  Effect.andThen(seesText(CHAT_TITLE)),
-)
 
 const reopens = () => Effect.andThen(clicks(CARD_BUTTON), seesSelector(HELD_THREAD))
 
