@@ -18,9 +18,27 @@ const STATUS_PILL_TONE = {
 
 const isLive = (status: AgentStatus): boolean => status === 'working' || status === 'blocked'
 
-export function AgentStatusPill({ status, since }: { status: AgentStatus; since: DateTime.Utc }) {
+function ElapsedLabel({ status, since }: { status: AgentStatus; since: DateTime.Utc }) {
   const now = useNow()
 
+  return isLive(status) ? (
+    <>
+      <span
+        aria-hidden="true"
+        className="font-mono text-[11.5px] font-normal tabular-nums opacity-80"
+      >
+        {clockElapsed(now, since)}
+      </span>
+      <span className="sr-only">{shortElapsed(now, since)}</span>
+    </>
+  ) : (
+    <span className="font-mono text-[11.5px] font-normal tabular-nums opacity-80">
+      {shortElapsed(now, since)}
+    </span>
+  )
+}
+
+export function AgentStatusPill({ status, since }: { status: AgentStatus; since: DateTime.Utc }) {
   return (
     <span
       data-slot="agent-status"
@@ -31,21 +49,7 @@ export function AgentStatusPill({ status, since }: { status: AgentStatus; since:
       )}
     >
       <Swap id={status}>{Str.capitalize(STATUS_WORD[status])}</Swap>
-      {isLive(status) ? (
-        <>
-          <span
-            aria-hidden="true"
-            className="font-mono text-[11.5px] font-normal tabular-nums opacity-80"
-          >
-            {clockElapsed(now, since)}
-          </span>
-          <span className="sr-only">{shortElapsed(now, since)}</span>
-        </>
-      ) : (
-        <span className="font-mono text-[11.5px] font-normal tabular-nums opacity-80">
-          {shortElapsed(now, since)}
-        </span>
-      )}
+      <ElapsedLabel status={status} since={since} />
     </span>
   )
 }
