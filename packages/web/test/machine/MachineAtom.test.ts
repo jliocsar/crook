@@ -62,14 +62,16 @@ const switched = (on: boolean, generation: number) =>
 
 const runtime = Atom.runtime(Layer.empty)
 
-const driven = (first: LampEvent) => {
+const warmsUp = ({ generation, wait }: WarmUp): Effect.Effect<LampEvent> =>
+  Effect.as(Effect.sleep(wait), LampEvent.cases.Warmed.make({ generation }))
+
+const driven = (first: LampEvent, perform = warmsUp) => {
   const switchAtom = Atom.make<LampEvent>(first)
   const lampAtom = machineAtom({
     machine: lamp,
     observed: switchAtom,
     runtime,
-    perform: ({ generation, wait }) =>
-      Effect.as(Effect.sleep(wait), LampEvent.cases.Warmed.make({ generation })),
+    perform,
   })
   const registry = AtomRegistry.make()
   const states: LampState[] = []
@@ -87,6 +89,18 @@ const driven = (first: LampEvent) => {
 const waitForSettle = Effect.sleep(Duration.millis(SETTLE_MS))
 
 describe('a machine driven by an atom', () => {
+  it.live('takes the event of a command that finishes before the atom has its first value', () =>
+    Effect.sync(() => {
+      const { states, unsubscribe } = driven(switched(true, 1), ({ generation }) =>
+        Effect.succeed(LampEvent.cases.Warmed.make({ generation })),
+      )
+
+      expect(states).toEqual([ON])
+
+      unsubscribe()
+    }),
+  )
+
   it.live('folds what it observes and feeds a finished command back in', () =>
     Effect.gen(function* () {
       const { states, unsubscribe } = driven(switched(true, 1))

@@ -73,6 +73,7 @@ export interface TranscriptResume {
   readonly tail: Option.Option<TranscriptTailBytes>
 }
 
+export const SYNC_NOTICE_DELAY = NOTICE_DELAY
 export const RECOVERED_NOTICE_DURATION = Duration.millis(1500)
 export const CALL_HOLD_LIMIT = RECONNECT_GRACE
 
@@ -93,7 +94,7 @@ export class HubNotConnected extends Schema.TaggedError<HubNotConnected>()('HubN
 const commandEvent = (command: LinkCommand): Effect.Effect<LinkEvent> =>
   Match.value(command).pipe(
     Match.when('StartNoticeTimer', () =>
-      Effect.as(Effect.sleep(NOTICE_DELAY), NOTICE_DELAY_PASSED),
+      Effect.as(Effect.sleep(SYNC_NOTICE_DELAY), NOTICE_DELAY_PASSED),
     ),
     Match.when('StartRecoveredTimer', () =>
       Effect.as(Effect.sleep(RECOVERED_NOTICE_DURATION), RECOVERED_NOTICE_ENDED),

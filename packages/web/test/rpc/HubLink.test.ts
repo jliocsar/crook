@@ -29,8 +29,8 @@ import {
   HubLink,
   HubNotConnected,
   RECOVERED_NOTICE_DURATION,
+  SYNC_NOTICE_DELAY,
 } from '@crook/web/rpc/HubLink'
-import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 import {
   ANNOUNCED,
   COLD_START,
@@ -189,7 +189,7 @@ describe('HubLink', () => {
       const { current, nextSession } = yield* start()
 
       yield* nextSession
-      yield* TestClock.adjust(Duration.subtract(NOTICE_DELAY, Duration.millis(1)))
+      yield* TestClock.adjust(Duration.subtract(SYNC_NOTICE_DELAY, Duration.millis(1)))
 
       expect((yield* current).status).toEqual(COLD_START)
 
@@ -209,7 +209,7 @@ describe('HubLink', () => {
 
       expect((yield* current).status).toEqual(COLD_START)
 
-      yield* TestClock.adjust(NOTICE_DELAY)
+      yield* TestClock.adjust(SYNC_NOTICE_DELAY)
 
       expect((yield* current).status).toEqual(ANNOUNCED)
 
@@ -238,7 +238,7 @@ describe('HubLink', () => {
       expect((yield* current).status).toEqual(REDIALING)
 
       yield* Queue.offer(second.views, liveView)
-      yield* TestClock.adjust(NOTICE_DELAY)
+      yield* TestClock.adjust(SYNC_NOTICE_DELAY)
 
       expect((yield* current).status).toEqual(LIVE)
     }),

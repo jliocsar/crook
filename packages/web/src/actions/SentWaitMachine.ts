@@ -28,8 +28,6 @@ export const SentWaitEvent = Schema.TaggedUnion({
 })
 export type SentWaitEvent = typeof SentWaitEvent.Type
 
-const SOONEST_WAKE_MS = 1
-
 export const NOT_SENT = SentWaitState.cases.NotSent.make({})
 export const SETTLED = SentWaitEvent.cases.Settled.make({})
 
@@ -75,11 +73,7 @@ export const sentWaitTimer = (
     WaitOutBound: ({ answeredAt }) =>
       Effect.flatMap(Clock.currentTimeMillis, (now) =>
         Effect.as(
-          Effect.sleep(
-            Duration.millis(
-              Math.max(SOONEST_WAKE_MS, Duration.toMillis(bound) - (now - answeredAt)),
-            ),
-          ),
+          Effect.sleep(Duration.millis(Math.max(0, Duration.toMillis(bound) - (now - answeredAt)))),
           boundEnded(answeredAt),
         ),
       ),

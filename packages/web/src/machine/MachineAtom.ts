@@ -22,11 +22,25 @@ export const machineAtom = <State, Event, Command, Services, RuntimeFailure>({
   const running = runtime.fn(perform)
 
   return Atom.make((get) => {
+    const finishedBeforeFirstValue: Event[] = []
+
     const start = (commands: readonly Command[]) => {
       Arr.forEach(commands, (command) => {
         get.set(running, command)
       })
     }
+
+    const foldFinished = (state: State): State =>
+      Option.match(Option.fromNullishOr(finishedBeforeFirstValue.shift()), {
+        onNone: () => state,
+        onSome: (event) => {
+          const [next, commands] = machine.transition(state, event)
+
+          start(commands)
+
+          return foldFinished(next)
+        },
+      })
 
     const dispatch = (event: Event) => {
       Option.map(get.self<State>(), (current) => {
@@ -40,6 +54,12 @@ export const machineAtom = <State, Event, Command, Services, RuntimeFailure>({
     get.mount(running)
     get.subscribe(running, (result) => {
       if (AsyncResult.isSuccess(result) && !result.waiting) {
+        if (Option.isNone(get.self<State>())) {
+          finishedBeforeFirstValue.push(result.value)
+
+          return
+        }
+
         dispatch(result.value)
       }
     })
@@ -49,6 +69,6 @@ export const machineAtom = <State, Event, Command, Services, RuntimeFailure>({
 
     start(commands)
 
-    return first
+    return foldFinished(first)
   })
 }
