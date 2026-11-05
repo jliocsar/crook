@@ -14,6 +14,7 @@ import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { ClaudeSessionId, PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import {
+  CHUNK_READ_LIMIT,
   PaneTranscript,
   type TranscriptEvent,
   TranscriptPosition,
@@ -29,6 +30,9 @@ const SESSION_A = ClaudeSessionId.make('aaaaaaaa-0000-4000-8000-000000000000')
 const SESSION_B = ClaudeSessionId.make('bbbbbbbb-0000-4000-8000-000000000000')
 const PANE = PaneId.make('w1:p1')
 const TAIL = TranscriptTailBytes.make(LINE_BYTES)
+const BIG_LINE_BYTES = CHUNK_READ_LIMIT / 2
+const BIG_LINE = `{"type":"verify","pad":"${'x'.repeat(BIG_LINE_BYTES - 27)}"}\n`
+const BIG_TAIL = TranscriptTailBytes.make(BIG_LINE_BYTES)
 const SETTLE_TIMEOUT = '5 seconds'
 
 const idOf = (name: 'A' | 'B') => (name === 'A' ? SESSION_A : SESSION_B)
@@ -42,6 +46,8 @@ interface FollowCase {
   readonly expected: readonly string[]
   readonly thenPane?: 'A' | 'B'
   readonly expectedAfter?: readonly string[]
+  readonly big?: boolean
+  readonly whole?: boolean
 }
 
 const CASES: readonly FollowCase[] = [
@@ -93,6 +99,38 @@ const CASES: readonly FollowCase[] = [
     expected: ['opened A', 'chunk A 0-2 omit 1', 'caughtUp A'],
   },
   {
+    name: 'nextChunk: a resume reads a gap one read covers, big lines and all',
+    from: ['A', 1],
+    pane: 'A',
+    lines: { A: 3 },
+    big: true,
+    expected: ['opened A', 'chunk A 1-3', 'caughtUp A'],
+  },
+  {
+    name: 'nextChunk: a resume over a gap too big for one read marks the hole and reads the tail',
+    from: ['A', 1],
+    pane: 'A',
+    lines: { A: 5 },
+    big: true,
+    expected: ['opened A', 'chunk A 1-5 omit 1-4', 'caughtUp A'],
+  },
+  {
+    name: 'watcher.tail: a whole watch reads that same gap and leaves nothing out',
+    from: ['A', 1],
+    pane: 'A',
+    lines: { A: 5 },
+    big: true,
+    whole: true,
+    expected: ['opened A', 'chunk A 1-5', 'caughtUp A'],
+  },
+  {
+    name: 'nextChunk: a cold open with no tail reads the whole file',
+    pane: 'A',
+    lines: { A: 3 },
+    whole: true,
+    expected: ['opened A', 'chunk A 0-3', 'caughtUp A'],
+  },
+  {
     name: 'FollowCatchesUp: a session with no file yet is caught up at once',
     pane: 'B',
     lines: {},
@@ -111,12 +149,12 @@ const CASES: readonly FollowCase[] = [
 const stateOn = (name: 'A' | 'B') =>
   machineStateWith([agentRow({ claudeSession: Option.some(idOf(name)) })])
 
-const words = (events: readonly TranscriptEvent[]) => {
+const words = (events: readonly TranscriptEvent[], lineBytes: number) => {
   const joined: {
     s: string
     from: number
     to: number
-    omit: number
+    omit: string
   }[] = []
   const out: (string | (typeof joined)[number])[] = []
 
@@ -125,10 +163,15 @@ const words = (events: readonly TranscriptEvent[]) => {
     if (event._tag === 'TranscriptCaughtUp') out.push(`caughtUp ${nameOf(event.session)}`)
     if (event._tag === 'TranscriptChunk') {
       const last = out[out.length - 1]
-      const from = event.offset / LINE_BYTES
-      const to = event.nextOffset / LINE_BYTES
+      const from = event.offset / lineBytes
+      const to = event.nextOffset / lineBytes
       const omitted = event.messages.find((message) => message._tag === 'Omitted')
-      const omit = omitted === undefined ? 0 : to
+      const omit =
+        omitted === undefined
+          ? ''
+          : omitted.offset === 0
+            ? ` omit ${to}`
+            : ` omit ${from}-${to}`
 
       if (typeof last === 'object' && last.to === from && last.s === nameOf(event.session)) {
         last.to = to
@@ -141,7 +184,7 @@ const words = (events: readonly TranscriptEvent[]) => {
   return out.map((item) =>
     typeof item === 'string'
       ? item
-      : `chunk ${item.s} ${item.from}-${item.to}${item.omit > 0 ? ` omit ${item.omit}` : ''}`,
+      : `chunk ${item.s} ${item.from}-${item.to}${item.omit}`,
   )
 }
 
@@ -149,6 +192,9 @@ const runCase = (root: string, followCase: FollowCase) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem
     const folder = `${root}/projects/${PROJECT}`
+    const line = followCase.big ? BIG_LINE : LINE
+    const lineBytes = followCase.big ? BIG_LINE_BYTES : LINE_BYTES
+    const tail = followCase.whole ? Option.none() : Option.some(followCase.big ? BIG_TAIL : TAIL)
 
     yield* fileSystem.remove(root, { recursive: true, force: true })
     yield* fileSystem.makeDirectory(folder, { recursive: true })
@@ -157,7 +203,7 @@ const runCase = (root: string, followCase: FollowCase) =>
       const count = followCase.lines[name] ?? 0
 
       if (count > 0) {
-        yield* fileSystem.writeFileString(`${folder}/${idOf(name)}.jsonl`, LINE.repeat(count))
+        yield* fileSystem.writeFileString(`${folder}/${idOf(name)}.jsonl`, line.repeat(count))
       }
     }
 
@@ -171,12 +217,12 @@ const runCase = (root: string, followCase: FollowCase) =>
       ? Option.some(
           new TranscriptPosition({
             session: idOf(followCase.from[0]),
-            offset: TranscriptOffset.make(followCase.from[1] * LINE_BYTES),
+            offset: TranscriptOffset.make(followCase.from[1] * lineBytes),
           }),
         )
       : Option.none()
 
-    yield* streams.follow(new PaneTranscript({ pane: PANE }), from, Option.some(TAIL)).pipe(
+    yield* streams.follow(new PaneTranscript({ pane: PANE }), from, tail).pipe(
       Stream.runForEach((event) => Queue.offer(events, event)),
       Effect.forkScoped,
     )
@@ -194,7 +240,8 @@ const runCase = (root: string, followCase: FollowCase) =>
       }).pipe(Effect.timeoutOption(SETTLE_TIMEOUT))
 
     const first = yield* untilCaughtUp(followCase.pane)
-    const firstWords = Option.match(first, { onNone: () => ['timed out'], onSome: words })
+    const wordsOf = (events: readonly TranscriptEvent[]) => words(events, lineBytes)
+    const firstWords = Option.match(first, { onNone: () => ['timed out'], onSome: wordsOf })
     const problems: string[] = []
 
     if (JSON.stringify(firstWords) !== JSON.stringify(followCase.expected)) {
@@ -206,7 +253,7 @@ const runCase = (root: string, followCase: FollowCase) =>
     if (followCase.thenPane !== undefined) {
       yield* SubscriptionRef.set(state, stateOn(followCase.thenPane))
       const after = yield* untilCaughtUp(followCase.thenPane)
-      const afterWords = Option.match(after, { onNone: () => ['timed out'], onSome: words })
+      const afterWords = Option.match(after, { onNone: () => ['timed out'], onSome: wordsOf })
 
       if (JSON.stringify(afterWords) !== JSON.stringify(followCase.expectedAfter)) {
         problems.push(

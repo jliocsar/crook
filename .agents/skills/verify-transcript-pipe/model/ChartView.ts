@@ -48,6 +48,8 @@ export const step = (action: string) => {
       return 'the phone reconnects and resumes'
     case 'ChatReopens':
       return 'you close and reopen the chat'
+    case 'UserShowsEarlier':
+      return 'you press Show earlier'
     case 'UserPressesTryAgain':
       return 'you press Try again'
     case 'PhoneSeesFailure':

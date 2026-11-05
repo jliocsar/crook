@@ -25,6 +25,7 @@ const BASE = {
   PhoneDrops: 0,
   WatchFailures: 0,
   Reopens: 0,
+  ShowEarliers: 0,
   SocketsMayReorder: false,
   WalkLength: 60,
   Broken: 'none',
@@ -52,6 +53,8 @@ const HOLDS_ON_MAIN = [
   'NeverStuckCatchingUp',
   'ShowsPaneSession',
   'NeverBehindFile',
+  'WholeShowsAll',
+  'AtMostTwoHoles',
 ]
 
 const finding = (
@@ -81,6 +84,8 @@ const STALE_SOCKET: Constants = { AgentDrops: 1, SocketsMayReorder: true }
 const RETURN: Constants = { SessionPath: 'PathReturn' }
 const DROPS: Constants = { AgentDrops: 1 }
 const BACKLOG: Constants = { SessionPath: 'PathOne', FirstFileLines: 3, TailLines: 3, Writes: 0 }
+const BIG_GAP: Constants = { SessionPath: 'PathOne', Writes: 3, SwitchQueueSize: 1 }
+const REPEATED_GAPS: Constants = { ...BIG_GAP, MailboxCapacity: 1, Writes: 6, Reopens: 3 }
 
 const HOLDING: readonly Check[] = [
   holds('holds/agent-and-phone-drop', 'both connections die once, lines and a /clear racing them', {
@@ -106,6 +111,34 @@ const HOLDING: readonly Check[] = [
     AgentDrops: 1,
     SwitchQueueSize: 1,
   }),
+  holds('holds/reopen-over-big-gap', 'the chat reopens over a gap too big for one read, and the agent skips it with an agent drop racing the skip', {
+    ...BIG_GAP,
+    Reopens: 1,
+    AgentDrops: 1,
+  }),
+  holds('holds/reconnect-over-big-gap', 'the phone reconnects over a gap too big for one read, with more lines written during the skip', {
+    ...BIG_GAP,
+    Writes: 4,
+    PhoneDrops: 1,
+  }),
+  holds('holds/show-earlier-at-hole', 'Show earlier is pressed at a hole, and the whole watch fills it with no repeated line', {
+    ...BIG_GAP,
+    Reopens: 1,
+    ShowEarliers: 1,
+  }),
+  holds('holds/repeated-gaps', 'the chat keeps reopening over big gaps, and what it holds stays bounded', REPEATED_GAPS),
+  holds('holds/return-over-big-gap', 'the pane goes A, B, A and the chat reopens on a gap too big for one read', {
+    ...RETURN,
+    Writes: 3,
+    Reopens: 1,
+    SwitchQueueSize: 1,
+    MailboxCapacity: 1,
+  }),
+  holds('holds/late-publish-over-big-gap', "a dead socket's skip lands after its successor has spoken", {
+    ...BIG_GAP,
+    ...STALE_SOCKET,
+    Reopens: 1,
+  }),
   holds('holds/return-inside-switch-queue', 'the pane goes A, B, A with the first open still queued, and the phone ends with each line of A once', RETURN),
   {
     name: 'holds/every-retry-ends',
@@ -116,7 +149,14 @@ const HOLDING: readonly Check[] = [
   },
 ]
 
-const FINDINGS: readonly Check[] = []
+const FINDINGS: readonly Check[] = [
+  finding('finding/open-chat-gains-a-hole-per-drop', 'a chat left open gains a hole per reconnect over a wide gap, until the next open folds them', 'AtMostTwoHoles', {
+    ...BIG_GAP,
+    MailboxCapacity: 1,
+    Writes: 6,
+    PhoneDrops: 3,
+  }),
+]
 
 const reach = (name: string, says: string, property: string, constants: Constants): Check => ({
   name,
@@ -134,6 +174,24 @@ const REACHED: readonly Check[] = [
   reach('reach/caught-up-refused', 'a caught-up mark past what the hub delivered is refused, and the agent restarts from where the hub says', 'NoCaughtUpRefused', RETURN),
   reach('reach/fenced-call-dropped', "a dead socket's call lands after a later link asked for demands, and the hub drops it", 'NoFencedCallDropped', STALE_SOCKET),
   reach('reach/dead-socket-interrupted', "the hub sees a dead socket and interrupts its call between two updates", 'NoDeadSocketSeen', STALE_SOCKET),
+  reach('reach/hole-landed', 'a resume over a big gap reaches the phone as a chunk that continues its position', 'NoHoleLanded', {
+    ...BIG_GAP,
+    Reopens: 1,
+  }),
+  reach('reach/earlier-shown', 'Show earlier starts the view over and reads the file again', 'NoEarlierShown', {
+    ...BIG_GAP,
+    FirstFileLines: 2,
+    Writes: 0,
+    ShowEarliers: 1,
+  }),
+  reach('reach/hole-on-return', 'the pane goes A, B, A, and a reopen lands a hole', 'NoHoleLanded', {
+    ...RETURN,
+    Writes: 3,
+    Reopens: 1,
+    SwitchQueueSize: 1,
+    MailboxCapacity: 1,
+  }),
+  reach('reach/hole-folded', 'a view that holds two holes is opened from the cache with one', 'NoHoleFolded', REPEATED_GAPS),
   reach('reach/call-on-gone-watch', 'a call lands after its watch has failed and left the map', 'NoCallOnGoneWatch', { ...STALE_SOCKET, WatchFailures: 1 }),
 ]
 
@@ -148,6 +206,14 @@ const CAN_FAIL: readonly Check[] = [
     name: 'can-fail/open-keeps-lines-on-return',
   },
   mutant('omitted-not-marked', 'NoHole', { SessionPath: 'PathOne', FirstFileLines: 2 }, 'omittedUpTo without its OmittedLines'),
+  {
+    ...mutant('omitted-not-marked', 'NoHole', { ...BIG_GAP, Reopens: 1 }, 'a skip over a gap without its OmittedLines'),
+    name: 'can-fail/skip-not-marked',
+  },
+  mutant('skip-from-start', 'AlwaysSettles', { ...BIG_GAP, Reopens: 1 }, 'a skip over a gap says it starts at byte 0, not at the position'),
+  mutant('whole-takes-tail', 'WholeShowsAll', { ...BIG_GAP, FirstFileLines: 2, Writes: 0, ShowEarliers: 1 }, 'a whole watch skips as if it had a tail'),
+  mutant('no-fold', 'AtMostTwoHoles', REPEATED_GAPS, 'the cache hands back every hole it holds'),
+  mutant('fold-not-marked', 'NoHole', REPEATED_GAPS, 'the rows a fold drops leave no mark at the start of the file'),
   mutant('open-not-filtered', 'NoRepeatedOpen', DROPS, 'deliver forwards every TranscriptOpened'),
   mutant('no-fence', 'NeverRewinds', STALE_SOCKET, "a dead socket's call counts after a later link asked for demands"),
   mutant('caught-up-unchecked', 'NeverBehindFile', RETURN, 'passOnCaughtUp forwards a mark past the delivered position'),
@@ -169,6 +235,7 @@ const WALK_CONSTANTS: Constants = {
   PhoneDrops: 2,
   WatchFailures: 2,
   Reopens: 1,
+  ShowEarliers: 1,
   SocketsMayReorder: true,
 }
 

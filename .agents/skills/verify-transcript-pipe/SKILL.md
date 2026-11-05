@@ -23,7 +23,7 @@ The command compares these files with that commit and exits 2 when any of them m
 is the file, then the functions the model stands for.
 
 ```coverage
-packages/domain/src/Transcript.ts           positionAfter continuesFrom reachesPast inSession omittedUpTo
+packages/domain/src/Transcript.ts           positionAfter continuesFrom reachesPast inSession omittedUpTo omittedBetween
 packages/protocol/src/TranscriptBatch.ts    batchWith withChunk withOpened intoSession eventsOf updatesOf isFull awaitsCatchUp isCaughtUp takeWhen
 packages/protocol/src/Transcripts.ts        TranscriptOutOfStep TranscriptWatchFailed
 packages/claude/src/TranscriptTail.ts       open available follow tailStart
@@ -31,7 +31,7 @@ packages/agent/src/TranscriptStreams.ts     fromLineNearEnd openSession sessions
 packages/agent/src/HubLink.ts               session transcriptLinkOf
 packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append passOnCaughtUp fail deliver publish
 packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript TranscriptDemands PublishTranscriptBatch
-packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines catchingUpAfter catchingUpFrom failedWith resumeOf isShowable isOpened
+packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines catchingUpAfter catchingUpFrom failedWith resumeOf isShowable isOpened withOneHole
 packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
 packages/web/src/rpc/HubLink.ts             whileConnected watchTranscript
 packages/web/src/cache/TranscriptCache.ts   remember load
@@ -44,7 +44,7 @@ keeping what an interrupted inner stream already queued, and the hub's permit on
 ## Run it
 
 ```sh
-bun run verify:transcript-pipe               # everything, about 2 minutes
+bun run verify:transcript-pipe               # everything, about 4 minutes
 bun run verify:transcript-pipe --only holds  # the checks whose name contains the word
 ```
 
@@ -71,7 +71,7 @@ The run has five parts, each a line per check:
 - `can-fail/*`: each rule failing on a broken variant of the code it guards. A check never seen
   failing proves nothing.
 - `replay/*`: fixed random walks through the real relay, mailbox and view, comparing every
-  position, line and mailbox after every step, plus nine cases through the real
+  position, line and mailbox after every step, plus thirteen cases through the real
   `TranscriptStreams.follow` over real files. `replay/every-step` fails if any step of the model
   was never walked through the real code: without it, a replay that passes says nothing about
   the steps it skipped. It runs only on a whole run, not under `--only`.
@@ -89,12 +89,20 @@ The run has five parts, each a line per check:
 | `ShowsPaneSession` | With a live link and nothing left to do, the phone is in the pane's session | The chat shows the wrong conversation |
 | `NeverBehindFile` | With a live link and nothing left to do, the phone holds the whole file | Lines the laptop has never arrive |
 | `AlwaysSettles` | Every retry ends | A restart loop that burns the agent and never delivers |
+| `WholeShowsAll` | With a live link and nothing left to do, a chat that asked for the whole file holds no hole | Show earlier leaves part of the conversation out |
+| `AtMostTwoHoles` | A view holds at most two holes | Repeated gaps grow what the phone keeps and shows without bound |
 
 ## What it found
 
 A bug found here is kept as a finding until it is fixed: never weaken a rule or the model to make
-one go away. Each runs as `finding/*`, so its line stops being "ok" the day the code changes. None
+one go away. Each runs as `finding/*`, so its line stops being "ok" the day the code changes. One
 is open today.
+
+**Open: a chat left open gains a hole per reconnect.** `AtMostTwoHoles` holds for a chat opened from
+the cache, since the cache folds as it hands a view back. A chat that stays open and reconnects three
+times over a wide gap holds three, and the real relay and view walk the same 60 steps to it. The
+next open folds them, and each reconnect adds a tail where it used to add the whole gap. Folding on
+the spot would take rows from under a reader scrolled up to them, so that is the user's call.
 
 **Settled: a return inside the switch queue.** Needs the pane to go A, B, A while `opened(B)` is
 still in `mergeAll`'s queue: microseconds on an idle pipe, longer while a full mailbox holds the
@@ -200,6 +208,7 @@ Every check is one pane, one chat, one agent, one hub, with lines counted, not b
 | Tail | 1 line; 3 in the backlog check |
 | Mailbox | full at 2 lines |
 | `mergeAll` queue | 2 events; the real one holds 16 |
+| Big gap | a resume with more lines left than a full mailbox skips to the last line, a full mailbox standing for one read; `Writes: 3` is the fewest that lands a hole on `SessionPath: PathReturn` |
 | Disruptions | as each `holds/*` line says: each connection drop, follow failure, reopen and pane gap at most once, and the two drops together |
 
 Assumed, not checked: Claude only appends whole lines, and only to the pane's current session.
@@ -209,6 +218,27 @@ it on. A dead link is never the newest to ask for demands once its successor has
 only after its upgrade's reply, so links are minted in the order the agent's real connections
 started, and a dial the agent gave up on never asks, so it fences nothing. Fairness on the pipe's own steps for `AlwaysSettles`. `awaitsCaughtUp` is true: a current
 agent.
+
+## A skip over a big gap
+
+A resume with more than one read left to go sends an omitted-lines chunk from its offset to a line
+start near the end, then reads on from there. The model gives every chunk a body of lines and
+omitted runs, because a mailbox joins chunks that continue each other and a hole can then sit in the
+middle of one. `Show earlier` restarts the watch from nothing with no tail, and the cache folds a
+view down to one hole as it hands it back.
+
+No rule breaks from the skip. `can-fail/skip-not-marked`, `can-fail/skip-from-start`,
+`can-fail/whole-takes-tail`, `can-fail/no-fold` and `can-fail/fold-not-marked` show the guards
+failing without it. `can-fail/no-fold` needs three reopens that each land a gap: at `Writes: 4` the
+model only reached two holes and said every rule holds, which proved nothing about the fold.
+
+A `holds/*` line over a bound that never reaches the step it names is empty, and says so by nothing.
+`holds/return-over-big-gap` held at `Writes: 2`, where no hole ever landed; `reach/hole-on-return`
+is what showed it, so a bound for a new step gets a `reach/*` line beside it.
+
+A real-code mutation shows the replay's half: dropping the chunk that marks the skip fails
+`replay/follow` on 5 of 13 cases, skipping a gap one read covers fails it on 2, and a cache that does
+not fold fails `reach/hole-folded` at its reopen.
 
 ## What it does not cover
 
@@ -224,7 +254,8 @@ agent.
 - A publish that dies of a defect: the agent tells the phone the watch failed, and a test holds it.
   If that call dies too, the watch stays dead until the next connection or re-watch.
 - `transcriptViews`' fibers are replayed by hand in `Replay.ts` from the pure functions it calls;
-  the atom itself is not run.
+  the atom itself is not run. Its reopen calls the fold directly, so that the cache's own load goes
+  through the fold is held by the cache's tests, not here.
 - A mailbox that holds a step back. The replay compares the agent's outbox fullness after each
   step, but it cannot see a hub inbox that takes more than the model lets it, since the model
   simply takes no step there.
