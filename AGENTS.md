@@ -856,6 +856,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   built from, so only a watch that comes or goes works out a machine's demand again. Updating
   the position inside that set recomputed the demand once per event: 21 events cost 21
   recomputations before, and none after (measured with a counting tracer).
+- A burst of writes behind a publish arrives in fewer publishes than writes, not always in one. A test that wrote three lines and waited 80 ms for the agent to read them saw two in the next publish in one loaded gate, and all three in 12 of 12 runs with sixteen busy loops beside it (measured). The rest follows in the next publish, since a file event that lands during a read is kept (read in the tail). So a test holds that everything arrives in fewer publishes than writes.
 - A test that publishes twice and expects two deliveries takes the first before it publishes
   the second. The mailbox joins whatever the phone has not taken yet, and whether the phone's
   fiber got a turn in between hung on unrelated work in the hub: dropping a per-event update

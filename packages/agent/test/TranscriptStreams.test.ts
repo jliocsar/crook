@@ -806,9 +806,14 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
           yield* Effect.sleep(WATCHERS_SETTLED)
           yield* Deferred.succeed(answered, undefined)
 
-          expect(yield* Queue.take(published)).toEqual([
-            `0 chunk ${FIRST_SESSION} ${bytesOf(first)}-${bytesOf(first + burst.join(''))} 3`,
-          ])
+          const whole = bytesOf(first + burst.join(''))
+          const publishes = yield* Stream.fromQueue(published).pipe(
+            Stream.takeUntil(Arr.some((update) => update.includes(`-${whole} `))),
+            Stream.runCollect,
+          )
+
+          expect(publishes.length).toBeLessThan(burst.length)
+          expect(publishes[0]?.[0]).toContain(`0 chunk ${FIRST_SESSION} ${bytesOf(first)}-`)
         }),
     )
 
