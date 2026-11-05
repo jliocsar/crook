@@ -12,7 +12,10 @@
     "preview": "vite preview --port 5191 --strictPort",
     "typecheck": "tsr generate && tsc && tsc -p src/sw",
     "test": "tsr generate && vitest run --fsModuleCachePath node_modules/.vitest-cache",
-    "brand": "bun brand/Generate.ts"
+    "brand": "bun brand/Generate.ts",
+    "stories": "tsr generate && vite --config vite.stories.config.ts --port 5192 --strictPort",
+    "stories:list": "tsr generate && bun stories/List.ts",
+    "typecheck:kitchen": "tsc -p tsconfig.kitchen.json"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -45,6 +48,8 @@
     "@crook/claude": "workspace:*",
     "@crook/tsconfig": "workspace:*",
     "@effect/platform-bun": "4.0.5",
+    "@tailwindcss/node": "4.3.3",
+    "@tailwindcss/oxide": "4.3.3",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/router-cli": "1.167.45",
     "@tanstack/router-plugin": "1.168.47",

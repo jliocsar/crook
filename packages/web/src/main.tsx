@@ -4,7 +4,7 @@ import * as Effect from 'effect/Effect'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import '@crook/web/index.css'
+import '@crook/web/app.css'
 import { registerServiceWorker } from '@crook/web/pwa/RegisterServiceWorker'
 import { router } from '@crook/web/router/Router'
 
