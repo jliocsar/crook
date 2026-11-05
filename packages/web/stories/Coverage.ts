@@ -120,6 +120,7 @@ export const REQUIRED_TRANSITIONS: readonly string[] = [
   'transition/reconnect-chat-open',
   'transition/machine-redial',
   'transition/clear',
+  'transition/resume-other-session',
   'transition/prompt-to-answer',
   'transition/herd-first-load-from-cache',
 ]

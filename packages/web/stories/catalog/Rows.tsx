@@ -387,10 +387,24 @@ export const ROW_STORIES: readonly StoryMaker[] = [
       opened(),
       chunk(0, 10, [said(0, 'Before the clear.')]),
       opened(NEXT_SESSION),
-      chunk(0, 10, [prompt(0, 'After the clear.')], NEXT_SESSION),
-      caughtUp(10, NEXT_SESSION),
+      chunk(
+        0,
+        20,
+        [
+          user(0, [new LocalCommandBlock({ name: '/clear', args: '' })]),
+          prompt(10, 'After the clear.'),
+        ],
+        NEXT_SESSION,
+      ),
+      caughtUp(20, NEXT_SESSION),
     ],
-    shows: { text: 'Conversation cleared' },
+    shows: {
+      all: [
+        { text: 'Conversation cleared' },
+        { text: 'After the clear.' },
+        { absent: 'Before the clear.' },
+      ],
+    },
   }),
   rowStory(
     'unreadable',

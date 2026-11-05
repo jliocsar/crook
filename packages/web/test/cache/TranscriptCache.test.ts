@@ -6,6 +6,7 @@ import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
+import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as Struct from 'effect/Struct'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -79,6 +80,23 @@ const cacheOver = Effect.fn('cacheOver')(function* (store: TranscriptStore) {
 
 const storedKeys = (entries: Ref.Ref<ReadonlyMap<string, StoredEntry>>) =>
   Effect.map(Ref.get(entries), (current) => Array.from(current.values(), (entry) => entry.key))
+
+const SavedFields = Schema.Record(Schema.String, Schema.Json)
+const SavedLines = Schema.Array(SavedFields)
+
+const rewriteSaved = (
+  store: TranscriptStore,
+  entries: Ref.Ref<ReadonlyMap<string, StoredEntry>>,
+  rewrite: (lines: readonly (typeof SavedFields.Type)[]) => readonly (typeof SavedFields.Type)[],
+) =>
+  Effect.gen(function* () {
+    const [entry] = Array.from((yield* Ref.get(entries)).values())
+    const found = yield* Effect.fromNullishOr(entry).pipe(Effect.orDie)
+    const saved = yield* Schema.decodeUnknownEffect(SavedFields)(found.stored).pipe(Effect.orDie)
+    const lines = yield* Schema.decodeUnknownEffect(SavedLines)(saved['lines']).pipe(Effect.orDie)
+
+    yield* store.write(found.key, { ...saved, lines: rewrite(lines) })
+  })
 
 describe('TranscriptCache', () => {
   it.effect('hands a remembered chat back at once, and a saved one to the next app run', () =>
@@ -170,6 +188,43 @@ describe('TranscriptCache', () => {
 
       expect(yield* cache.load(LAPTOP, paneSource)).toEqual(Option.none())
       expect(yield* storedKeys(entries)).toEqual([])
+    }),
+  )
+
+  it.effect('forgets a chat saved before a thread showed one session, so it reopens cold', () =>
+    Effect.gen(function* () {
+      const { store, entries } = yield* makeMemoryTranscriptStore()
+      const { cache } = yield* cacheOver(store)
+
+      yield* cache.remember(LAPTOP, paneSource, conversation)
+      yield* cache.persist(LAPTOP, paneSource, running(SESSION))
+
+      yield* rewriteSaved(store, entries, (lines) =>
+        Arr.append(lines, { _tag: 'SessionCleared', session: SESSION }),
+      )
+      const { cache: nextRun } = yield* cacheOver(store)
+
+      expect(yield* nextRun.load(LAPTOP, paneSource)).toEqual(Option.none())
+      expect(yield* storedKeys(entries)).toEqual([])
+    }),
+  )
+
+  it.effect('still reads a saved chat whose lines carry the old Message tag', () =>
+    Effect.gen(function* () {
+      const { store, entries } = yield* makeMemoryTranscriptStore()
+      const { cache } = yield* cacheOver(store)
+
+      yield* cache.remember(LAPTOP, paneSource, conversation)
+      yield* cache.persist(LAPTOP, paneSource, running(SESSION))
+
+      yield* rewriteSaved(store, entries, (lines) =>
+        Arr.map(lines, (line) => ({ ...line, _tag: 'Message' })),
+      )
+      const { cache: nextRun } = yield* cacheOver(store)
+
+      expect(
+        Option.map(yield* nextRun.load(LAPTOP, paneSource), (view) => view.lines.length),
+      ).toEqual(Option.some(conversation.lines.length))
     }),
   )
 

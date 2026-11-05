@@ -172,8 +172,6 @@ export const replay = (states: readonly TraceState[], mailboxCapacity: number) =
       lines: view.lines.map((line) => {
         const session = SESSION_NAMES[line.session] as string
 
-        if (line._tag === 'SessionCleared') return ['cleared', session, 0]
-
         return line.message._tag === 'Omitted'
           ? ['omitted', session, line.message.byteLength / lineBytes]
           : ['line', session, line.message.offset / lineBytes]

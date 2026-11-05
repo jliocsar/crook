@@ -39,7 +39,6 @@ CONSTANTS
   Reopens,            \* how often the chat may be closed and opened from the cache
   SocketsMayReorder,  \* can a message on a dead agent socket reach the hub after one on its successor?
   WalkLength,         \* how long a random walk is before the replay takes it
-  Jc147,              \* TRUE: applyTranscriptEvent starts the view over on another session's open
   Broken              \* "none" for the code as it is; otherwise one broken variant
 
 \* Named so a TLC config can pick one: a config has no syntax for a tuple.
@@ -163,23 +162,20 @@ isCaughtUp(batch) == batch.failed /= NONE \/ ~awaitsCatchUp(batch)
 -----------------------------------------------------------------------------
 (* @crook/agent/TranscriptStreams: followPane, fromSession, fromLineNearEnd *)
 
-NEVER == [stage |-> "never", src |-> NONE, off |-> 0, tgt |-> NONE, epoch |-> 0,
+NEVER == [stage |-> "never", off |-> 0, tgt |-> NONE, epoch |-> 0,
           caught |-> FALSE, tail |-> TRUE]
 
 OPEN(tgt, off, epoch) == [NEVER EXCEPT !.stage = "open", !.off = off, !.tgt = tgt,
                                        !.epoch = epoch, !.tail = FALSE]
 
-DRAIN(src, off, tgt, epoch) == [OPEN(tgt, off, epoch) EXCEPT !.stage = "drain", !.src = src]
-
 PaneSession == IF pane.gone THEN NONE ELSE SessionPath[pane.at]
 
-\* fromSession, read through Ref.get(position) when the inner stream first runs
+\* openSession from startIn(session, position), read through Ref.get(position) when the inner
+\* stream first runs. Nothing reads on in a session the pane left: the phone starts over anyway.
 startInner(at, tgt, epoch) ==
   IF tgt = NONE THEN NEVER
-  ELSE IF at = NONE THEN OPEN(tgt, 0, epoch)
-  ELSE IF at.s = tgt THEN OPEN(tgt, at.off, epoch)
-  ELSE IF Broken = "no-finish-session" THEN OPEN(tgt, 0, epoch)
-  ELSE DRAIN(at.s, at.off, tgt, epoch)
+  ELSE IF inSession(at, tgt) THEN OPEN(tgt, at.off, epoch)
+  ELSE OPEN(tgt, 0, epoch)
 
 FIBER_OFF == [running |-> FALSE, at |-> NONE, seen |-> NONE, inner |-> NEVER,
               queued |-> <<>>, outbox |-> EMPTY_BATCH]
@@ -202,25 +198,21 @@ Emit(event, nextInner) ==
   /\ UNCHANGED <<superseded, pane, file, budget, agentUp, call, stale, permit, watcher, moving,
                  inbox, wire, mode, view, cached, ghost>>
 
-FollowReads ==   \* TranscriptTail.available, drain or follow
+FollowReads ==   \* TranscriptTail.available, under follow
   LET i == fiber.inner
-      s == IF i.stage = "drain" THEN i.src ELSE i.tgt
   IN /\ fiber.running
-     /\ i.stage \in {"drain", "follow"}
-     /\ i.off < file[s]
+     /\ i.stage = "follow"
+     /\ i.off < file[i.tgt]
      /\ ~(Broken = "follow-stops-at-caught-up" /\ i.caught)
-     /\ LET c == nextChunk(i, s)
+     /\ LET c == nextChunk(i, i.tgt)
         IN Emit(c, [i EXCEPT !.off = c.to, !.tail = TRUE])
 
-FollowOpens ==   \* opened(session), after finishSession has drained what the pane left
+FollowOpens ==   \* opened(session), the first thing openSession sends
   LET i == fiber.inner
   IN /\ fiber.running
-     /\ \/ i.stage = "open"
-        \/ i.stage = "drain" /\ i.off >= file[i.src]
+     /\ i.stage = "open"
      /\ Emit([t |-> "opened", s |-> i.tgt, e |-> i.epoch],
-             [i EXCEPT !.stage = "follow", !.src = NONE,
-                       !.off = IF i.stage = "open" THEN i.off ELSE 0,
-                       !.tail = FALSE])
+             [i EXCEPT !.stage = "follow", !.tail = FALSE])
 
 FollowCatchesUp ==   \* tail.follow's caughtUp, or the one openSession sends before a file exists
   LET i == fiber.inner
@@ -478,9 +470,7 @@ chunkLines(c) ==
 
 linesAfter(v, u) ==
   CASE u.t = "opened" ->
-         IF Jc147
-         THEN IF inSession(v.position, u.s) THEN v.lines ELSE <<>>
-         ELSE IF isOpened(v) THEN Append(v.lines, <<"cleared", u.s, 0>>) ELSE v.lines
+         IF inSession(v.position, u.s) \/ Broken = "open-keeps-lines" THEN v.lines ELSE <<>>
     [] u.t = "chunk" -> v.lines \o chunkLines(u)
     [] OTHER         -> v.lines
 
@@ -502,10 +492,7 @@ PhoneApplies ==   \* Transcript.apply, one event at a time, so a drop can land b
         /\ ghost' = [ghost EXCEPT
              !.phoneEpoch = IF u.t = "opened" /\ u.e > @ THEN u.e ELSE @,
              !.rewound = @ \/ (u.t = "opened" /\ u.e < ghost.phoneEpoch),
-             !.falseClear = @ \/ (u.t = "opened" /\ inSession(view.position, u.s)),
-             !.lostTail = @ \/ (u.t = "opened" /\ ~Jc147 /\ view.position /= NONE
-                                /\ view.position.s /= u.s /\ view.position.off > 0
-                                /\ view.position.off < ghost.leftAt[view.position.s])]
+             !.repeatedOpen = @ \/ (u.t = "opened" /\ inSession(view.position, u.s))]
   /\ UNCHANGED <<superseded, pane, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
                  inbox, mode>>
 
@@ -562,9 +549,8 @@ ClaudeWrites ==
 PaneChangesSession ==   \* /clear, /resume: MachineStateSync sees another claudeSession
   /\ pane.at < Len(SessionPath)
   /\ pane' = [at |-> pane.at + 1, gone |-> FALSE]
-  /\ ghost' = [ghost EXCEPT !.leftAt[SessionPath[pane.at]] = file[SessionPath[pane.at]]]
   /\ UNCHANGED <<superseded, file, budget, agentUp, fiber, call, stale, permit, watcher, moving,
-                 inbox, wire, mode, view, cached>>
+                 inbox, wire, mode, view, cached, ghost>>
 
 PaneLosesClaude ==   \* the agent row shows no claudeSession for now
   /\ budget.gaps > 0
@@ -700,8 +686,7 @@ Init ==
   /\ mode = "watching"
   /\ view = [EMPTY_TRANSCRIPT EXCEPT !.catching = TRUE]
   /\ cached = NONE
-  /\ ghost = [phoneEpoch |-> 0, rewound |-> FALSE, falseClear |-> FALSE, lostTail |-> FALSE,
-              watchFrom |-> NONE, leftAt |-> [s \in Sessions |-> 0]]
+  /\ ghost = [phoneEpoch |-> 0, rewound |-> FALSE, repeatedOpen |-> FALSE, watchFrom |-> NONE]
 
 Spec == Init /\ [][Next]_vars /\ WF_vars(Internal)
 
@@ -730,17 +715,14 @@ NoHole ==
        \A n \in 0..(view.position.off - 1) :
          covered(view.position.s, n, Len(view.lines) + 1)
 
-\* A session the phone has started showing is finished before the phone leaves it.
-FinishesSessionItLeaves == ~ghost.lostTail
-
 \* A thread shows one session: no line of an old session under the new one.
 OneSessionShown ==
-  view.position /= NONE =>
-    \A k \in DOMAIN view.lines :
-      view.lines[k][1] = "cleared" \/ view.lines[k][2] = view.position.s
+  IF view.position = NONE
+  THEN view.lines = <<>>
+  ELSE \A k \in DOMAIN view.lines : view.lines[k][2] = view.position.s
 
-\* "Conversation cleared" only appears when the session really changed.
-NoFalseClear == ~ghost.falseClear
+\* The phone is never told to open the session it is already in.
+NoRepeatedOpen == ~ghost.repeatedOpen
 
 \* The phone never goes back to a session the pane has already left behind.
 NeverRewinds == ~ghost.rewound

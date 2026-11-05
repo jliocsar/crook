@@ -181,26 +181,9 @@ const make = Effect.gen(function* () {
       Stream.changesWith(isSameRoster),
     )
 
-  const read = Effect.fn('SubagentRoster.read')(function* (file: TranscriptFile) {
-    const [roster, notices] = yield* Effect.all(
-      [
-        readRoster(subagentsDirectoryOf(path, file)),
-        tail.drainWith(file, TRANSCRIPT_START, taskNoticeLines).pipe(
-          Stream.runFold(
-            () => NO_TASK_NOTICES,
-            (known, chunk) => withTaskNotices(known, chunk.messages),
-          ),
-        ),
-      ],
-      { concurrency: 'unbounded' },
-    )
-
-    return settledRoster(roster, notices)
-  })
-
   const readMetas = (file: TranscriptFile) => readRoster(subagentsDirectoryOf(path, file))
 
-  return SubagentRoster.of({ watch, read, readMetas })
+  return SubagentRoster.of({ watch, readMetas })
 })
 
 export class SubagentRoster extends Context.Service<
@@ -209,9 +192,6 @@ export class SubagentRoster extends Context.Service<
     readonly watch: (
       file: TranscriptFile,
     ) => Stream.Stream<readonly Subagent[], SubagentsUnreadable | TailError>
-    readonly read: (
-      file: TranscriptFile,
-    ) => Effect.Effect<readonly Subagent[], SubagentsUnreadable | TailError>
     readonly readMetas: (
       file: TranscriptFile,
     ) => Effect.Effect<readonly Subagent[], SubagentsUnreadable>

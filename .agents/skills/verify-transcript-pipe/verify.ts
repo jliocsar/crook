@@ -27,7 +27,6 @@ const BASE = {
   Reopens: 0,
   SocketsMayReorder: false,
   WalkLength: 60,
-  Jc147: false,
   Broken: 'none',
 }
 
@@ -47,7 +46,8 @@ interface Check {
 const HOLDS_ON_MAIN = [
   'NoDuplicateLine',
   'NoHole',
-  'NoFalseClear',
+  'OneSessionShown',
+  'NoRepeatedOpen',
   'NeverRewinds',
   'NeverStuckCatchingUp',
   'ShowsPaneSession',
@@ -107,6 +107,12 @@ const HOLDING: readonly Check[] = [
     SwitchQueueSize: 1,
   }),
   {
+    name: 'holds/return-shows-lines-once',
+    says: 'the pane goes A, B, A, and the phone shows each line of A once and only A',
+    constants: RETURN,
+    rules: ['NoDuplicateLine', 'NoHole', 'OneSessionShown', 'NoRepeatedOpen', 'NeverRewinds'],
+  },
+  {
     name: 'holds/every-retry-ends',
     says: 'no restart loop: the pipe always reaches a point with nothing left to do',
     constants: { AgentDrops: 1, SwitchQueueSize: 1 },
@@ -116,16 +122,7 @@ const HOLDING: readonly Check[] = [
 ]
 
 const FINDINGS: readonly Check[] = [
-  finding('finding/F1-old-lines-stay', 'a session change leaves the old lines above the new ones', 'OneSessionShown', {}),
-  finding('finding/F2-return-duplicates', 'going back to a session shows its lines again', 'NoDuplicateLine', RETURN),
-  finding('finding/F4-return-race-behind', 'a return inside the switch queue leaves the hub at offset 0', 'NeverBehindFile', RETURN),
-  finding('finding/F5-cold-switch-drops-tail', 'a /clear right after a cold open never finishes the old session', 'FinishesSessionItLeaves', {}),
-]
-
-const AFTER_JC147: readonly Check[] = [
-  { name: 'jc147/F1-gone', says: 'with the view reset, a thread shows one session', constants: { Jc147: true }, rules: ['OneSessionShown'] },
-  { name: 'jc147/F2-gone', says: 'with the view reset, a return shows no line twice', constants: { ...RETURN, Jc147: true }, rules: ['NoDuplicateLine', 'OneSessionShown'] },
-  { name: 'jc147/F4-stays', says: 'the view reset makes the return race an empty thread', constants: { ...RETURN, Jc147: true }, rules: ['NeverBehindFile'], breaks: 'NeverBehindFile' },
+  finding('finding/F4-return-race-behind', 'a return inside the switch queue leaves the phone empty at offset 0', 'NeverBehindFile', RETURN),
 ]
 
 const reach = (name: string, says: string, property: string, constants: Constants): Check => ({
@@ -140,20 +137,24 @@ const reach = (name: string, says: string, property: string, constants: Constant
 })
 
 const REACHED: readonly Check[] = [
-  reach('reach/live-chunk-refused', 'a chunk that does not continue the position is refused, and the agent restarts from where the hub says', 'NoLiveChunkRefused', {}),
+  reach('reach/live-chunk-refused', 'a chunk that does not continue the position is refused, and the agent restarts from where the hub says', 'NoLiveChunkRefused', RETURN),
   reach('reach/fenced-call-dropped', "a dead socket's call lands after a later link asked for demands, and the hub drops it", 'NoFencedCallDropped', STALE_SOCKET),
   reach('reach/dead-socket-interrupted', "the hub sees a dead socket and interrupts its call between two updates", 'NoDeadSocketSeen', STALE_SOCKET),
   reach('reach/call-on-gone-watch', 'a call lands after its watch has failed and left the map', 'NoCallOnGoneWatch', { ...STALE_SOCKET, WatchFailures: 1 }),
 ]
 
 const CAN_FAIL: readonly Check[] = [
-  mutant('relay-no-continuity', 'NoDuplicateLine', DROPS, 'append without continuesFrom'),
+  mutant('relay-no-continuity', 'NoDuplicateLine', RETURN, 'append without continuesFrom'),
   mutant('forward-two-steps', 'NoDuplicateLine', DROPS, 'forward moves the position after the transaction'),
   mutant('relay-forgets-resume', 'NoDuplicateLine', { PhoneDrops: 1 }, 'delivered starts empty instead of at from'),
-  mutant('reset-keeps-lines', 'NoDuplicateLine', { WatchFailures: 1 }, 'settle clears the position but keeps the lines'),
+  mutant('reset-keeps-lines', 'OneSessionShown', { WatchFailures: 1 }, 'settle clears the position but keeps the lines'),
+  mutant('open-keeps-lines', 'OneSessionShown', {}, 'applyTranscriptEvent keeps the lines of the session it leaves'),
+  {
+    ...mutant('open-keeps-lines', 'NoDuplicateLine', RETURN, 'the same, on a return to a session the phone already showed'),
+    name: 'can-fail/open-keeps-lines-on-return',
+  },
   mutant('omitted-not-marked', 'NoHole', { SessionPath: 'PathOne', FirstFileLines: 2 }, 'omittedUpTo without its OmittedLines'),
-  mutant('no-finish-session', 'FinishesSessionItLeaves', {}, 'fromSession opens the next session without finishSession'),
-  mutant('open-not-filtered', 'NoFalseClear', DROPS, 'deliver forwards every TranscriptOpened'),
+  mutant('open-not-filtered', 'NoRepeatedOpen', DROPS, 'deliver forwards every TranscriptOpened'),
   mutant('no-fence', 'NeverRewinds', STALE_SOCKET, "a dead socket's call counts after a later link asked for demands"),
   mutant('caught-up-dropped', 'NeverStuckCatchingUp', {}, 'forwardInSession drops the caught-up mark'),
   mutant('mailbox-holds-when-full', 'NeverStuckCatchingUp', BACKLOG, 'awaitsCatchUp without the isFull check'),
@@ -357,7 +358,7 @@ const main = async () => {
     report(true, `${check.name}: ${expected ? `${expected} breaks as it should` : 'every rule holds'} (${tail})`)
   }
 
-  for (const check of [...HOLDING, ...FINDINGS, ...REACHED, ...AFTER_JC147, ...CAN_FAIL]) {
+  for (const check of [...HOLDING, ...FINDINGS, ...REACHED, ...CAN_FAIL]) {
     if (selected(check.name)) await runCheck(check)
   }
 

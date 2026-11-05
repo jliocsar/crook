@@ -40,7 +40,15 @@ import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
 import type { SentCommand } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
-import { chunk, CWD, opened, prompt, toolResult, toolUse } from '../TranscriptFixtures.ts'
+import {
+  chunk,
+  CWD,
+  NEXT_SESSION,
+  opened,
+  prompt,
+  toolResult,
+  toolUse,
+} from '../TranscriptFixtures.ts'
 
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
@@ -493,6 +501,37 @@ describe('the ask dock', () => {
 
       expect(call.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(note.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }),
+  )
+
+  it.effect('drops an Always note with the session it belonged to', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedOn(editAsk))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        chunk(0, 10, [
+          toolUse(0, 'toolu_edit', 'Edit', {
+            file_path: `${CWD}/packages/hub/src/Herd.ts`,
+            old_string: 'const herd = 1',
+            new_string: 'const herd = 2',
+          }),
+        ]),
+      ])
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(answered(new ApproveAlways(), EDIT_ID))),
+      )
+      yield* click(yield* findByRole('button', 'Always'))
+      yield* Effect.promise(() => screen.findByText(EDIT_NOTE))
+      yield* Queue.offerAll(transcript, [
+        opened(NEXT_SESSION),
+        chunk(0, 10, [prompt(0, 'A fresh start.')], NEXT_SESSION),
+      ])
+      yield* Effect.promise(() => screen.findByText('A fresh start.'))
+
+      expect(screen.queryByText(EDIT_NOTE)).toBeNull()
     }),
   )
 

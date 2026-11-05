@@ -5,6 +5,7 @@ import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
+import * as Stream from 'effect/Stream'
 
 import { SubagentRoster, subagentFromMeta } from '@crook/claude/SubagentRoster'
 import {
@@ -142,12 +143,14 @@ layer(services, { excludeTestServices: true })('the stuck runs captured on the l
         const roster = yield* SubagentRoster
         const sessions = yield* stuckSessions()
         const fromMetas = yield* Effect.forEach(sessions, metaStatuses)
-        const settled = yield* Effect.forEach(sessions, (file) => roster.read(file))
+        const settled = yield* Effect.forEach(sessions, (file) =>
+          roster.watch(file).pipe(Stream.take(1), Stream.runCollect),
+        )
 
         expect(Arr.getSomes(fromMetas.flat())).toEqual(
           Arr.makeBy(STUCK_RUN_COUNT, (): SubagentStatus => 'running'),
         )
-        expect(settled.flat().map((subagent) => subagent.status)).toEqual(
+        expect(settled.flat(2).map((subagent) => subagent.status)).toEqual(
           Arr.makeBy(STUCK_RUN_COUNT, (): SubagentStatus => 'completed'),
         )
       }),

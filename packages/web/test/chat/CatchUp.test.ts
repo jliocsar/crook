@@ -5,11 +5,13 @@ import { describe, expect, it } from 'vitest'
 
 import { CatchUp, lapseLabel, lapseOf, nextCatchUp, releasedRows } from '@crook/web/chat/CatchUp'
 import type { ThreadRow } from '@crook/web/chat/Thread'
+import { TranscriptOffset } from '@crook/domain/Ids'
+import { UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
 import {
   catchingUpFrom,
   EMPTY_TRANSCRIPT,
   failedWith,
-  TranscriptLine,
+  type TranscriptLine,
   TranscriptView,
 } from '@crook/web/chat/TranscriptState'
 import { HubCallDefected } from '@crook/web/rpc/HubConnection'
@@ -17,8 +19,10 @@ import { clockTime } from '@crook/web/time/Clock'
 
 import { assistant, prompt, said, SESSION } from '../TranscriptFixtures.ts'
 
-const line = (offset: number) =>
-  TranscriptLine.Message({ session: SESSION, message: said(offset, `line ${offset}`) })
+const line = (offset: number): TranscriptLine => ({
+  session: SESSION,
+  message: said(offset, `line ${offset}`),
+})
 
 const row = (key: string): ThreadRow => ({ key, content: key })
 
@@ -157,9 +161,8 @@ describe('releasedRows', () => {
 describe('lapseOf', () => {
   it('spans the first and last stamped line', () => {
     const lapse = lapseOf([
-      TranscriptLine.SessionCleared({ session: SESSION }),
-      TranscriptLine.Message({ session: SESSION, message: prompt(0, 'go') }),
-      TranscriptLine.Message({ session: SESSION, message: assistant(10, [], 42) }),
+      { session: SESSION, message: prompt(0, 'go') },
+      { session: SESSION, message: assistant(10, [], 42) },
     ])
 
     expect(Option.map(lapse, (found) => DateTime.formatIso(found.to))).toStrictEqual(
@@ -171,9 +174,14 @@ describe('lapseOf', () => {
   })
 
   it('is none when no line carries a time', () => {
-    expect(lapseOf([TranscriptLine.SessionCleared({ session: SESSION })])).toStrictEqual(
-      Option.none(),
-    )
+    expect(
+      lapseOf([
+        {
+          session: SESSION,
+          message: new UnrecognizedEntry({ offset: TranscriptOffset.make(0), entryType: 'mode' }),
+        },
+      ]),
+    ).toStrictEqual(Option.none())
   })
 })
 

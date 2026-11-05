@@ -1,7 +1,6 @@
 import { cn } from 'cn'
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
-import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as React from 'react'
@@ -35,18 +34,8 @@ const promptTimeOf = (message: TranscriptMessage): Option.Option<DateTime.Utc> =
     Match.orElse(() => Option.none()),
   )
 
-const lineMessage = (line: TranscriptLine): Option.Option<TranscriptMessage> =>
-  Match.value(line).pipe(
-    Match.tag('Message', (found) => Option.some(found.message)),
-    Match.orElse(() => Option.none()),
-  )
-
 export const lastPromptAt = (lines: readonly TranscriptLine[]): Option.Option<DateTime.Utc> =>
-  pipe(
-    Arr.findLast(lines, (line) => Option.isSome(Option.flatMap(lineMessage(line), promptTimeOf))),
-    Option.flatMap(lineMessage),
-    Option.flatMap(promptTimeOf),
-  )
+  Arr.findLast(lines, ({ message }) => promptTimeOf(message))
 
 const signatureOf = (summary: Option.Option<EpisodeSummary>): string =>
   Option.match(summary, {

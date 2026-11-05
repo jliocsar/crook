@@ -11,6 +11,7 @@ import {
   type AgentActivity,
   ChatItem,
   chatItems,
+  runningCount,
   runsIn,
   type SubagentRun,
 } from '@crook/web/chat/ChatItems'
@@ -18,7 +19,6 @@ import { treeRun } from '@crook/web/chat/ToolView'
 import {
   applyTranscriptEvent,
   EMPTY_TRANSCRIPT,
-  TranscriptLine,
   type TranscriptView,
 } from '@crook/web/chat/TranscriptState'
 
@@ -88,7 +88,7 @@ const durationOf = (run: SubagentRun) =>
   }).duration
 
 describe('a background subagent run', () => {
-  it('shows as done in a session the pane left while the phone was away', () => {
+  it('leaves with its session when the pane moves on while the phone was away', () => {
     const beforeAway = [opened(), launched, rosterOf(SESSION, [subagent({ toolUseId: 'toolu_1' })])]
     const onReturn = [
       rosterOf(SESSION, [subagent({ toolUseId: 'toolu_1', status: 'completed' })]),
@@ -102,9 +102,6 @@ describe('a background subagent run', () => {
       'subagents: Review the herd diff running',
     ])
     expect(itemsOf(fold([...beforeAway, ...onReturn]), 'working').map(describeItem)).toEqual([
-      'you: review',
-      'subagents: Review the herd diff done',
-      'cleared',
       'you: next',
     ])
   })
@@ -120,20 +117,16 @@ describe('a background subagent run', () => {
     expect(Option.map(Option.fromUndefinedOr(idle), durationOf)).toEqual(Option.some(undefined))
   })
 
-  it('counts no elapsed time once the pane has moved on to another session', () => {
-    const view = fold([
+  it('counts no run of a session the pane has left', () => {
+    const before = fold([
       opened(),
       launched,
       rosterOf(SESSION, [subagent({ toolUseId: 'toolu_1' })]),
-      opened(NEXT_SESSION),
     ])
-    const [left] = runsIn(itemsOf(view, 'working'))
+    const after = applyTranscriptEvent(before, opened(NEXT_SESSION))
 
-    expect(Arr.last(view.lines).pipe(Option.map(TranscriptLine.$is('SessionCleared')))).toEqual(
-      Option.some(true),
-    )
-    expect([left?.status, left?.sessionIdle]).toEqual(['running', true])
-    expect(Option.map(Option.fromUndefinedOr(left), durationOf)).toEqual(Option.some(undefined))
-    expect(HashMap.has(view.rosters, SESSION)).toBe(true)
+    expect(runningCount(itemsOf(before, 'working'))).toBe(1)
+    expect(runningCount(itemsOf(after, 'working'))).toBe(0)
+    expect(HashMap.has(after.rosters, SESSION)).toBe(false)
   })
 })

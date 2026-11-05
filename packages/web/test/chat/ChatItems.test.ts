@@ -4,8 +4,13 @@ import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
 import type { Subagent } from '@crook/domain/Subagent'
-import { TextBlock } from '@crook/domain/TranscriptMessage'
-import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
+import type { TranscriptEvent } from '@crook/domain/Transcript'
+import {
+  LocalCommandBlock,
+  LocalCommandOutputBlock,
+  SubagentLaunch,
+  TextBlock,
+} from '@crook/domain/TranscriptMessage'
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import {
   ChatItem,
@@ -15,19 +20,22 @@ import {
   toolTitle,
 } from '@crook/web/chat/ChatItems'
 import type { AgentActivity, ChatContext } from '@crook/web/chat/ChatItems'
-import { TranscriptLine } from '@crook/web/chat/TranscriptState'
-import { lastTurnEvidence } from '@crook/web/chat/WorkingHold'
+import { applyTranscriptEvent, EMPTY_TRANSCRIPT } from '@crook/web/chat/TranscriptState'
+import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
+import { HerdrTurn, lastTurnEvidence, nextWorkingHold } from '@crook/web/chat/WorkingHold'
 
 import {
   answered,
   at,
   calledTool,
+  chunk,
   compactBoundary,
   compactSummary,
   CWD,
   interrupted,
   notification,
   NEXT_SESSION,
+  opened,
   prompt,
   REVIEWER,
   said,
@@ -39,8 +47,11 @@ import {
   user,
 } from '../TranscriptFixtures.ts'
 
-const linesOf = (messages: readonly TranscriptMessage[]) =>
-  Arr.map(messages, (message) => TranscriptLine.Message({ session: SESSION, message }))
+const fold = (events: readonly TranscriptEvent[]) =>
+  Arr.reduce(events, EMPTY_TRANSCRIPT, applyTranscriptEvent)
+
+const linesOf = (messages: readonly TranscriptMessage[]): readonly TranscriptLine[] =>
+  Arr.map(messages, (message) => ({ session: SESSION, message }))
 
 const context = (
   activity: AgentActivity = 'working',
@@ -204,18 +215,57 @@ describe('chatItems', () => {
     ).toEqual(['you: go', 'compacted: We built the herd.'])
   })
 
-  it('shows a cleared conversation as a divider', () => {
-    const lines = [
-      ...linesOf([prompt(0, 'old')]),
-      TranscriptLine.SessionCleared({ session: NEXT_SESSION }),
-      TranscriptLine.Message({ session: NEXT_SESSION, message: prompt(0, 'new') }),
-    ]
+  it('shows /clear as one divider, from what the new session writes first', () => {
+    expect(
+      shown([
+        user(0, [new TextBlock({ text: 'caveat' })], { isMeta: true }),
+        user(10, [new LocalCommandBlock({ name: '/clear', args: '' })]),
+        user(20, [new LocalCommandOutputBlock({ text: '' })]),
+        prompt(30, 'new'),
+      ]),
+    ).toEqual(['cleared', 'you: new'])
+  })
 
-    expect(chatItems(lines, context()).map(describeItem)).toEqual([
-      'you: old',
-      'cleared',
-      'you: new',
+  it('shows no divider for a session the pane resumed, which writes no command', () => {
+    const resumed = fold([
+      opened(),
+      chunk(0, 10, [prompt(0, 'old')]),
+      opened(NEXT_SESSION),
+      chunk(0, 10, [prompt(0, 'resumed'), said(5, 'where we were')], NEXT_SESSION),
     ])
+
+    expect(chatItems(resumed.lines, context()).map(describeItem)).toEqual([
+      'you: resumed',
+      'claude: where we were',
+    ])
+  })
+
+  it('keys no row twice when the pane goes to another session and back', () => {
+    const back = fold([
+      opened(),
+      chunk(0, 10, [prompt(0, 'first')]),
+      opened(NEXT_SESSION),
+      chunk(0, 10, [prompt(0, 'second')], NEXT_SESSION),
+      opened(),
+      chunk(0, 10, [prompt(0, 'first')]),
+    ])
+    const keys = chatItems(back.lines, context()).map((item) => item.key)
+
+    expect(keys).toHaveLength(1)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('holds no Working row across /clear over a turn the old session left open', () => {
+    const before = fold([opened(), chunk(0, 10, [prompt(0, 'unanswered')])])
+    const after = applyTranscriptEvent(before, opened(NEXT_SESSION))
+    const held = at(0)
+
+    expect(
+      nextWorkingHold(held, { herdr: HerdrTurn.Idle(), evidence: lastTurnEvidence(before.lines) }),
+    ).toEqual(held)
+    expect(
+      nextWorkingHold(held, { herdr: HerdrTurn.Idle(), evidence: lastTurnEvidence(after.lines) }),
+    ).toEqual(Option.none())
   })
 
   it('keys every item by session, offset and block so a resumed watch keeps them', () => {

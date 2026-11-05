@@ -9,7 +9,7 @@ import { askOption, askSummary, relativeToFolder } from '@crook/domain/Ask'
 import type { Ask, AskOption, AskQuestion, PermissionAsk, QuestionAsk } from '@crook/domain/Ask'
 import { Approve, ApproveAlways, Decline } from '@crook/domain/Command'
 import type { AskAnswer, Command } from '@crook/domain/Command'
-import type { AskId } from '@crook/domain/Ids'
+import type { AskId, ClaudeSessionId } from '@crook/domain/Ids'
 import { AskNotPending } from '@crook/protocol/Commands'
 import { ActionProgress } from '@crook/web/atoms/ActionProgress'
 import { ChatItem } from '@crook/web/chat/ChatItems'
@@ -67,6 +67,7 @@ export class AlwaysNote extends Data.Class<{
   readonly ask: AskId
   readonly text: string
   readonly after: Option.Option<string>
+  readonly session: Option.Option<ClaudeSessionId>
 }> {}
 
 const isTool = ChatItem.$is('Tool')
@@ -238,7 +239,11 @@ export const answerState = (progress: AnswerProgress, ask: AskId): AskAnswerStat
     },
   )
 
-const alwaysNoteOf = (ask: PermissionAsk, items: readonly ChatItem[]): Option.Option<AlwaysNote> =>
+const alwaysNoteOf = (
+  ask: PermissionAsk,
+  items: readonly ChatItem[],
+  session: Option.Option<ClaudeSessionId>,
+): Option.Option<AlwaysNote> =>
   Option.map(
     askOption(ask, 'always'),
     (option) =>
@@ -250,6 +255,7 @@ const alwaysNoteOf = (ask: PermissionAsk, items: readonly ChatItem[]): Option.Op
           Option.orElse(() => Arr.last(items)),
           Option.map((item) => item.key),
         ),
+        session,
       }),
   )
 
@@ -257,11 +263,12 @@ export const alwaysNoteFor = (
   ask: Ask,
   answer: AskAnswer,
   items: readonly ChatItem[],
+  session: Option.Option<ClaudeSessionId>,
 ): Option.Option<AlwaysNote> =>
   Match.value(ask).pipe(
     Match.tag('PermissionAsk', (permission) =>
       Option.flatMap(Option.liftPredicate(answer, isApproveAlways), () =>
-        alwaysNoteOf(permission, items),
+        alwaysNoteOf(permission, items, session),
       ),
     ),
     Match.orElse(() => Option.none<AlwaysNote>()),

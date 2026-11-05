@@ -114,6 +114,6 @@ export const REAL_TRANSCRIPT_STORIES: readonly StoryMaker[] = [
           caughtUp(REAL_LENGTH, NEXT_SESSION),
         ])
       }),
-    shows: { text: 'Conversation cleared' },
+    shows: { all: [{ text: 'Conversation cleared' }, { absent: '/clear' }] },
   }),
 ]

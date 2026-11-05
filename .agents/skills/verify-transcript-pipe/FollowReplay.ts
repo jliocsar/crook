@@ -72,18 +72,18 @@ const CASES: readonly FollowCase[] = [
     expected: ['opened A', 'chunk A 0-3 omit 2', 'caughtUp A'],
   },
   {
-    name: 'startInner(A@1, B): finishes the session it left, then opens the new one',
+    name: 'startInner(A@1, B): reads nothing of the session it left, and opens the new one',
     from: ['A', 1],
     pane: 'B',
     lines: { A: 3, B: 1 },
-    expected: ['chunk A 1-3', 'opened B', 'chunk B 0-1', 'caughtUp B'],
+    expected: ['opened B', 'chunk B 0-1', 'caughtUp B'],
   },
   {
-    name: 'startInner(A@0, B): finishing from offset 0 takes the tail too',
+    name: 'startInner(A@0, B): the same from offset 0, and over the tail it marks what it left out',
     from: ['A', 0],
     pane: 'B',
-    lines: { A: 3, B: 1 },
-    expected: ['chunk A 0-3 omit 2', 'opened B', 'chunk B 0-1', 'caughtUp B'],
+    lines: { A: 3, B: 3 },
+    expected: ['opened B', 'chunk B 0-3 omit 2', 'caughtUp B'],
   },
   {
     name: 'startInner(B@1, A): going back to a session reads it from the start again',

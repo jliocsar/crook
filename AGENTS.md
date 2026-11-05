@@ -672,8 +672,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   WebSocket message). Fewer, larger events are the lever; a smaller read size is a regression.
 - Neither the agent nor the hub waits on the phone per event. Each keeps what is pending for a
   watch in a mailbox that merges as it goes: chunks that continue each other join into one, a
-  later skill list or subagent roster replaces the earlier one of its session, and the final
-  roster of a session the pane left stays ahead of the session it opened. The agent publishes
+  later skill list or subagent roster replaces the earlier one of its session. The agent publishes
   everything its mailbox holds as one call and keeps reading while it waits for the reply; the
   hub replies once the updates are in the phone's mailbox, and the phone gets everything held
   since its last acknowledgement as one message. A caught-up mark merged that way can name an
@@ -690,9 +689,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   already in and any roster, skill list or caught-up mark of another session, and refuses a chunk
   that does not continue the position, so the agent restarts from there. The phone applies
   whatever arrives and keeps a position only to resume from. The agent sends from where its own
-  read reached and resends freely, a repeated open on every resume included; that cursor is
-  what drains the rest of a session the pane left, and the hub could only hand it over after a
-  round trip. An older agent gets the same filtering, since it happens at the hub.
+  read reached and resends freely, a repeated open on every resume included; the hub could only
+  hand that cursor over after a round trip. An older agent gets the same filtering, since it
+  happens at the hub.
   The position moves in the same transaction that puts the update in the phone's mailbox. Done
   as two steps, an agent connection dropping between them would leave the position behind what
   the phone holds, and the agent's resend from that position would reach the phone twice, with
@@ -815,11 +814,28 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   at 2.8 KB a line on average (measured in Bun on the laptop, 200 appends, four runs). The count
   is an optional key on the wire, so a row from an agent too old to send it decodes as not knowing
   it, and its card shows none.
-- The phone keeps the last roster of every session a pane has shown, keyed by session, and the
-  agent sends a session's final roster when a watch crosses into the next one, so the runs of a
-  session the pane left keep their outcome. A background run outlives Claude's turn, so an idle
-  session does not end it; it only stops the run's elapsed time, since nothing then says the run
-  is still going.
+- A background run outlives Claude's turn, so an idle session does not end it; it only stops the
+  run's elapsed time, since nothing then says the run is still going.
+- A thread shows one session, and there is no way back to an earlier one on the phone: the old file
+  stays on the laptop and `/resume` reaches it. An open of another session starts the view over,
+  and the agent reads nothing further of the session the pane left, since the phone would throw it
+  away. Everything that counts on a thread only growing starts over with it: the wait for a sent
+  prompt, whose count can fall and strand a row (measured), the catch-up, the always notes, and
+  the thread's following, size cache and lift. The draft is the user's words about the pane rather
+  than about one session, so it stays.
+- The transcript says which of `/clear` and `/resume` changed a pane's session. Measured on a real
+  Claude Code 2.1.317, the pid file's session id changing within 5 s of either: `/clear` starts a
+  new file holding a meta caveat, a `user` entry `<command-name>/clear</command-name>` and an empty
+  `local_command` output; `/resume <id>` keeps that id and file, with no fork, and appends only
+  bookkeeping (`last-prompt`, `session-owner`, `atis-latch`, `cost-state`), no command line and no
+  user line. Over 151 local main transcripts all 9 `/clear` entries are `user` entries at line 3 or
+  4, near 1.2 KB, so any tail of a short new session holds one. A session that itself began with
+  `/clear` keeps that row at the top whenever a read reaches its start, a resume or a cold open
+  alike (reasoned, not measured). A bare `/resume` that is cancelled writes a `local_command` entry
+  reading `Resume cancelled`, and changes nothing.
+- A thread remounts when a session it knows changes to another, not when its first session
+  arrives. Remounting on the first one threw away the following that had already pinned the
+  thread to its end (measured: a test opened at the top instead of at the bottom).
 - A `translateY` on the thread's content extends its scroll container's scrollable overflow by
   the same amount: in Chromium 156 a 1000 px child lifted by 100 px gave the container a
   `scrollHeight` of 1100 and a bottom `scrollTop` 100 px further down (measured). While the
@@ -1043,10 +1059,7 @@ a turn of its own, enqueued as a task notification.
   up: the view that ends the catch-up counts as one only if the cached view's last line sits at
   the same index in it (lines are appended, so the same object), and its new rows are the row
   keys the cached view did not show. A chat that opened current, a cold open, a watch that failed
-  or started over, and a catch-up that added no row get nothing. A resume that sends an open of
-  the session the phone already holds appends a session-cleared line, so a test fake that does
-  so shows a divider for a row the real hub never sends: the hub drops that open (measured: a
-  test of a catch-up with nothing new saw a divider until its fake stopped sending the open).
+  or started over, and a catch-up that added no row get nothing.
 - The catch-up's line spans rows the virtualizer may have unmounted, so it is drawn in the
   thread's content layer from the virtualizer's measurement cache, which holds a start and end
   for every row, the estimate for one never measured. The content layer carries the glide's

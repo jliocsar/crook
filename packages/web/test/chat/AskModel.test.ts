@@ -248,13 +248,14 @@ describe('always notes', () => {
   it('notes only an Always, after the call it allowed or else the newest item', () => {
     const items = [note('first'), note('last')]
 
-    expect(alwaysNoteFor(ask, new Approve(), items)).toEqual(Option.none())
-    expect(alwaysNoteFor(ask, new ApproveAlways(), items)).toEqual(
+    expect(alwaysNoteFor(ask, new Approve(), items, Option.none())).toEqual(Option.none())
+    expect(alwaysNoteFor(ask, new ApproveAlways(), items, Option.none())).toEqual(
       Option.some(
         new AlwaysNote({
           ask: ASK,
           text: 'Commands like this one allowed without asking again',
           after: Option.some('last'),
+          session: Option.none(),
         }),
       ),
     )
@@ -271,18 +272,29 @@ describe('always notes', () => {
 
     expect(
       Option.map(
-        alwaysNoteFor(permission(edit(Option.none()), sessionOptions), new ApproveAlways(), []),
+        alwaysNoteFor(
+          permission(edit(Option.none()), sessionOptions),
+          new ApproveAlways(),
+          [],
+          Option.none(),
+        ),
         (found) => found.text,
       ),
     ).toEqual(Option.some('File edits like this one allowed for the rest of the session'))
   })
 
   it('places a note after its item, and at the end when that item is gone', () => {
-    const kept = new AlwaysNote({ ask: ASK, text: 'Allowed', after: Option.some('first') })
+    const kept = new AlwaysNote({
+      ask: ASK,
+      text: 'Allowed',
+      after: Option.some('first'),
+      session: Option.none(),
+    })
     const lost = new AlwaysNote({
       ask: AskId.make('toolu_2'),
       text: 'Also allowed',
       after: Option.some('cleared'),
+      session: Option.none(),
     })
 
     expect(

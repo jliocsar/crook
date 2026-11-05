@@ -158,23 +158,6 @@ const rosterOf =
   (subagents: readonly Subagent[]): TranscriptEvent =>
     new SubagentsChanged({ session, subagents })
 
-const finalRoster = Effect.fn('TranscriptStreams.finalRoster')(function* (
-  roster: SubagentRoster['Service'],
-  file: TranscriptFile,
-) {
-  return yield* roster.read(file).pipe(
-    Effect.map((subagents) => Stream.succeed(rosterOf(file.session)(subagents))),
-    Effect.catch((error) =>
-      Effect.as(
-        Effect.logWarning(
-          `Sent no final subagent list for the session the pane left: ${error.message}`,
-        ),
-        Stream.empty,
-      ),
-    ),
-  )
-})
-
 const backgroundOf =
   (session: ClaudeSessionId) =>
   (snapshot: BackgroundSnapshot): TranscriptEvent =>
@@ -410,40 +393,6 @@ const make = Effect.gen(function* () {
     )
   }
 
-  const finishSession = (
-    position: TranscriptPosition,
-    tailBytes: Option.Option<TranscriptTailBytes>,
-  ) =>
-    Stream.unwrap(
-      Effect.map(
-        locator.locate(position.session),
-        Option.match({
-          onNone: () => Stream.empty,
-          onSome: (file) =>
-            Stream.concat(
-              fromLineNearEnd(file, position.offset, tailBytes, (from) => tail.drain(file, from)),
-              Stream.unwrap(finalRoster(roster, file)),
-            ),
-        }),
-      ),
-    )
-
-  const fromSession = (
-    paneSession: PaneSession,
-    position: Option.Option<TranscriptPosition>,
-    tailBytes: Option.Option<TranscriptTailBytes>,
-  ) =>
-    Option.match(position, {
-      onNone: () => openSession(paneSession, TRANSCRIPT_START, tailBytes),
-      onSome: (at) =>
-        at.session === paneSession.session
-          ? openSession(paneSession, at.offset, tailBytes)
-          : Stream.concat(
-              finishSession(at, tailBytes),
-              openSession(paneSession, TRANSCRIPT_START, tailBytes),
-            ),
-    })
-
   const sessionsOf = (pane: PaneId) =>
     sync.changes.pipe(
       Stream.map((state) =>
@@ -470,7 +419,9 @@ const make = Effect.gen(function* () {
               onNone: () => Stream.never,
               onSome: (paneSession) =>
                 Stream.unwrap(
-                  Effect.map(Ref.get(position), (at) => fromSession(paneSession, at, tailBytes)),
+                  Effect.map(Ref.get(position), (at) =>
+                    openSession(paneSession, startIn(paneSession.session, at), tailBytes),
+                  ),
                 ),
             }),
           ),

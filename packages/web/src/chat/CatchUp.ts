@@ -7,9 +7,10 @@ import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 
+import type { ClaudeSessionId } from '@crook/domain/Ids'
 import type { ThreadRow } from '@crook/web/chat/Thread'
-import { TranscriptLine } from '@crook/web/chat/TranscriptState'
-import type { TranscriptView } from '@crook/web/chat/TranscriptState'
+import { sessionOf } from '@crook/web/chat/TranscriptState'
+import type { TranscriptLine, TranscriptView } from '@crook/web/chat/TranscriptState'
 import { clockTime } from '@crook/web/time/Clock'
 
 export interface Lapse {
@@ -24,6 +25,7 @@ export type CatchUp = Data.TaggedEnum<{
   Landed: {
     readonly keys: Arr.NonEmptyReadonlyArray<string>
     readonly lapse: Option.Option<Lapse>
+    readonly session: Option.Option<ClaudeSessionId>
   }
 }>
 
@@ -31,21 +33,17 @@ export type Landed = Data.TaggedEnum.Value<CatchUp, 'Landed'>
 
 export const CatchUp = Data.taggedEnum<CatchUp>()
 
-const stampOf = (line: TranscriptLine): Option.Option<DateTime.Utc> =>
-  TranscriptLine.$match(line, {
-    SessionCleared: () => Option.none(),
-    Message: ({ message }) =>
-      Match.value(message).pipe(
-        Match.tagsExhaustive({
-          User: (user) => user.timestamp,
-          Assistant: (assistant) => assistant.timestamp,
-          System: (system) => system.timestamp,
-          UnrecognizedEntry: () => Option.none(),
-          Malformed: () => Option.none(),
-          Omitted: () => Option.none(),
-        }),
-      ),
-  })
+const stampOf = ({ message }: TranscriptLine): Option.Option<DateTime.Utc> =>
+  Match.value(message).pipe(
+    Match.tagsExhaustive({
+      User: (user) => user.timestamp,
+      Assistant: (assistant) => assistant.timestamp,
+      System: (system) => system.timestamp,
+      UnrecognizedEntry: () => Option.none(),
+      Malformed: () => Option.none(),
+      Omitted: () => Option.none(),
+    }),
+  )
 
 export const lapseOf = (lines: readonly TranscriptLine[]): Option.Option<Lapse> =>
   pipe(lines, Arr.map(stampOf), Arr.getSomes, (stamps) =>
@@ -97,7 +95,11 @@ const landedFrom = (
           onEmpty: () => Option.none<CatchUp>(),
           onNonEmpty: (keys) =>
             Option.some(
-              CatchUp.Landed({ keys, lapse: lapseOf(Arr.drop(shown.lines, cached.lines.length)) }),
+              CatchUp.Landed({
+                keys,
+                lapse: lapseOf(Arr.drop(shown.lines, cached.lines.length)),
+                session: Option.map(shown.position, (position) => position.session),
+              }),
             ),
         }),
       ),
@@ -122,7 +124,10 @@ export const nextCatchUp = (
         }),
       ),
     Off: () => current,
-    Landed: () => current,
+    Landed: (landed) =>
+      Option.exists(sessionOf(view), (session) => !Option.contains(landed.session, session))
+        ? CatchUp.Off()
+        : current,
   })
 
 export const landedOf = (catchUp: CatchUp): Option.Option<Landed> =>

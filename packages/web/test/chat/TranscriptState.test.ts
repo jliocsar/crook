@@ -17,7 +17,7 @@ import {
   failedWith,
   isShowable,
   shownAfter,
-  TranscriptLine,
+  type TranscriptLine,
 } from '@crook/web/chat/TranscriptState'
 
 import {
@@ -36,11 +36,9 @@ const fold = (events: readonly TranscriptEvent[]) =>
   Arr.reduce(events, EMPTY_TRANSCRIPT, applyTranscriptEvent)
 
 const offsets = (lines: readonly TranscriptLine[]) =>
-  Arr.map(lines, (line) =>
-    TranscriptLine.$match(line, {
-      Message: ({ session, message }) => `${session === SESSION ? 'old' : 'new'} ${message.offset}`,
-      SessionCleared: () => 'cleared',
-    }),
+  Arr.map(
+    lines,
+    ({ session, message }) => `${session === SESSION ? 'old' : 'new'} ${message.offset}`,
   )
 
 describe('applyTranscriptEvent', () => {
@@ -55,7 +53,7 @@ describe('applyTranscriptEvent', () => {
     expect(Option.map(view.position, (position) => position.offset)).toEqual(Option.some(20))
   })
 
-  it('marks a cleared conversation and keeps the roster of the old session beside the new one', () => {
+  it('starts over on another session, keeping neither its lines nor its roster', () => {
     const view = fold([
       opened(),
       new SubagentsChanged({ session: SESSION, subagents: [subagent({ toolUseId: 'toolu_1' })] }),
@@ -64,13 +62,36 @@ describe('applyTranscriptEvent', () => {
       chunk(0, 5, [prompt(0, 'again')], NEXT_SESSION),
     ])
 
-    expect(offsets(view.lines)).toEqual(['old 0', 'cleared', 'new 0'])
-    expect(HashMap.get(view.rosters, SESSION)).toEqual(
-      Option.some([subagent({ toolUseId: 'toolu_1' })]),
+    expect(offsets(view.lines)).toEqual(['new 0'])
+    expect(HashMap.size(view.rosters)).toBe(0)
+    expect(Option.map(view.position, (position) => position.session)).toEqual(
+      Option.some(NEXT_SESSION),
     )
   })
 
-  it('keeps the latest background work of each session across /clear', () => {
+  it('does nothing on an open of the session it is already in', () => {
+    const before = fold([opened(), chunk(0, 10, [prompt(0, 'hi')])])
+    const after = applyTranscriptEvent(before, opened())
+
+    expect(offsets(after.lines)).toEqual(['old 0'])
+    expect(after.position).toEqual(before.position)
+  })
+
+  it('shows a session it went back to once, from where the file is read again', () => {
+    const view = fold([
+      opened(),
+      chunk(0, 10, [prompt(0, 'first')]),
+      opened(NEXT_SESSION),
+      chunk(0, 5, [prompt(0, 'second')], NEXT_SESSION),
+      opened(),
+      chunk(0, 10, [prompt(0, 'first')]),
+    ])
+
+    expect(offsets(view.lines)).toEqual(['old 0'])
+    expect(Option.map(view.position, (position) => position.offset)).toEqual(Option.some(10))
+  })
+
+  it('drops the background work of the session it left', () => {
     const before = new BackgroundChanged({
       session: SESSION,
       tasks: [],
@@ -87,9 +108,11 @@ describe('applyTranscriptEvent', () => {
     const latest = new BackgroundChanged({ session: SESSION, tasks: [], activity: [] })
     const view = fold([opened(), before, latest, opened(NEXT_SESSION)])
 
-    expect(HashMap.get(view.backgrounds, SESSION)).toEqual(Option.some(latest))
-    expect(HashMap.has(view.backgrounds, NEXT_SESSION)).toBe(false)
-    expect(offsets(view.lines)).toEqual(['cleared'])
+    expect(HashMap.get(fold([opened(), before, latest]).backgrounds, SESSION)).toEqual(
+      Option.some(latest),
+    )
+    expect(HashMap.size(view.backgrounds)).toBe(0)
+    expect(view.lines).toEqual([])
   })
 
   it('keeps the skills of the pane across /clear until the agent lists new ones', () => {

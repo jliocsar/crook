@@ -2,6 +2,7 @@ import { useAtom } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
+import * as Equal from 'effect/Equal'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -18,7 +19,7 @@ import {
   StartAgent,
 } from '@crook/domain/Command'
 import type { AskAnswer, Command, CommandReceipt } from '@crook/domain/Command'
-import type { MachineId, PaneId } from '@crook/domain/Ids'
+import type { ClaudeSessionId, MachineId, PaneId } from '@crook/domain/Ids'
 import {
   failureMessageOf,
   isDone,
@@ -65,6 +66,8 @@ interface ChatCommandsInput {
   readonly model: ChatScreenModel
   readonly canAct: boolean
   readonly items: readonly ChatItem[]
+  readonly session: Option.Option<ClaudeSessionId>
+  readonly threadEpoch: number
   readonly draft: string
   readonly setDraft: (draft: string) => void
   readonly onPromptSent: () => void
@@ -232,9 +235,15 @@ const useClearSentDraft = (
   }, [sent])
 }
 
-const usePromptWait = (items: readonly ChatItem[]) => {
+const usePromptWait = (items: readonly ChatItem[], threadEpoch: number) => {
   const [wait, setWait] = React.useState<PromptWait>(NOTHING_AWAITED)
+  const [waitedIn, setWaitedIn] = React.useState(threadEpoch)
   const arrived = hasArrived(wait, items)
+
+  if (waitedIn !== threadEpoch) {
+    setWaitedIn(threadEpoch)
+    setWait(NOTHING_AWAITED)
+  }
 
   React.useEffect(() => {
     if (arrived && Arr.isReadonlyArrayNonEmpty(wait.pending)) {
@@ -273,7 +282,11 @@ const useStopLock = (stop: CommandAction): boolean => {
   return isSending(stop.state) || (acknowledged && !settled)
 }
 
-const useAlwaysNotes = (opened: OpenedAgent, answer: CommandAction) => {
+const useAlwaysNotes = (
+  opened: OpenedAgent,
+  answer: CommandAction,
+  session: Option.Option<ClaudeSessionId>,
+) => {
   const [notes, setNotes] = useAtom(alwaysNotesAtom(opened))
   const [awaited, setAwaited] = React.useState(Option.none<AlwaysNote>())
   const answered = Option.filter(awaited, (note) => isAnswered(answerState(answer, note.ask)))
@@ -292,7 +305,10 @@ const useAlwaysNotes = (opened: OpenedAgent, answer: CommandAction) => {
     }
   }, [Option.isSome(answered), abandoned])
 
-  return { notes, expect: setAwaited }
+  return {
+    notes: Arr.filter(notes, (note) => Equal.equals(note.session, session)),
+    expect: setAwaited,
+  }
 }
 
 const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
@@ -320,6 +336,8 @@ export const useChatCommands = ({
   model,
   canAct,
   items,
+  session,
+  threadEpoch,
   draft,
   setDraft,
   onPromptSent,
@@ -329,7 +347,7 @@ export const useChatCommands = ({
   const stop = useCommandAction(machine)
   const restart = useCommandAction(machine)
   const answer = useCommandAction(machine)
-  const prompted = usePromptWait(items)
+  const prompted = usePromptWait(items, threadEpoch)
   const promptInFlight = isPromptInFlight(prompt)
   const pendingPrompts = React.useMemo(
     () => pendingPromptRows(prompted.wait, items, promptInFlight),
@@ -338,7 +356,7 @@ export const useChatCommands = ({
   const activity = activityOf(model)
   const blocked = activity === 'blocked'
   const stopping = useStopLock(stop)
-  const always = useAlwaysNotes(opened, answer)
+  const always = useAlwaysNotes(opened, answer, session)
   const openAsk = Option.flatMap(
     Option.filter(model.row, () => blocked && model.presence === 'live'),
     (row) => row.ask,
@@ -379,7 +397,7 @@ export const useChatCommands = ({
   }
 
   const answerAsk = (ask: Ask) => (given: AskAnswer) => {
-    always.expect(alwaysNoteFor(ask, given, items))
+    always.expect(alwaysNoteFor(ask, given, items, session))
     answer.send(new AnswerAsk({ pane, ask: ask.id, answer: given }))
   }
 
