@@ -8,8 +8,7 @@ import { isOffline } from '@crook/domain/Machine'
 import { useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import type { OpenAgentActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
-import { herdAtom } from '@crook/web/atoms/Herd'
-import { machineScreenAtom } from '@crook/web/atoms/Machines'
+import { herdKnownAtom, machineScreenAtom } from '@crook/web/atoms/Machines'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
@@ -27,7 +26,6 @@ import type { MachineScreenModel } from '@crook/web/machines/MachineLayout'
 import { SectionLabel } from '@crook/web/machines/SectionLabel'
 import { openedFromMachine } from '@crook/web/navigation/ChatOrigin'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
-import { useNow } from '@crook/web/time/Now'
 
 const BACK_LABEL = 'Back to machines'
 
@@ -107,7 +105,6 @@ function MachineDetail({
   onOpenAgent: OpenAgent
   onOpenActions: OpenAgentActions
 }) {
-  const now = useNow()
   const { back } = usePushedScreen()
   const { card } = model.detail
   const forgetting = useForgetMachine(card.machine.id, {
@@ -130,7 +127,7 @@ function MachineDetail({
       <PushedHeader
         title={card.machine.label}
         backLabel={BACK_LABEL}
-        subtitle={<MachineStatus card={card} now={now} />}
+        subtitle={<MachineStatus card={card} />}
       />
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto pt-4 pb-[max(2rem,var(--safe-bottom))]">
         <div className="grid gap-6">
@@ -141,7 +138,7 @@ function MachineDetail({
             onOpenAgent={onOpenAgent}
             onOpenActions={onOpenActions}
           />
-          <MachineAbout detail={model.detail} now={now} />
+          <MachineAbout detail={model.detail} />
           {model.inHerd && isOffline(card.machine) ? (
             <ForgetMachine
               label={card.machine.label}
@@ -159,7 +156,7 @@ function MachineDetail({
 
 export function MachineScreen({ machine }: { machine: MachineId }) {
   const connection = useAtomValue(connectionAtom)
-  const herd = useAtomValue(herdAtom)
+  const herdKnown = useAtomValue(herdKnownAtom)
   const model = useAtomValue(machineScreenAtom(machine))
   const navigate = useNavigate()
   const openActions = useOpenAgentActions()
@@ -175,7 +172,7 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
   return (
     <PushedScreen>
       {Option.match(model, {
-        onNone: () => <UnknownMachine title={machine} loading={Option.isNone(herd)} />,
+        onNone: () => <UnknownMachine title={machine} loading={!herdKnown} />,
         onSome: (found) => (
           <MachineDetail
             model={found}

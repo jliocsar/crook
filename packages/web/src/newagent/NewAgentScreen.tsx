@@ -36,7 +36,6 @@ import { BranchChoices, FolderChoices, MachineChoices } from '@crook/web/newagen
 import { PlaceChips } from '@crook/web/newagent/PlaceChips'
 import type { Picker } from '@crook/web/newagent/PlaceChips'
 import { TaskComposer } from '@crook/web/newagent/TaskComposer'
-import { useNow } from '@crook/web/time/Now'
 
 const PICKER_TITLE = {
   machine: 'Machine',
@@ -101,14 +100,12 @@ function PickerContent({
   onClose: () => void
   onChange: (next: Selection, close: boolean) => void
 }) {
-  const now = useNow()
   const worktree = worktreeBranch(selection, task)
 
   return Match.value(picker).pipe(
     Match.when('machine', () => (
       <MachineChoices
         machines={view.machines}
-        now={now}
         selected={selection.machine}
         onPick={(entry) => {
           onChange(selectionOn(view, entry.machine.id), true)

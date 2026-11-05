@@ -1,5 +1,4 @@
 import { cn } from 'cn'
-import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import { Check, GitBranch } from 'lucide-react'
 import * as React from 'react'
@@ -85,12 +84,10 @@ function ChoiceRow({
 
 export function MachineChoices({
   machines,
-  now,
   selected,
   onPick,
 }: {
   machines: readonly HerdMachine[]
-  now: DateTime.Utc
   selected: MachineId
   onPick: (machine: HerdMachine) => void
 }) {
@@ -102,7 +99,7 @@ export function MachineChoices({
           title={entry.machine.label}
           selected={entry.machine.id === selected}
           disabled={!isOnline(entry)}
-          trailing={<MachineBadge machine={entry.machine} now={now} plain />}
+          trailing={<MachineBadge machine={entry.machine} plain />}
           onClick={() => {
             onPick(entry)
           }}

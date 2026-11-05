@@ -1,4 +1,3 @@
-import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import { ChevronRight, Trash2 } from 'lucide-react'
 
@@ -25,11 +24,11 @@ const forgetAction = (run: () => void, disabled: boolean): SwipeAction => ({
   disabled,
 })
 
-function MachineCardBody({ card, now }: { card: MachineCardModel; now: DateTime.Utc }) {
+function MachineCardBody({ card }: { card: MachineCardModel }) {
   return (
     <span data-slot="machine-card" className="flex min-w-0 flex-1 items-center gap-3">
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <MachineHeading card={card} now={now} />
+        <MachineHeading card={card} />
         <span className="text-muted-foreground text-sm leading-5">
           {isOffline(card.machine) ? OFFLINE_HINT : agentSummary(card)}
         </span>
@@ -43,15 +42,7 @@ function MachineCardBody({ card, now }: { card: MachineCardModel; now: DateTime.
   )
 }
 
-function OnlineMachineRow({
-  card,
-  now,
-  onOpen,
-}: {
-  card: MachineCardModel
-  now: DateTime.Utc
-  onOpen: OpenMachine
-}) {
+function OnlineMachineRow({ card, onOpen }: { card: MachineCardModel; onOpen: OpenMachine }) {
   const open = (opener: HTMLElement) => {
     onOpen(card.machine.id, opener)
   }
@@ -60,7 +51,7 @@ function OnlineMachineRow({
     <li>
       <div className="bg-card border-border rounded-xl border">
         <Pressable frameClassName="rounded-xl" className="p-3" onTap={open}>
-          <MachineCardBody card={card} now={now} />
+          <MachineCardBody card={card} />
         </Pressable>
       </div>
     </li>
@@ -69,13 +60,11 @@ function OnlineMachineRow({
 
 function OfflineMachineRow({
   card,
-  now,
   row,
   controlsEnabled,
   onOpen,
 }: {
   card: MachineCardModel
-  now: DateTime.Utc
   row: OpenRow
   controlsEnabled: boolean
   onOpen: OpenMachine
@@ -95,7 +84,7 @@ function OfflineMachineRow({
         actions={[forgetAction(forgetting.forget, !controlsEnabled || forgetting.pending)]}
         onTap={open}
       >
-        <MachineCardBody card={card} now={now} />
+        <MachineCardBody card={card} />
       </SwipeRow>
       <ActionFailure message={forgetting.failure} />
     </li>
@@ -104,12 +93,10 @@ function OfflineMachineRow({
 
 export function MachineList({
   layout,
-  now,
   controlsEnabled,
   onOpen,
 }: {
   layout: MachinesLayout
-  now: DateTime.Utc
   controlsEnabled: boolean
   onOpen: OpenMachine
 }) {
@@ -122,13 +109,12 @@ export function MachineList({
           <OfflineMachineRow
             key={card.machine.id}
             card={card}
-            now={now}
             row={row}
             controlsEnabled={controlsEnabled}
             onOpen={onOpen}
           />
         ) : (
-          <OnlineMachineRow key={card.machine.id} card={card} now={now} onOpen={onOpen} />
+          <OnlineMachineRow key={card.machine.id} card={card} onOpen={onOpen} />
         ),
       )}
     </ul>
