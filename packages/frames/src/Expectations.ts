@@ -72,6 +72,10 @@ export const TIMELINE_EXPECTATIONS = {
     { thread: inSequence('thread-rows'), dock: inSequence('composer') },
     { watchFrom: 'first-step' },
   ),
+  'transition/long-catch-up-over-tall-rows': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step' },
+  ),
   'transition/show-earlier-at-hole': story(
     {
       thread: inSequence('thread-rows'),

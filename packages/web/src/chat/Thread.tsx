@@ -9,7 +9,8 @@ import { ArrowDown } from 'lucide-react'
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react'
 import * as React from 'react'
 
-import { departedKeys, liftFor, withTheEnd } from '@crook/web/chat/Reveal'
+import { departedKeys, heldFrom, liftFor, reachOf, withTheEnd } from '@crook/web/chat/Reveal'
+import type { LiftReach } from '@crook/web/chat/Reveal'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { RenderCacheScope } from '@crook/web/components/RenderCache'
 import { RowMemoryScope } from '@crook/web/components/RowMemory'
@@ -147,6 +148,32 @@ const useScrollIntent = () => {
   }
 }
 
+const usePinOnResize = (
+  viewport: React.RefObject<HTMLElement | null>,
+  following: React.RefObject<boolean>,
+  toBottom: () => void,
+) => {
+  React.useEffect(() => {
+    const element = viewport.current
+
+    if (element === null) {
+      return undefined
+    }
+
+    const observer = new ResizeObserver(() => {
+      if (following.current) {
+        toBottom()
+      }
+    })
+
+    observer.observe(element)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [viewport, following, toBottom])
+}
+
 const useLanded = (renderedRows: number, totalSize: number): boolean => {
   const [landed, setLanded] = React.useState(false)
 
@@ -239,18 +266,27 @@ const useLift = () => {
       }),
     )
 
+  const heldIndex = (): number | undefined => Option.getOrUndefined(liftedFrom.current)
+
+  const holdReach = React.useCallback((reach: LiftReach): boolean => {
+    liftedFrom.current = Option.some(heldFrom(liftedFrom.current, reach, OVERSCAN))
+
+    return !reach.rendered
+  }, [])
+
   const raise = React.useCallback(
     (options: {
       readonly grown: number
       readonly ceiling: number
       readonly content: HTMLElement | null
-      readonly indexAt: (lifted: number) => Option.Option<number>
     }) => {
       const before = current()
       const next = liftFor(options.grown, before, options.ceiling)
       const rest = resting.get() + options.grown
 
-      liftedFrom.current = options.indexAt(next)
+      if (before === 0) {
+        liftedFrom.current = Option.none()
+      }
 
       if (next < before + options.grown) {
         trailing.jump(rest - next)
@@ -265,7 +301,7 @@ const useLift = () => {
     [current, resting, trailing],
   )
 
-  return { transform, firstIndex, raise, current }
+  return { transform, firstIndex, heldIndex, holdReach, raise, current }
 }
 
 const ghostsOf = (
@@ -356,10 +392,12 @@ export function Thread({
   const followingRef = React.useRef(true)
   const lastTop = React.useRef(0)
   const holesAtPin = React.useRef(0)
+  const pinUnheard = React.useRef(false)
   const intent = useScrollIntent()
   const reduce = useReducedMotion() ?? false
   const lift = useLift()
-  const { raise, current: liftNow } = lift
+  const { raise, holdReach, current: liftNow } = lift
+  const [, renderReach] = React.useReducer((renders: number) => renders + 1, 0)
 
   const { askedPin } = intent
 
@@ -392,6 +430,7 @@ export function Thread({
         defaultRangeExtractor({ ...range, startIndex: lift.firstIndex(range) }),
         range,
         followingRef.current,
+        pinUnheard.current || liftNow() > 0 ? lift.heldIndex() : undefined,
       ),
     onChange: onScrollStop,
   })
@@ -452,39 +491,24 @@ export function Thread({
 
     const grown = element.scrollTop - before
 
+    pinUnheard.current ||= grown !== 0
+
     if (animates && grown > 0 && !holeFilled) {
-      raise({
-        grown,
-        ceiling: element.clientHeight,
-        content: content.current,
-        indexAt: (lifted) =>
-          Option.map(
-            Option.fromUndefinedOr(virtualizer.getVirtualItemForOffset(element.scrollTop - lifted)),
-            (item) => item.index,
-          ),
-      })
-    }
-  }, [totalSize, rows.length, holes, toBottom, animates, raise, virtualizer])
-
-  React.useEffect(() => {
-    const element = viewport.current
-
-    if (element === null) {
-      return undefined
+      raise({ grown, ceiling: element.clientHeight, content: content.current })
     }
 
-    const observer = new ResizeObserver(() => {
-      if (followingRef.current) {
-        toBottom()
-      }
-    })
-
-    observer.observe(element)
-
-    return () => {
-      observer.disconnect()
+    if (
+      (pinUnheard.current || liftNow() > 0) &&
+      Option.exists(
+        reachOf(virtualizer.getVirtualItems(), liftNow(), element.clientHeight, OVERSCAN),
+        holdReach,
+      )
+    ) {
+      renderReach()
     }
-  }, [toBottom])
+  }, [totalSize, rows.length, holes, toBottom, animates, raise, holdReach, liftNow, virtualizer])
+
+  usePinOnResize(viewport, followingRef, toBottom)
 
   return (
     <RenderCacheScope>
@@ -499,6 +523,7 @@ export function Thread({
             const top = event.currentTarget.scrollTop
             const movedUp = top < lastTop.current
 
+            pinUnheard.current = false
             lastTop.current = top
             intent.scrolled()
 

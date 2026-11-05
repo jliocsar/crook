@@ -11,6 +11,7 @@ import { FrameLog } from '@crook/frames/FrameLog'
 import blankFixture from './fixtures/blank.json' with { type: 'json' }
 import cleanFixture from './fixtures/clean.json' with { type: 'json' }
 import emptyBandFixture from './fixtures/empty-band.json' with { type: 'json' }
+import filledBandFixture from './fixtures/filled-band.json' with { type: 'json' }
 import flashFixture from './fixtures/flash.json' with { type: 'json' }
 import pairFixture from './fixtures/pair.json' with { type: 'json' }
 import shiftFixture from './fixtures/shift.json' with { type: 'json' }
@@ -72,18 +73,12 @@ describe('detect, over logs recorded from real runs', () => {
     expect(top.words).toContain('the lift at 660 px')
   })
 
-  it('stays quiet about the spacing every thread has of its own', () => {
+  it('stays quiet about a lift that keeps the screen filled, the same story fixed', () => {
     const story = 'transition/reopen-over-big-gap-long'
-    const log = decodeLog(emptyBandFixture)
-    const spaced = {
-      ...log,
-      frames: Arr.map(log.frames, (frame) => ({
-        ...frame,
-        thread: { lift: 0, top: 16, middle: 12, bottom: 16 },
-      })),
-    }
+    const log = decodeLog(filledBandFixture)
 
-    expect(detect(story, spaced, expectationOf(story))).toEqual([])
+    expect(Math.max(...Arr.map(log.frames, (frame) => frame.thread?.lift ?? 0))).toBe(660)
+    expect(detect(story, log, expectationOf(story))).toEqual([])
   })
 
   it('reports a pair of states the story does not allow side by side', () => {

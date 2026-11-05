@@ -170,6 +170,76 @@ export const holeFillsWhileAway = Effect.fn('holeFillsWhileAway')(function* (add
   return { followedWhileAway, followedBack: following() }
 })
 
+const contentOf = (scrolling: HTMLElement): HTMLElement =>
+  present(
+    scrolling.querySelector<HTMLElement>('[data-slot="conversation-content"]'),
+    'the thread content',
+  )
+
+const startOf = (renderedRow: HTMLElement): number =>
+  Number.parseFloat(renderedRow.style.transform.replace('translateY(', ''))
+
+const startOfRowsJoinedToTheEnd = (scrolling: HTMLElement): number => {
+  const rendered = Array.from(scrolling.querySelectorAll<HTMLElement>('[data-index]')).toSorted(
+    (one, other) => Number(one.dataset['index']) - Number(other.dataset['index']),
+  )
+  const lastIndex = Number(rendered.at(-1)?.dataset['index'])
+  const joined = rendered.filter(
+    (renderedRow, position) =>
+      Number(renderedRow.dataset['index']) - lastIndex === position - (rendered.length - 1),
+  )
+
+  return startOf(present(joined[0], 'a row at the end'))
+}
+
+export const catchUpLands = Effect.fn('catchUpLands')(function* (
+  cachedHeight: number,
+  cachedCount: number,
+  landedHeight: number,
+  landedCount: number,
+) {
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
+    function rendered(this: HTMLElement) {
+      const key = this.dataset['row'] ?? ''
+
+      if (key.startsWith('landed')) {
+        return landedHeight
+      }
+
+      return key.startsWith('cached') ? cachedHeight : 0
+    },
+  )
+
+  const cached = Arr.makeBy(cachedCount, (index) => row(`cached ${index}`))
+  const landed = Arr.makeBy(landedCount, (index) => row(`landed ${index}`))
+  const { rerender } = render(thread(cached, null))
+  const scrolling = viewport()
+  let top = 0
+
+  Object.defineProperty(scrolling, 'scrollHeight', {
+    configurable: true,
+    get: () => Number.parseFloat(contentOf(scrolling).style.height) + lifted(),
+  })
+  Object.defineProperty(scrolling, 'scrollTop', {
+    configurable: true,
+    get: () => top,
+    set: (next: number) => {
+      top = Math.max(0, Math.min(next, bottomOf(scrolling)))
+    },
+  })
+  scrolling.scrollTop = bottomOf(scrolling)
+  fireEvent.scroll(scrolling)
+
+  yield* wait(SETTLE_MS)
+
+  rerender(thread([...cached, ...landed], null))
+
+  return {
+    topOfTheScreen: scrolling.scrollTop - lifted(),
+    rowsReachUpTo: startOfRowsJoinedToTheEnd(scrolling),
+  }
+})
+
 export const answerGrows = Effect.fn('answerGrows')(function* (added: number) {
   const tail = yield* liveTail()
 

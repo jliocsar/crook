@@ -44,6 +44,7 @@ know what the marks name; your eyes on the sheet are the rest of the check.
 | `flash:<mark>` | A state held under 24 frames (400 ms at 60 Hz) and went away |
 | `pair:<a>+<b>` | Two states that must never show together did |
 | `blank` | The content area showed nothing between states |
+| `empty:<top\|middle\|bottom>` | The thread's viewport held a band with no row in it wider than the thread's own spacing, while rows were on screen. The image is the frame where the band was widest |
 | `shift:<element>` | Layout moved past the story's budget; names what moved most |
 | `order:<track>:<a>><b>` | A state gave way to one the story does not allow there |
 
@@ -75,8 +76,8 @@ app as it is.
 The tool plays what the catalog can show. Add a timeline story to `packages/web/stories/` when a
 state has none, declare what it allows in `packages/frames/src/Expectations.ts` (a test holds the
 two lists equal), and add a mark to `packages/frames/src/Marks.ts` for a state nothing names. A
-state story without a timeline runs too, with no declared order: blank, flash and shift still
-apply.
+state story without a timeline runs too, with no declared order: blank, empty, flash and shift
+still apply.
 
 An element carrying `data-machine` and `data-state` needs no mark to be seen: the log records every
 machine's state per frame, the contact sheet takes a tile when one changes and prints it, and a
@@ -86,7 +87,7 @@ finding names the machines' states at its frame. A mark is for a state that must
 
 | Tool | Use it for | It can see | It cannot see |
 |---|---|---|---|
-| `bun run frames` | Anything that changes over time: every QA pass starts here | Marks, blank frames, layout shifts with the element, boxes, DOM added and removed, per animation frame; the screencast beside them | Pixels of its own (see below); any state no mark names; what runs between animation frames |
+| `bun run frames` | Anything that changes over time: every QA pass starts here | Marks, blank frames, empty bands in the thread, layout shifts with the element, boxes, DOM added and removed, per animation frame; the screencast beside them | Pixels of its own (see below); any state no mark names; what runs between animation frames |
 | `agent-browser trace` | Why a frame was long: who ran, what laid out | Every main-thread task and compositor step | Which state was on screen. It also disturbs the timing: frames at p90 up to 58 ms against 18. **Never count frames under a trace.** One story is about 94 MB; its screenshots are not in the default categories |
 | `agent-browser record` | A video to show a person | What was composited, at a fixed rate (30 fps, or `--fps 60`) | Which frame held which state; nothing lines up with the log. `--contact-sheet` failed on this laptop at 30 fps and at 60 ("analyzer fell behind") and left a 0-byte video; the plain recording worked |
 | `agent-browser vitals <url> --json` | Load numbers: FCP, LCP, CLS, React phases | The load, once. It navigates | Anything after the load; CLS comes with no element and no frame |
@@ -111,6 +112,9 @@ stops. Use it after the above, never in place of them.
   through 47 of 61 gaps over 50 ms. No DOM state can change in such a gap.
 - Layout shift misses transforms by definition, so a slide or a glide never shows as a shift. Use
   the marks' boxes for those.
+- An empty band is read from row boxes, so it knows the thread's rows and nothing else. A row whose
+  box is there but whose content has not painted reads as filled, and only the thread has this
+  check: a list elsewhere can hold the same hole and pass.
 - Stories run the real route tree on a fake hub. Real network timing, a real phone, iOS and real
   hub behaviour are out of reach; so is anything that needs a real Claude.
 - The catalog's fake link can give the real link its first value before first render, so a state

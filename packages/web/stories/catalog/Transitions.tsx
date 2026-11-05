@@ -105,6 +105,19 @@ const goesBackToTheHerd = clicks(BACK).pipe(
   Effect.andThen(seesText(CHAT_TITLE)),
 )
 
+const TALL_ANSWER = 'The quiet redial keeps the old notice until the attempt ends. '.repeat(20)
+const TALL_ROWS_END = 30
+
+const TALL_ROWS: readonly TranscriptEvent[] = [
+  opened(),
+  chunk(0, TALL_ROWS_END, [
+    answered(0, TALL_ANSWER),
+    answered(10, TALL_ANSWER),
+    answered(20, TALL_ANSWER),
+  ]),
+  caughtUp(TALL_ROWS_END),
+]
+
 const reopenFromTheCard = () => Effect.andThen(seesText('The quiet redial'), goesBackToTheHerd)
 
 const linesOver = (from: number, count: number, word: string) =>
@@ -382,6 +395,26 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
       ),
       step<LinkStage>(900, 'What was missed lands, many turns of it', ({ link }) =>
         feed(link, [manyTurnsChunk(50), caughtUp(50 + MANY_TURNS_END)]),
+      ),
+    ],
+  }),
+  linkStory({
+    slug: 'long-catch-up-over-tall-rows',
+    title: 'A catch-up of short rows over a view of a few tall ones',
+    shows: { text: CHAT_TITLE },
+    ends: {
+      all: [{ selector: '[data-following]' }, { absent: 'Catching up' }, { text: 'Line 119' }],
+    },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, TALL_ROWS),
+    settle: reopenFromTheCard,
+    timeline: [
+      step<LinkStage>(700, 'Tap the card, the cached view shows at once', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(900, 'What was missed lands, many short rows of it', ({ link }) =>
+        feed(link, [manyLinesChunk(TALL_ROWS_END), caughtUp(TALL_ROWS_END + MANY_LINES_END)]),
       ),
     ],
   }),

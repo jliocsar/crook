@@ -1,7 +1,8 @@
 import * as Arr from 'effect/Array'
+import * as Option from 'effect/Option'
 import { describe, expect, it } from 'vitest'
 
-import { departedKeys, liftFor, withTheEnd } from '@crook/web/chat/Reveal'
+import { departedKeys, heldFrom, liftFor, reachOf, withTheEnd } from '@crook/web/chat/Reveal'
 import type { RevealRow } from '@crook/web/chat/Reveal'
 
 const rows = (...keys: readonly string[]): readonly RevealRow[] => keys.map((key) => ({ key }))
@@ -53,5 +54,81 @@ describe('withTheEnd', () => {
 
   it('joins a range that stops short of the end without repeating a row', () => {
     expect(withTheEnd(Arr.range(70, 90), range, true)).toEqual(Arr.range(70, 99))
+  })
+
+  it('renders down from where the lift reaches, wherever the range still sits', () => {
+    expect(withTheEnd([0, 1, 2], range, true, 60)).toEqual([0, 1, 2, ...Arr.range(60, 99)])
+  })
+
+  it('keeps the end rows it already renders when the lift reaches less far', () => {
+    expect(withTheEnd([0, 1, 2], range, true, 95)).toEqual([0, 1, 2, ...Arr.range(82, 99)])
+  })
+
+  it('renders only the range once the thread stops following, whatever the lift reaches', () => {
+    expect(withTheEnd([0, 1, 2], range, false, 60)).toEqual([0, 1, 2])
+  })
+})
+
+describe('reachOf', () => {
+  const SCREEN = 600
+  const OVERSCAN = 8
+
+  const rowsOf = (indexes: readonly number[], pitch: number) =>
+    indexes.map((index) => ({ index, start: index * pitch, end: (index + 1) * pitch }))
+
+  it('names the row at the top of the lifted screen when the rows reach it', () => {
+    const rendered = rowsOf(Arr.range(40, 99), 100)
+
+    expect(reachOf(rendered, 300, SCREEN, OVERSCAN)).toEqual(
+      Option.some({ from: 91, rendered: true }),
+    )
+  })
+
+  it('counts on the height of the rows it can see to name those it has not rendered', () => {
+    const rendered = rowsOf(Arr.range(80, 99), 20)
+
+    expect(reachOf(rendered, 600, SCREEN, OVERSCAN)).toEqual(
+      Option.some({ from: 32, rendered: false }),
+    )
+  })
+
+  it('reads only the rows joined to the end, not a range the thread has left', () => {
+    const rendered = [...rowsOf(Arr.range(0, 20), 20), ...rowsOf(Arr.range(80, 99), 20)]
+
+    expect(reachOf(rendered, 600, SCREEN, OVERSCAN)).toEqual(
+      Option.some({ from: 32, rendered: false }),
+    )
+  })
+
+  it('asks for nothing above the first row of the thread', () => {
+    const rendered = rowsOf(Arr.range(0, 9), 20)
+
+    expect(reachOf(rendered, 600, SCREEN, OVERSCAN)).toEqual(
+      Option.some({ from: 0, rendered: true }),
+    )
+  })
+
+  it('has no reach with no rows', () => {
+    expect(reachOf([], 600, SCREEN, OVERSCAN)).toEqual(Option.none())
+  })
+})
+
+describe('heldFrom', () => {
+  const OVERSCAN = 8
+
+  it('moves to rows it has not rendered', () => {
+    expect(heldFrom(Option.some(50), { from: 30, rendered: false }, OVERSCAN)).toBe(30)
+  })
+
+  it('takes the reach as it is when nothing is held', () => {
+    expect(heldFrom(Option.none(), { from: 30, rendered: true }, OVERSCAN)).toBe(30)
+  })
+
+  it('keeps rows it has rendered when the reach sits just below them, so none remounts', () => {
+    expect(heldFrom(Option.some(28), { from: 30, rendered: true }, OVERSCAN)).toBe(28)
+  })
+
+  it('lets go of rows once the reach has moved well past them', () => {
+    expect(heldFrom(Option.some(28), { from: 60, rendered: true }, OVERSCAN)).toBe(52)
   })
 })
