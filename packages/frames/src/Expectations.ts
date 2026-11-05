@@ -64,7 +64,13 @@ export const TIMELINE_EXPECTATIONS = {
   }),
   'transition/failed-then-retry': story(A_CHAT_WITH_ROWS),
   'transition/show-earlier-loads': story(A_CHAT_WITH_ROWS),
-  'transition/resume-after-show-earlier': story(A_CHAT_WITH_ROWS),
+  'transition/resume-after-show-earlier': story({
+    thread: fromTable({
+      'thread-rows': ['thread-skeleton'],
+      'thread-skeleton': ['thread-rows'],
+    }),
+    dock: inSequence('composer'),
+  }),
   'transition/older-agent-open': story(A_CHAT),
   'transition/older-agent-rejected-resume': story(A_CHAT_WITH_ROWS),
   'transition/reopen-while-dialing': story(

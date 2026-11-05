@@ -120,6 +120,16 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     shows: { text: 'This pane closed' },
   }),
   chatStory({
+    slug: 'closed-empty',
+    title: 'Chat, the pane closed and nothing is cached',
+    settle: ({ link }) =>
+      Effect.andThen(
+        seesSelector(SKELETON),
+        SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])]))),
+      ),
+    shows: { all: [{ text: 'This pane closed' }, { text: 'No messages on this phone yet' }] },
+  }),
+  chatStory({
     slug: 'restart-starting',
     title: 'Chat, Start Claude here again waiting',
     shows: { selector: 'button[disabled][aria-busy="true"]' },

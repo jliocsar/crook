@@ -446,11 +446,14 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
         yield* seesText(CHAT_TITLE)
       }),
     timeline: [
-      step<BrowserStage>(300, 'The socket drops', (stage) =>
-        Effect.flatMap(currentSession(stage), (session) => dropSession(session, LOST)),
+      step<BrowserStage>(300, 'The phone puts crook away', ({ browser }) =>
+        SubscriptionRef.set(browser.visible, false),
+      ),
+      step<BrowserStage>(300, 'crook comes back', ({ browser }) =>
+        SubscriptionRef.set(browser.visible, true),
       ),
       step<BrowserStage>(0, 'The link dials', takeSession),
-      step<BrowserStage>(700, 'Tap the card, the cache shows and nothing is read yet', () =>
+      step<BrowserStage>(100, 'Tap the card, the cache shows and nothing is read yet', () =>
         clicks(CARD_BUTTON),
       ),
       step<BrowserStage>(400, 'The hub answers', (stage) =>

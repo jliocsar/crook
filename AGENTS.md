@@ -571,7 +571,7 @@ path to it, a transition that throws or returns what the schema refuses, a state
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
 its own test shows each one failing. Two states that differ only by a token are one state: the
 walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
-guard and not a measurement: the two machines here have 11 and 8 (measured), so reaching it means a
+guard and not a measurement: the machines here have 11, 8 and 130 (measured; the last has ten tags, and its identity keeps what each view holds beside its name), so reaching it means a
 token got into a state's identity.
 
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
@@ -718,13 +718,45 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   line and renders every block plain; test the walk against a real highlighter's output.
 - A stream atom marks every value it emits as `waiting` until its stream ends (read in
   `Atom`'s stream constructor), so the result of an atom over a stream that never ends, such as a
-  chat's transcript, is waiting from its first value on and says nothing about a refresh. A chat
-  that is catching up says so in the view it emits: while a fresher view is held back until the
-  agent has caught up, the atom emits the last view it showed, marked as catching up, and that
-  mark drives the header's "Catching up" pill and the pending Show earlier and Try again rows.
-  The cue hides while the chat is dimmed, since the dim already says the hub or the machine is
-  away, and once the pane no longer runs Claude, whose transcript never catches up. A failed
-  watch is not catching up, so Try again turns pending only once pressed.
+  chat's transcript, is waiting from its first value on and says nothing about a refresh. So the
+  chat's atom emits a machine's state, which holds both the view on screen and the fold still
+  being read: the header's "Catching up" pill and the pending Show earlier and Try again rows are
+  each a tag of that state, and a screen reads nothing else. The cue hides while the chat is
+  dimmed, since the dim already says the hub or the machine is away, and once the pane no longer
+  runs Claude, whose transcript never catches up. A failed watch is not catching up, and pressing
+  Try again is a tag of its own.
+- A read that ends within a second says nothing. The pill used to show as soon as a watch
+  resumed, and on a reconnect and a foreground return it held 17 frames (317 ms) and 14 frames
+  (238 ms), each with its spinner, and read as a flash every run. Waiting the second a link's
+  notice waits, neither shows at all. Once shown it stays until it has held 400 ms, the frame
+  tool's limit: a read landing 1.8 s after the tap showed the pill at full opacity for 36 frames
+  (all measured in Chromium at 4x CPU throttling).
+- The pill, the failure rows and the rows read one state, deferred once, so they commit together:
+  on that 1.8 s read the pill starts to fade in the frame the rows land (measured as above). The
+  rows are slow to render and the deferred read can skip a state on its way: a read landing about
+  1.1 s after the tap went from held rows to landed rows with the state that says catching up never
+  committed, so the pill first showed in the frame the rows landed, and held its 400 ms over a read
+  already done, 37 frames with its fades (measured as above). The atom cannot know what committed.
+- A catch-up that lands before the cached rows ever committed gets no divider, since the divider's
+  keys are the rows the chat showed and nobody saw those (reasoned, not measured). A story that
+  needs the divider waits to see the held rows before the agent's next event.
+- The agent applies a watch's tail only from offset 0 and keeps it per watch (read in its source),
+  so a watch that read one session whole reads the next one whole too. The phone restarts the watch
+  when a session read whole changes, with the tail, and drops what the old watch still delivers
+  until the new one has been asked, so Show earlier is offered again on the next session.
+- An agent too old for the caught-up mark gives no sign that a session is empty, only silence after
+  its open, so the phone keeps the skeleton for the same second before it says "No messages yet"
+  (reasoned, not measured). With rows on screen it never says so, and a rejected resume keeps them
+  until the agent's first chunk replaces them. A file left truly empty behind such a rejection
+  therefore keeps showing the old rows (reasoned, not measured).
+- A chat with nothing cached whose pane closed or whose Claude exited showed a blank thread above
+  the card. It says the phone has no messages, as a machine that is away does.
+- The thread skeleton on a cold reload of a chat stays in the frame baseline, explained rather than
+  fixed. With nothing cached, it held 12 frames (333 ms) on a reconnect story and 11 (290 ms) on a
+  foreground return, because the catalog's fake hub answers as soon as the screen mounts; a real
+  hub takes its round trip (measured for the fake; the real one is not). Dropping it means either a
+  delay, which shows a blank panel while the chat slides in, or a minimum hold, which delays rows
+  that have arrived (both reasoned, not measured), and each is a skeleton design call.
 - Catching a chat up is bound by round trips, not by any hop's own work. The hub writes a
   transcript message to the phone only after the phone acknowledged the one before. Before
   transcript events were coalesced, it also held one event per phone, so the agent's next event
@@ -1143,9 +1175,10 @@ a turn of its own, enqueued as a task notification.
   up: the view that ends the catch-up counts as one only if the cached view's last line sits at
   the same index in it (lines are appended, so the same object), and its new rows are the row
   keys the cached view did not show. A chat that opened current, a cold open, a watch that failed
-  or started over, and a catch-up that added no row get nothing.
-- The catch-up shows nothing while it waits for the fresher view: the header's "Catching up"
-  pill covers that. Its rows then land in one commit under one ordinary lift capped at a screen,
+  or started over, and a catch-up that added no row get nothing. The fold judges the lines when the
+  read ends, and the screen turns them into row keys, since only it has rows.
+- The catch-up shows nothing but the header's "Catching up" pill, past its first second, while it
+  waits for the fresher view. Its rows then land in one commit under one ordinary lift capped at a screen,
   with a static divider above the first new row. Releasing them one row at a time, with a chip
   carried down a trail, held a reopen back from its end: reopening a thread of 120 lines with 40
   new ones took 267 to 273 frames, 5.1 to 5.5 s of lift, and ran past a story's wait for its last
@@ -1418,6 +1451,12 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
 - Vite discovers the highlighter's languages only when a chat first renders, and reloads the page
   once on each fresh server (measured), so the first story of a run can restart, and a sweep
   started in that page dies with it. Load a chat first and wait for the reload.
+- The smoke test plays a timeline with no waits, and the fake link's watches share one queue, so
+  an event offered while an old watch is still ending reaches it and is dropped. A step after
+  something that restarts the watch waits for the new request first (measured: two stories failed
+  until they did). A hide and a show with no step between them lost the hide on the one story that
+  tried it from the herd, and the link never redialed (measured: the story timed out), so a story
+  gives each its own step.
 - A timeline's end witness has to hold at every playback speed. A catch-up's trail, since removed,
   showed at full length, where the missed rows land 900 ms after the tap, and not at twice the
   speed, where they land 450 ms after it, so that transition ended on the rows instead (measured in

@@ -15,12 +15,7 @@
     "always": ["shift:div[chat-dock]"]
   },
   "transition/foreground-return": {
-    "always": [
-      "flash:thread-skeleton",
-      "shift:div[conversation-viewport]",
-      "flash:catching-up",
-      "flash:spinner"
-    ]
+    "always": ["flash:thread-skeleton", "shift:div[conversation-viewport]"]
   },
   "transition/herd-first-load-empty": {
     "always": [],
@@ -31,6 +26,6 @@
     "sometimes": ["flash:banner", "flash:spinner"]
   },
   "transition/reconnect-chat-open": {
-    "always": ["flash:thread-skeleton", "flash:catching-up", "flash:spinner"]
+    "always": ["flash:thread-skeleton"]
   }
 }

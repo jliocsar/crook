@@ -67,7 +67,7 @@ export const STATE_COVERAGE = {
     Current: ['chat/conversation'],
     OpenedEmpty: ['transition/opened-empty'],
     Failed: ['chat/failed-with-lines', 'chat/failed-empty', 'transition/failed-then-retry'],
-    Retrying: ['transition/failed-then-retry'],
+    Retrying: ['chat/retrying', 'transition/failed-then-retry'],
   } satisfies Record<TranscriptViewState['_tag'], readonly string[]>,
   edgeCard: {
     away: ['chat/away'],

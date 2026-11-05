@@ -134,6 +134,8 @@ export function ThreadEmpty({
   return TranscriptViewState.guards.NoView(state) ? (
     <LoadingThread />
   ) : (
-    <p className="text-muted-foreground py-10 text-center text-sm">{NO_MESSAGES}</p>
+    <p data-slot="empty-state" className="text-muted-foreground py-10 text-center text-sm">
+      {NO_MESSAGES}
+    </p>
   )
 }
