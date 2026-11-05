@@ -8,6 +8,7 @@ type StoryEnvValue = boolean | number | string | EventTarget
 const MOTION_QUERY = '(prefers-reduced-motion)'
 const CLOCK_AFTER_START_MS = 5 * 60 * 1000
 const KEYBOARD_HEIGHT = 336
+const KEYBOARD_ELEMENT_ID = 'story-keyboard'
 
 const defineOn = (target: Navigator | Window, property: string, value: StoryEnvValue): void => {
   Object.defineProperty(target, property, { configurable: true, value })
@@ -32,6 +33,15 @@ export const emulateKeyboard = (up: boolean): void => {
   })
 
   defineOn(window, 'visualViewport', viewport)
+  document.getElementById(KEYBOARD_ELEMENT_ID)?.remove()
+
+  if (up) {
+    const keyboard = document.body.appendChild(document.createElement('div'))
+
+    keyboard.id = KEYBOARD_ELEMENT_ID
+    keyboard.setAttribute('aria-hidden', 'true')
+    keyboard.style.cssText = `position:fixed;inset:auto 0 0 0;height:${KEYBOARD_HEIGHT}px;z-index:2147483646;background:#d1d5db;`
+  }
 }
 
 export const applyStoryEnv = (env: StoryEnv): void => {

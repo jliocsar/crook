@@ -27,7 +27,7 @@ import { AskDialogUnreadable, AskNotPending } from '@crook/protocol/Commands'
 import { liveWith } from '../../test/AppWiring.tsx'
 import { agent, herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
 import { inputDelivered } from '../../test/HubFakes.ts'
-import { chunk, CWD, opened, prompt, toolUse } from '../../test/TranscriptFixtures.ts'
+import { caughtUp, chunk, CWD, opened, prompt, toolUse } from '../../test/TranscriptFixtures.ts'
 import { chatStory } from '../ChatFixtures.ts'
 import { CHAT_TITLE, PANE } from '../Fixtures.ts'
 import { clicks, seesText, types, typesInto } from '../StageDom.ts'
@@ -134,10 +134,10 @@ const question = (multiSelect: Option.Option<boolean>, count = 1) =>
       }),
       ...Array.from(
         { length: count - 1 },
-        () =>
+        (_unused, index) =>
           new AskQuestion({
-            header: 'Port',
-            question: 'Which port?',
+            header: `Port ${index + 1}`,
+            question: `Which port for service ${index + 1}?`,
             multiSelect,
             choices: [new QuestionChoice({ label: '8080', description: Option.none() })],
           }),
@@ -163,6 +163,7 @@ const LEAD_IN = [
     prompt(0, 'Lint the web package'),
     toolUse(10, 'toolu_bash', 'Bash', { command: 'bun run lint' }),
   ]),
+  caughtUp(20),
 ]
 
 const askStory = (slug: string, title: string, ask: Ask, shows = ASK_DOCK) =>

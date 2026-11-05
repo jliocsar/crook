@@ -1009,7 +1009,9 @@ a turn of its own, enqueued as a task notification.
   shown still played its spring, 99 card frames of it (measured in Chromium).
 - An atom subscription made without `immediate` does not compute the atom, so it depends on
   nothing and never fires until something else reads the atom: a test that counted wakes that way
-  counted none, whatever the atom did (measured).
+  counted none, whatever the atom did (measured). The first read by anything else then fires it
+  with the atom's current value, though nothing changed: a retry signal subscribed that way
+  delivered its initial 0 once a component read it, with nothing pressed (measured).
 - An effect that needs an atom's latest value only at given moments reads it with the registry's
   `get` right then. Mirroring it into a `Ref` through a subscription cost a fiber per atom and
   added nothing; only a change that must not be missed needs the subscription.
@@ -1202,6 +1204,83 @@ Never run `install-service`, `uninstall-service`, `systemctl --user` start/enabl
 :::tip
 A `bun build --compile` binary reports its own path as `process.execPath`, and `Bun.main` sits under `/$bunfs/`; from a checkout `process.execPath` is bun and `Bun.main` is the script (measured). That is how the agent tells which command runs it.
 :::
+
+## Stories
+
+`bun run stories` serves a catalog of the real app at phone width, and `bun run stories:list`
+prints every story id with its URLs. `/stories/?story=<id>` opens one in the sidebar;
+`/stories/frame.html?story=<id>` is the same story bare, `&autoplay=1&speed=<n>` plays its
+timeline, and `window.__story` lists, steps, plays and awaits it. A story shows what the app does
+today, warts included: a wrong-looking state is a finding about the app, not a story to fix.
+
+- A story runs the real route tree with the hub runtime's layer seeded with a fake, so it needs
+  no mock of any screen. The fixtures stay in the test folder, where about forty tests reach them
+  relatively; they load in Chromium as they are (measured), and only the wiring that imported
+  testing-library moved out from under the tests.
+- Each story gets its own iframe. Motion reads reduced motion once per module instance, and the
+  keyboard, install and reduced-motion stories stub `navigator`, `visualViewport` and
+  `matchMedia`, so one page could not tell two such stories apart without resetting all of that
+  by hand. It costs little: from setting an iframe's address to its story done took a median of
+  368 ms and a 90th percentile of 461 ms over the whole catalog on the dev server
+  (measured).
+- A timeline's step is an event the hub or the user would cause, moving the real screen, so a
+  step never sets a component's state. A transition that depends on the link's own delays, its
+  backoff or its resume runs the real link over a fake browser: the fake link keeps one transcript
+  watch through a reconnect, where the real one starts it over on each session (read in both).
+- The app's clock is the real one, shifted when a story boots to where the fixtures think it is,
+  so elapsed times tick and read the same on every load. The smoke test shifts it again before
+  each story: a job that ended 5 s before the fixtures' now had aged out of its 14 s window by the
+  time the suite reached it (measured).
+- The smoke test runs every story under happy-dom, in about 15 s for 350 of them, and it is
+  not enough on its own. 17 stories passed there and failed in Chromium (measured): user-event's
+  `type` filled the field and left React's state empty, so the send button stayed disabled, and
+  its pointer check refuses a press under a sheet that is still opening. Stories type by
+  setting the value through the native setter and firing `input`. After changing stories, load
+  them in a browser too: one page, one iframe at a time, reading `data-story-phase` on each
+  frame's root, went through all of them in about four minutes.
+- A state with no reachable witness is the weak spot: a story that names no text or selector
+  proves only that its steps ran. A story states what it shows, which fails it when the state
+  stops being reached.
+- The coverage test is exhaustive over what is a union in the types (a new member fails to
+  compile) and over the routes and the link matrix (a new route fails it at run time). It cannot
+  see a state that lives in a boolean, a local `useState` or CSS, and a story names what it
+  shows, not that the state looks right.
+- Reduced motion is a stubbed `matchMedia` set before the first render. It reaches Motion only:
+  the `motion-reduce:` utilities read the real media query (reasoned, not measured). Emulating it
+  in the browser instead makes the dev page reload in a loop (reported by another agent, not
+  measured here).
+- Vite discovers the highlighter's languages only when a chat first renders, and reloads the page
+  once on each fresh dependency cache (measured), so the first story of a run can restart.
+
+:::warning
+A production build must get nothing from the catalog, and Tailwind is what would leak it. Its
+automatic source detection scans everything under the Vite root that git does not ignore, so a
+class only a tracked story uses reached the production stylesheet (measured). The production entry
+stylesheet therefore negates the catalog's folder, and the catalog's own stylesheet imports the
+same tokens without the negation. A negated `@source` beats a positive one for the same path or a
+deeper one, in either order (measured), so the negation cannot live in the shared stylesheet.
+:::
+
+:::tip
+An explicit `@source` reaches a folder ignored as `dir/` and does not reach files ignored as
+`dir/*`, with or without a negation beside it: Tailwind's walker starts at the named directory, so
+only a pattern matching what is inside it hides anything (measured, same folder, both patterns). An
+`@source` naming a folder that does not exist compiles as if it were not there (measured).
+
+Tailwind's Vite plugin scans when it transforms the stylesheet, and a folder that did not exist then
+is not watched, so a prototype created while the dev server runs rendered without its arbitrary
+classes until the stylesheet was transformed again (measured). The catalog's dev server therefore
+marks its stylesheet changed whenever a file lands in the kitchen.
+:::
+
+The kitchen is where the `prototype` skill builds variants: one gitignored folder per prototype,
+found by a lazy glob, running inside the real root, gates and shell, on the same fake hub. Keeping
+it out of git was the call because a prototype is deleted once a variant wins, so a tracked one
+would only reach history and the gate. It stays out of the gate on purpose: oxlint skips ignored
+files, the member's `tsc` excludes the folder, and the smoke test leaves it out, since a half-built
+prototype must not fail anyone's push. Its own typecheck is `typecheck:kitchen`. A prototype that
+does not load fails its own story and no other. Deleting the folder removes it; nothing else names
+it.
 
 ## Release
 

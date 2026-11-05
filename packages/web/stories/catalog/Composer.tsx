@@ -197,7 +197,9 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
         yield* clicks(SEND)
         yield* SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent('working'))))
         yield* typesDraft('third')
+        yield* clicks(SEND)
       }),
+    shows: { text: 'Queued' },
   }),
   chatStory({
     slug: 'queued-landed',

@@ -1,6 +1,6 @@
-import { waitFor, within } from '@testing-library/dom'
+import { fireEvent, waitFor, within } from '@testing-library/dom'
 import type { ByRoleMatcher } from '@testing-library/dom'
-import userEvent from '@testing-library/user-event'
+import userEvent, { PointerEventsCheckLevel } from '@testing-library/user-event'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
@@ -10,6 +10,12 @@ import type { Witness } from './Story.tsx'
 
 const FIND_TIMEOUT_MS = 4000
 const SWIPE_STEP_MS = 16
+
+const pointerUser = () => {
+  window.focus()
+
+  return userEvent.setup({ delay: null, pointerEventsCheck: PointerEventsCheckLevel.Never })
+}
 
 const failedWith = (what: string) => (cause: unknown) =>
   new StoryStepFailed({
@@ -84,7 +90,7 @@ export const role = (name: string | RegExp, matcher: ByRoleMatcher = 'button') =
   )
 
 export const clickElement = (target: Element, what = 'clicks an element') =>
-  attempt(what, () => userEvent.setup({ delay: null }).click(target))
+  attempt(what, () => pointerUser().click(target))
 
 export const clicks = (name: string | RegExp, matcher: ByRoleMatcher = 'button') =>
   Effect.flatMap(role(name, matcher), (target) => clickElement(target, `clicks ${String(name)}`))
@@ -92,28 +98,40 @@ export const clicks = (name: string | RegExp, matcher: ByRoleMatcher = 'button')
 export const clicksSelector = (selector: string) =>
   Effect.flatMap(element(selector), (target) => clickElement(target, `clicks ${selector}`))
 
+const typeInto = (target: HTMLInputElement | HTMLTextAreaElement, text: string) =>
+  Effect.sync(() => {
+    const value = `${target.value}${text}`
+
+    window.focus()
+    target.focus()
+    fireEvent.input(target, { target: { value } })
+    target.setSelectionRange(value.length, value.length)
+    fireEvent.select(target)
+  })
+
+const textFieldOf = (found: HTMLElement, what: string) =>
+  found instanceof HTMLInputElement || found instanceof HTMLTextAreaElement
+    ? Effect.succeed(found)
+    : Effect.fail(new StoryStepFailed({ step: what, detail: 'It is not a text field.' }))
+
 export const types = (name: string | RegExp, text: string, matcher: ByRoleMatcher = 'textbox') =>
-  Effect.flatMap(role(name, matcher), (target) =>
-    attempt(`types into ${String(name)}`, () =>
-      userEvent.setup({ delay: null }).type(target, text),
-    ),
+  role(name, matcher).pipe(
+    Effect.flatMap((found) => textFieldOf(found, `types into ${String(name)}`)),
+    Effect.flatMap((target) => typeInto(target, text)),
   )
 
 export const typesInto = (placeholder: string, text: string) =>
-  Effect.flatMap(
-    attempt(`finds the field ${placeholder}`, () =>
-      body().findByPlaceholderText(placeholder, {}, { timeout: FIND_TIMEOUT_MS }),
-    ),
-    (target) =>
-      attempt(`types into ${placeholder}`, () =>
-        userEvent.setup({ delay: null }).type(target, text),
-      ),
+  attempt(`finds the field ${placeholder}`, () =>
+    body().findByPlaceholderText(placeholder, {}, { timeout: FIND_TIMEOUT_MS }),
+  ).pipe(
+    Effect.flatMap((found) => textFieldOf(found, `types into ${placeholder}`)),
+    Effect.flatMap((target) => typeInto(target, text)),
   )
 
 export const holdsDown = (name: string | RegExp, milliseconds: number) =>
   Effect.flatMap(role(name), (target) =>
     Effect.gen(function* () {
-      const finger = userEvent.setup({ delay: null })
+      const finger = pointerUser()
 
       yield* attempt(`presses ${String(name)}`, () => finger.pointer({ keys: '[TouchA>]', target }))
       yield* pause(milliseconds)
@@ -160,9 +178,7 @@ export const swipes = (selector: string, path: readonly number[], stepMs = SWIPE
 
 export const pressesDown = (name: string | RegExp) =>
   Effect.flatMap(role(name), (target) =>
-    attempt(`presses ${String(name)}`, () =>
-      userEvent.setup({ delay: null }).pointer({ keys: '[TouchA>]', target }),
-    ),
+    attempt(`presses ${String(name)}`, () => pointerUser().pointer({ keys: '[TouchA>]', target })),
   )
 
 export const dispatchPointer = (

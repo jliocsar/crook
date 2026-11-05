@@ -88,7 +88,6 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
       ),
       step<LinkStage>(900, 'What was missed lands', ({ link }) =>
         feed(link, [
-          opened(),
           chunk(50, 90, [
             prompt(50, 'Is the banner fixed?'),
             toolUse(60, 'toolu_grep', 'Grep', { pattern: 'announce' }),
@@ -132,7 +131,6 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
           const transcript = yield* Queue.take(session.transcripts)
 
           yield* Queue.offerAll(transcript, [
-            opened(),
             chunk(50, 60, [said(50, 'Written while the socket was down.')]),
             caughtUp(60),
           ])
@@ -173,7 +171,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
           const session = yield* currentSession(stage)
           const transcript = yield* Queue.take(session.transcripts)
 
-          yield* Queue.offerAll(transcript, [opened(), caughtUp(50)])
+          yield* Queue.offer(transcript, caughtUp(50))
         }),
       ),
     ],

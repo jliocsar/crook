@@ -94,7 +94,12 @@ export const MACHINES_STORIES: readonly StoryMaker[] = [
     path: MACHINES_PATH,
     link: liveWith(viewOf([desk])),
     arrange: ({ link }) => link.forgetAnswers.close,
-    settle: () => Effect.andThen(seesText(OFFLINE_HINT), pressesEvenIfHidden('Forget')),
+    settle: () =>
+      Effect.gen(function* () {
+        yield* seesText(OFFLINE_HINT)
+        yield* swipes(DESK_CARD, SWIPE_LEFT)
+        yield* pressesEvenIfHidden('Forget')
+      }),
   }),
   linkStory({
     slug: 'forget-failed',
