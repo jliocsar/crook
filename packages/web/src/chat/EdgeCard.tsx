@@ -1,3 +1,4 @@
+import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
 import * as Option from 'effect/Option'
 import { CircleOff, SquareX } from 'lucide-react'
@@ -25,6 +26,7 @@ interface EdgeCardProps {
   readonly onBack: () => void
   readonly backLabel: string
   readonly takeFocus: boolean
+  readonly className?: string
 }
 
 const EDGE_ICON_SIZE = 20
@@ -62,8 +64,33 @@ function EdgeIcon({ kind }: { kind: EdgeKind }) {
   )
 }
 
+function BackButton({
+  ref,
+  backLabel,
+  onBack,
+  className,
+}: {
+  ref: React.Ref<HTMLButtonElement> | undefined
+  backLabel: string
+  onBack: () => void
+  className: string
+}) {
+  return (
+    <Button
+      ref={ref}
+      type="button"
+      variant="outline"
+      className={cn('min-h-11 rounded-full', className)}
+      aria-label={backLabel}
+      onClick={onBack}
+    >
+      Back
+    </Button>
+  )
+}
+
 export function EdgeCard(props: EdgeCardProps) {
-  const { kind, machineLabel, restart, onBack, backLabel, takeFocus } = props
+  const { kind, machineLabel, restart, onBack, backLabel, takeFocus, className } = props
   const firstButton = React.useRef<HTMLButtonElement>(null)
   const title = edgeTitle(kind, machineLabel)
   const now = useNow()
@@ -79,14 +106,24 @@ export function EdgeCard(props: EdgeCardProps) {
       data-slot="edge-card"
       data-kind={kind}
       aria-label={title}
-      className="border-border bg-card grid gap-3 rounded-[calc(var(--radius)+0.35rem)] border p-4"
+      className={cn(
+        'border-border bg-card grid content-center gap-3 rounded-[calc(var(--radius)+0.35rem)] border',
+        kind === 'away' ? 'p-3' : 'p-4',
+        className,
+      )}
     >
-      <div className="flex items-start gap-3">
+      <div className={cn('flex gap-3', kind === 'away' ? 'items-center' : 'items-start')}>
         <span className="text-muted-foreground mt-0.5 shrink-0">
           <EdgeIcon kind={kind} />
         </span>
         <div className="min-w-0 flex-1">
-          <p role="status" className="text-foreground text-sm leading-5 font-semibold">
+          <p
+            role="status"
+            className={cn(
+              'text-foreground text-sm leading-5 font-semibold',
+              kind === 'away' && 'truncate',
+            )}
+          >
             {title}
           </p>
           {Option.match(detailOf(props, now), {
@@ -94,34 +131,40 @@ export function EdgeCard(props: EdgeCardProps) {
             onSome: (detail) => <p className="text-muted-foreground text-sm leading-5">{detail}</p>,
           })}
         </div>
+        {kind === 'away' ? (
+          <BackButton
+            ref={firstButton}
+            backLabel={backLabel}
+            onBack={onBack}
+            className="shrink-0 px-5"
+          />
+        ) : null}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {Option.match(restart, {
-          onNone: () => null,
-          onSome: ({ start, starting, disabled }) => (
-            <Button
-              ref={firstButton}
-              type="button"
-              className="min-h-11 flex-1 rounded-full"
-              disabled={disabled || starting}
-              aria-busy={starting || undefined}
-              onClick={start}
-            >
-              Start Claude here again
-            </Button>
-          ),
-        })}
-        <Button
-          ref={Option.isNone(restart) ? firstButton : undefined}
-          type="button"
-          variant="outline"
-          className="min-h-11 flex-1 rounded-full"
-          aria-label={backLabel}
-          onClick={onBack}
-        >
-          Back
-        </Button>
-      </div>
+      {kind === 'away' ? null : (
+        <div className="flex flex-wrap gap-2">
+          {Option.match(restart, {
+            onNone: () => null,
+            onSome: ({ start, starting, disabled }) => (
+              <Button
+                ref={firstButton}
+                type="button"
+                className="min-h-11 flex-1 rounded-full"
+                disabled={disabled || starting}
+                aria-busy={starting || undefined}
+                onClick={start}
+              >
+                Start Claude here again
+              </Button>
+            ),
+          })}
+          <BackButton
+            ref={Option.isNone(restart) ? firstButton : undefined}
+            backLabel={backLabel}
+            onBack={onBack}
+            className="flex-1"
+          />
+        </div>
+      )}
       <ActionFailure message={Option.flatMap(restart, (found) => found.failure)} />
     </section>
   )

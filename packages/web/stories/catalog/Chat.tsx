@@ -94,15 +94,15 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     slug: 'away-empty',
     title: 'Chat, the machine is offline and nothing is cached',
     link: liveWith(chatHerd(chatAgent(), 'offline')),
-    shows: { text: 'laptop is offline' },
+    shows: { text: 'No messages on this phone yet' },
   }),
   chatStory({
     slug: 'reconnecting',
     title: 'Chat, the machine is reconnecting',
-    note: 'Reads as offline today: any connection other than online is away.',
+    note: 'The header says so after a quiet second. The composer stays, and a send holds.',
     link: liveWith(chatHerd(chatAgent(), 'reconnecting')),
     events: CONVERSATION,
-    shows: { text: 'laptop is offline' },
+    shows: { text: 'laptop reconnecting' },
   }),
   chatStory({
     slug: 'exited',

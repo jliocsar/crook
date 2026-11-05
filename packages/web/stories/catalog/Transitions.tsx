@@ -276,6 +276,76 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     ],
   }),
   chatStory({
+    slug: 'machine-gone',
+    title: "A machine that does not come back, the card takes the composer's place",
+    shows: { selector: SEND_READY },
+    ends: { text: 'laptop is offline' },
+    events: CONVERSATION,
+    settle: () => types(COMPOSER, 'Half a thought'),
+    timeline: [
+      step<LinkStage>(600, 'The machine starts reconnecting', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent(), 'reconnecting'))),
+      ),
+      step<LinkStage>(1500, 'The hub gives it up', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent(), 'offline'))),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'machine-back-after-hub-restart',
+    title: 'A hub restart, the machine reads offline until its agent attaches again',
+    note: 'A hub that restarts lists a machine offline with no reconnecting first, so the phone gives it the grace itself.',
+    shows: { selector: SEND_READY },
+    ends: { selector: SEND_READY },
+    events: CONVERSATION,
+    settle: () => types(COMPOSER, 'Half a thought'),
+    timeline: [
+      step<LinkStage>(600, 'The restarted hub lists the machine offline', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgent(), 'offline'))),
+      ),
+      step<LinkStage>(1500, 'Its agent attaches', ({ link }) =>
+        SubscriptionRef.set(link.state, IDLE_HERD),
+      ),
+    ],
+  }),
+  browserStory({
+    slug: 'send-through-machine-redial',
+    title: 'Send while the machine reconnects, held until it is back',
+    note: 'The real link holds the send while the herd says the machine is not online.',
+    shows: { selector: SEND_READY },
+    ends: { text: HELD_PROMPT },
+    path: CHAT_PATH,
+    cached: Option.none(),
+    settle: (stage) =>
+      Effect.gen(function* () {
+        yield* takeSession(stage)
+        const session = yield* currentSession(stage)
+
+        yield* Ref.set(
+          stage.browser.commandAnswer,
+          Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: HELD_PROMPT }))),
+        )
+        yield* Queue.offer(session.views, chatHerd())
+
+        const transcript = yield* Queue.take(session.transcripts)
+
+        yield* Queue.offerAll(transcript, CONVERSATION)
+        yield* seesText('The quiet redial')
+        yield* types(COMPOSER, HELD_PROMPT)
+      }),
+    timeline: [
+      step<BrowserStage>(600, 'The machine starts reconnecting', (stage) =>
+        Effect.flatMap(currentSession(stage), (session) =>
+          Queue.offer(session.views, chatHerd(chatAgent(), 'reconnecting')),
+        ),
+      ),
+      step<BrowserStage>(200, 'Tap Send while it is away', () => clicks(SEND)),
+      step<BrowserStage>(700, 'The machine is back, and the held send goes out', (stage) =>
+        Effect.flatMap(currentSession(stage), (session) => Queue.offer(session.views, chatHerd())),
+      ),
+    ],
+  }),
+  chatStory({
     slug: 'clear',
     title: '/clear, from the old session to the new one',
     shows: { text: 'The quiet redial' },

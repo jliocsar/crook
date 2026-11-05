@@ -30,13 +30,6 @@
     "always": [],
     "sometimes": ["flash:banner", "flash:spinner"]
   },
-  "transition/machine-redial": {
-    "always": [
-      "order:dock:composer>edge-card",
-      "shift:div[chat-dock]",
-      "order:dock:edge-card>composer"
-    ]
-  },
   "transition/reconnect-chat-open": {
     "always": ["flash:thread-skeleton", "flash:catching-up", "flash:spinner"]
   }

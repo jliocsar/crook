@@ -9,6 +9,7 @@ import { PaneId } from '@crook/domain/Ids'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
 import { pendingActionAtom, PendingActionKey } from '@crook/web/atoms/Commands'
 import { canActAtom, dimsContentAtom } from '@crook/web/atoms/Connection'
+import { PANE_LIVE } from '@crook/web/chat/PresenceMachine'
 import { OpenedAgent } from '@crook/web/atoms/Herd'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
@@ -79,7 +80,7 @@ const watched = Effect.fn('watched')(function* () {
   )
   yield* Effect.promise(() =>
     vi.waitFor(() => {
-      expect(models.at(-1)?.presence).toBe('live')
+      expect(models.at(-1)?.presence).toStrictEqual(PANE_LIVE)
     }),
   )
 
@@ -106,7 +107,7 @@ describe('chatScreenAtom', () => {
 
       expect(models.length).toBe(shown + 1)
       expect(wakes).toStrictEqual(before)
-      expect(models.at(-1)?.presence).toBe('live')
+      expect(models.at(-1)?.presence).toStrictEqual(PANE_LIVE)
     }).pipe(Effect.scoped),
   )
 })

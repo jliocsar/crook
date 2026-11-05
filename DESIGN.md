@@ -514,8 +514,15 @@ When the agent ends or its machine drops, the dock becomes a card in its place:
   ago, then "Start Claude here again" and Back. The header status reads "closed" or "exited"
   with a hollow dot. The restart starts Claude in the same folder and replaces the chat in place,
   without a push. It needs the hub to be reachable.
-- **The machine drops:** "laptop is offline", with a spinner, "Waiting for it. Last heard from
-  5m ago.", and Back. The transcript dims, and the header status reads "laptop offline".
+- **The machine redials:** nothing changes for a second. After that the header status reads
+  "laptop reconnecting", and the composer stays with its draft and keyboard: a send holds until the
+  machine is back. Only a machine really gone takes the dock. The grace is 15s, the time the hub
+  gives a machine before calling it offline, and the phone gives it the same when a restarted hub
+  lists a machine offline with no reconnecting first.
+- **The machine is gone:** "laptop is offline", with a spinner, "Waiting for it. Last heard from
+  5m ago.", and Back, in the space the composer held, so nothing moves. The transcript dims, and
+  the header status reads "laptop offline". With nothing on this phone, the thread says "No
+  messages on this phone yet".
 - **The chat never pops on its own.** The transcript stays readable until you leave. A machine
   that comes back with the pane still there resumes silently: the card goes and the composer
   returns. If the pane is gone, it turns into the closed card.

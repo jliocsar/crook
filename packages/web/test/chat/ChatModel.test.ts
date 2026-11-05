@@ -16,8 +16,19 @@ import {
   ChatStatus,
   chatScreenModel,
   chatStatus,
+  edgeKindOf,
+  endedAtOf,
+  isWatching,
   LOADING_CHAT,
+  withPresence,
 } from '@crook/web/chat/ChatModel'
+import {
+  PANE_LIVE,
+  presenceEventOf,
+  presenceMachine,
+  PresenceState,
+  reconnecting,
+} from '@crook/web/chat/PresenceMachine'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 
 import { agent, CROOK_TAB, CROOK_WORKSPACE, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
@@ -54,14 +65,22 @@ const snapshot = (entry: HerdMachine, minutes = 0) =>
 const laptop = (rows: readonly AgentRow[], connection: MachineConnection = 'online') =>
   machine(LAPTOP, rows, { connection })
 
-const step = (previous: ChatScreenModel, entry: HerdMachine, minutes = 0, stale = false) =>
-  chatScreenModel(snapshot(entry, minutes), LAPTOP, PANE, previous, stale)
+const step = (previous: ChatScreenModel, entry: HerdMachine, minutes = 0): ChatScreenModel => {
+  const herdNow = snapshot(entry, minutes)
+  const seenBefore = Option.isSome(previous.row)
+  const [presence] = presenceMachine.transition(
+    previous.presence,
+    presenceEventOf(herdNow, LAPTOP, PANE, seenBefore, true),
+  )
+
+  return chatScreenModel(herdNow, LAPTOP, PANE, previous, presence)
+}
 
 const live = step(LOADING_CHAT, laptop([agent('w1:p1', 'working')]))
 
 describe('chatScreenModel', () => {
   it('reads a pane with Claude as live, with its status, place and activity', () => {
-    expect(live.presence).toBe('live')
+    expect(PresenceState.guards.Live(live.presence)).toBe(true)
     expect(chatStatus(live)).toStrictEqual(ChatStatus.Agent({ status: 'working' }))
     expect(activityOf(live)).toBe('working')
     expect(live.workspaceLabel).toStrictEqual(Option.some('crook'))
@@ -71,8 +90,8 @@ describe('chatScreenModel', () => {
     const exited = step(live, withShellPane(laptop([])), 1)
     const closed = step(exited, laptop([]), 2)
 
-    expect(exited.presence).toBe('exited')
-    expect(closed.presence).toBe('closed')
+    expect(PresenceState.guards.Exited(exited.presence)).toBe(true)
+    expect(PresenceState.guards.Closed(closed.presence)).toBe(true)
     expect(Option.map(closed.row, (row) => row.pane)).toStrictEqual(Option.some(PANE))
     expect(chatStatus(closed)).toStrictEqual(ChatStatus.Ended({ label: 'closed' }))
     expect(activityOf(closed)).toBe('still')
@@ -82,43 +101,51 @@ describe('chatScreenModel', () => {
     const exited = step(live, withShellPane(laptop([])), 1)
     const later = step(exited, withShellPane(laptop([])), 7)
 
-    expect(later.endedAt).toStrictEqual(exited.endedAt)
-    expect(exited.endedAt).toStrictEqual(
+    expect(endedAtOf(later)).toStrictEqual(endedAtOf(exited))
+    expect(endedAtOf(exited)).toStrictEqual(
       Option.some(DateTime.addDuration(START, Duration.minutes(1))),
     )
   })
 
   it('calls a pane it never saw Claude in not a Claude pane', () => {
-    expect(step(LOADING_CHAT, withShellPane(laptop([]))).presence).toBe('notClaude')
+    expect(
+      PresenceState.guards.NotClaude(step(LOADING_CHAT, withShellPane(laptop([]))).presence),
+    ).toBe(true)
   })
 
-  it('reads a dropped machine as away and keeps the transcript row', () => {
-    const away = step(live, laptop([agent('w1:p1', 'working')], 'offline'))
+  it('keeps a redialing machine live-looking, with the agent still its status', () => {
+    const quiet = step(live, laptop([agent('w1:p1', 'working')], 'reconnecting'))
 
-    expect(away.presence).toBe('away')
+    expect(PresenceState.guards.Redialing(quiet.presence)).toBe(true)
+    expect(chatStatus(quiet)).toStrictEqual(ChatStatus.Agent({ status: 'working' }))
+    expect(activityOf(quiet)).toBe('working')
+    expect(Option.isNone(edgeKindOf(quiet))).toBe(true)
+    expect(isWatching(quiet)).toBe(true)
+  })
+
+  it('says a machine is reconnecting without taking the dock', () => {
+    const reconnectingLaptop = laptop([agent('w1:p1', 'working')], 'reconnecting')
+    const said = withPresence(
+      step(live, reconnectingLaptop),
+      reconnecting(reconnectingLaptop.machine.connectionChangedAt),
+    )
+
+    expect(chatStatus(said)).toStrictEqual(ChatStatus.Ended({ label: 'laptop reconnecting' }))
+    expect(Option.isNone(edgeKindOf(said))).toBe(true)
+    expect(isWatching(said)).toBe(true)
+  })
+
+  it('reads a machine already offline when the chat opens as away and keeps the row', () => {
+    const away = step(LOADING_CHAT, laptop([agent('w1:p1', 'working')], 'offline'))
+
+    expect(PresenceState.guards.Away(away.presence)).toBe(true)
     expect(Option.isSome(away.row)).toBe(true)
     expect(chatStatus(away)).toStrictEqual(ChatStatus.Ended({ label: 'laptop offline' }))
-  })
-
-  it('keeps what the agent was doing while its machine is away', () => {
-    const away = step(live, laptop([agent('w1:p1', 'working')], 'offline'))
-
+    expect(edgeKindOf(away)).toStrictEqual(Option.some('away'))
     expect(activityOf(away)).toBe('working')
   })
 
   it('keeps what it had while there is no snapshot', () => {
-    expect(chatScreenModel(Option.none(), LAPTOP, PANE, live, false)).toBe(live)
-  })
-
-  it('waits for the hub before calling a pane closed that only a stale herd lacks', () => {
-    const cached = step(LOADING_CHAT, laptop([]), 0, true)
-    const confirmed = step(cached, laptop([]))
-
-    expect(cached.presence).toBe('loading')
-    expect(confirmed.presence).toBe('closed')
-  })
-
-  it('still calls a pane closed while stale once it had seen Claude there', () => {
-    expect(step(live, laptop([]), 1, true).presence).toBe('closed')
+    expect(chatScreenModel(Option.none(), LAPTOP, PANE, live, PANE_LIVE)).toStrictEqual(live)
   })
 })

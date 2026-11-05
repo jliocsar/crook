@@ -40,7 +40,7 @@ import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/
 import { STOP_SETTLE } from '@crook/web/chat/ChatCommands'
 import { COLD_START } from '@crook/web/rpc/HubLinkState'
 
-import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
+import { liveWith, machineGoesAway, machineRedials, renderApp, stateWith } from '../AppRender.tsx'
 import { fingerScrollsToTop, followedToBottom, manyLines, tallViewport } from '../ChatThread.ts'
 import { click, eventually, findByRole, present, wait } from '../Dom.ts'
 import { agent, CROOK_TAB, CROOK_WORKSPACE, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
@@ -453,10 +453,7 @@ describe('AgentChatScreen', () => {
 
         yield* Effect.promise(() => screen.findByRole('textbox'))
         fireEvent.change(field(), { target: { value: 'half a thought' } })
-        yield* SubscriptionRef.set(
-          link.state,
-          liveWith(herd([laptopWith([agent('w1:p1', 'idle')], { connection: 'offline' })])),
-        )
+        yield* machineGoesAway(link, [agent('w1:p1', 'idle')])
 
         expect(
           (yield* Effect.promise(() => screen.findByText('laptop is offline'))).getAttribute(
@@ -464,15 +461,49 @@ describe('AgentChatScreen', () => {
           ),
         ).toBe('status')
         expect(screen.getByText('Waiting for it. Last heard from 2h ago.')).toBeDefined()
-        expect(screen.queryByRole('textbox')).toBeNull()
+        expect(field().closest('[inert]')).not.toBeNull()
         expect(screen.getByText('laptop offline')).toBeDefined()
 
         yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'idle')]))
+        yield* eventually(() => {
+          expect(field().closest('[inert]')).toBeNull()
+        })
 
-        expect(
-          yield* Effect.promise(() => screen.findByDisplayValue('half a thought')),
-        ).toBeDefined()
+        expect(screen.getByDisplayValue('half a thought')).toBeDefined()
       }),
+  )
+
+  it.effect('keeps the composer, its draft and its focus through a redial', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+
+      yield* Effect.promise(() => screen.findByRole('textbox'))
+      const composer = field()
+
+      composer.focus()
+      fireEvent.change(composer, { target: { value: 'half a thought' } })
+      yield* machineRedials(link, [agent('w1:p1', 'idle')])
+
+      expect(field()).toBe(composer)
+      expect(document.activeElement).toBe(composer)
+      expect(composer.closest('[inert]')).toBeNull()
+      expect(screen.getByDisplayValue('half a thought')).toBeDefined()
+      expect(screen.queryByText('laptop is offline')).toBeNull()
+    }),
+  )
+
+  it.effect('says what is missing when a machine is away and nothing is cached', () =>
+    Effect.gen(function* () {
+      yield* renderApp(
+        CHAT,
+        liveWith(herd([laptopWith([agent('w1:p1', 'idle')], { connection: 'offline' })])),
+      )
+
+      expect(
+        yield* Effect.promise(() => screen.findByText('No messages on this phone yet')),
+      ).toBeDefined()
+      expect(screen.getByText('They show once laptop is back.')).toBeDefined()
+    }),
   )
 
   it.effect('tells a closed pane from an exited Claude and stays on the chat', () =>
@@ -598,10 +629,7 @@ describe('AgentChatScreen', () => {
 
       expect(yield* findByRole('button', 'Try again')).toBeDefined()
 
-      yield* SubscriptionRef.set(
-        link.state,
-        liveWith(herd([laptopWith([agent('w1:p1', 'idle')], { connection: 'offline' })])),
-      )
+      yield* machineGoesAway(link, [agent('w1:p1', 'idle')])
       yield* Effect.promise(() => screen.findByText('laptop is offline'))
       yield* SubscriptionRef.set(link.state, live([agent('w1:p1', 'idle')]))
       yield* eventually(() => {

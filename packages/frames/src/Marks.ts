@@ -14,6 +14,10 @@ export interface MarkDefinition {
 
 export type MarkPair = readonly [string, string]
 
+const PRESENCE = 'presence'
+const COMPOSER_STATES = ['Loading', 'Live', 'Redialing', 'Reconnecting']
+const EDGE_CARD_STATES = ['Away', 'Exited', 'Closed']
+
 export const MACHINE_ATTRIBUTE = 'data-machine'
 export const STATE_ATTRIBUTE = 'data-state'
 export const MACHINE_SELECTOR = `[${MACHINE_ATTRIBUTE}]`
@@ -38,6 +42,13 @@ export const MARKS: readonly MarkDefinition[] = [
     content: true,
   },
   {
+    mark: 'thread-away',
+    track: 'thread',
+    selector: '[data-slot="empty-state"]',
+    text: 'No messages on this phone yet',
+    content: true,
+  },
+  {
     mark: 'thread-empty',
     track: 'thread',
     selector: '[data-slot="empty-state"]',
@@ -54,8 +65,18 @@ export const MARKS: readonly MarkDefinition[] = [
   { mark: 'dimmed', track: 'dimmed', selector: `[${STATE_ATTRIBUTE}="dimmed"]` },
   { mark: 'catching-up', track: 'header', selector: '[data-slot="catching-up-pill"]' },
   { mark: 'working', track: 'activity', selector: '[data-slot="thinking-state"]' },
-  { mark: 'composer', track: 'dock', selector: '[data-slot="composer"]' },
-  { mark: 'edge-card', track: 'dock', selector: '[data-slot="edge-card"]' },
+  {
+    mark: 'composer',
+    track: 'dock',
+    selector: machineSelector(PRESENCE, COMPOSER_STATES),
+    machine: { name: PRESENCE, states: COMPOSER_STATES },
+  },
+  {
+    mark: 'edge-card',
+    track: 'dock',
+    selector: machineSelector(PRESENCE, EDGE_CARD_STATES),
+    machine: { name: PRESENCE, states: EDGE_CARD_STATES },
+  },
   {
     mark: 'composer-paused',
     track: 'paused',

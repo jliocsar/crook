@@ -4,7 +4,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
-import { identity, pipe } from 'effect/Function'
+import { identity } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -15,6 +15,7 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import type { Command, CommandReceipt } from '@crook/domain/Command'
+import { findMachine } from '@crook/domain/HerdView'
 import type { HerdView } from '@crook/domain/HerdView'
 import type { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import type { NotificationEvent, NotificationSettings } from '@crook/domain/Notifications'
@@ -100,27 +101,36 @@ const commandEvent = (command: LinkCommand): Effect.Effect<LinkEvent> =>
     Match.exhaustive,
   )
 
-const callsOnceDialed = (
+const callsOnceReady = (
   state: SubscriptionRef.SubscriptionRef<HubLinkState>,
   connected: ConnectedCalls,
+  isReady: (current: HubLinkState) => boolean,
 ) =>
   SubscriptionRef.changes(state).pipe(
-    Stream.mapEffect((current) =>
-      Effect.map(SubscriptionRef.get(connected), (calls) => ({
-        calls,
-        refused: refusesCalls(current.status),
-      })),
-    ),
-    Stream.filter(({ calls, refused }) => Option.isSome(calls) || refused),
-    Stream.runHead,
-    Effect.timeoutOption(CALL_HOLD_LIMIT),
-    Effect.map((answer) =>
-      pipe(
-        answer,
-        Option.flatten,
-        Option.flatMap(({ calls }) => calls),
+    Stream.filterEffect((current) =>
+      Effect.map(
+        SubscriptionRef.get(connected),
+        (calls) => refusesCalls(current.status) || (Option.isSome(calls) && isReady(current)),
       ),
     ),
+    Stream.runHead,
+    Effect.timeoutOption(CALL_HOLD_LIMIT),
+    Effect.andThen(SubscriptionRef.get(connected)),
+  )
+
+const whenReady = <Success, Failure>(
+  state: SubscriptionRef.SubscriptionRef<HubLinkState>,
+  connected: ConnectedCalls,
+  isReady: (current: HubLinkState) => boolean,
+  call: (calls: HubCalls) => Effect.Effect<Success, Failure>,
+) =>
+  Effect.flatMap(
+    callsOnceReady(state, connected, isReady),
+    (answer): Effect.Effect<Success, Failure | HubNotConnected> =>
+      Option.match(answer, {
+        onNone: () => Effect.fail(new HubNotConnected()),
+        onSome: call,
+      }),
   )
 
 const whenConnected = <Success, Failure>(
@@ -131,15 +141,15 @@ const whenConnected = <Success, Failure>(
   Effect.flatMap(SubscriptionRef.get(connected), (held) =>
     Option.match(held, {
       onSome: call,
-      onNone: () =>
-        Effect.flatMap(
-          callsOnceDialed(state, connected),
-          (answer): Effect.Effect<Success, Failure | HubNotConnected> =>
-            Option.match(answer, {
-              onNone: () => Effect.fail(new HubNotConnected()),
-              onSome: call,
-            }),
-        ),
+      onNone: () => whenReady(state, connected, () => true, call),
+    }),
+  )
+
+const machineIsThere = (current: HubLinkState, machine: MachineId): boolean =>
+  Option.exists(current.herd, ({ view }) =>
+    Option.match(findMachine(view, machine), {
+      onNone: () => true,
+      onSome: (entry) => entry.machine.connection === 'online',
     }),
   )
 
@@ -367,7 +377,18 @@ const make = Effect.gen(function* () {
     markSeen: connectedCall('HubLink.markSeen', (calls) => calls.markSeen),
     forgetMachine: connectedCall('HubLink.forgetMachine', (calls) => calls.forgetMachine),
     setPinned: connectedCall('HubLink.setPinned', (calls) => calls.setPinned),
-    sendCommand: connectedCall('HubLink.sendCommand', (calls) => calls.sendCommand),
+    sendCommand: Effect.fn('HubLink.sendCommand')(function* (
+      machine: MachineId,
+      key: IdempotencyKey,
+      command: Command,
+    ) {
+      return yield* whenReady(
+        state,
+        connected,
+        (current) => machineIsThere(current, machine),
+        (calls) => calls.sendCommand(machine, key, command),
+      )
+    }),
     notificationSettings: whileConnected(connected, (calls) => calls.watchNotificationSettings),
     account: whileConnected(connected, (calls) => Stream.fromEffect(calls.account)),
     setNotificationPref: connectedCall(

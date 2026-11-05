@@ -41,6 +41,7 @@ import type { AlwaysNote } from '@crook/web/chat/AskModel'
 import { isUserPrompt } from '@crook/web/chat/ChatItems'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
 import { activityOf } from '@crook/web/chat/ChatModel'
+import { isPresent } from '@crook/web/chat/PresenceMachine'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 import { useCommandAction } from '@crook/web/chat/CommandAction'
 import type { CommandAction } from '@crook/web/chat/CommandAction'
@@ -358,7 +359,7 @@ export const useChatCommands = ({
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(opened, answer, session)
   const openAsk = Option.flatMap(
-    Option.filter(model.row, () => blocked && model.presence === 'live'),
+    Option.filter(model.row, () => blocked && isPresent(model.presence)),
     (row) => row.ask,
   )
   const mode: ComposerMode = Option.isSome(openAsk) ? 'decline' : 'prompt'

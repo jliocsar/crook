@@ -58,6 +58,9 @@ const SETTLE_STEPS = 50
 const cachedView = herd([machine(LAPTOP, [agent('w1:p1', 'working')])])
 const liveView = herd([machine(LAPTOP, [agent('w1:p1', 'done')])])
 const laterView = herd([machine(LAPTOP, [agent('w1:p1', 'idle')])])
+const redialingView = herd([
+  machine(LAPTOP, [agent('w1:p1', 'done')], { connection: 'reconnecting' }),
+])
 const refused = new HubConnectionLost({ detail: 'connection refused' })
 
 const isDialing = LinkStatus.isAnyOf(['ColdStart', 'Redialing', 'Announced', 'Returning'])
@@ -394,6 +397,88 @@ describe('HubLink', () => {
 
       expect(yield* Fiber.join(held)).toEqual(receipt)
       expect(yield* Ref.get(browser.sent)).toEqual([{ machine: LAPTOP, key, command }])
+    }),
+  )
+
+  it.effect('holds a command while its machine redials and sends it once the machine is back', () =>
+    Effect.gen(function* () {
+      const { browser, link, nextSession, settle } = yield* start()
+      const command = new StartAgent({
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        task: Option.none(),
+      })
+      const key = IdempotencyKey.make('5b0e7d22')
+      const receipt = new AgentStarted({ pane: agent('w1:p9', 'idle').pane })
+      const session = yield* nextSession
+
+      yield* Ref.set(browser.commandAnswer, Exit.succeed(receipt))
+      yield* Queue.offer(session.views, redialingView)
+      yield* settle
+      const held = yield* Effect.forkChild(link.sendCommand(LAPTOP, key, command))
+
+      yield* settle
+
+      expect(yield* Ref.get(browser.sent)).toEqual([])
+
+      yield* Queue.offer(session.views, liveView)
+
+      expect(yield* Fiber.join(held)).toEqual(receipt)
+      expect(yield* Ref.get(browser.sent)).toEqual([{ machine: LAPTOP, key, command }])
+    }),
+  )
+
+  it.effect('lets the hub answer for a machine still away once the hold runs out', () =>
+    Effect.gen(function* () {
+      const { browser, link, nextSession, settle } = yield* start()
+      const command = new StartAgent({
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        task: Option.none(),
+      })
+      const key = IdempotencyKey.make('5b0e7d23')
+      const receipt = new AgentStarted({ pane: agent('w1:p9', 'idle').pane })
+      const session = yield* nextSession
+
+      yield* Ref.set(browser.commandAnswer, Exit.succeed(receipt))
+      yield* Queue.offer(session.views, redialingView)
+      yield* settle
+      const held = yield* Effect.forkChild(link.sendCommand(LAPTOP, key, command))
+
+      yield* settle
+      yield* TestClock.adjust(CALL_HOLD_LIMIT)
+
+      expect(yield* Fiber.join(held)).toEqual(receipt)
+      expect(yield* Ref.get(browser.sent)).toEqual([{ machine: LAPTOP, key, command }])
+    }),
+  )
+
+  it.effect('gives a send one hold, through a machine away and a link down together', () =>
+    Effect.gen(function* () {
+      const { browser, link, nextSession, settle } = yield* start()
+      const command = new StartAgent({
+        kind: 'claude',
+        folder: '/home/jliocsar/Projects/crook',
+        task: Option.none(),
+      })
+      const first = yield* nextSession
+
+      yield* Queue.offer(first.views, redialingView)
+      yield* settle
+      yield* TestClock.adjust(RECONNECT_CAP)
+      const held = yield* Effect.forkChild(
+        Effect.flip(link.sendCommand(LAPTOP, IdempotencyKey.make('5b0e7d24'), command)),
+      )
+
+      yield* settle
+      yield* dropSession(first, refused)
+      yield* TestClock.adjust(HUB_RECONNECT_BASE)
+      yield* nextSession
+      yield* settle
+      yield* TestClock.adjust(CALL_HOLD_LIMIT)
+
+      expect(yield* Fiber.join(held)).toBeInstanceOf(HubNotConnected)
+      expect(yield* Ref.get(browser.sent)).toEqual([])
     }),
   )
 

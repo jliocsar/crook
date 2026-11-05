@@ -59,6 +59,18 @@ export const TIMELINE_EXPECTATIONS = {
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
   }),
+  'transition/machine-gone': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer', 'edge-card'),
+  }),
+  'transition/machine-back-after-hub-restart': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'transition/send-through-machine-redial': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step' },
+  ),
   'transition/clear': story({ thread: inSequence('thread-rows'), dock: inSequence('composer') }),
   'transition/resume-other-session': story({
     thread: inSequence('thread-rows'),

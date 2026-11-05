@@ -12,6 +12,7 @@ import {
 } from '@crook/web/atoms/Transcript'
 import type { TranscriptKey } from '@crook/web/atoms/Transcript'
 import { deriveChat, EMPTY_CHAT } from '@crook/web/chat/ChatItems'
+import { PresenceState } from '@crook/web/chat/PresenceMachine'
 import type { ChatContext, ChatItem } from '@crook/web/chat/ChatItems'
 import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
 
@@ -23,7 +24,12 @@ export const useOpenedChat = (machine: MachineId, pane: PaneId) => {
 
   useAtomMount(seenWhileOpenAtom(opened))
 
-  return { opened, model, canAct, dimmed: model.presence === 'away' || connectionDims }
+  return {
+    opened,
+    model,
+    canAct,
+    dimmed: PresenceState.guards.Away(model.presence) || connectionDims,
+  }
 }
 
 export const useTranscriptThread = (key: TranscriptKey) => {

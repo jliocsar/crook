@@ -553,21 +553,26 @@ heavily measured, so their frame-level writes do not belong in a table.
 Commands are data and `transition` runs nothing, so the table is what a test walks. Whatever drives
 the machine runs each command and feeds the event it returns back in. An atom drives a machine whose
 inputs are atoms, and it runs commands through an `Atom.fn` on the hub runtime, one at a time, so a
-new command interrupts the one running. A service that owns the connection drives its own machine
-the same way, through its state's ref, with the commands' fibers in the scope they belong to.
+new command interrupts the one running, and such a machine's walk holds each step to one command. A
+service that owns the connection drives its own machine the same way, through its state's ref, with
+the commands' fibers in the scope they belong to.
 
-A state that waits on a command carries a generation, the command and its finished event carry the
-same one, and `transition` drops a finished event whose generation is not the state's. Interrupting
-is not enough: a state that moves on without starting another command leaves the old one running to
-its end.
+A state that waits on a command carries a token, a counter or whatever already names what it waits
+for, the command and its finished event carry the same one, and `transition` drops a finished event
+whose token is not the state's. Interrupting is not enough: a state that moves on without starting
+another command leaves the old one running to its end. A timer forked into a scope that ends with
+what it waits for needs no token, which is the one exception: a link's notice timers die with their
+session.
 
-Every machine has a walk, used from a test: the events to try from each state, a stale generation
+Every machine has a walk, used from a test: the events to try from each state, a stale token
 included, the invariants of a state, the rules of an arrow, the states it must always be able to get
 back to and the ones it may end in. The walker reports a broken invariant or arrow with the shortest
 path to it, a transition that throws or returns what the schema refuses, a state nothing reaches, a
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
-its own test shows each one failing. Two states that differ only by a generation are one state: the
-walk's identity drops it, or a counter makes the walk endless.
+its own test shows each one failing. Two states that differ only by a token are one state: the
+walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
+guard and not a measurement: the two machines here have 11 and 8 (measured), so reaching it means a
+token got into a state's identity.
 
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
 through the union's guards since `_tag` stays unread. The frame tool's mark table is the one place
@@ -589,6 +594,18 @@ A call made while the link dials holds in the fiber that made it. It goes out wh
 A herd update from another machine re-rendered everything above the screens, 10 of 10 updates for each of the gate, the shell, the toast host and the action sheets, because the connection view carried the sync time and was rebuilt on every herd. A sync time now sits only in the views that show one, under structural equality: 0 of 10 (measured by counting commits through React's devtools hook in the DOM tests).
 
 React registers with that hook when react-dom first loads, and Vitest leaves `node_modules` out of its module graph, so `vi.resetModules` cannot make it register again: a hook installed in a test file counted nothing (measured). The DOM setup installs it as its first import, before testing-library loads react-dom.
+:::
+
+:::tip
+A machine's connection blinking is not the machine being gone, and the phone gave the two one look: the card replaced the composer and took the keyboard with it. Measured with a local hub, agent and proxy, from when a phone sees the machine leave online to when it sees it back. A socket dropped from a healthy agent took 25 to 29 ms; one dropped again and again, while the backoff grows, 114 ms to 5042 ms; an agent process restart 219 to 231 ms; a hub restart with 2 s of downtime 215 to 218 ms, and with 6 s 3688 ms; a network blackout of 3 s 17 ms, 7 s 32 ms, 12 s 5418 ms and 20 s 12048 ms, all under the 15 s the hub already gives a machine. So the phone keeps the dock for those same 15 s. The first second of it shows nothing at all, since a healthy machine's single drop never came near it.
+
+A restarted hub lists a machine offline with no reconnecting first (measured), so the phone cannot wait for the hub's word: going from a live pane to offline starts its own grace. It cannot compute that grace from the machine's timestamps either: after a restart they say when the machine was last seen, on the hub's clock. It times it from what it saw, and a machine already offline when the chat opens goes straight to the card.
+
+A send for a machine on its way back holds until the machine is online and the link is up, under one bound, the same 15 s. When the bound runs out with the link up, the call goes out and the hub answers for the machine; with the link down it fails as not connected. Two holds in a row would stack to 30 s (reasoned, not measured). Going back to the chat restarts the wait, since the machine lives only while its chat is open, and a phone that slept through a whole drop gives a machine long gone the same 16 s: nothing it holds tells that from a hub restart.
+
+The card takes the composer's cell at the composer's height, 102 px at 390 and at 430 wide, in light and dark. A machine's name long enough to wrap made it 106 and pushed the dock up 4 px, so the title truncates (measured).
+
+The drop's own time is the token for a wait, so the machine needs no counter: the hub moves it on every drop. A machine sees a herd's reading only when it changes, so offline landing while a drop is still quiet can only be the hub's reconnecting running out, and that goes to the card.
 :::
 
 ## Web
