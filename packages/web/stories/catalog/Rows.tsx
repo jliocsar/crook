@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
 import { TranscriptOffset } from '@crook/domain/Ids'
@@ -427,21 +428,114 @@ export const ROW_STORIES: readonly StoryMaker[] = [
   ),
   rowStory(
     'slash-local-command',
-    'Slash command, a local command and its output',
+    'Slash command, a bubble and its muted output',
     [
-      user(0, [new LocalCommandBlock({ name: '/cost', args: '' })]),
-      user(10, [new LocalCommandOutputBlock({ text: 'Total cost: $0.12' })]),
+      user(0, [new LocalCommandBlock({ name: '/rename', args: 'made up name' })]),
+      user(10, [new LocalCommandOutputBlock({ text: 'Session renamed to: made up name' })]),
     ],
-    { text: 'Total cost' },
+    { text: 'Session renamed to' },
   ),
   rowStory(
     'slash-with-args',
-    'Slash command, with arguments',
+    'Slash command, output with inline code',
     [
-      user(0, [new LocalCommandBlock({ name: '/model', args: 'sonnet' })]),
-      user(10, [new LocalCommandOutputBlock({ text: 'Set model to sonnet' })]),
+      user(0, [new LocalCommandBlock({ name: '/model', args: 'opus' })]),
+      user(10, [
+        new LocalCommandOutputBlock({
+          text: 'Set model to `Opus 5.5` and saved as your default for new sessions',
+        }),
+      ]),
     ],
-    { text: 'Set model to sonnet' },
+    { selector: '[data-slot="command"] code' },
+  ),
+  rowStory(
+    'slash-skill',
+    'Slash command, a skill that starts a turn',
+    [
+      answered(0, 'The earlier turn ended here.'),
+      user(10, [
+        new LocalCommandBlock({
+          name: '/handoff',
+          args: 'carry on with the made up banner',
+          opensTurn: true,
+        }),
+      ]),
+      user(20, [new TextBlock({ text: 'The body of the skill, which nobody reads.' })], {
+        isMeta: true,
+      }),
+      answered(30, 'Handed off.'),
+    ],
+    { text: '/handoff carry on with the made up banner' },
+  ),
+  rowStory(
+    'slash-shell',
+    'Shell line, a bubble and its output',
+    [
+      user(0, [new LocalCommandBlock({ name: '!', args: 'kill 1', opensTurn: true })]),
+      user(10, [
+        new LocalCommandOutputBlock({ text: 'kill: (1): Operation not permitted, `not code`' }),
+      ]),
+      answered(20, 'That one needs root.'),
+    ],
+    { text: '! kill 1' },
+  ),
+  rowStory(
+    'slash-long-output',
+    'Slash command, output of many lines scrolling in its own box',
+    [
+      user(0, [new LocalCommandBlock({ name: '/context', args: '' })]),
+      user(10, [
+        new LocalCommandOutputBlock({
+          text: pipe(
+            Arr.makeBy(40, (index) => `Made up category ${index + 1}: ${index + 1}k tokens`),
+            Arr.join('\n'),
+          ),
+        }),
+      ]),
+    ],
+    { text: 'Made up category 40' },
+  ),
+  rowStory(
+    'slash-failed',
+    'Slash command, a failed /compact says why and nothing else',
+    [
+      user(0, [new LocalCommandBlock({ name: '/compact', args: '' })]),
+      user(10, [new LocalCommandOutputBlock({ text: 'Error: No messages to compact' })]),
+    ],
+    { text: 'Error: No messages to compact' },
+  ),
+  rowStory(
+    'slash-unknown',
+    'Slash command, one Claude does not know',
+    [
+      new SystemMessage({
+        offset: TranscriptOffset.make(0),
+        uuid: Option.none(),
+        timestamp: at(0),
+        blocks: [new NoticeBlock({ text: 'Unknown command: /nosuchcommand' })],
+      }),
+    ],
+    { text: 'Unknown command' },
+  ),
+  rowStory(
+    'slash-compact',
+    'Slash command, /compact shows its divider alone',
+    [
+      said(0, 'The earlier conversation stays.'),
+      user(10, [new TextBlock({ text: '/compact' })], { isMeta: true }),
+      compactBoundary(20),
+      compactSummary(30, 'We were fixing the made up banner.'),
+      user(40, [new TextBlock({ text: 'caveat' })], { isMeta: true }),
+      user(50, [new LocalCommandBlock({ name: '/compact', args: '' })]),
+      user(60, [new LocalCommandOutputBlock({ text: 'Compacted (ctrl+o to see full summary)' })]),
+    ],
+    {
+      all: [
+        { text: 'The earlier conversation stays.' },
+        { text: 'Show summary' },
+        { absent: 'ctrl+o' },
+      ],
+    },
   ),
   rowStory(
     'tool-use-with-text',

@@ -35,7 +35,15 @@ export const STATE_COVERAGE = {
     Tool: ['rows/tool-running', 'rows/tool-read-open'],
     Subagents: ['rows/subagent-tree-running'],
     Plan: ['rows/plan'],
-    Note: ['rows/note-interrupted', 'rows/note-notice', 'rows/slash-local-command'],
+    Note: ['rows/note-interrupted', 'rows/note-notice', 'rows/slash-failed', 'rows/slash-unknown'],
+    Command: [
+      'rows/slash-local-command',
+      'rows/slash-with-args',
+      'rows/slash-skill',
+      'rows/slash-shell',
+      'rows/slash-long-output',
+      'real/slash-commands',
+    ],
     Compacted: ['rows/compacted', 'rows/compacted-open'],
     Cleared: ['rows/cleared', 'real/clear-across-sessions'],
     Omitted: [
@@ -162,6 +170,8 @@ export const REQUIRED_TRANSITIONS: readonly string[] = [
   'transition/turn-with-tools',
   'transition/idle-before-answer',
   'transition/compact-ends-the-turn',
+  'transition/slash-send-lands',
+  'transition/slash-send-silent',
   'subagent/turn-with-tools',
   'transition/herd-first-load-from-cache',
 ]

@@ -170,6 +170,14 @@ export const TIMELINE_EXPECTATIONS = {
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
   }),
+  'transition/slash-send-lands': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'transition/slash-send-silent': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
   'transition/herd-first-load-from-cache': story(
     { herd: inSequence('herd-list') },
     { shiftBudget: BANNER_SHIFT_BUDGET },
