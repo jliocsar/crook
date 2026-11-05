@@ -1623,6 +1623,7 @@ the screen once per animation frame and fails on what a settled screenshot canno
   it is a guess). A failed browser step now runs its story again like a starved one, so one bad
   page does not cost the sweep, and it prints that it did.
 - The Working row's ghost takes no mark. It lives for a fade, under the 24 frames a state has to hold, so a mark on it read as a flash on every turn (measured).
+- A story opening on a quiet state waits past a flash's limit before its first step. A 400 ms wait straddled it, the state holding 22 frames in 510 ms on one sweep and 24 to 25 on others (measured), so the same story passed and failed with nothing changed.
 - A contact sheet that added a tile only when the marks changed never showed a `/clear`, since that
   swaps rows for rows with the same marks around them (read in how it picks tiles). It also takes a tile
   when the row count changes and always shows the last frame.

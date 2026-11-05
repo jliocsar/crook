@@ -75,7 +75,7 @@ export const TURN_STORIES: readonly StoryMaker[] = [
     ends: { all: [{ text: 'The three checks agree.' }, { selector: STILL_ACTIVITY }] },
     events: CONVERSATION,
     timeline: [
-      step<LinkStage>(400, 'herdr says working', ({ link }) =>
+      step<LinkStage>(900, 'herdr says working', ({ link }) =>
         SubscriptionRef.set(link.state, WORKING_HERD),
       ),
       step<LinkStage>(500, 'The prompt reaches the transcript', ({ link }) =>
@@ -97,7 +97,7 @@ export const TURN_STORIES: readonly StoryMaker[] = [
     ends: { all: [{ text: 'Idle came first, the answer after.' }, { selector: STILL_ACTIVITY }] },
     events: CONVERSATION,
     timeline: [
-      step<LinkStage>(400, 'herdr says working', ({ link }) =>
+      step<LinkStage>(900, 'herdr says working', ({ link }) =>
         SubscriptionRef.set(link.state, WORKING_HERD),
       ),
       step<LinkStage>(500, 'The prompt reaches the transcript', ({ link }) =>
