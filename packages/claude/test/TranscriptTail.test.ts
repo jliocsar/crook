@@ -129,7 +129,7 @@ const repeatedPast = (turn: Uint8Array, minimum: number) => {
 
 layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
   live.effect(
-    'reads what a lost event left behind on the next wake, and sends nothing when no more is there',
+    'reads whatever landed since on the next wake, and sends nothing when no more has',
     () =>
       Effect.gen(function* () {
         const first = encoder.encode('{}\n')
