@@ -278,6 +278,8 @@ const startsTurn = ({ message }: TranscriptLine): boolean =>
 const keyOf = ({ session, message }: TranscriptLine, index: number): string =>
   `${session} ${message.offset} ${index}`
 
+const holeKeyOf = (line: TranscriptLine): string => `hole ${keyOf(line, 0)}`
+
 const boundaryOf = ({ session, message }: TranscriptLine): Option.Option<string> =>
   Match.value(message).pipe(
     Match.tag('System', (system) =>
@@ -667,7 +669,7 @@ const draftsOf = (placed: Placed): readonly Draft[] => {
         draft(ChatItem.Unreadable({ key: keyAt(0), byteLength: malformed.byteLength })),
       ],
       Omitted: (omitted) => [
-        draft(ChatItem.Omitted({ key: `hole ${keyAt(0)}`, byteLength: omitted.byteLength })),
+        draft(ChatItem.Omitted({ key: holeKeyOf(placed.line), byteLength: omitted.byteLength })),
       ],
     }),
   )

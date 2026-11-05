@@ -29,10 +29,7 @@ describe('loadFontsEarly', () => {
       const themed = Array.from(indexCss.matchAll(THEME_FONT), ([, family = '']) => family)
 
       expect(asked).toStrictEqual(APP_FONTS)
-      expect(themed.length).toBeGreaterThan(0)
-      expect(themed.filter((family) => !asked.some((font) => font.includes(family)))).toStrictEqual(
-        [],
-      )
+      expect(asked).toStrictEqual(themed.map((family) => `1em "${family}"`))
     }),
   )
 
