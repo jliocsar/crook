@@ -13,10 +13,13 @@
     "src/**/*.tsx",
     "test/**/*.ts",
     "test/**/*.tsx",
+    "stories/**/*.ts",
+    "stories/**/*.tsx",
     "brand/**/*.ts",
     "vite.config.ts",
     "vitest.config.ts",
+    "vite.stories.config.ts",
     "pwa-assets.config.ts"
   ],
-  "exclude": ["src/sw/**"]
+  "exclude": ["src/sw/**", "stories/kitchen/**"]
 }
