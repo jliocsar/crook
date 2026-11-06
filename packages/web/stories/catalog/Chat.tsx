@@ -11,7 +11,7 @@ import { CommandTimedOut } from '@crook/protocol/Commands'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
 import * as Duration from 'effect/Duration'
 import { UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
-import { COLD_START, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
+import { COLD_START, RECOVERED, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { agent, herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
@@ -238,6 +238,24 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     events: [opened(), manyTurnsChunk(0), caughtUp(MANY_TURNS_END)],
     settle: (stage) => Effect.andThen(seesText('Answer 15'), leaveAndReopen(stage)),
     shows: { selector: '[data-slot="catching-up-capsule"]' },
+  }),
+  chatStory({
+    slug: 'catching-up-under-banner',
+    title: 'Chat, Catching up capsule below the banner saying the hub is back',
+    events: CONVERSATION,
+    settle: (stage) =>
+      Effect.gen(function* () {
+        yield* seesText('The quiet redial')
+        yield* leaveAndReopen(stage)
+        yield* seesSelector('[data-slot="catching-up-capsule"]')
+        yield* SubscriptionRef.set(stage.link.state, stateWith(RECOVERED, Option.some(chatHerd())))
+      }),
+    shows: {
+      all: [
+        { selector: '[data-slot="catching-up-capsule"]' },
+        { selector: '[data-slot="connection-banner"]' },
+      ],
+    },
   }),
   chatStory({
     slug: 'catching-up-long-title',

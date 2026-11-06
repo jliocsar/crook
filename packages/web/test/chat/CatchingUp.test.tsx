@@ -21,7 +21,7 @@ import {
 } from '@crook/domain/Transcript'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
-import { COLD_START } from '@crook/web/rpc/HubLinkState'
+import { COLD_START, HubLinkState, RECOVERED } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
 import { click, eventually, findByRole, present } from '../Dom.ts'
@@ -178,6 +178,44 @@ describe('a chat catching up', () => {
       yield* eventually(() => {
         expect(catchingUpCapsule()).toBeNull()
       })
+    }),
+  )
+
+  it.live('moves below the banner, which lies over the top of the thread', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp(CHAT, current())
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Seen before.')]),
+        caughtUp(10),
+      ])
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByText('Seen before.')).toBeNull()
+      })
+      yield* Effect.promise(() =>
+        router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+      )
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+
+      const capsule = present(catchingUpCapsule(), 'The capsule')
+      const room = present(capsule.parentElement?.parentElement, 'The room under the banner')
+
+      expect(room.style.transform).not.toContain('32px')
+
+      yield* SubscriptionRef.update(
+        link.state,
+        (state) => new HubLinkState({ status: RECOVERED, herd: state.herd }),
+      )
+      yield* eventually(() => {
+        expect(document.querySelector('[data-slot="connection-banner"]')).not.toBeNull()
+        expect(room.style.transform).toContain('32px')
+      })
+
+      expect(catchingUpCapsule()).toBe(capsule)
     }),
   )
 

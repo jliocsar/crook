@@ -774,6 +774,13 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   centre opened the tool call under it, a finger scroll starting on it moved the thread 286 px and
   let go of the end, and a swipe from the screen's edge at its height went back. With the keyboard
   emulated it stayed 8 px under the header over a thread 324 px tall (each measured once).
+  The connection banner lies over the same place in a higher layer and hid the capsule whole, for
+  all 19 to 20 frames they were up together, at both phone widths in both themes. The capsule now
+  rides the slide a tab screen's content takes, so it rests 9 px under the banner, 28 to 29 frames
+  together on a reconnect in 3 of 3 runs with no layout shift. The thread itself stays put under both
+  (all measured in Chromium). A capsule beside a skeleton is a forbidden pair in the frame tool:
+  the states that say catching up each hold a view and a skeleton means there is none (read in the
+  machine), and the sweep holds that.
 - A chat counts its running subagents only in its dock. The dock counts every running subagent of
   the session, a foreground one included and marked "Claude waits on it", and its chip opens that
   run's screen in one tap, as a tree row does. So the header's count added only a scroll to the

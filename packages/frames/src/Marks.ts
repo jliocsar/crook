@@ -118,6 +118,7 @@ export const MARKS: readonly MarkDefinition[] = [
 
 export const NEVER_TOGETHER: readonly MarkPair[] = [
   ['thread-skeleton', 'thread-rows'],
+  ['thread-skeleton', 'catching-up'],
   ['thread-skeleton', 'thread-empty'],
   ['thread-empty', 'thread-rows'],
   ['herd-skeleton', 'herd-list'],

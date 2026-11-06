@@ -382,7 +382,8 @@ screen" on the Ask.
   same one. It hides while the chat is dimmed or the pane no longer runs Claude. It covers a row
   or two of text while it shows and takes no touch: a tap or a scroll lands on what is under it. A
   screen reader hears "Catching up" through a polite status when it shows, and nothing when it
-  ends.
+  ends. With the connection banner up it slides below the banner, 9px under it, and it never
+  shows beside a skeleton, which means there is no transcript yet to catch up.
 - **The transcript** follows the live tail. Only the user scrolling up lets go of it: content that
   grows, a row that remeasures or a scroll the page makes itself never does. Scrolled up, a
   "Latest" pill (`bg-foreground`, 44px) shows above the dock and jumps back down, and sending a
