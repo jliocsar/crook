@@ -8,7 +8,24 @@
         "name": "@effect/language-service",
         "diagnostics": false,
         "brandedSchemaClasses": ["Error", "Opaque"],
-        "namespaceImportPackages": ["effect"]
+        "namespaceImportPackages": ["effect"],
+        "allowedUnstableApis": [
+          "@effect/atom-react",
+          "@effect/platform-bun",
+          "@effect/platform-node-shared",
+          "@effect/sql-sqlite-bun",
+          "@effect/vitest",
+          "effect/FileSystem",
+          "effect/Path",
+          "effect/PlatformError",
+          "effect/cli",
+          "effect/http",
+          "effect/process",
+          "effect/reactivity",
+          "effect/rpc",
+          "effect/socket",
+          "effect/sql"
+        ]
       }
     ]
   }

@@ -38,9 +38,6 @@
     // `JSON.stringify` on plain data outside an Effect can't fail; inside one, `global-json-in-effect`
     // still asks for a Schema codec.
     "effecttsgo/global-json": "off",
-    // crook is built on the modules Effect tags unstable: the platform services, SQL, RPC, atoms and
-    // `@effect/vitest`. A rule that flags every use of them can't single out a risky one.
-    "effecttsgo/unstable-api-usage": "off",
     // A sync encode of a value its type already checked can't fail on shape, and a sync decode that
     // throws in a test fails the test, which is what a test wants.
     "effecttsgo/schema-sync": "off",

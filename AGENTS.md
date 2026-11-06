@@ -43,9 +43,12 @@ The tsgo rules that are off say why beside themselves in `.oxlintrc.json`. Two a
 their quickfixes write what begone-slop rejects: a map to `undefined` becomes `Effect.asVoid`, and a
 catch returning `Effect.void` becomes a log-less `Effect.ignore`. `unnecessary-effect-gen` stays on,
 but don't take its fix for a body with no return and a non-void success: it writes `Effect.asVoid`
-too (read in tsgo 0.67.4's source, not run). `unstable-api-usage` is off
-because crook is built on the modules Effect tags unstable — the platform services, SQL, RPC, atoms
-and `@effect/vitest` — so it flagged every use (1,679 on the bump) and could single out none.
+too (read in tsgo 0.67.4's source). `oxlint --fix` left a probe of that shape unchanged, so it's the
+editor's quickfix to watch. `unstable-api-usage` stays on, and the language-service plugin block
+allow-lists the `@stability unstable` families crook is built on: the platform services, SQL, RPC,
+sockets, atoms and `@effect/vitest`. Without the list it reports every use (2,318 on 4.1.2), and with
+it an unstable family from anywhere else still fails the gate (measured). A new one goes on the list
+deliberately, or not at all.
 Schema classes carry no brand: the language-service plugin limits `brandedSchemaClasses` to
 `Error` and `Opaque`, since a tagged class's literal `_tag` already keeps two classes apart and a
 plain `Schema.Class` here is a wire shape decoded at a boundary.
@@ -246,7 +249,6 @@ under `effect/`, since every leaf module is PascalCase. Type-only imports are ex
 
 Since `effect@4.0.5` the former `effect/unstable/*` modules sit directly under `effect/`
 (`effect/rpc/Rpc`, `effect/cli/Command`) and `effect/unstable/*` is no longer exported (measured).
-The `effect-best-practices` references still spell the old paths; drop the `unstable/` segment.
 The same release made the `Config` constructors PascalCase (`Config.String`, `Config.Int`;
 `Config.string` is gone), and a `Config` is itself an `Effect` (both measured).
 
@@ -433,8 +435,8 @@ waiter itself. It also admits the poll on its own terms, so it stays.
 :::
 
 :::tip
-A `Result` is not yieldable inside `Effect.gen` in `effect@4.1.2`, whatever the
-`effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
+A `Result` is not yieldable inside `Effect.gen` in `effect@4.1.2` (measured: a type error, and it dies
+at runtime). Lift it with `Effect.fromResult`.
 
 `Effect.andThen(effect, f)` runs what `f` returns as an effect: an `f` that only does a side
 effect and returns nothing dies with `Not a valid effect: undefined` (measured on `effect@4.1.2`).
@@ -490,7 +492,7 @@ needs that decision. One that only asks whether a value is one named variant is 
 works on a tagged class and a tagged error alike, and needs no fallback at all.
 
 Nested `reason` unions too — `SqlError`/`AiError` put the variant in `reason`, out of the failure
-channel, so `catchTag` misses it and some `effect-best-practices` snippets write `error.reason._tag`.
+channel, so `catchTag` misses it.
 Replacements per `references/core/error-handling.md`: `Effect.catchReason`, `Effect.catchReasons`,
 `Effect.unwrapReason` + `catchTags`, or `Match.value(error.reason).pipe(Match.tagsExhaustive({…}))`.
 Disable-comment only after all four fail; say which in the comment.
@@ -596,7 +598,7 @@ The ones with behaviour worth knowing before you trip on them:
   `meta.schema` before the rule runs.
 - `no-tag-access` — no `x._tag`, `switch (x._tag)`, `const { _tag } = x`. Defining a tag is fine.
 - `no-shadowed-error-field` — no `name`/`stack` field on `Schema.TaggedError`/`Schema.Error`
-  (measured on `begone-slop` 0.2.11; `TaggedErrorClass` is gone from Effect). tsgo's
+  (measured on `begone-slop` 0.2.11; `TaggedErrorClass` isn't in Effect 4.1.2). tsgo's
   `error-payload-shadows-name` reports the same field.
 - `no-comments` and `require-safety-comment-for-type-assertion` are one doctrine in two rules: prose
   is banned everywhere except where an assertion demands it.
