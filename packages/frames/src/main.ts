@@ -343,7 +343,7 @@ const frames = Command.make(
   run,
 ).pipe(
   Command.withDescription(
-    'Play stories from the catalog in a throttled browser and fail on what only shows between settled screens: flashes, forbidden pairs, layout shift, blank frames, empty bands in the thread, a row going back and forth and a state order the story does not allow.',
+    'Play stories from the catalog in a throttled browser and fail on what only shows between settled screens: flashes, forbidden pairs, layout shift, blank frames, empty bands in the thread, a row going back and forth, a lift that overshoots what landed and a state order the story does not allow.',
   ),
 )
 

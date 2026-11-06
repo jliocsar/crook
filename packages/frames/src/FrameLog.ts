@@ -25,6 +25,7 @@ export const ThreadReading = Schema.Struct({
   middle: Schema.Finite,
   bottom: Schema.Finite,
   moved: Schema.Finite,
+  leastMoved: Schema.optional(Schema.Finite),
   held: Schema.Boolean,
 })
 export type ThreadReading = typeof ThreadReading.Type
@@ -100,6 +101,17 @@ export const backtracks = (frame: RecordedFrame, next: RecordedFrame): boolean =
   next.thread?.held !== true &&
   movedAt(frame) <= -BACKTRACK_PIXELS &&
   movedAt(next) >= BACKTRACK_PIXELS
+
+export const leastMovedAt = (frame: RecordedFrame): number => frame.thread?.leastMoved ?? 0
+
+export const liftAt = (frame: RecordedFrame): number => frame.thread?.lift ?? 0
+
+export const overshoots = (frame: RecordedFrame, next: RecordedFrame): boolean =>
+  next.frame === frame.frame + 1 &&
+  frame.thread?.held !== true &&
+  next.thread?.held !== true &&
+  liftAt(next) - liftAt(frame) >= BACKTRACK_PIXELS &&
+  leastMovedAt(next) >= BACKTRACK_PIXELS
 
 export const p90FrameMs = (frames: readonly RecordedFrame[]): number => {
   const mounted = frames.filter((frame) => frame.mounted)
