@@ -144,7 +144,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
     () => Arr.filter(items, (item) => item.key !== firstPromptKey),
     [items, firstPromptKey],
   )
-  const parentTitle = titleOf(model, pane)
+  const parentTitle = titleOf(model)
 
   const earlierPending = isLoadingEarlier(state)
   const environment = React.useMemo<ThreadEnvironment>(
