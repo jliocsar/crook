@@ -47,6 +47,7 @@ const source = new PaneTranscript({ pane: PANE })
 
 const OLDER_AGENT = '0.0.0'
 const NOTICE_WAIT_MS = Duration.toMillis(NOTICE_DELAY) + 200
+const TWO_NOTICE_WAITS_LIMIT_MS = 15_000
 
 const laptopOn = (connection: 'online' | 'offline', agentVersion: string) =>
   liveWith(
@@ -98,6 +99,7 @@ describe('a chat catching up', () => {
 
       expect(screen.queryByText('No messages yet')).toBeNull()
     }),
+    TWO_NOTICE_WAITS_LIMIT_MS,
   )
 
   it.effect('says nothing for a quick read, and does not dim a reopened chat', () =>
