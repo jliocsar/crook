@@ -387,6 +387,34 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
     }),
   )
 
+  it.effect('answers the same dialog asked again under the next state change', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('40-parallel-blocked-1')
+      const ask = bashAsk(screen, 'echo par-a > par-a.txt')
+      const { executor, sent, state, showNext } = yield* startOverQueuedScreens(ask, screen, screen)
+
+      yield* executor.execute(ACTION, answer(ask, new Approve({})))
+      yield* showNext
+      yield* SubscriptionRef.set(
+        state,
+        machineStateWith([
+          agentRow({ status: 'blocked', ask: Option.some(ask), stateChangeSeq: 6 }),
+        ]),
+      )
+      const receipt = yield* executor.execute(OTHER_DEVICE_ACTION, answer(ask, new Approve({})))
+
+      expect(receipt).toEqual(
+        new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 6 }),
+      )
+      expect(yield* sentAfter(sent)).toEqual([
+        READ_REQUEST,
+        keysRequest(['enter']),
+        READ_REQUEST,
+        keysRequest(['enter']),
+      ])
+    }),
+  )
+
   it.effect('re-reads the herd when the agent stays blocked after an answer', () =>
     Effect.gen(function* () {
       const screen = yield* spikeScreen('112-codemode6-zombie')

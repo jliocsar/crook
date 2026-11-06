@@ -3,6 +3,9 @@
     "always": [],
     "sometimes": ["flash:spinner"]
   },
+  "ask/same-dialog-again": {
+    "always": ["shift:div[chat-dock]"]
+  },
   "background/pane-closes": {
     "always": ["shift:div[chat-dock]"]
   },

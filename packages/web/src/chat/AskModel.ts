@@ -8,13 +8,10 @@ import * as Schema from 'effect/Schema'
 import { askOption, askSummary, relativeToFolder } from '@crook/domain/Ask'
 import type { Ask, AskOption, AskQuestion, PermissionAsk, QuestionAsk } from '@crook/domain/Ask'
 import { Approve, ApproveAlways, Decline } from '@crook/domain/Command'
-import type { AskAnswer, Command } from '@crook/domain/Command'
+import type { AskAnswer } from '@crook/domain/Command'
 import type { AskId, ClaudeSessionId } from '@crook/domain/Ids'
 import { toolName } from '@crook/domain/ToolName'
-import { AskNotPending } from '@crook/protocol/Commands'
-import { ActionProgress, UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
 import { ChatItem } from '@crook/web/chat/ChatItems'
-import type { CommandAction } from '@crook/web/chat/CommandAction'
 import { editHunks, fileName } from '@crook/web/chat/ToolView'
 import type { DiffHunk } from '@crook/web/components/ui/diff-view'
 
@@ -25,16 +22,6 @@ export type AskDetail = Data.TaggedEnum<{
   Text: { readonly text: string }
   Summary: { readonly text: string }
 }>
-
-export type AskAnswerState = Data.TaggedEnum<{
-  Open: Record<never, never>
-  Answering: { readonly answer: AskAnswer }
-  Answered: { readonly answer: AskAnswer }
-  AlreadyAnswered: Record<never, never>
-  Refused: { readonly message: string }
-}>
-
-type AnswerProgress = Pick<CommandAction, 'state' | 'refusal' | 'last'>
 
 export interface AskButton {
   readonly label: string
@@ -62,8 +49,6 @@ const NO_BUTTON: AskButton = { label: NO_LABEL, answer: PLAIN_DECLINE }
 
 export const AskDetail = Data.taggedEnum<AskDetail>()
 
-export const AskAnswerState = Data.taggedEnum<AskAnswerState>()
-
 export class AlwaysNote extends Data.Class<{
   readonly ask: AskId
   readonly text: string
@@ -73,23 +58,7 @@ export class AlwaysNote extends Data.Class<{
 
 const isTool = ChatItem.$is('Tool')
 
-const isAlreadyAnswered = Schema.is(AskNotPending)
-
 const isApproveAlways = Schema.is(ApproveAlways)
-
-export const isAnswered = AskAnswerState.$is('Answered')
-
-export const isAnswerUnderway = AskAnswerState.$is('Answering')
-
-export const answerInFlight = (state: AskAnswerState): Option.Option<AskAnswer> =>
-  Option.map(Option.liftPredicate(state, isAnswerUnderway), (answering) => answering.answer)
-
-const isAlreadyAnsweredState = AskAnswerState.$is('AlreadyAnswered')
-
-const isRefused = AskAnswerState.$is('Refused')
-
-export const isAnswerSettled = (state: AskAnswerState): boolean =>
-  isAlreadyAnsweredState(state) || isRefused(state)
 
 const permissionTitle = (ask: PermissionAsk): string =>
   Match.value(ask.action).pipe(
@@ -208,37 +177,6 @@ export const answerableQuestion = (ask: QuestionAsk): Option.Option<AskQuestion>
   Option.filter(
     Option.some(Arr.headNonEmpty(ask.questions)),
     (question) => ask.questions.length === 1 && Option.contains(question.multiSelect, false),
-  )
-
-const answerTo = (command: Command, ask: AskId): Option.Option<AskAnswer> =>
-  Match.value(command).pipe(
-    Match.tag('AnswerAsk', (answering) =>
-      Option.map(
-        Option.liftPredicate(answering, (sent) => sent.ask === ask),
-        (sent) => sent.answer,
-      ),
-    ),
-    Match.orElse(() => Option.none<AskAnswer>()),
-  )
-
-export const answerState = (progress: AnswerProgress, ask: AskId): AskAnswerState =>
-  Option.match(
-    Option.flatMap(progress.last, (command) => answerTo(command, ask)),
-    {
-      onNone: () => AskAnswerState.Open(),
-      onSome: (answer) =>
-        ActionProgress.$match(progress.state, {
-          Idle: () => AskAnswerState.Open(),
-          Sending: () => AskAnswerState.Answering({ answer }),
-          Sent: () => AskAnswerState.Answered({ answer }),
-          Unconfirmed: () => AskAnswerState.Refused({ message: UNCONFIRMED_NOTE }),
-          Done: () => AskAnswerState.Answered({ answer }),
-          Failed: ({ message }) =>
-            Option.exists(progress.refusal, isAlreadyAnswered)
-              ? AskAnswerState.AlreadyAnswered()
-              : AskAnswerState.Refused({ message }),
-        }),
-    },
   )
 
 const alwaysNoteOf = (

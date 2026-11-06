@@ -582,7 +582,7 @@ path to it, a transition that throws or returns what the schema refuses, a state
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
 its own test shows each one failing. Two states that differ only by a token are one state: the
 walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
-guard and not a measurement: the machines here have 10, 11, 8, 117, 6, 6, 3 and 3 (measured), so reaching it means a
+guard and not a measurement: the machines here have 10, 11, 8, 117, 6, 6, 5, 3 and 3 (measured), so reaching it means a
 token got into a state's identity.
 
 The shape and the walker live in a member of their own, which the phone and the hub both depend on, so an app reaches no other app for code it runs. The hub's first machine imported them from the phone's member. They were pure, so nothing broke, but the graph lets an app be read only for a value both sides must agree on. They stayed out of the domain member because there a machine means a laptop, and a domain leaf with that name would read as one, which is also why their member's name says state machine in full. The machines themselves stay with their apps, and so does whatever drives one through atoms. The compiled hub takes the shape and leaves the walker, which only charts and tests import (measured in its bundle's inputs).
@@ -661,6 +661,20 @@ A held answer ends a day after Hark says it was answered, the longest a prompt s
 The answer was already durable, and stays so without a new table: it lives at Hark, and the sent notification's row says to read it again after a restart (measured: a restart of the old hub routed it once the machine attached). The audit table is what says it concluded, so a restart neither sends nor audits again. A row saying offline or timed out concludes nothing, which is what an older hub's retries left behind (a test seeds them). A hub stopping writes no row for an answer still held or still out, since the restart resumes it.
 
 This is a machine rather than one effect because it has six ways out, a delivery, a refusal, a state that moved on, a withdrawal, an age limit and a send that may not have landed going back to waiting, and the rules worth holding are about arrows: a send only from a hold on that hold's own open, one fate recorded on the way into the end, nothing after it. Whatever watches the link or the clock is one fiber per hold, in a scope that ends with the answer, inside the notifier's scope.
+:::
+
+:::tip
+The same dialog asked twice is two asks. A Claude making one Bash call twice in a row, same command and same description, showed one fingerprint both times, and herdr's sequence read 2 on the first and 4 on the second, with working between and the second dialog on screen 1415 ms after the first was answered (one Claude, Claude Code 2.1.318 on herdr 0.9.5, measured once). A dialog read off the screen is named by that fingerprint, so such an ask comes back under its old id. Claude writes the description itself, and the dialog shows it: the same command with descriptions that differed gave two fingerprints (measured once), so this takes a call repeated word for word.
+
+The phone matched its answer on the id alone. An audit read that as a dialog opening with no buttons, which it was not: they stayed and worked, a second tap going out under a new key, since an answered ask keeps its buttons on purpose. What the dialog opened with was the last answer's word, "Answered. Waiting for Claude to move on.", "Already answered" or a refusal, over a dialog waiting on the user, until the next answer replaced it (measured in the DOM tests against the old code).
+
+So an answer is a machine whose token is the asking: the terminal, the state change sequence, the id and the dialog, which is what the agent remembers an answer by. The two cannot disagree: an asking the phone offers as new is one the agent takes, and the row still showing the asking it answered keeps its word, as the agent still refuses it. What an answer came to is keyed by its idempotency key, so a retry under the same key is the same answer, and it can move between delivered and not shown as the herd catches up.
+
+It folds during render, as the activity does, because a new asking must not commit with the old word on it, and each render hears the current outcome again, so hearing a thing twice has to change nothing or the render never settles. The walk holds that.
+
+Two identical calls in one message are the case the token cannot name. A Claude told to send one Bash call twice in parallel showed one fingerprint for both, herdr held one sequence and stayed blocked, and the second dialog was on screen about 215 ms after the first was answered (one Claude, the same versions, hooks off, measured once). Nothing on the row or on the screen tells that dialog from the one just answered, so the phone keeps its word and the agent refuses a second tap as already answered (read in both, not run through them), and the laptop answers it. A row naming the dialog by its call would tell them apart (reasoned, not measured).
+
+A decline with a message stays out of the machine, on the composer's action, where a failure tells on the composer. The field holds the words it refused, and Esc may already have closed the ask, so only the composer is sure to outlive it. The buttons hold while that action is sending one, which needs no state of its own. An Always note waits on the action rather than the machine, since the grant holds even if the row moved on before the reply. Nothing marks this machine for the frame tool: an answer is out for one round trip, which can sit under the 24 frames a mark would hold it to (reasoned, not measured), and the dock's own state attribute names it in the log.
 :::
 
 ## Web
