@@ -25,6 +25,7 @@ import type * as SqlClient from 'effect/sql/SqlClient'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { AuditLog } from '@crook/agent/AuditLog'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { HubConnectionStatus } from '@crook/agent/HubConnection'
@@ -66,6 +67,7 @@ import { tokenConfig } from './HarkFakes'
 
 export type AgentFoundation =
   | MachineStateSync
+  | ClaudeSessionFiles
   | CreatedPanes
   | AuditLog
   | HerdrClient
@@ -123,6 +125,7 @@ export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[
     beforeHandoff: Option.none(),
     ask: Option.none(),
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
     ...fields,
   })
 
@@ -274,6 +277,7 @@ export const realAgent = (
     machine,
     Layer.mergeAll(
       MachineStateSync.layerTest(state),
+      ClaudeSessionFiles.layerTest(),
       CreatedPanes.layerTest(),
       discardingAgentAudit,
       herdr,

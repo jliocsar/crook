@@ -30,6 +30,7 @@ const rowTitled = (pane: string, title: string, label: Option.Option<string> = O
     beforeHandoff: Option.none(),
     ask: Option.none(),
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
   })
 
 describe('agentTitleOrPane', () => {
@@ -70,6 +71,34 @@ describe('settledStatusOf', () => {
     expect([settledStatusOf(handedOff).status, settledStatusOf(handedOff).statusChangedAt]).toEqual(
       ['blocked', DateTime.makeUnsafe(5000)],
     )
+  })
+})
+
+describe('claudeWaiting on the wire', () => {
+  const waiting = new AgentRow(
+    Struct.evolve(rowTitled('w1:p1', 'Port the herd'), {
+      claudeWaiting: () => Option.some(true),
+    }),
+  )
+
+  it('decodes a row from an agent too old to read it as not knowing', () => {
+    const older = Struct.omit(Schema.encodeSync(AgentRow)(waiting), ['claudeWaiting'])
+
+    expect(Schema.decodeSync(AgentRow)(older).claudeWaiting).toEqual(Option.none())
+  })
+
+  it('carries it through the wire, and leaves the key out when it is unknown', () => {
+    const unknown = rowTitled('w1:p2', 'Port the herd')
+
+    expect(Schema.decodeSync(AgentRow)(Schema.encodeSync(AgentRow)(waiting))).toEqual(waiting)
+    expect(Object.keys(Schema.encodeSync(AgentRow)(unknown))).not.toContain('claudeWaiting')
+  })
+
+  it('keeps a phone too old for the key reading the rest of the row', () => {
+    const olderRow = Schema.Struct({ pane: PaneId, title: Schema.String })
+    const decoded = Schema.decodeSync(olderRow)(Schema.encodeSync(AgentRow)(waiting))
+
+    expect(decoded).toEqual({ pane: waiting.pane, title: waiting.title })
   })
 })
 

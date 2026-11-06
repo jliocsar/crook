@@ -9,7 +9,9 @@ import * as Schema from 'effect/Schema'
 import {
   ClaudeSessionFileUnreadable,
   ClaudeSessionFiles,
+  PROC_ROOT,
   SessionFile,
+  startTime,
 } from '@crook/agent/ClaudeSessionFiles'
 import { flatMapSome } from '@crook/agent/OptionEffect'
 import { ClaudeSessionId } from '@crook/domain/Ids'
@@ -23,10 +25,6 @@ import type { AgentInfo, PaneProcess } from '@crook/herdr/Records'
 
 const CLAUDE_AGENT = 'claude'
 const CLAUDE_PROCESS_NAME = 'claude'
-const STAT_COMM_TERMINATOR = ') '
-const STAT_START_TIME_INDEX = 19
-
-export const PROC_ROOT = '/proc'
 
 const reportedSession = (agent: AgentInfo) =>
   agent.agent_session.pipe(
@@ -42,12 +40,6 @@ const environValue = (environ: string, key: string) =>
 const claudeRoot = (environ: string) =>
   environValue(environ, 'CLAUDE_CONFIG_DIR').pipe(
     Option.orElse(() => Option.map(environValue(environ, 'HOME'), (home) => `${home}/.claude`)),
-  )
-
-export const startTime = (stat: string) =>
-  Arr.get(
-    stat.slice(stat.lastIndexOf(STAT_COMM_TERMINATOR) + STAT_COMM_TERMINATOR.length).split(' '),
-    STAT_START_TIME_INDEX,
   )
 
 const make = (procRoot: string) =>

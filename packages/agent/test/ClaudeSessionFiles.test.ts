@@ -11,26 +11,41 @@ import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 
-import { ClaudeSessionFiles, SessionFile } from '@crook/agent/ClaudeSessionFiles'
+import { ClaudeSessionFiles, PROC_ROOT, SessionFile } from '@crook/agent/ClaudeSessionFiles'
 import { FileWatch } from '@crook/claude/FileWatch'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 
 const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 const CLEARED = ClaudeSessionId.make('5f0c2a8e-91d4-4b6e-a3c7-2e8d6b1f4a90')
 const PID = 2224797
+const DEAD_PID = 2224798
 const NOTHING_MOVED_WAIT = Duration.millis(150)
 const MOVE_WAIT = Duration.seconds(5)
 
 const encodeSessionFile = Schema.encodeSync(SessionFile)
 
+const PROC_START = '248837515'
+const WAITING = 'waiting'
+const IDLE = 'idle'
+const BUSY = 'busy'
+
 const sessionFile = (session: ClaudeSessionId) =>
-  encodeSessionFile({ pid: PID, sessionId: session, procStart: '248837515' })
+  encodeSessionFile({ pid: PID, sessionId: session, procStart: PROC_START })
+
+const fileSaying = (status: string, pid = PID) =>
+  encodeSessionFile({ pid, sessionId: SESSION, procStart: PROC_START, status })
+
+const statOf = (procStart: string) =>
+  `${PID} (claude) S ${Array.from({ length: 18 }, () => '0').join(' ')} ${procStart} 0`
 
 const services = Layer.mergeAll(BunFileSystem.layer, Path.layer)
 
-const watchingRoots = Effect.fn('watchingRoots')(function* (roots: readonly string[]) {
+const watchingRoots = Effect.fn('watchingRoots')(function* (
+  roots: readonly string[],
+  procRoot: string = PROC_ROOT,
+) {
   const context = yield* Layer.build(
-    ClaudeSessionFiles.layerAt(roots).pipe(
+    ClaudeSessionFiles.layerAt(roots, procRoot).pipe(
       Layer.provide(Layer.provideMerge(FileWatch.layer, services)),
     ),
   )
@@ -65,7 +80,116 @@ const rootWithSession = Effect.fn('rootWithSession')(function* (session: ClaudeS
   return root
 })
 
+const waitingProbe = Effect.fn('waitingProbe')(function* (firstStatus: string) {
+  const fileSystem = yield* FileSystem.FileSystem
+  const root = yield* fileSystem.makeTempDirectoryScoped()
+  const procRoot = yield* fileSystem.makeTempDirectoryScoped()
+  const file = `${root}/sessions/${PID}.json`
+
+  yield* fileSystem.makeDirectory(`${root}/sessions`)
+  yield* fileSystem.makeDirectory(`${procRoot}/${PID}`)
+  yield* fileSystem.writeFileString(`${procRoot}/${PID}/stat`, statOf(PROC_START))
+  yield* fileSystem.writeFileString(file, fileSaying(firstStatus))
+
+  const files = yield* watchingRoots([root], procRoot)
+
+  yield* awaitMove(files)
+
+  return { root, procRoot, file, files, fileSystem }
+})
+
 layer(services, { excludeTestServices: true })('ClaudeSessionFiles', (it) => {
+  it.effect('reads whether a running Claude waits, and says so when that flips', () =>
+    Effect.gen(function* () {
+      const { file, files, fileSystem } = yield* waitingProbe(IDLE)
+
+      expect(yield* files.waiting(SESSION)).toEqual(Option.some(false))
+
+      yield* fileSystem.writeFileString(file, fileSaying(WAITING))
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.waiting(SESSION)).toEqual(Option.some(true))
+
+      yield* fileSystem.writeFileString(file, fileSaying(IDLE))
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.waiting(SESSION)).toEqual(Option.some(false))
+    }),
+  )
+
+  it.effect('stays still when a pid file only goes between busy and idle', () =>
+    Effect.gen(function* () {
+      const { file, files, fileSystem } = yield* waitingProbe(IDLE)
+
+      yield* fileSystem.writeFileString(file, fileSaying(BUSY))
+
+      expect(yield* staysStill(files)).toBe(true)
+
+      yield* fileSystem.writeFileString(file, fileSaying(IDLE))
+
+      expect(yield* staysStill(files)).toBe(true)
+    }),
+  )
+
+  it.effect('holds nothing for a pid file a dead process left saying waiting', () =>
+    Effect.gen(function* () {
+      const { procRoot, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      expect(yield* files.waiting(SESSION)).toEqual(Option.some(true))
+
+      yield* fileSystem.remove(`${procRoot}/${PID}`, { recursive: true })
+
+      expect(yield* files.waiting(SESSION)).toEqual(Option.some(false))
+    }),
+  )
+
+  it.effect("holds nothing when another process has taken the dead one's pid", () =>
+    Effect.gen(function* () {
+      const { procRoot, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      yield* fileSystem.writeFileString(`${procRoot}/${PID}/stat`, statOf('999'))
+
+      expect(yield* files.waiting(SESSION)).toEqual(Option.some(false))
+    }),
+  )
+
+  it.effect('lets a live Claude answer for a session a dead one left waiting', () =>
+    Effect.gen(function* () {
+      const { root, files, fileSystem } = yield* waitingProbe(IDLE)
+
+      yield* fileSystem.writeFileString(
+        `${root}/sessions/${DEAD_PID}.json`,
+        fileSaying(WAITING, DEAD_PID),
+      )
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.waiting(SESSION)).toEqual(Option.some(false))
+    }),
+  )
+
+  it.effect('does not know for a pid file without a status, or a session no file names', () =>
+    Effect.gen(function* () {
+      const root = yield* rootWithSession(SESSION)
+      const files = yield* watchingRoots([root])
+
+      yield* awaitMove(files)
+
+      expect(yield* files.waiting(SESSION)).toEqual(Option.none())
+      expect(yield* files.waiting(CLEARED)).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('stops knowing and says so when Claude removes its pid file while it waits', () =>
+    Effect.gen(function* () {
+      const { file, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      yield* fileSystem.remove(file)
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.waiting(SESSION)).toEqual(Option.none())
+    }),
+  )
+
   it.effect('says so when a pid file comes to name another session', () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem

@@ -1,4 +1,4 @@
-import { expect, it } from '@effect/vitest'
+import { describe, expect, it } from '@effect/vitest'
 import * as Context from 'effect/Context'
 import * as Deferred from 'effect/Deferred'
 import * as Duration from 'effect/Duration'
@@ -26,7 +26,7 @@ import {
   SendKeys,
   interrupt,
 } from '@crook/domain/Command'
-import { IdempotencyKey, PaneId } from '@crook/domain/Ids'
+import { ClaudeSessionId, IdempotencyKey, PaneId } from '@crook/domain/Ids'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
   HerdrClient,
@@ -50,6 +50,7 @@ import {
   HerdrUnavailable,
   PaneNotAgent,
   PaneNotCreatedByCrook,
+  claudeWaitingRefusal,
 } from '@crook/protocol/Commands'
 
 import {
@@ -62,6 +63,7 @@ import {
   machineStateWith,
 } from './Fixtures'
 
+const SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 const AGENT_PANE = PaneId.make('w1:p1')
 const SHELL_PANE = PaneId.make('w1:p2')
 const FIRST_ACTION = IdempotencyKey.make('3f1c8a52-0b7e-4d0a-9a51-6f3f0d2f8e11')
@@ -217,6 +219,67 @@ it.effect('passes a herdr refusal through and sends again on retry', () =>
     expect(yield* sent).toHaveLength(2)
   }),
 )
+
+describe('a prompt while Claude waits on the laptop', () => {
+  const inSession = machineStateWith([agentRow({ claudeSession: Option.some(SESSION) })])
+
+  const startWaiting = Effect.fn('startWaiting')(function* (
+    responses: readonly ScriptedResponse[],
+    initial: Option.Option<boolean>,
+  ) {
+    const state = yield* SubscriptionRef.make(inSession)
+    const waiting = yield* Ref.make(initial)
+    const sent = yield* Queue.unbounded<SentRequest>()
+    const events = yield* Queue.unbounded<HerdrEvent, HerdrSubscriptionError>()
+    const context = yield* Layer.build(
+      executorWith(HerdrClient.layerTest({ responses, events, sent }), state, {
+        claudeWaiting: Ref.get(waiting),
+      }),
+    )
+
+    return { executor: Context.get(context, CommandExecutor), sent: Queue.clear(sent), waiting }
+  })
+
+  it.effect('refuses it from the status read right then, typing nothing', () =>
+    Effect.gen(function* () {
+      const { executor, sent } = yield* startWaiting([], Option.some(true))
+      const refused = yield* executor.execute(FIRST_ACTION, continuePrompt).pipe(Effect.flip)
+
+      expect(refused).toEqual(claudeWaitingRefusal())
+      expect(yield* sent).toEqual([])
+    }),
+  )
+
+  it.effect('lets the same action go once the dialog has closed', () =>
+    Effect.gen(function* () {
+      const { executor, sent, waiting } = yield* startWaiting([prompted], Option.some(true))
+
+      yield* executor.execute(FIRST_ACTION, continuePrompt).pipe(Effect.flip)
+      yield* Ref.set(waiting, Option.some(false))
+
+      expect(yield* executor.execute(FIRST_ACTION, continuePrompt)).toEqual(delivered)
+      expect(yield* sent).toHaveLength(1)
+    }),
+  )
+
+  it.effect('sends it as ever when the status is unknown', () =>
+    Effect.gen(function* () {
+      const { executor, sent } = yield* startWaiting([prompted], Option.none())
+
+      expect(yield* executor.execute(FIRST_ACTION, continuePrompt)).toEqual(delivered)
+      expect(yield* sent).toHaveLength(1)
+    }),
+  )
+
+  it.effect('still sends the keys that answer or leave the dialog', () =>
+    Effect.gen(function* () {
+      const { executor, sent } = yield* startWaiting([keysSent], Option.some(true))
+
+      expect(yield* executor.execute(FIRST_ACTION, interrupt(AGENT_PANE))).toEqual(delivered)
+      expect(yield* sent).toHaveLength(1)
+    }),
+  )
+})
 
 it.effect('remembers an unconfirmed delivery, so a retry never sends it twice', () =>
   Effect.gen(function* () {

@@ -5,15 +5,23 @@ import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { type AnswerAsk, type ClosePane, type PaneCommand, targetPane } from '@crook/domain/Command'
-import { AskNotPending, PaneNotAgent, PaneNotCreatedByCrook } from '@crook/protocol/Commands'
+import {
+  AskNotPending,
+  type HerdrRefusedCommand,
+  PaneNotAgent,
+  PaneNotCreatedByCrook,
+  claudeWaitingRefusal,
+} from '@crook/protocol/Commands'
 
 const make = Effect.gen(function* () {
   const sync = yield* MachineStateSync
   const createdPanes = yield* CreatedPanes
+  const sessionFiles = yield* ClaudeSessionFiles
 
   const admitClose = (close: ClosePane) =>
     close.confirmed
@@ -30,10 +38,22 @@ const make = Effect.gen(function* () {
       ? Effect.void
       : Effect.fail(new AskNotPending({ pane: answer.pane, ask: answer.ask }))
 
+  const admitPrompt = (row: AgentRow) =>
+    Option.match(row.claudeSession, {
+      onNone: () => Effect.void,
+      onSome: (session) =>
+        sessionFiles.waiting(session).pipe(
+          Effect.filterOrFail(
+            (waiting) => !Option.contains(waiting, true),
+            () => claudeWaitingRefusal(),
+          ),
+        ),
+    })
+
   const admitTarget = (command: PaneCommand, row: AgentRow) =>
     Match.value(command).pipe(
       Match.tagsExhaustive({
-        Prompt: () => Effect.void,
+        Prompt: () => admitPrompt(row),
         SendKeys: () => Effect.void,
         RenameAgent: () => Effect.void,
         ClosePane: admitClose,
@@ -61,7 +81,10 @@ export class CommandPolicy extends Context.Service<
   {
     readonly admit: (
       command: PaneCommand,
-    ) => Effect.Effect<AgentRow, PaneNotAgent | PaneNotCreatedByCrook | AskNotPending>
+    ) => Effect.Effect<
+      AgentRow,
+      PaneNotAgent | PaneNotCreatedByCrook | AskNotPending | HerdrRefusedCommand
+    >
   }
 >()('@crook/agent/CommandPolicy') {
   static readonly layer = Layer.effect(this, make)

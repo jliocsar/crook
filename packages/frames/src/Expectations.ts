@@ -199,6 +199,7 @@ export const TIMELINE_EXPECTATIONS = {
   'machine/forget-stays-pending': story({}),
   'composer/send-answered-past-the-delay': story(A_CHAT_WITH_ROWS),
   'composer/send-failed-then-edited': story(A_CHAT_WITH_ROWS),
+  'composer/claude-waiting-ends': story(A_CHAT_WITH_ROWS),
   'composer/stop-failed-then-turn-ends': story(A_CHAT_WITH_ROWS),
   'chat/restart-gives-up': story(
     { thread: inSequence('thread-rows'), dock: inSequence('composer', 'edge-card') },

@@ -156,6 +156,7 @@ const startSync = Effect.fn('startSync')(function* (
   const runningCounts = yield* SubscriptionRef.make(NO_RUNNING_COUNTS)
   const followed = yield* Queue.unbounded<HashSet.HashSet<ClaudeSessionId>>()
   const sessionMoves = yield* Queue.unbounded<void>()
+  const claudeWaiting = yield* Ref.make(Option.none<boolean>())
   const headMoves = yield* Queue.unbounded<void>()
   const followedFolders = yield* Queue.unbounded<HashSet.HashSet<string>>()
   const paneSessions = new Map([
@@ -186,7 +187,7 @@ const startSync = Effect.fn('startSync')(function* (
       PendingAsks.layerTest(asks),
       recentPlaces,
       ClaudeSessions.layerTest(paneSessions),
-      ClaudeSessionFiles.layerTest([], Stream.fromQueue(sessionMoves)),
+      ClaudeSessionFiles.layerTest([], Stream.fromQueue(sessionMoves), Ref.get(claudeWaiting)),
       GitBranches.layerTest(folderBranches),
       CheckoutHeads.layerTest(Stream.fromQueue(headMoves), (folders) =>
         Queue.offer(followedFolders, folders),
@@ -212,6 +213,7 @@ const startSync = Effect.fn('startSync')(function* (
     attempts,
     answerRead,
     sessionMoves,
+    claudeWaiting,
     headMoves,
     followedFolders,
     paneSessions,
@@ -254,6 +256,18 @@ it.effect('counts the running subagents of the Claude sessions its agents are in
     expect(Array.from(sessions)).toEqual([SESSION])
     expect(counted.agents.map((row) => row.runningSubagents)).toEqual([Option.some(2)])
     expect(settled.agents.map((row) => row.runningSubagents)).toEqual([Option.some(0)])
+  }),
+)
+
+it.effect('reads whether Claude waits on each refresh', () =>
+  Effect.gen(function* () {
+    const { sync, answerRead, claudeWaiting } = yield* startSync(working)
+
+    yield* Ref.set(claudeWaiting, Option.some(true)).pipe(Effect.andThen(answerRead(working)))
+
+    const waiting = yield* stateAt(sync, 1)
+
+    expect(waiting.agents.map((row) => row.claudeWaiting)).toEqual([Option.some(true)])
   }),
 )
 

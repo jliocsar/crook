@@ -44,6 +44,7 @@ export const agent = (
     readonly createdByCrook?: boolean
     readonly claudeSession?: ClaudeSessionId
     readonly runningSubagents?: number
+    readonly claudeWaiting?: boolean
   } = {},
 ) =>
   new AgentRow({
@@ -63,6 +64,7 @@ export const agent = (
     beforeHandoff: Option.none(),
     ask: Option.fromUndefinedOr(options.ask),
     runningSubagents: Option.fromUndefinedOr(options.runningSubagents),
+    claudeWaiting: Option.fromUndefinedOr(options.claudeWaiting),
   })
 
 export const machine = (

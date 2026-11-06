@@ -57,6 +57,7 @@ const agentAt = (pane: PaneId, stateChangeSeq: number, terminal: TerminalId = BE
     beforeHandoff: Option.none(),
     ask: Option.none(),
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
   })
 
 const handedOffAt = (stateChangeSeq: number, status: AgentStatus) =>
@@ -84,6 +85,7 @@ const handedOffAt = (stateChangeSeq: number, status: AgentStatus) =>
     ),
     ask: Option.none(),
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
   })
 
 const stateOf = (

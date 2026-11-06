@@ -149,6 +149,7 @@ const syncingFoundation = Effect.fn('syncingFoundation')(function* (
   const ledger = yield* SubscriptionRef.make(emptyHookLedger)
   const host = Layer.mergeAll(
     herdr,
+    ClaudeSessionFiles.layerTest(),
     CreatedPanes.layerTest(),
     GitBranches.layerTest(new Map([[CWD, BRANCH]])),
     discardingAgentAudit,
@@ -167,7 +168,6 @@ const syncingFoundation = Effect.fn('syncingFoundation')(function* (
   const sync = Layer.provide(MachineStateSync.layer, [
     pendingAsks,
     ClaudeSessions.layerTest(new Map()),
-    ClaudeSessionFiles.layerTest(),
     CheckoutHeads.layerTest(),
     RecentPlaces.layerTest(),
     runningSubagents,

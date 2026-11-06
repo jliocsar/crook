@@ -6,6 +6,11 @@ import { Command, CommandReceipt } from '@crook/domain/Command'
 import { AskId, IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import { shellQuoted } from '@crook/domain/ShellQuoting'
 
+export const CLAUDE_WAITING_CODE = 'claude_waiting'
+
+export const CLAUDE_WAITING_NOTE =
+  'Claude is waiting on the laptop, and its dialog would take this message. Answer it there, then send.'
+
 export const CommandId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
   Schema.brand('CommandId'),
 )
@@ -39,9 +44,17 @@ export class HerdrRefusedCommand extends Schema.TaggedError<HerdrRefusedCommand>
   { code: Schema.String, detail: Schema.String },
 ) {
   override get message(): string {
-    return `Herdr refused the command with ${this.code}: ${this.detail}. Nothing was sent to the agent; look at the agent before trying again.`
+    return this.code === CLAUDE_WAITING_CODE
+      ? CLAUDE_WAITING_NOTE
+      : `Herdr refused the command with ${this.code}: ${this.detail}. Nothing was sent to the agent; look at the agent before trying again.`
   }
 }
+
+export const claudeWaitingRefusal = () =>
+  new HerdrRefusedCommand({
+    code: CLAUDE_WAITING_CODE,
+    detail: 'Claude is waiting on a dialog on the laptop, which would take this prompt',
+  })
 
 export class HerdrUnavailable extends Schema.TaggedError<HerdrUnavailable>()(
   'HerdrUnavailable',
