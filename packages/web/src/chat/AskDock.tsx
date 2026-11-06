@@ -237,7 +237,9 @@ function QuestionDock({
 function UnknownDock({ ask, controls }: { ask: UnknownAsk; controls: AnswerControls }) {
   return (
     <>
-      <p className="text-base leading-6 font-semibold">{askTitle(ask)}</p>
+      <p data-slot="ask-unreadable" className="text-base leading-6 font-semibold">
+        {askTitle(ask)}
+      </p>
       <OutputText text={ask.screen} className={DETAIL_CAP} />
       <p className="text-muted-foreground text-sm leading-5">{UNREADABLE_HINT}</p>
       <AnswerButtons buttons={DECLINE_BUTTONS} controls={controls} />

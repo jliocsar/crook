@@ -1,5 +1,7 @@
-import { expect, it } from '@effect/vitest'
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
+import { expect, it, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
+import * as Clock from 'effect/Clock'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
@@ -11,6 +13,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
+import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
@@ -20,12 +23,19 @@ import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
+import { HookInbox } from '@crook/agent/HookInbox'
+import { PaneScreens } from '@crook/agent/PaneScreens'
 import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { HERDR_RECONNECT_BASE, MachineStateSync } from '@crook/agent/MachineStateSync'
 import { PendingAsks } from '@crook/agent/PendingAsks'
 import { NO_RUNNING_COUNTS, RunningSubagents } from '@crook/agent/RunningSubagents'
+import { emptyHookLedger } from '@crook/claude/HookLedger'
+import { LastTurn } from '@crook/claude/LastTurn'
+import { parseDialog } from '@crook/claude/ScreenDialog'
+import { spikeScreen } from '@crook/claude/fixtures/SpikeScreens.ts'
+import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import { type AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
-import { type Ask, UnknownAsk } from '@crook/domain/Ask'
+import { type Ask, PermissionAsk, UnknownAsk } from '@crook/domain/Ask'
 import { AskId, ClaudeSessionId, PaneId } from '@crook/domain/Ids'
 import { isHerdrLost, isResync, panePresence } from '@crook/domain/MachineState'
 import { Checkout, Place } from '@crook/domain/Place'
@@ -54,12 +64,17 @@ const LATER_SESSION = ClaudeSessionId.make('edc67541-7435-412f-8d59-25e6abe64625
 const BRANCH = 'feat/jc-97-98-registry-seen'
 const CWD = '/home/jliocsar/Projects/crook'
 const BACKOFF_ATTEMPTS = 8
+const BLANK_SCREEN = 'Thinking…\n'
+const JUST_BEFORE_THE_HOLD_ENDS = Duration.millis(999)
 
 const expectedBackoffMillis = Arr.makeBy(BACKOFF_ATTEMPTS, (attempt) =>
   Duration.toMillis(
     Duration.min(Duration.times(HERDR_RECONNECT_BASE, 2 ** attempt), RECONNECT_CAP),
   ),
 )
+
+const isPermission = Schema.is(PermissionAsk)
+const isUnknown = Schema.is(UnknownAsk)
 
 const herdrStopped = new HerdrUnreachable({
   socketPath: '/home/jliocsar/.config/herdr/herdr.sock',
@@ -138,6 +153,7 @@ const startSync = Effect.fn('startSync')(function* (
   subscribeFailures: readonly HerdrSubscriptionError[] = [],
   asks: ReadonlyMap<string, Ask> = new Map(),
   recentPlaces: Layer.Layer<RecentPlaces> = RecentPlaces.layerTest(),
+  pendingAsks: Layer.Layer<PendingAsks> = PendingAsks.layerTest(asks),
 ) {
   const readStarted = yield* Queue.unbounded<void>()
   const replies = yield* Queue.unbounded<SessionSnapshot>()
@@ -175,7 +191,7 @@ const startSync = Effect.fn('startSync')(function* (
       herdr,
       CreatedPanes.layerTest(),
       RunningSubagents.layerTest(runningCounts, (sessions) => Queue.offer(followed, sessions)),
-      PendingAsks.layerTest(asks),
+      pendingAsks,
       recentPlaces,
       ClaudeSessions.layerTest(paneSessions),
       ClaudeSessionFiles.layerTest([], Stream.fromQueue(sessionMoves), Ref.get(claudeWaiting)),
@@ -289,6 +305,72 @@ it.effect('re-reads on every event and bumps the version only when the state cha
     expect(state.agents.map((row) => row.status)).toEqual(['blocked'])
   }),
 )
+
+layer(BunFileSystem.layer)('a dialog closing under a blocked read', (fileIt) => {
+  fileIt.effect('reads the screen by itself when the hold ends with herdr still blocked', () =>
+    Effect.gen(function* () {
+      const dialogScreen = yield* spikeScreen('12-native-bash-t20')
+      const screens = yield* Ref.make([dialogScreen])
+      const reads = yield* Ref.make(0)
+      const leftWaitingAt = yield* Ref.make(Option.none<number>())
+      const ledger = yield* SubscriptionRef.make(emptyHookLedger)
+      const realAsks = Layer.provide(PendingAsks.layer, [
+        BunFileSystem.layer,
+        HookInbox.layerTest(ledger),
+        Layer.mock(PaneScreens, {
+          read: () =>
+            Ref.update(reads, (count) => count + 1).pipe(
+              Effect.andThen(Ref.get(screens)),
+              Effect.map(([screen = '']) => ({ screen, dialog: parseDialog(screen) })),
+            ),
+        }),
+        Layer.mock(TranscriptLocator, { locate: () => Effect.succeedNone }),
+        Layer.mock(LastTurn, { read: () => Effect.succeed([]) }),
+        Layer.mock(ClaudeSessionFiles, { leftWaitingAt: () => Ref.get(leftWaitingAt) }),
+      ])
+      const blocked = sessionSnapshot([agentInfo({ agent_status: 'blocked' })])
+      const { sync, subscriptions, answerRead, readStarted } = yield* startSync(
+        blocked,
+        [],
+        new Map(),
+        RecentPlaces.layerTest(),
+        realAsks,
+      )
+      const subscription = yield* Queue.take(subscriptions)
+
+      yield* answerRead(blocked)
+
+      const shown = (yield* sync.current).agents.map((row) => row.ask)
+
+      expect(Arr.every(shown, (ask) => Option.exists(ask, isPermission))).toBe(true)
+
+      const readsBefore = yield* Ref.get(reads)
+
+      yield* Ref.set(screens, [BLANK_SCREEN])
+      yield* Ref.set(leftWaitingAt, Option.some(yield* Clock.currentTimeMillis))
+      yield* Queue.offer(subscription.events, paneClosed)
+      yield* answerRead(blocked)
+      yield* Effect.yieldNow.pipe(
+        Effect.repeat({ until: () => Ref.getUnsafe(reads) > readsBefore }),
+      )
+      yield* Effect.yieldNow
+
+      expect((yield* sync.current).agents.map((row) => row.ask)).toEqual(shown)
+
+      yield* TestClock.adjust(JUST_BEFORE_THE_HOLD_ENDS)
+      yield* Effect.yieldNow
+
+      expect(yield* Queue.size(readStarted)).toBe(0)
+
+      yield* TestClock.adjust(Duration.millis(1))
+      yield* answerRead(blocked)
+
+      const after = yield* stateAt(sync, 1)
+
+      expect(after.agents.map((row) => Option.exists(row.ask, isUnknown))).toEqual([true])
+    }),
+  )
+})
 
 it.effect('publishes the ask of a blocked agent, and drops it once the agent moves on', () =>
   Effect.gen(function* () {

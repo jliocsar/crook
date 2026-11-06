@@ -284,6 +284,11 @@ export const TIMELINE_EXPECTATIONS = {
     dock: inSequence('composer'),
     ask: inSequence('ask-dock'),
   }),
+  'ask/answered-before-herdr-moves': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+    ask: inSequence('ask-dock'),
+  }),
   'ask/same-dialog-again': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
