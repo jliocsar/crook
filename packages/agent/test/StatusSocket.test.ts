@@ -131,7 +131,7 @@ layer(BunServices.layer, { excludeTestServices: true })('StatusSocket', (live) =
 
 layer(BunServices.layer)('StatusSocket with an agent that went silent', (it) => {
   it.effect(
-    'calls an agent that took the request and says nothing silent only at the end of the budget',
+    'reports an agent that read the request and never answers only once the budget runs out',
     () =>
       Effect.gen(function* () {
         const path = yield* scratchSocket()
