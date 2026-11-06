@@ -39,7 +39,7 @@ const attemptOfEvent = (event: AnswerEvent): Option.Option<number> =>
     Match.tags({
       AskOpen: ({ attempt }) => Option.some(attempt),
       AskMovedOn: ({ attempt }) => Option.some(attempt),
-      AnswerAgedOut: ({ attempt }) => Option.some(attempt),
+      DeadlinePassed: ({ attempt }) => Option.some(attempt),
       SendFinished: ({ attempt }) => Option.some(attempt),
     }),
     Match.orElse(() => Option.none()),
@@ -54,9 +54,9 @@ const holdsAnAnswer = (state: AnswerState) =>
   AnswerState.guards.SendingWithdrawn(state)
 
 const eventsAt = (attempt: number): readonly AnswerEvent[] => [
-  AnswerEvent.cases.AskOpen.make({ attempt }),
+  AnswerEvent.cases.AskOpen.make({ attempt, link: 0 }),
   AnswerEvent.cases.AskMovedOn.make({ attempt }),
-  AnswerEvent.cases.AnswerAgedOut.make({ attempt }),
+  AnswerEvent.cases.DeadlinePassed.make({ attempt }),
   AnswerEvent.cases.SendFinished.make({ attempt, failure: Option.none() }),
   AnswerEvent.cases.SendFinished.make({ attempt, failure: Option.some(OFFLINE) }),
   AnswerEvent.cases.SendFinished.make({ attempt, failure: Option.some(TIMED_OUT) }),

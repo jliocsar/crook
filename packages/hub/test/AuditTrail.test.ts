@@ -1,6 +1,7 @@
 import { expect, layer } from '@effect/vitest'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Deferred from 'effect/Deferred'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
@@ -11,10 +12,12 @@ import * as SqlClient from 'effect/sql/SqlClient'
 import { SqlError } from 'effect/sql/SqlError'
 
 import { AuditPolicy, DEFAULT_AUDIT_ARGUMENT_LIMIT, REDACT_NOTHING } from '@crook/domain/Audit'
-import { MachineId } from '@crook/domain/Ids'
+import { IdempotencyKey, MachineId } from '@crook/domain/Ids'
+import { INCONCLUSIVE_FAILURES } from '@crook/hub/ApprovalAnswerMachine'
 import { AuditTrail, CrookHubAuditPolicy, HubAuditRecord } from '@crook/hub/AuditTrail'
 import * as Database from '@crook/hub/Database'
 import { MachineNotInHerd } from '@crook/protocol/ClientApi'
+import { CommandTimedOut, MachineOffline } from '@crook/protocol/Commands'
 
 const LAPTOP = MachineId.make('laptop')
 const OWNER = 'owner@example.com'
@@ -120,6 +123,25 @@ layer(trail)('AuditTrail', (it) => {
       expect(nothing.redactedArguments).toEqual([])
       expect(Exit.isFailure(misspelt)).toBe(true)
       expect(Exit.isFailure(padded)).toBe(true)
+    }),
+  )
+})
+
+layer(trail)('AuditTrail reading an answer', (it) => {
+  it.effect('reads the failures a send can still recover from as not concluding its key', () =>
+    Effect.gen(function* () {
+      const audit = yield* AuditTrail
+      const key = IdempotencyKey.make('unsure-send')
+      const recorded = audit.audited({ ...forgetLaptop, idempotencyKey: Option.some(key) })
+
+      yield* Effect.exit(recorded(Effect.fail(new MachineOffline({ machine: LAPTOP }))))
+      yield* Effect.exit(
+        recorded(
+          Effect.fail(new CommandTimedOut({ machine: LAPTOP, timeout: Duration.seconds(5) })),
+        ),
+      )
+
+      expect(yield* audit.hasConcluded(key, INCONCLUSIVE_FAILURES)).toBe(false)
     }),
   )
 })

@@ -45,7 +45,7 @@ const FIRST_SEND = AnswerState.cases.Sending.make({
   attempt: 0,
 })
 
-const OPEN = AnswerEvent.cases.AskOpen.make({ attempt: 0 })
+const OPEN = AnswerEvent.cases.AskOpen.make({ attempt: 0, link: 0 })
 const DELIVERED = AnswerEvent.cases.SendFinished.make({ attempt: 0, failure: Option.none() })
 
 const TIMED_OUT_SEND = AnswerEvent.cases.SendFinished.make({
@@ -116,7 +116,7 @@ describe('the approval answer machine', () => {
       recorded(AnswerFate.Failed({ failure: OFFLINE })),
     ])
     expect(
-      approvalAnswerMachine.transition(held, AnswerEvent.cases.AnswerAgedOut.make({ attempt: 1 })),
+      approvalAnswerMachine.transition(held, AnswerEvent.cases.DeadlinePassed.make({ attempt: 1 })),
     ).toEqual([ENDED, recorded(AnswerFate.AgedOut())])
   })
 

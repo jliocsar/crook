@@ -17,7 +17,9 @@ import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { AnswerAsk, Approve, Decline } from '@crook/domain/Command'
 import { AskId, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import { defaultNotificationPrefs } from '@crook/domain/Notifications'
-import { CommandRouter } from '@crook/hub/CommandRouter'
+import type { MachineState } from '@crook/domain/MachineState'
+
+import { type CommandLink, CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
 import { HARK_REQUEST_SPACING, HarkId } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
@@ -479,19 +481,22 @@ const approvingHark =
     return isCancel(call) ? interactionWaited('canceled') : acceptingHark(call)
   }
 
+const publishOver = (herd: Herd['Service'], link: CommandLink, state: MachineState) =>
+  herd.publish(LAPTOP, state).pipe(Effect.andThen(link.published(state)))
+
 it.effect(
   'asks for a permission on the lock screen and routes the answer as AnswerAsk keyed by the interaction',
   () =>
     Effect.gen(function* () {
       const { calls, start } = yield* withNotifier(approvingHark('approved'))
       const { herd, router } = yield* start
-      const routed = yield* Effect.forkScoped(
-        router.attach(LAPTOP).pipe(Stream.take(1), Stream.runCollect),
-        { startImmediately: true },
-      )
+      const link = yield* router.linkFor(LAPTOP)
+      const routed = yield* Effect.forkScoped(link.attach.pipe(Stream.take(1), Stream.runCollect), {
+        startImmediately: true,
+      })
 
       yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
-      yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+      yield* publishOver(herd, link, blockedOnBashAt(2))
       const asked = yield* nextCallWhere(calls, isAskCreation)
       const waited = yield* nextCallWhere(calls, isWait)
       const commands = yield* advancingClock(Fiber.join(routed))
@@ -569,23 +574,24 @@ it.effect(
 
 const attachedAgent = Effect.fn('attachedAgent')(function* (router: CommandRouter['Service']) {
   const inbox = yield* Queue.unbounded<RoutedCommand>()
+  const link = yield* router.linkFor(LAPTOP)
 
   yield* Effect.forkScoped(
-    router.attach(LAPTOP).pipe(Stream.runForEach((routed) => Queue.offer(inbox, routed))),
+    link.attach.pipe(Stream.runForEach((routed) => Queue.offer(inbox, routed))),
     { startImmediately: true },
   )
 
-  return inbox
+  return { inbox, link }
 })
 
 it.effect('routes a denial on the lock screen as a Decline without a message', () =>
   Effect.gen(function* () {
     const { calls, start } = yield* withNotifier(approvingHark('denied'))
     const { herd, router } = yield* start
-    const inbox = yield* attachedAgent(router)
+    const { inbox, link } = yield* attachedAgent(router)
 
     yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
-    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    yield* publishOver(herd, link, blockedOnBashAt(2))
     yield* nextCallWhere(calls, isWait)
     const routed = yield* advancingClock(Queue.take(inbox))
 
@@ -604,10 +610,10 @@ it.effect('sends a lock-screen answer once when the agent says the ask is no lon
   Effect.gen(function* () {
     const { calls, start } = yield* withNotifier(approvingHark('approved'))
     const { herd, router } = yield* start
-    const inbox = yield* attachedAgent(router)
+    const { inbox, link } = yield* attachedAgent(router)
 
     yield* herd.publish(LAPTOP, stateAt(1, 'working', 6))
-    yield* herd.publish(LAPTOP, blockedOnBashAt(2))
+    yield* publishOver(herd, link, blockedOnBashAt(2))
     yield* nextCallWhere(calls, isWait)
     const routed = yield* advancingClock(Queue.take(inbox))
 

@@ -30,7 +30,7 @@ import {
   approvalAnswerMachine,
 } from '@crook/hub/ApprovalAnswerMachine'
 import { AuditTrail } from '@crook/hub/AuditTrail'
-import { CommandRouter } from '@crook/hub/CommandRouter'
+import { CommandRouter, type LiveLink } from '@crook/hub/CommandRouter'
 import {
   HARK_APPROVAL_EXPIRY,
   type HarkApprovalRead,
@@ -39,7 +39,6 @@ import {
   gaveUpOnBug,
   pauseOrGiveUp,
 } from '@crook/hub/HarkClient'
-import { Herd } from '@crook/hub/Herd'
 import { type SentNotification, notificationKey, verdictOn } from '@crook/hub/NotificationPlan'
 
 interface AnswerRun {
@@ -49,8 +48,14 @@ interface AnswerRun {
 }
 
 interface Judged {
-  readonly state: MachineState
+  readonly live: LiveLink
   readonly movedOn: boolean
+}
+
+interface SendOrder {
+  readonly attempt: number
+  readonly answer: AskAnswer
+  readonly link: number
 }
 
 const HARK_ACTOR = 'hark'
@@ -139,15 +144,14 @@ const makeAnswerReader = Effect.gen(function* () {
 const judgedOn = (
   approval: SentNotification,
   triedAgainst: Option.Option<MachineState>,
-  state: MachineState,
-  isAttached: boolean,
+  live: LiveLink,
 ): Option.Option<Judged> =>
-  Match.value(verdictOn(approval, state)).pipe(
-    Match.when('movedOn', () => Option.some({ state, movedOn: true })),
+  Match.value(verdictOn(approval, live.state)).pipe(
+    Match.when('movedOn', () => Option.some({ live, movedOn: true })),
     Match.when('raised', () =>
       Option.liftPredicate(
-        { state, movedOn: false },
-        () => isAttached && !Option.exists(triedAgainst, (tried) => tried === state),
+        { live, movedOn: false },
+        () => !Option.exists(triedAgainst, (tried) => tried === live.state),
       ),
     ),
     Match.orElse(() => Option.none()),
@@ -155,16 +159,13 @@ const judgedOn = (
 
 const makeHold = Effect.gen(function* () {
   const router = yield* CommandRouter
-  const herd = yield* Herd
 
   const nextJudgement = (
     approval: SentNotification,
     triedAgainst: Option.Option<MachineState>,
   ): Effect.Effect<Judged> =>
-    Stream.zipLatest(herd.liveState(approval.machine), router.attached(approval.machine)).pipe(
-      Stream.map(([state, isAttached]) =>
-        Option.flatMap(state, (live) => judgedOn(approval, triedAgainst, live, isAttached)),
-      ),
+    router.liveLink(approval.machine).pipe(
+      Stream.map(Option.flatMap((live) => judgedOn(approval, triedAgainst, live))),
       Stream.filter(Option.isSome),
       Stream.map((judged) => judged.value),
       Stream.runHead,
@@ -178,7 +179,7 @@ const makeHold = Effect.gen(function* () {
     deadline: number,
   ) {
     const left = deadline - (yield* Clock.currentTimeMillis)
-    const agedOut = AnswerEvent.cases.AnswerAgedOut.make({ attempt })
+    const agedOut = AnswerEvent.cases.DeadlinePassed.make({ attempt })
 
     if (left <= 0) {
       return agedOut
@@ -197,9 +198,9 @@ const makeHold = Effect.gen(function* () {
       return AnswerEvent.cases.AskMovedOn.make({ attempt })
     }
 
-    yield* Ref.set(triedAgainst, Option.some(judged.value.state))
+    yield* Ref.set(triedAgainst, Option.some(judged.value.live.state))
 
-    return AnswerEvent.cases.AskOpen.make({ attempt })
+    return AnswerEvent.cases.AskOpen.make({ attempt, link: judged.value.live.link })
   })
 })
 
@@ -215,12 +216,11 @@ export const makeApprovalAnswers = Effect.gen(function* () {
   const send = Effect.fn('ApprovalAnswers.send')(function* (
     approval: SentNotification,
     ask: AskId,
-    attempt: number,
-    answer: AskAnswer,
+    { attempt, answer, link }: SendOrder,
   ) {
     const command = new AnswerAsk({ pane: approval.pane, ask, answer })
     const failure = yield* router
-      .send(approval.machine, IdempotencyKey.make(approval.harkId), command)
+      .sendOver(approval.machine, link, IdempotencyKey.make(approval.harkId), command)
       .pipe(Effect.as(Option.none()), Effect.catch(Effect.succeedSome))
 
     return AnswerEvent.cases.SendFinished.make({ attempt, failure })
@@ -248,7 +248,7 @@ export const makeApprovalAnswers = Effect.gen(function* () {
       Effect.andThen(Effect.logInfo(`Answered the approval of ${what} from the lock screen.`)),
       Effect.catch((failure) =>
         Effect.logError(
-          `The answer given on the lock screen for ${what} did not reach the agent, so it stays unanswered unless it is answered in crook or on the laptop: ${failure.message}`,
+          `The answer given on the lock screen for ${what} has no delivery the hub knows of, so unless it landed unconfirmed the agent stays unanswered until it is answered in crook or on the laptop: ${failure.message}`,
         ),
       ),
       Effect.uninterruptible,
@@ -279,7 +279,7 @@ export const makeApprovalAnswers = Effect.gen(function* () {
             ),
           ),
         Hold: ({ attempt, deadline }) => feed(hold(approval, triedAgainst, attempt, deadline)),
-        Send: ({ attempt, answer }) => feed(send(approval, ask, attempt, answer)),
+        Send: (order) => feed(send(approval, ask, order)),
         Record: ({ answer, fate }) => record(approval, ask, answer, fate),
       })
 

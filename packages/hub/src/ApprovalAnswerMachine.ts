@@ -18,7 +18,7 @@ export type AnswerFate = Data.TaggedEnum<{
 export type AnswerCommand = Data.TaggedEnum<{
   Poll: Record<never, never>
   Hold: { readonly attempt: number; readonly deadline: number }
-  Send: { readonly attempt: number; readonly answer: AskAnswer }
+  Send: { readonly attempt: number; readonly answer: AskAnswer; readonly link: number }
   Record: { readonly answer: AskAnswer; readonly fate: AnswerFate }
 }>
 
@@ -41,9 +41,9 @@ export type AnswerState = typeof AnswerState.Type
 export const AnswerEvent = Schema.TaggedUnion({
   HarkAnswered: { answer: AskAnswer, deadline: Schema.Finite },
   HarkClosed: {},
-  AskOpen: { attempt: Schema.Int },
+  AskOpen: { attempt: Schema.Int, link: Schema.Int },
   AskMovedOn: { attempt: Schema.Int },
-  AnswerAgedOut: { attempt: Schema.Int },
+  DeadlinePassed: { attempt: Schema.Int },
   SendFinished: { attempt: Schema.Int, failure: Schema.Option(CommandFailure) },
   Withdrawn: {},
 })
@@ -137,16 +137,16 @@ const answerTransition = (state: AnswerState, event: AnswerEvent): AnswerStep =>
       HarkAnswered: ({ answer, deadline }) =>
         AnswerState.guards.Polling(state) ? holding(answer, deadline, 0, Option.none()) : to(state),
       HarkClosed: () => to(AnswerState.guards.Polling(state) ? ENDED : state),
-      AskOpen: ({ attempt }) =>
+      AskOpen: ({ attempt, link }) =>
         whileHolding(state, attempt, ({ answer, deadline }) => [
           AnswerState.cases.Sending.make({ answer, deadline, attempt }),
-          [AnswerCommand.Send({ attempt, answer })],
+          [AnswerCommand.Send({ attempt, answer, link })],
         ]),
       AskMovedOn: ({ attempt }) =>
         whileHolding(state, attempt, ({ answer, lastFailure }) =>
           ended(answer, fateOfLeaving(lastFailure)),
         ),
-      AnswerAgedOut: ({ attempt }) =>
+      DeadlinePassed: ({ attempt }) =>
         whileHolding(state, attempt, ({ answer }) => ended(answer, AnswerFate.AgedOut())),
       SendFinished: ({ attempt, failure }) =>
         isCurrentSend(state, attempt) ? afterSend(state, failure) : to(state),

@@ -40,7 +40,7 @@ interface RaisedEvent {
 
 export type NotificationsByPane<Notification> = HashMap.HashMap<GlobalPaneId, Notification>
 
-export type RaisedVerdict = 'raised' | 'movedOn' | 'undecided'
+type RaisedVerdict = 'raised' | 'movedOn' | 'undecided'
 
 export type NotificationStep = Data.TaggedEnum<{
   Withdraw: { readonly sent: SentNotification }

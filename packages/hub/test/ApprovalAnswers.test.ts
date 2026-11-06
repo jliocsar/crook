@@ -17,6 +17,7 @@ import * as TestClock from 'effect/testing/TestClock'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { InputDelivered } from '@crook/domain/Command'
 import { AskId, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
+import type { MachineState } from '@crook/domain/MachineState'
 import { HubAuditRecord } from '@crook/hub/AuditTrail'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
@@ -145,20 +146,30 @@ const auditRowsOnce = Effect.fn('auditRowsOnce')(function* (sql: SqlClient.SqlCl
 const rowsReaching = (sql: SqlClient.SqlClient, count: number) =>
   auditRowsOnce(sql).pipe(Effect.repeat({ until: (rows) => rows.length >= count }))
 
-const openLink = Effect.fn('openLink')(function* (
+const dialLink = Effect.fn('dialLink')(function* (
   herd: Herd['Service'],
   router: CommandRouter['Service'],
 ) {
   const inbox = yield* Queue.unbounded<RoutedCommand>()
-  const link = yield* Stream.merge(
-    Stream.fromEffectDrain(herd.hold(LAPTOP, hello)),
-    router.attach(LAPTOP),
-  ).pipe(
+  const link = yield* router.linkFor(LAPTOP)
+  const attach = Stream.merge(Stream.fromEffectDrain(herd.hold(LAPTOP, hello)), link.attach).pipe(
     Stream.runForEach((routed) => Queue.offer(inbox, routed)),
     Effect.forkScoped({ startImmediately: true }),
   )
+  const publish = (state: MachineState) =>
+    herd.publish(LAPTOP, state).pipe(Effect.andThen(link.published(state)))
 
-  return { inbox, close: Fiber.interrupt(link) }
+  return { inbox, attach, publish }
+})
+
+const openLink = Effect.fn('openLink')(function* (
+  herd: Herd['Service'],
+  router: CommandRouter['Service'],
+) {
+  const { inbox, attach, publish } = yield* dialLink(herd, router)
+  const attachment = yield* attach
+
+  return { inbox, publish, close: Fiber.interrupt(attachment) }
 })
 
 const answerWhileAway = Effect.fn('answerWhileAway')(function* (
@@ -169,8 +180,8 @@ const answerWhileAway = Effect.fn('answerWhileAway')(function* (
 ) {
   const link = yield* openLink(herd, router)
 
-  yield* herd.publish(LAPTOP, working(1))
-  yield* herd.publish(LAPTOP, blockedAt(2))
+  yield* link.publish(working(1))
+  yield* link.publish(blockedAt(2))
   yield* nextCallWhere(calls, isWait)
   yield* link.close
   prompt.said = 'approved'
@@ -201,7 +212,7 @@ it.effect(
       const callsWhileAway = yield* Queue.clear(calls)
       const back = yield* openLink(herd, router)
 
-      yield* herd.publish(LAPTOP, blockedAt(3))
+      yield* back.publish(blockedAt(3))
       const routed = yield* Queue.take(back.inbox)
 
       yield* completeDelivered(router, routed)
@@ -211,10 +222,10 @@ it.effect(
       yield* back.close
       const again = yield* openLink(herd, router)
 
-      yield* herd.publish(LAPTOP, blockedAt(4))
+      yield* again.publish(blockedAt(4))
 
       expect(rowsWhileAway).toEqual([])
-      expect(Arr.filter(callsWhileAway, isWait).length).toBeLessThanOrEqual(1)
+      expect(Arr.filter(callsWhileAway, isWait).length).toBe(0)
       expect(routed.key).toBe(INTERACTION_ID)
       expect(rowsAfter).toEqual([{ outcome: 'succeeded', failure: null }])
       expect(yield* auditRowsOnce(sql)).toEqual(rowsAfter)
@@ -237,13 +248,67 @@ it.effect('waits for both the link and a state published on it, in either order'
     const beforePublish = yield* Queue.clear(linkFirst.inbox)
 
     yield* linkFirst.close
-    yield* herd.publish(LAPTOP, blockedAt(3))
+    const stateFirst = yield* dialLink(herd, router)
+
+    yield* stateFirst.publish(blockedAt(3))
     yield* TestClock.adjust(Duration.minutes(1))
     yield* letFibersRun
-    const stateFirst = yield* openLink(herd, router)
+    yield* stateFirst.attach
     const routed = yield* Queue.take(stateFirst.inbox)
 
     expect(beforePublish).toEqual([])
+    expect(routed.key).toBe(INTERACTION_ID)
+  }).pipe(Effect.scoped),
+)
+
+it.effect(
+  'takes no state from a link a newer one has replaced, even while it still reads live',
+  () =>
+    Effect.gen(function* () {
+      const prompt = unanswered()
+      const { calls, start } = yield* boot(prompt)
+      const { herd, router } = yield* start
+      const silent = yield* openLink(herd, router)
+
+      yield* silent.publish(working(1))
+      yield* silent.publish(blockedAt(2))
+      yield* nextCallWhere(calls, isWait)
+      const redialed = yield* openLink(herd, router)
+
+      prompt.said = 'approved'
+      yield* nextCallWhere(calls, isWait)
+      yield* letFibersRun
+      const beforeItsState = yield* Queue.clear(redialed.inbox)
+
+      yield* redialed.publish(blockedAt(3))
+      const routed = yield* Queue.take(redialed.inbox)
+
+      expect(beforeItsState).toEqual([])
+      expect(routed.key).toBe(INTERACTION_ID)
+      expect(yield* Queue.clear(silent.inbox)).toEqual([])
+    }).pipe(Effect.scoped),
+)
+
+it.effect('delivers when the old link ends between the new link publishing and attaching', () =>
+  Effect.gen(function* () {
+    const prompt = unanswered()
+    const { calls, start } = yield* boot(prompt)
+    const { herd, router } = yield* start
+    const silent = yield* openLink(herd, router)
+
+    yield* silent.publish(working(1))
+    yield* silent.publish(blockedAt(2))
+    yield* nextCallWhere(calls, isWait)
+    const redialed = yield* dialLink(herd, router)
+
+    yield* redialed.publish(blockedAt(3))
+    yield* silent.close
+    prompt.said = 'approved'
+    yield* nextCallWhere(calls, isWait)
+    yield* letFibersRun
+    yield* redialed.attach
+    const routed = yield* Queue.take(redialed.inbox)
+
     expect(routed.key).toBe(INTERACTION_ID)
   }).pipe(Effect.scoped),
 )
@@ -257,13 +322,13 @@ it.effect('sends nothing through a burst of attaches beyond the one send out', (
     yield* answerWhileAway(prompt, calls, herd, router)
     const first = yield* openLink(herd, router)
 
-    yield* herd.publish(LAPTOP, blockedAt(3))
+    yield* first.publish(blockedAt(3))
     const routed = yield* Queue.take(first.inbox)
     const others = yield* Effect.forEach(Arr.range(4, 8), (version) =>
       Effect.gen(function* () {
         const link = yield* openLink(herd, router)
 
-        yield* herd.publish(LAPTOP, blockedAt(version))
+        yield* link.publish(blockedAt(version))
         yield* letFibersRun
 
         return link.inbox
@@ -290,7 +355,7 @@ it.effect(
       yield* answerWhileAway(prompt, calls, herd, router)
       const link = yield* openLink(herd, router)
 
-      yield* herd.publish(LAPTOP, blockedAt(3))
+      yield* link.publish(blockedAt(3))
       const first = yield* Queue.take(link.inbox)
 
       yield* TestClock.adjust(Duration.minutes(1))
@@ -298,7 +363,7 @@ it.effect(
       const withNoNewState = yield* Queue.clear(link.inbox)
       const rowsMeanwhile = yield* auditRows(sql)
 
-      yield* herd.publish(LAPTOP, blockedAt(4))
+      yield* link.publish(blockedAt(4))
       const second = yield* Queue.take(link.inbox)
 
       yield* completeDelivered(router, second)
@@ -328,7 +393,7 @@ it.effect(
       const beforeState = yield* Queue.clear(back.inbox)
 
       yield* Queue.clear(calls)
-      yield* herd.publish(LAPTOP, blockedAt(3, NEXT_ASK_SEQ))
+      yield* back.publish(blockedAt(3, NEXT_ASK_SEQ))
       const rows = yield* rowsReaching(sql, 1)
       const cancelled = yield* nextCallWhere(calls, isCancel)
       const raisedAgain = yield* nextCallWhere(calls, isAskCreation)
@@ -358,7 +423,7 @@ it.effect('drops a held answer once its pane is gone or the agent asks something
       yield* answerWhileAway(prompt, calls, herd, router)
       const back = yield* openLink(herd, router)
 
-      yield* herd.publish(LAPTOP, returned(3))
+      yield* back.publish(returned(3))
       const rows = yield* rowsReaching(sql, 1)
 
       return [rows, yield* Queue.clear(back.inbox)]
@@ -388,8 +453,7 @@ it.effect('keeps holding through a state that cannot tell, such as herdr being l
     yield* answerWhileAway(prompt, calls, herd, router)
     const back = yield* openLink(herd, router)
 
-    yield* herd.publish(
-      LAPTOP,
+    yield* back.publish(
       machineStateWith(LAPTOP, 3, [], {
         workspaces: [crookWorkspace],
         herdr: herdrLinkOf(1, Option.some(DateTime.makeUnsafe(0))),
@@ -399,7 +463,7 @@ it.effect('keeps holding through a state that cannot tell, such as herdr being l
     const whileLost = yield* Queue.clear(back.inbox)
     const rowsWhileLost = yield* auditRows(sql)
 
-    yield* herd.publish(LAPTOP, blockedAt(4))
+    yield* back.publish(blockedAt(4))
     const routed = yield* Queue.take(back.inbox)
 
     expect(whileLost).toEqual([])
@@ -425,7 +489,7 @@ it.effect('stops holding a day after the answer, and a machine back later gets n
     const rows = yield* rowsReaching(sql, 1)
     const back = yield* openLink(herd, router)
 
-    yield* herd.publish(LAPTOP, blockedAt(3))
+    yield* back.publish(blockedAt(3))
     yield* TestClock.adjust(Duration.hours(1))
     yield* letFibersRun
 
@@ -466,10 +530,10 @@ it.effect(
       yield* answerWhileAway(prompt, calls, herd, router)
       const back = yield* openLink(herd, router)
 
-      yield* herd.publish(LAPTOP, blockedAt(3))
+      yield* back.publish(blockedAt(3))
       const routed = yield* Queue.take(back.inbox)
 
-      yield* herd.publish(LAPTOP, working(4))
+      yield* back.publish(working(4))
       yield* nextCallWhere(calls, isCancel)
       const rowsBeforeReply = yield* auditRows(sql)
 
@@ -490,7 +554,7 @@ it.effect('refuses for good on what the agent says, and audits that once', () =>
     yield* answerWhileAway(prompt, calls, herd, router)
     const back = yield* openLink(herd, router)
 
-    yield* herd.publish(LAPTOP, blockedAt(3))
+    yield* back.publish(blockedAt(3))
     const routed = yield* Queue.take(back.inbox)
 
     yield* router.complete(
@@ -500,7 +564,7 @@ it.effect('refuses for good on what the agent says, and audits that once', () =>
     )
     const rows = yield* rowsReaching(sql, 1)
 
-    yield* herd.publish(LAPTOP, blockedAt(4))
+    yield* back.publish(blockedAt(4))
     yield* letFibersRun
 
     expect(rows).toEqual([{ outcome: 'failed', failure: 'AskNotPending' }])
@@ -532,7 +596,7 @@ it.effect('keeps a held answer across a restart, and audits it once when it land
     yield* letFibersRun
     const beforeState = yield* Queue.clear(back.inbox)
 
-    yield* herd.publish(LAPTOP, blockedAt(3))
+    yield* back.publish(blockedAt(3))
     const routed = yield* advancingClock(Queue.take(back.inbox))
 
     yield* completeDelivered(router, routed)
@@ -556,7 +620,7 @@ it.effect('sends nothing and audits nothing again after a restart once an answer
         yield* answerWhileAway(prompt, calls, herd, router)
         const back = yield* openLink(herd, router)
 
-        yield* herd.publish(LAPTOP, blockedAt(3))
+        yield* back.publish(blockedAt(3))
         const routed = yield* Queue.take(back.inbox)
 
         yield* completeDelivered(router, routed)
@@ -569,7 +633,7 @@ it.effect('sends nothing and audits nothing again after a restart once an answer
     yield* nextCallWhere(calls, isWait)
     const back = yield* openLink(herd, router)
 
-    yield* herd.publish(LAPTOP, blockedAt(4))
+    yield* back.publish(blockedAt(4))
     yield* TestClock.adjust(Duration.seconds(16))
     yield* letFibersRun
 
@@ -602,7 +666,7 @@ it.effect('still delivers after a restart over the retry rows an older hub wrote
     yield* nextCallWhere(calls, isWait)
     const back = yield* openLink(herd, router)
 
-    yield* herd.publish(LAPTOP, blockedAt(3))
+    yield* back.publish(blockedAt(3))
     const routed = yield* advancingClock(Queue.take(back.inbox))
 
     expect(routed.key).toBe(INTERACTION_ID)
