@@ -334,8 +334,9 @@ Service control and the Herdr plugin (built in JC-113). The systemd claims are r
 
 ```
 src/
-  main.ts                 runMain; BunHttpServer
-  HttpRoutes.ts           static PWA, /rpc/agent (ws), /rpc/client (ws), health
+  main.ts                 runMain; launches HubDaemon.layer
+  HubDaemon.ts            the hub's graph in named stages, the server and its socket options
+  HttpRoutes.ts           static PWA, /rpc/agent (ws), /rpc/client (ws), health; its layer leaves every service open
   StaticWeb.ts            the PWA from CROOK_WEB_ROOT or the embedded build, with the CSP and service-worker headers
   ExeDevIdentity.ts       reads X-ExeDev-Email / X-ExeDev-Token-Ctx; rejects anything else
   Herd.ts                 SubscriptionRef<Map<MachineId, MachineEntry>> + HerdView stream

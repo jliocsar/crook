@@ -50,13 +50,9 @@ import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { Workspace } from '@crook/domain/Workspace'
 import type { HerdrClient } from '@crook/herdr/HerdrClient'
-import { AuditTrail } from '@crook/hub/AuditTrail'
-import { CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
 import { HarkClient } from '@crook/hub/HarkClient'
-import { Herd } from '@crook/hub/Herd'
-import { HerdStore } from '@crook/hub/HerdStore'
-import * as HttpRoutes from '@crook/hub/HttpRoutes'
+import * as HubDaemon from '@crook/hub/HubDaemon'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { AGENT_PING_INTERVAL, AgentLink, Hello } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
@@ -159,18 +155,12 @@ export const harkServicesUnder = <Services, Failure, Needs>(
   token: Option.Option<string>,
   database: Context.Context<SqlClient.SqlClient>,
 ) => {
-  const herdServices = Layer.provideMerge(
-    Layer.mergeAll(
-      Herd.layer,
-      HarkClient.layer,
-      NotificationStore.layer,
-      CommandRouter.layer,
-      AuditTrail.layer,
-    ),
-    HerdStore.layer,
+  const harkServices = Layer.provideMerge(
+    Layer.mergeAll(HarkClient.layer, NotificationStore.layer),
+    HubDaemon.herdServices,
   )
 
-  return Layer.provideMerge(services, herdServices).pipe(
+  return Layer.provideMerge(services, harkServices).pipe(
     Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]),
   )
 }
@@ -188,13 +178,13 @@ const testServer = BunHttpServer.layer({
   hostname: '127.0.0.1',
   port: 0,
   gracefulShutdownTimeout: Duration.zero,
-  websocket: HttpRoutes.socketOptions,
+  websocket: HubDaemon.socketOptions,
 })
 
 const testClient = HttpServer.layerTestClient.pipe(Layer.provide(FetchHttpClient.layer))
 
 const servedHub = Layer.mergeAll(
-  HttpRouter.serve(HttpRoutes.layer, { disableLogger: true }),
+  HttpRouter.serve(HubDaemon.routes, { disableLogger: true }),
   testClient,
 ).pipe(Layer.provideMerge(testServer))
 
