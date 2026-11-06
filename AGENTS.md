@@ -269,10 +269,10 @@ for something to exist, such as a folder Claude has not made yet, silences the w
 (measured: a watch of background work hung until it read the current state up front and emitted
 it).
 
-`Effect.filter` with an effectful predicate and a `concurrency` option returns what it keeps in
-the order the predicates finished, not in input order (read in `effect@4.0.5`'s source; a test
-saw a sorted list come back shuffled). Where order matters, `Effect.forEach` into `Option`s and
-`Arr.getSomes` keeps it.
+`Effect.filter` with an effectful predicate and a `concurrency` option keeps input order (measured
+on `effect@4.1.2`: predicates that finished in 10, 20 and 30 ms over `[30, 10, 20]` gave `[30, 10,
+20]`). `effect@4.0.5` returned them in the order they finished, and code written then goes through
+`Effect.forEach` into `Option`s and `Arr.getSomes`, which still holds.
 
 A fiber forked into a scope that closes before the fiber first runs never runs any of its effect
 (measured: a step forked from inside a `forkScoped` fiber never started when the session scope
@@ -344,6 +344,22 @@ the scope that should own it, with `Layer.build`, and provide the resulting cont
 :::
 
 :::tip
+A composed layer is memoized by identity. `Layer.provide`, `Layer.provideMerge` and `Layer.mergeAll`
+check the memo map, so one composed value referenced from two parents builds once, a `Layer.fresh`
+inside it included (measured: 2 builds on `effect@4.0.5`, 1 on `effect@4.1.2`). Two parents that need
+their own instance need two layer values.
+:::
+
+:::warning
+A defect beats a typed failure when the runtime combines the two. A typed failure whose finalizer
+dies reaches `Effect.catch`, `Effect.ignore` and `Stream.catch` as a defect, and none of them recovers
+it (measured: all three recovered on `effect@4.0.5`, none on `effect@4.1.2`). So a dying finalizer
+cannot hide behind typed recovery, and what must survive one catches it with `Effect.catchDefect`. An
+`Effect.all` whose first child fails before a dying sibling has run still recovers (measured on
+both).
+:::
+
+:::tip
 `Queue.fail` lets a consumer take everything buffered before it sees the failure, so failing a
 queue to end a stream drops nothing already queued (measured). `Stream.runCollect` over that stream
 still reports only the failure, so a test that needs the items as well collects them with
@@ -355,7 +371,7 @@ A parked `Queue.offer` is resumed synchronously inside the call that takes its m
 resumes it through `Effect.callback`, which runs the offerer's fiber in place. What the offerer
 does next has already run by the time the taker resumes, unless its op budget runs out right
 there, so a test cannot slip an interrupt between the offer and its next step (measured on
-`effect@4.0.5`). Guard such a gap by making the consumer idempotent, and test that part on its own.
+`effect@4.1.2`). Guard such a gap by making the consumer idempotent, and test that part on its own.
 :::
 
 :::caution
@@ -401,22 +417,23 @@ reset interrupts the running effect.
 :::
 
 :::warning
-Effect's `Semaphore` is not fair (read in its source, measured on `effect@4.0.5`): a release wakes
-the waiters on a scheduled task, so a fiber that takes the permit again right after releasing it
-gets in first. A loop of instantly answered long polls starved another caller for 300 test-clock
-seconds. Where several fibers share one permit and one of them loops, hand the turn to the oldest
-waiter explicitly.
+Effect's `Semaphore` stopped letting a later `take` overtake a queued waiter that fits (measured: a
+fiber looping on one permit got in 341 times ahead of a waiter on `effect@4.0.5`, and once on
+`effect@4.1.2`). A larger request can still be overtaken by a smaller one behind it (read in its
+source). Before that, a loop of instantly answered long polls starved another caller for 300
+test-clock seconds, which is why the one place that has a long poll hands the turn to the oldest
+waiter itself. It also admits the poll on its own terms, so it stays.
 :::
 
 :::tip
-A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
+A `Result` is not yieldable inside `Effect.gen` in `effect@4.1.2`, whatever the
 `effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
 
 `Effect.andThen(effect, f)` runs what `f` returns as an effect: an `f` that only does a side
-effect and returns nothing dies with `Not a valid effect: undefined` (measured on `effect@4.0.5`).
+effect and returns nothing dies with `Not a valid effect: undefined` (measured on `effect@4.1.2`).
 Write the step in an `Effect.gen` body, or map with `Effect.map`.
 
-`Arr.filterMap` takes a function returning a `Result`, not an `Option`, in `effect@4.0.5` (measured: a
+`Arr.filterMap` takes a function returning a `Result`, not an `Option`, in `effect@4.1.2` (measured: a
 type error). Keep an `Option` pipeline on `Arr.flatMap` or `Arr.getSomes`. `Arr.replicate` and
 `Arr.makeBy` clamp the count to at least 1 (read in their source), so a count that can be zero is
 guarded before the call.
@@ -491,7 +508,7 @@ Error schema fields must not shadow `Error`'s own. Fields are assigned onto the 
 or `stack` field replaces what identifies the error as an error — `Cause.pretty`, `String(error)`,
 the stack header, OTLP `exception.type`/`exception.stacktrace` all read it (measured). Name for what
 it holds (`userName`), not where it sits. `message`/`cause` stay legal.
-Enforced: `begone-slop/no-shadowed-error-field`, but only on the pre-4.0.5 class names (see below).
+Enforced: `begone-slop/no-shadowed-error-field`.
 :::
 
 :::warning
@@ -565,10 +582,9 @@ The ones with behaviour worth knowing before you trip on them:
   argument — the rule reads `options[0]` only — which oxlint validates against the rule's JSON
   `meta.schema` before the rule runs.
 - `no-tag-access` — no `x._tag`, `switch (x._tag)`, `const { _tag } = x`. Defining a tag is fine.
-- `no-shadowed-error-field` — no `name`/`stack` field on `TaggedErrorClass`/`ErrorClass`. It does
-  not know `effect@4.0.5`'s names yet: in 4.0.5 the classes are `Schema.TaggedError` and
-  `Schema.Error` (`TaggedErrorClass` is gone), and the rule stays silent on a `name` or `stack`
-  field there (measured). The fix belongs in `begone-slop`; until it ships, this one is on review.
+- `no-shadowed-error-field` — no `name`/`stack` field on `Schema.TaggedError`/`Schema.Error`
+  (measured on `begone-slop` 0.2.11; `TaggedErrorClass` is gone from Effect). tsgo's
+  `error-payload-shadows-name` reports the same field.
 - `no-comments` and `require-safety-comment-for-type-assertion` are one doctrine in two rules: prose
   is banned everywhere except where an assertion demands it.
 
@@ -2349,7 +2365,7 @@ Do not guess about Effect, oxc or Bun. Do not trust a plausible claim in a revie
 `src/` also carries `@internal` exports that the shipped declarations strip, so a name found by
 grepping it can still fail to typecheck. `Schema.UnknownFromJsonString` is one, and
 `effecttsgo/prefer-schema-over-json` suggests it in its message anyway; the public spelling is
-`Schema.fromJsonString(Schema.Json)` (both measured on `effect@4.0.5`). Check a name found in `src`
+`Schema.fromJsonString(Schema.Json)` (both measured on `effect@4.1.2`). Check a name found in `src`
 for `@internal` before building on it.
 :::
 

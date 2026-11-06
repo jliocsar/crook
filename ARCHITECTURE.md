@@ -687,7 +687,7 @@ phone leaves ──▶ watch removed ──▶ TranscriptDemands without it ─�
 - Tests: `vitest` + `@effect/vitest` (`it.effect`, `it.layer`, `TestClock`). Every member's `test` script is `vitest run`.
 - PWA state: Effect atoms only, no XState.
 - House lint rules apply to `@crook/web` unchanged.
-- `effect` bumped to stable `4.0.5` (in the boilerplate first, then here).
+- `effect` on stable `4.1.2`, from the root's catalog (in the boilerplate first, then here).
 - Everything stays private; no package is published.
 - TanStack Router with file-based routes.
 
