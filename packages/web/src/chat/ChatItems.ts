@@ -184,6 +184,7 @@ export class SubagentRun extends Data.Class<{
   readonly background: boolean
   readonly status: RunStatus
   readonly sessionIdle: boolean
+  readonly unconfirmed: boolean
   readonly startedAt: Option.Option<DateTime.Utc>
   readonly finishedAt: Option.Option<DateTime.Utc>
 }> {}
@@ -509,6 +510,8 @@ const subagentRun = (
     background,
     status,
     sessionIdle: evidence.context.activity === 'still',
+    unconfirmed:
+      status === 'running' && evidence.context.activity === 'still' && Option.isNone(roster),
     startedAt: at,
     finishedAt:
       status === 'running'

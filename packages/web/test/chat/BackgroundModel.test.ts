@@ -72,6 +72,7 @@ const reviewer = (status: DockRun['status'], finishedAt: Option.Option<number>):
   model: Option.some('claude-sonnet-4-6'),
   background: true,
   status,
+  unconfirmed: false,
   startedAt: Option.some(at(0)),
   finishedAt: Option.map(finishedAt, at),
 })
@@ -127,6 +128,14 @@ describe('backgroundJobs', () => {
     expect(stateOf(jobsOf([persistent], [], at(24 * 60 * 60)), 'toolu_mon')).toEqual(
       Option.some('running'),
     )
+  })
+
+  it('counts no unconfirmed subagent as running, so its clock never shows', () => {
+    const run = { ...reviewer('running', Option.none()), unconfirmed: true }
+    const jobs = jobsOf([], [run], at(15 * 24 * 60 * 60))
+
+    expect(stateOf(jobs, 'toolu_agent')).toEqual(Option.some('unconfirmed'))
+    expect(isShown(dockOf(jobs, at(15 * 24 * 60 * 60)))).toBe(false)
   })
 
   it('says what a running subagent is doing from its activity', () => {
