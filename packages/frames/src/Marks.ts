@@ -103,6 +103,12 @@ export const MARKS: readonly MarkDefinition[] = [
   { mark: 'sheet', track: 'sheet', selector: '[data-slot="sheet"]' },
   { mark: 'alert', track: 'alert', selector: '[role="alert"]' },
   { mark: 'catch-up-divider', track: 'catch-up', selector: '[data-slot="catch-up-divider"]' },
+  {
+    mark: 'herdr-lost',
+    track: 'herdr',
+    selector: '[data-slot="status-pill"]',
+    text: 'herdr lost',
+  },
   { mark: 'show-earlier', track: 'hole', selector: 'button[aria-label="Show earlier messages"]' },
   {
     mark: 'show-earlier-pending',

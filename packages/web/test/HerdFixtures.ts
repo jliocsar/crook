@@ -77,6 +77,8 @@ export const machine = (
     readonly label?: string
     readonly agentVersion?: string
     readonly herdrVersion?: string
+    readonly herdrConnection?: number
+    readonly herdrLostAt?: DateTime.Utc
     readonly places?: readonly Place[]
     readonly shellPanes?: readonly string[]
   } = {},
@@ -98,7 +100,10 @@ export const machine = (
         machine: id,
         version: MachineStateVersion.make(1),
         herdrVersion: '0.9.5',
-        herdr: new HerdrLink({ connection: HerdrConnectionId.make(1), lostAt: Option.none() }),
+        herdr: new HerdrLink({
+          connection: HerdrConnectionId.make(options.herdrConnection ?? 1),
+          lostAt: Option.fromUndefinedOr(options.herdrLostAt),
+        }),
         workspaces: [new Workspace({ id: CROOK_WORKSPACE, label: 'crook' })],
         tabs: [new Tab({ id: CROOK_TAB, workspace: CROOK_WORKSPACE, label: 'web' })],
         panes: [
