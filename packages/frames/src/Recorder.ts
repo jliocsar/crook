@@ -11,6 +11,7 @@ import {
   STATE_ATTRIBUTE,
   THREAD_CONTENT_SELECTOR,
   THREAD_VIEWPORT_SELECTOR,
+  UNSEEN_SAMPLE_SELECTOR,
 } from '@crook/frames/Marks'
 import type { MarkDefinition } from '@crook/frames/Marks'
 import { bandsOf } from '@crook/frames/ThreadBands'
@@ -117,7 +118,7 @@ const clipToAncestors = (element: Element): SeenElement | undefined => {
 }
 
 const seenElement = (element: Element, covers: readonly Element[]): SeenElement | undefined => {
-  if (!element.checkVisibility()) {
+  if (!element.checkVisibility() || element.closest(UNSEEN_SAMPLE_SELECTOR) !== null) {
     return undefined
   }
 

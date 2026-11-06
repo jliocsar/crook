@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import { cn } from 'cn'
+import * as Arr from 'effect/Array'
 import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import { Ellipsis } from 'lucide-react'
@@ -9,7 +10,7 @@ import type { ClaudeSessionId, MachineId, PaneId } from '@crook/domain/Ids'
 import type { SkillListing } from '@crook/domain/Skill'
 import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
-import { AskDock } from '@crook/web/chat/AskDock'
+import { askAnswerNotice, AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
 import { activityMachine, activityView } from '@crook/web/chat/ActivityMachine'
 import {
@@ -24,6 +25,7 @@ import { useChatCommands } from '@crook/web/chat/ChatCommands'
 import type {
   AskDockCommands,
   ComposerCommands,
+  ComposerStatus,
   PendingPromptRow,
 } from '@crook/web/chat/ChatCommands'
 import { CatchingUpCapsule } from '@crook/web/chat/CatchingUpCapsule'
@@ -41,8 +43,12 @@ import {
 } from '@crook/web/chat/ChatModel'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 import { summaryRows, useEpisodeSummary } from '@crook/web/chat/BackgroundSummary'
-import { failureRows, ThreadEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
+import { failureRows, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { Composer } from '@crook/web/chat/Composer'
+import {
+  composerFailureMachine,
+  composerFailureMessage,
+} from '@crook/web/chat/ComposerFailureMachine'
 import { isPresent, presenceMachine, PresenceState } from '@crook/web/chat/PresenceMachine'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
 import type { Restart } from '@crook/web/chat/EdgeCard'
@@ -55,6 +61,7 @@ import {
 } from '@crook/web/chat/OpenedChat'
 import { Thread } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
+import { useThreadContent } from '@crook/web/chat/ThreadEmpty'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import {
   hasFailed,
@@ -68,6 +75,8 @@ import {
 import { linesOf, rostersOf } from '@crook/web/chat/TranscriptState'
 import { Button } from '@crook/web/components/ui/button'
 import { Collapse } from '@crook/web/components/Collapse'
+import { failureNotice, FloatingNotices } from '@crook/web/components/FloatingNotices'
+import type { FloatingNotice } from '@crook/web/components/FloatingNotices'
 import { Message } from '@crook/web/components/ui/message'
 import { stateMark } from '@crook/web/machine/Machine'
 import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
@@ -79,6 +88,7 @@ interface DockProps {
   readonly model: ChatScreenModel
   readonly closedHere: boolean
   readonly composer: ComposerCommands
+  readonly status: ComposerStatus
   readonly skills: readonly SkillListing[]
   readonly ask: Option.Option<AskDockCommands>
   readonly restart: Option.Option<Restart>
@@ -95,6 +105,33 @@ const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly Threa
     key: prompt.key,
     content: <Message meta={prompt.queued ? 'Queued' : 'Sent'}>{prompt.text}</Message>,
   }))
+
+const composerNotices = (
+  status: ComposerStatus,
+  ask: Option.Option<AskDockCommands>,
+): readonly FloatingNotice[] =>
+  Arr.getSomes([
+    Option.flatMap(ask, (dock) => askAnswerNotice(dock.state)),
+    Option.map(composerFailureMessage(status.failure), (text): FloatingNotice => ({
+      id: 'composer-failure',
+      tone: 'failure',
+      text,
+    })),
+    Option.map(status.note, (text): FloatingNotice => ({
+      id: 'composer-note',
+      tone: 'quiet',
+      text,
+      slot: 'composer-note',
+    })),
+  ])
+
+const restartNotices = (restart: Option.Option<Restart>): readonly FloatingNotice[] =>
+  Option.toArray(
+    failureNotice(
+      'restart-failure',
+      Option.flatMap(restart, (found) => found.failure),
+    ),
+  )
 
 const hasActions = (model: ChatScreenModel): boolean =>
   Option.isSome(model.row) &&
@@ -114,6 +151,7 @@ function ChatDock({
   model,
   closedHere,
   composer,
+  status,
   skills,
   ask,
   restart,
@@ -144,8 +182,13 @@ function ChatDock({
     <div
       data-slot="chat-dock"
       {...stateMark(presenceMachine, model.presence)}
-      className="border-border bg-card flex min-h-0 flex-col border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)] in-data-[keyboard=open]:pb-3"
+      className="border-border bg-card relative z-10 flex min-h-0 flex-col border-t px-3 pt-3 pb-[max(var(--safe-bottom),0.75rem)] in-data-[keyboard=open]:pb-3"
     >
+      <div className="contents" {...stateMark(composerFailureMachine, status.failure)}>
+        <FloatingNotices
+          notices={edgeShown ? restartNotices(restart) : composerNotices(status, ask)}
+        />
+      </div>
       <p role="status" className="sr-only">
         {Option.match(ask, { onNone: () => '', onSome: (dock) => askAnnouncement(dock.ask) })}
       </p>
@@ -332,6 +375,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
       transcript.onRetry,
     ],
   )
+  const threadContent = useThreadContent(rows, model, state, transcript.started)
 
   return (
     <>
@@ -368,9 +412,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
           <Thread
             key={threadEpoch}
             handle={thread}
-            rows={rows}
+            rows={threadContent.rows}
             dimmed={dimmed}
-            empty={<ThreadEmpty model={model} state={state} started={transcript.started} />}
+            empty={threadContent.empty}
           />
           <CatchingUpCapsule shown={catchingUp && !dimmed} />
         </div>
@@ -380,6 +424,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         model={model}
         closedHere={closedHere}
         composer={commands.composer}
+        status={commands.composerStatus}
         skills={skillsOf(state)}
         ask={commands.ask}
         restart={commands.restart}

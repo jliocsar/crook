@@ -4,6 +4,7 @@
 @import '@fontsource-variable/bricolage-grotesque';
 @import '@fontsource-variable/schibsted-grotesk';
 @import '@fontsource-variable/geist-mono';
+@import 'skullet/styles.css';
 
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
@@ -57,6 +58,8 @@
 }
 
 :root {
+  --skullet-base: var(--muted);
+  --skullet-animation: pulse;
   --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --motion-fast: 120ms;
@@ -112,6 +115,15 @@
     --input: oklch(0.94 0.01 84 / 20%);
     --ring: oklch(0.72 0.185 32);
   }
+}
+
+[skullet-ghost] [data-slot='swipe-actions'],
+[skullet-ghost] [data-slot='press-highlight'] {
+  display: none;
+}
+
+[skullet-ghost] svg {
+  border-radius: 50%;
 }
 
 @layer base {

@@ -5,7 +5,11 @@ import type { StoryEnv } from './Story.tsx'
 
 type StoryEnvValue = boolean | number | string | EventTarget
 
-const MOTION_QUERY = '(prefers-reduced-motion)'
+const MOTION_QUERIES: readonly string[] = [
+  '(prefers-reduced-motion)',
+  '(prefers-reduced-motion: reduce)',
+]
+
 const KEYBOARD_HEIGHT = 336
 const KEYBOARD_ELEMENT_ID = 'story-keyboard'
 
@@ -60,7 +64,7 @@ export const applyStoryEnv = (env: StoryEnv): void => {
 
     window.matchMedia = (query) =>
       Object.defineProperty(realMatchMedia(query), 'matches', {
-        value: query === MOTION_QUERY ? true : realMatchMedia(query).matches,
+        value: MOTION_QUERIES.includes(query) ? true : realMatchMedia(query).matches,
       })
   }
 

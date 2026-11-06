@@ -10,7 +10,6 @@ import type { MachineId } from '@crook/domain/Ids'
 import type { OpenAgentActions } from '@crook/web/actions/AgentActions'
 import { usePinAgent } from '@crook/web/actions/PinAgent'
 import { PaneAddress } from '@crook/web/atoms/AgentActions'
-import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { SwipeRow, useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import type { OpenRow, SwipeAction } from '@crook/web/components/swipe/SwipeRow'
 import { ASKING_BORDER, AgentCard } from '@crook/web/herd/AgentCard'
@@ -22,6 +21,7 @@ import { MachineSection } from '@crook/web/herd/MachineSection'
 import { NoMachines } from '@crook/web/machines/NoMachines'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { SPRING } from '@crook/web/motion/Springs'
+import { useFailureToast } from '@crook/web/toast/FailureToast'
 
 export type OpenAgent = (machine: MachineId, card: AgentCardModel, opener: HTMLElement) => void
 
@@ -86,29 +86,28 @@ const AgentCardBody = React.memo(function AgentCardBody({
     onOpenActions(machine, pane, 'card')
   }
 
+  useFailureToast(pin.failure)
+
   return (
-    <>
-      <SwipeRow
-        id={toGlobalPaneId(machine, pane)}
-        row={row}
-        surface="agent"
-        frameClassName={cn(
-          'transition-[border-color] duration-(--motion) ease-(--ease-out)',
-          Option.isSome(card.askSummary) && ASKING_BORDER,
-        )}
-        actions={[
-          pinAction(card.pinned, pin.toggle, !controlsEnabled || pin.pending),
-          closeAction(openActions, !controlsEnabled),
-        ]}
-        onTap={(opener) => {
-          onOpenAgent(machine, card, opener)
-        }}
-        onLongPress={openActions}
-      >
-        <AgentCard card={card} />
-      </SwipeRow>
-      <ActionFailure message={pin.failure} />
-    </>
+    <SwipeRow
+      id={toGlobalPaneId(machine, pane)}
+      row={row}
+      surface="agent"
+      frameClassName={cn(
+        'transition-[border-color] duration-(--motion) ease-(--ease-out)',
+        Option.isSome(card.askSummary) && ASKING_BORDER,
+      )}
+      actions={[
+        pinAction(card.pinned, pin.toggle, !controlsEnabled || pin.pending),
+        closeAction(openActions, !controlsEnabled),
+      ]}
+      onTap={(opener) => {
+        onOpenAgent(machine, card, opener)
+      }}
+      onLongPress={openActions}
+    >
+      <AgentCard card={card} />
+    </SwipeRow>
   )
 }, Equal.equals)
 

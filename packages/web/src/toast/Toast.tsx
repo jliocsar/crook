@@ -28,7 +28,7 @@ function ToastLine({ toast }: { toast: Option.Option<Toast> }) {
           onSome: (shown) => (
             <motion.div
               key={shown.id}
-              className="bg-foreground text-background rounded-full px-4 py-2 text-sm leading-5 font-medium shadow-lg"
+              className="bg-foreground text-background rounded-[1.125rem] px-4 py-2 text-sm leading-5 font-medium shadow-lg"
               initial={{ opacity: 0, transform: transform.translate('Y', TOAST_RISE_PX) }}
               animate={{ opacity: 1, transform: translate('Y', 0) }}
               exit={{ opacity: 0, transform: transform.translate('Y', TOAST_RISE_PX) }}

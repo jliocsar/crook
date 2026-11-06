@@ -3,22 +3,26 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
 import { Check, ServerOff, WifiOff } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type * as React from 'react'
 
 import { useAtomValue } from '@effect/atom-react/Hooks'
 
 import { connectionAtom, linkMarkAtom } from '@crook/web/atoms/Connection'
-import { Collapse } from '@crook/web/components/Collapse'
 import { Swap } from '@crook/web/components/Swap'
 import { SpinnerGlyph } from '@crook/web/components/ui/spinner'
 import { noticeOf, syncedAtOf } from '@crook/web/connection/ConnectionView'
 import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
+import { INSTANT, SPRING } from '@crook/web/motion/Springs'
+import { motionTokens } from '@crook/web/motion/MotionTokens'
+import { translate, useTransformString } from '@crook/web/motion/TransformString'
 import { useShownAtomValue } from '@crook/web/navigation/Covered'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
 
 const NOTICE_SPINNER_SIZE = 14
 const JUST_NOW = Duration.minutes(1)
+const BANNER_HEIGHT_PX = 32
 
 const TONE = {
   unreachable: 'bg-[color-mix(in_oklab,var(--destructive)_16%,var(--background))] text-foreground',
@@ -69,34 +73,60 @@ function LastSynced({ at }: { at: DateTime.Utc }) {
 export function HeaderBanner() {
   const connection = useShownAtomValue(connectionAtom)
   const notice = noticeOf(connection)
+  const transform = useTransformString()
 
   return (
-    <Collapse open={Option.isSome(notice)}>
-      {Option.match(notice, {
-        onNone: () => null,
-        onSome: (shown) => (
-          <div
-            data-slot="connection-banner"
-            data-notice={shown}
-            className={cn(
-              'flex h-8 items-center gap-2 px-4 text-xs leading-4 font-medium transition-colors duration-(--motion) ease-(--ease-out)',
-              TONE[shown],
-            )}
-          >
-            {NOTICE_ICON[shown]}
-            <Swap id={shown}>{NOTICE_COPY[shown].line}</Swap>
-            {Option.match(syncedAtOf(connection), {
-              onNone: () => null,
-              onSome: (at) => (
-                <span className="ml-auto font-mono whitespace-nowrap opacity-70">
-                  <LastSynced at={at} />
-                </span>
-              ),
-            })}
-          </div>
-        ),
-      })}
-    </Collapse>
+    <div
+      className="pointer-events-none absolute inset-x-0 top-full overflow-hidden"
+      style={{ height: BANNER_HEIGHT_PX }}
+    >
+      <AnimatePresence initial={false}>
+        {Option.match(notice, {
+          onNone: () => null,
+          onSome: (shown) => (
+            <motion.div
+              key="banner"
+              data-slot="connection-banner"
+              data-notice={shown}
+              className={cn(
+                'flex h-full items-center gap-2 px-4 text-xs leading-4 font-medium transition-colors duration-(--motion) ease-(--ease-out)',
+                TONE[shown],
+              )}
+              initial={{ opacity: 0, transform: transform.translate('Y', -BANNER_HEIGHT_PX) }}
+              animate={{ opacity: 1, transform: translate('Y', 0) }}
+              exit={{ opacity: 0, transform: transform.translate('Y', -BANNER_HEIGHT_PX) }}
+              transition={motionTokens().fade}
+            >
+              {NOTICE_ICON[shown]}
+              <Swap id={shown}>{NOTICE_COPY[shown].line}</Swap>
+              {Option.match(syncedAtOf(connection), {
+                onNone: () => null,
+                onSome: (at) => (
+                  <span className="ml-auto font-mono whitespace-nowrap opacity-70">
+                    <LastSynced at={at} />
+                  </span>
+                ),
+              })}
+            </motion.div>
+          ),
+        })}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+export function BannerRoom({ children }: { children: React.ReactNode }) {
+  const connection = useShownAtomValue(connectionAtom)
+  const reduce = useReducedMotion() ?? false
+
+  return (
+    <motion.div
+      initial={false}
+      animate={{ y: Option.isSome(noticeOf(connection)) ? BANNER_HEIGHT_PX : 0 }}
+      transition={reduce ? INSTANT : SPRING}
+    >
+      {children}
+    </motion.div>
   )
 }
 

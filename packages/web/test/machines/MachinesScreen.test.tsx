@@ -4,7 +4,6 @@ import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
-import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { CrookVersion } from '@crook/domain/CrookVersion'
@@ -110,7 +109,7 @@ describe('MachinesScreen', () => {
     }),
   )
 
-  it.effect('says why a forget failed beside the card, until the link changes', () =>
+  it.effect('says why a forget failed in a toast, moving no card', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/machines', liveWith(viewOf([desk])))
       const refusal = new HubStorageFailed({ detail: 'disk full' })
@@ -119,15 +118,12 @@ describe('MachinesScreen', () => {
       yield* Effect.promise(() => screen.findByText('Swipe to forget, or wait for it to reconnect'))
       fireEvent.click(screen.getByRole('button', { name: 'Forget', hidden: true }))
 
-      const alert = yield* Effect.promise(() => screen.findByRole('alert'))
+      const shown = yield* Effect.promise(() => screen.findByText(refusal.message))
 
-      expect(alert.textContent).toBe(refusal.message)
-      expect(present(alert.closest('li'), 'The desk row').contains(cardOf('desk'))).toBe(true)
-
-      yield* SubscriptionRef.set(link.state, stateWith(UNREACHABLE, Option.some(viewOf([desk]))))
-      yield* eventually(() => {
-        expect(screen.queryByRole('alert')).toBeNull()
-      })
+      expect(shown.closest('[data-slot="toast"]')).not.toBeNull()
+      expect(present(cardOf('desk').closest('li'), 'The desk row').textContent).not.toContain(
+        refusal.message,
+      )
     }),
   )
 

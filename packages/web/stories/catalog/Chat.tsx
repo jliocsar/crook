@@ -32,6 +32,7 @@ import {
 import { chatHerd, chatStory, shellOnlyHerd } from '../ChatFixtures.ts'
 import { CHAT_SOURCE, chatAgent, CONVERSATION, AGENTS_PATH, PANE } from '../Fixtures.ts'
 import { clicks, element, pause, role, seesSelector, seesText } from '../StageDom.ts'
+import { step } from '../Story.tsx'
 import type { LinkStage, StoryMaker } from '../Story.tsx'
 
 const RETRY_LABEL = 'Try again'
@@ -184,15 +185,17 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     events: CONVERSATION,
     arrange: ({ link }) =>
       Ref.set(link.commandAnswer, Exit.succeed(new AgentStarted({ pane: STARTED_PANE }))),
-    settle: ({ link }) =>
-      Effect.gen(function* () {
-        yield* seesText('The quiet redial')
-        yield* SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])])))
-        yield* clicks('Start Claude here again')
-      }),
-    shows: {
+    settle: () => seesText('The quiet redial'),
+    shows: { text: 'The quiet redial' },
+    ends: {
       all: [{ text: UNCONFIRMED_NOTE }, { selector: 'button[data-slot="button"]:not([disabled])' }],
     },
+    timeline: [
+      step<LinkStage>(800, 'The pane closes', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])]))),
+      ),
+      step<LinkStage>(800, 'Start Claude here again', () => clicks('Start Claude here again')),
+    ],
   }),
   chatStory({
     slug: 'restart-failed',
@@ -316,6 +319,12 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     events: omittedEvents,
     settle: () => clicks('Show earlier messages'),
     shows: { text: 'Loading earlier messages' },
+  }),
+  chatStory({
+    slug: 'long-end',
+    title: 'Chat, the end of a long transcript',
+    events: [opened(), manyLinesChunk(0), caughtUp(1200)],
+    shows: { selector: '[data-row]' },
   }),
   chatStory({
     slug: 'latest-button',

@@ -11,6 +11,7 @@ import { connectionAtom } from '@crook/web/atoms/Connection'
 import { herdKnownAtom, machineScreenAtom } from '@crook/web/atoms/Machines'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { useOpenRow } from '@crook/web/components/swipe/SwipeRow'
+import { BannerRoom } from '@crook/web/connection/ConnectionBanner'
 import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { SectionBody } from '@crook/web/herd/HerdLayout'
@@ -130,25 +131,27 @@ function MachineDetail({
         subtitle={<MachineStatus card={card} />}
       />
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto pt-4 pb-[max(2rem,var(--safe-bottom))]">
-        <div className="grid gap-6">
-          <MachineAgents
-            model={model}
-            stale={dimsContent(connection)}
-            controlsEnabled={allowsActions(connection)}
-            onOpenAgent={onOpenAgent}
-            onOpenActions={onOpenActions}
-          />
-          <MachineAbout detail={model.detail} />
-          {model.inHerd && isOffline(card.machine) ? (
-            <ForgetMachine
-              label={card.machine.label}
-              disabled={!allowsActions(connection) || forgetting.pending}
-              pending={forgetting.pending}
-              failure={forgetting.failure}
-              onForget={forgetting.forget}
+        <BannerRoom>
+          <div className="grid gap-6">
+            <MachineAgents
+              model={model}
+              stale={dimsContent(connection)}
+              controlsEnabled={allowsActions(connection)}
+              onOpenAgent={onOpenAgent}
+              onOpenActions={onOpenActions}
             />
-          ) : null}
-        </div>
+            <MachineAbout detail={model.detail} />
+            {model.inHerd && isOffline(card.machine) ? (
+              <ForgetMachine
+                label={card.machine.label}
+                disabled={!allowsActions(connection) || forgetting.pending}
+                pending={forgetting.pending}
+                failure={forgetting.failure}
+                onForget={forgetting.forget}
+              />
+            ) : null}
+          </div>
+        </BannerRoom>
       </div>
     </>
   )

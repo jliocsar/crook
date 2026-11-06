@@ -806,12 +806,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   the chat goes back to the herd and the toast shows, with no blank (measured). A witness of the
   toast alone passed either way, since the toast shows on the chat too: a story about arriving
   somewhere names something only that place shows.
-- The thread skeleton on a cold reload of a chat stays in the frame baseline, explained rather than
-  fixed. With nothing cached, over three sweeps it held 9 to 13 frames (233 to 369 ms) on a reconnect
-  story and 10 to 17 (232 to 489 ms) on a foreground return, because the catalog's fake hub answers as soon as the screen mounts; a real
-  hub takes its round trip (measured for the fake; the real one is not). Dropping it means either a
-  delay, which shows a blank panel while the chat slides in, or a minimum hold, which delays rows
-  that have arrived (both reasoned, not measured), and each is a skeleton design call.
+- A thread skeleton holds for a flash's limit, 24 frames and 400 ms, whichever takes longer, and rows that arrive meanwhile wait out the rest. Before it, with nothing cached, it held 9 to 13 frames (233 to 369 ms) on a reconnect story and 10 to 17 (232 to 489 ms) on a foreground return over three sweeps, because the catalog's fake hub answers as soon as the screen mounts; with it, neither flashes (measured). A real hub's caught-up mark came 381 to 981 ms after a reload's first commit, so a real open rarely waits on the hold, and a phone is not measured. The other way out, a delay before it shows, leaves a blank panel while the chat slides in (reasoned, not measured).
 - Catching a chat up is bound by round trips, not by any hop's own work. The hub writes a
   transcript message to the phone only after the phone acknowledged the one before. Before
   transcript events were coalesced, it also held one event per phone, so the agent's next event
@@ -1765,9 +1760,24 @@ it.
 - Skeleton rows in a flex column that overflows shrink unless they are told not to: a row of 46 px
   rendered 32 (measured).
 - A generated skeleton works from what is in the DOM: skullet drew `opacity: 0` elements as bones,
-  skipping only `display: none`, its own elements and those marked `skullet-ignore`. It asks for
-  `(prefers-reduced-motion: reduce)`, which the catalog's stub does not answer, since the stub
-  matches `(prefers-reduced-motion)` alone (all measured).
+  skipping only `display: none`, its own elements and those marked `skullet-ignore` (measured).
+
+## Skeletons
+
+Every skeleton is skullet's engine measuring a sample rendered by the real components, hidden and inert, in the slot the real screen will fill. The sample is built when it shows, with nothing remembered, so a first visit and a return visit look alike and logging out has nothing to forget. A return visit shows a skeleton only when nothing is cached, since cached data is what a return visit normally shows. The sweep holds each skeleton's boxes to the screen it stands for: the first herd card and machine card edge for edge, and the last row of the thread on its bottom and sides, at 390 and at 430 wide, where all of them landed within a pixel, except the machine card, whose sample had no versions until the check said so (measured).
+
+:::warning
+skullet is pinned exactly and its engine is reached through its internal entry: a release is young, and that entry carries no compatibility promise. A bump needs, on a real build under `vite preview`, which sends the real policy: no `securitypolicyviolation` event and no log entry over a herd, machines and chat skeleton; no `style` element added; `--skullet-animation` still honoured; no running animation under emulated reduced motion; and the fit check in the sweep. Emulated reduced motion is safe on a preview, since only the dev server's reload loops on it.
+:::
+
+- The policy stays `style-src 'self'`. skullet's React wrapper hoists an inline `style`, which the policy refuses on every load, and its remembered shapes restore through markup carrying `style` attributes, 3 refusals per shape. The engine draws its bones through CSSOM, which the policy allows, and skips its own stylesheet once it reads `--skullet` from the root, which the stylesheet served from this origin sets. Exact mode turns memory off, so nothing is written to local storage. That gave 0 violations on a production build under the real header, on the real app's herd skeleton and the catalog's chat and machines (measured).
+- A painted element holding at most one label is drawn as a solid block. An empty `span` counts as text with a rect, so a press highlight covering a card turned the whole card into one grey block, and it merged every label inside it. Text truncated in a narrow row reports rects past its clip, which merge with their neighbours the same way, so sample paths stay short (both measured). The sample hides highlights and swipe actions with `display: none` in an unlayered rule, since a layered one loses to a utility class.
+- `pulse` animates opacity on the compositor; the default `shimmer` animates a background position on the main thread (read in its source). On screen the bones cost 16 ms (13 to 22) of main-thread work per 2 s on the herd against 12 (9 to 19) for the skeleton before them, and 31 (26 to 171) against 22 (12 to 70) on a thread. The first skeleton cost more: load to skeleton 324 ms (291 to 378) against 213 (189 to 226) on the herd, 366 (331 to 398) against 289 (280 to 357) on a thread, and a tap to a thread's skeleton 137 (131 to 153) against 80 (75 to 93) (production catalog, 390x844, 4x CPU throttling, five runs, medians).
+- A `requestAnimationFrame` loop in the page being measured is most of what it measures. The same production build read 618 ms and 650 ms of main-thread work per 2 s with a probe polling for the skeleton every frame, and 16 ms and 31 ms without it (measured), since the loop forces a frame the idle page would not draw.
+- The engine sits in a route chunk of 8881 bytes gzipped, outside the initial load, and the sample adds 4824. The initial load grew by 1642 bytes and all JavaScript by 11781 (measured on a production build). The service worker's precache went from 40 entries and 2710.81 KiB to 41 and 2741.39 KiB. Loading it lazily would add a state between the screen and its skeleton, for bytes the service worker precaches either way.
+- A skeleton's hold spends at least 400 ms of a DOM test's wait for the rows, out of testing-library's default of 1000 ms, so a chat's first test in its file failed its find in 1 of 8 runs beside sixteen busy loops, and in a loaded gate. The DOM setup raises the limit to 3000 ms, a guard and not a measurement: 0 of 16 runs under the same load (measured).
+- A notice floats in a card above the dock or sheet it belongs to, over what is behind it, rather than growing it: a failure line took a dock from 127 to 195 px, 187 to 303 px and back on a launch that gives up, and a sheet from 265 to 313 px (measured), which is the layout moving twice for one sentence. One stack per surface, since two beside each other overlap. A failure that belongs to a card in a list goes to a toast, since a card has nowhere to float and a list moving under the finger is the bug. A failure at the very end of a page moves nothing and stays where it is. A toast comes only from a failure that lands while its screen is mounted: an action's result outlives the screen, so reading one on a remount would toast an old failure for nothing the user just did (reasoned, not measured).
+- The connection banner lies over the content under the header instead of pushing it. Tab screens and a machine's page slide their content down by its height with a transform, which reads the same and is no layout shift, and a chat leaves its thread alone, since a thread sits at its end: at the top of a short chat the banner lies over the first row's top edge while it shows (seen in a shot). Stories with a banner measured 0.037 to 0.056 before and all pass the still budget now, so the banner's own budget went.
 
 ## Frames
 
@@ -1784,16 +1794,15 @@ the screen once per animation frame and fails on what a settled screenshot canno
   composer, 44 to 50 for a cold chat's skeleton (all measured). A threshold of 20 caught the
   reconnect pill in 2 of 3 sweeps and 24 in 3 of 3. The banner on a first load straddles 24 (6 to 37
   frames), so those stories list it as a finding only some runs show.
-- A story's layout shift budget is 0.01 in total, or 0.06 where a banner comes and goes, since a
-  banner pushes the content by design. A story that types a bare slash command opens and closes
+- A story's layout shift budget is 0.01 in total. A story that types a bare slash command opens and closes
   the suggestion strip, and that alone measured 0.0535, so a story about something else types the
   command with an argument, which opens no strip. Per-story totals fell at 0.0006 or under, or at 0.0125 or
-  over per event, so 0.01 sits in that gap; banner stories measured 0.037 to 0.056. Synthetic
+  over per event, so 0.01 sits in that gap. Synthetic
   events never set `hadRecentInput`, so a story's scripted press counts against it; a transform
   does not count at all.
-- A sweep of the 17 timeline stories took 106, 107, 108 and 115 s, contact sheets included, on a
-  shared 15 GB laptop. It stays out of the gate: it needs a browser and a dev server, it costs two
-  minutes per push, and its counts move with what else the machine runs. The detection runs in the
+- A sweep of the 55 timeline stories, skeleton fit included, took 356 and 372 s, contact sheets
+  included, on a shared 15 GB laptop. It stays out of the gate: it needs a browser and a dev server,
+  it costs six minutes per push, and its counts move with what else the machine runs. The detection runs in the
   gate, over recorded logs, with no browser.
 - A loaded machine can make a false finding, by slowing every frame without any one of them looking
   long. One story's frames dropped to 19 per second with another agent working: a pill that held 51
@@ -1869,10 +1878,7 @@ the screen once per animation frame and fails on what a settled screenshot canno
 - A baseline entry lists what a story always shows and what it only sometimes shows. A new key
   fails the story, an always key that did not happen fails it too and says to remove it, and a
   sometimes key does neither.
-- A failure line that grows the dock or sheet holding it is a finding about reserved room, not a
-  banner, so it gets neither the banner's budget nor a baseline entry. Timeline stories that end on
-  one stay out of a sweep until that room is decided: named, they play and fail at the still budget
-  with their real number, and the smoke test and the expectations test still hold them.
+- A failure line that grows the dock or sheet holding it is a bug, with no budget or baseline entry to hide in. Every timeline story is in a sweep, and the sweep ends by holding each skeleton's boxes to the real screen, at both phone widths.
 
 ## Release
 

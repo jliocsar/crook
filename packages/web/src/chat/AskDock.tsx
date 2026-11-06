@@ -22,7 +22,7 @@ import {
   PLAIN_DECLINE,
 } from '@crook/web/chat/AskModel'
 import type { AskButton } from '@crook/web/chat/AskModel'
-import { ActionFailure } from '@crook/web/components/ActionFailure'
+import type { FloatingNotice } from '@crook/web/components/FloatingNotices'
 import { OutputText } from '@crook/web/components/OutputText'
 import { Button } from '@crook/web/components/ui/button'
 import { CodeBlock } from '@crook/web/components/ui/code-block'
@@ -48,6 +48,7 @@ const DECLINE_LABEL = 'Decline'
 const ANSWER_LABEL = 'Answer'
 const ANSWERED_NOTE = 'Answered. Waiting for Claude to move on.'
 const ALREADY_ANSWERED_NOTE = 'Already answered'
+const ASK_NOTICE_ID = 'ask-answer'
 const UNREADABLE_HINT = 'Decline it here, or tell Claude what to do instead.'
 
 const QUESTIONNAIRE_HINT =
@@ -58,23 +59,17 @@ const DECLINE_BUTTONS: readonly AskButton[] = [{ label: DECLINE_LABEL, answer: P
 const locked = (controls: AnswerControls): boolean =>
   controls.disabled || isAnswerUnderway(controls.state)
 
-function AnswerNote({ children }: { children: string }) {
-  return (
-    <p role="status" className="text-muted-foreground text-sm leading-5">
-      {children}
-    </p>
-  )
-}
+const askNotice = (tone: FloatingNotice['tone'], text: string): Option.Option<FloatingNotice> =>
+  Option.some({ id: ASK_NOTICE_ID, tone, text })
 
-function AnswerStatus({ state }: { state: AskAnswerState }) {
-  return AskAnswerState.$match(state, {
-    Open: () => null,
-    Answering: () => null,
-    Answered: () => <AnswerNote>{ANSWERED_NOTE}</AnswerNote>,
-    AlreadyAnswered: () => <AnswerNote>{ALREADY_ANSWERED_NOTE}</AnswerNote>,
-    Refused: ({ message }) => <ActionFailure message={Option.some(message)} />,
+export const askAnswerNotice = (state: AskAnswerState): Option.Option<FloatingNotice> =>
+  AskAnswerState.$match(state, {
+    Open: () => Option.none(),
+    Answering: () => Option.none(),
+    Answered: () => askNotice('quiet', ANSWERED_NOTE),
+    AlreadyAnswered: () => askNotice('quiet', ALREADY_ANSWERED_NOTE),
+    Refused: ({ message }) => askNotice('failure', message),
   })
-}
 
 function DetailView({ detail }: { detail: AskDetail }) {
   return AskDetail.$match(detail, {
@@ -263,7 +258,6 @@ export function AskDock({
           ),
         }),
       )}
-      <AnswerStatus state={controls.state} />
     </section>
   )
 }

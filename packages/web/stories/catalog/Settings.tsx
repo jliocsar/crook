@@ -122,7 +122,7 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
     title: 'Settings, test notification reached no phone',
     arrange: ({ link }) => Ref.set(link.testRefusal, Option.some(new HarkReachedNoDevice())),
     settle: () => clicks(TEST_BUTTON),
-    shows: { selector: '[role="alert"]' },
+    shows: { text: new HarkReachedNoDevice().message },
   }),
   story({
     slug: 'log-out-sheet',

@@ -7,8 +7,9 @@ import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import type { HerdMachine } from '@crook/domain/HerdView'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
+import { ANNOUNCED } from '@crook/web/rpc/HubLinkState'
 
-import { liveWith } from '../../test/AppWiring.tsx'
+import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { agent, DESK, LAPTOP, machine } from '../../test/HerdFixtures.ts'
 import { MACHINE_PATH, MACHINES_PATH } from '../Fixtures.ts'
 import { pressesEvenIfHidden, pressesInstantly, seesText, swipes } from '../StageDom.ts'
@@ -53,6 +54,13 @@ const refusal = new HubStorageFailed({ detail: 'disk full' })
 const refuseForget = ({ link }: LinkStage) => Ref.set(link.forgetRefusal, Option.some(refusal))
 
 export const MACHINES_STORIES: readonly StoryMaker[] = [
+  linkStory({
+    slug: 'skeleton',
+    title: 'Machines, the skeleton of a first visit',
+    path: MACHINES_PATH,
+    link: stateWith(ANNOUNCED, Option.none()),
+    shows: { selector: '[data-slot="machines-skeleton"]' },
+  }),
   linkStory({
     slug: 'list',
     title: 'Machines, online, offline and behind on version',

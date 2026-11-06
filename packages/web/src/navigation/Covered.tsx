@@ -9,6 +9,7 @@ import * as React from 'react'
 const UNCOVERING_ATTRIBUTE = 'data-uncovering'
 
 const neverCoveredAtom = Atom.make(false)
+const alwaysCoveredAtom = Atom.make(true)
 
 const CoveredContext = React.createContext<Atom.Atom<boolean>>(neverCoveredAtom)
 
@@ -43,6 +44,10 @@ export const useShownAtomValue = <Value,>(source: Atom.Atom<Value>): Value => {
   const shown = React.useMemo(() => shownWhileUncovered(covered, source), [covered, source])
 
   return useAtomValue(shown)
+}
+
+export function FrozenScope({ children }: { children: React.ReactNode }) {
+  return <CoveredContext value={alwaysCoveredAtom}>{children}</CoveredContext>
 }
 
 export function CoveredScope({

@@ -1,16 +1,10 @@
 {
-  "ask/next-ask": {
-    "always": ["shift:div[chat-dock]"]
-  },
   "actions/toast-after-chat-close": {
     "always": [],
     "sometimes": ["flash:spinner"]
   },
   "transition/clear": {
     "always": ["shift:div[chat-dock]"]
-  },
-  "transition/foreground-return": {
-    "always": ["flash:thread-skeleton", "shift:div[conversation-viewport]"]
   },
   "transition/herd-first-load-empty": {
     "always": [],
@@ -19,8 +13,5 @@
   "transition/herd-first-load-from-cache": {
     "always": [],
     "sometimes": ["flash:banner", "flash:spinner"]
-  },
-  "transition/reconnect-chat-open": {
-    "always": ["flash:thread-skeleton"]
   }
 }

@@ -17,7 +17,7 @@ import { isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import { CatchingUpCapsule } from '@crook/web/chat/CatchingUpCapsule'
 import { cwdOf, isWatching, titleOf } from '@crook/web/chat/ChatModel'
-import { failureRows, ThreadEmpty, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
+import { failureRows, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { ImageViewer } from '@crook/web/chat/Images'
 import {
   useChatActivity,
@@ -28,6 +28,7 @@ import {
 } from '@crook/web/chat/OpenedChat'
 import { PresenceState } from '@crook/web/chat/PresenceMachine'
 import { Thread } from '@crook/web/chat/Thread'
+import { useThreadContent } from '@crook/web/chat/ThreadEmpty'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
 import { runStatusShown, runTicks } from '@crook/web/chat/ToolView'
@@ -166,6 +167,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
     ),
     ...failureRows(state, transcript.onRetry),
   ]
+  const threadContent = useThreadContent(rows, model, state, transcript.started)
 
   return (
     <PushedScreen>
@@ -190,11 +192,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
           backLabel={`Back to ${parentTitle}`}
         />
         <div {...stateMark(transcriptMachine, state)} className="relative min-h-0 flex-1">
-          <Thread
-            rows={rows}
-            dimmed={dimmed}
-            empty={<ThreadEmpty model={model} state={state} started={transcript.started} />}
-          />
+          <Thread rows={threadContent.rows} dimmed={dimmed} empty={threadContent.empty} />
           <CatchingUpCapsule shown={catchingUp && !dimmed} />
         </div>
         <div

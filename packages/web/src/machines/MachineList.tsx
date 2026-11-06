@@ -3,7 +3,6 @@ import { ChevronRight, Trash2 } from 'lucide-react'
 
 import type { MachineId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
-import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Pressable } from '@crook/web/components/press/Pressable'
 import { SwipeRow, useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import type { OpenRow, SwipeAction } from '@crook/web/components/swipe/SwipeRow'
@@ -11,6 +10,7 @@ import { useForgetMachine } from '@crook/web/machines/Forget'
 import { MachineHeading } from '@crook/web/machines/MachineHeading'
 import { agentSummary, versionsLine } from '@crook/web/machines/MachineLayout'
 import type { MachineCardModel, MachinesLayout } from '@crook/web/machines/MachineLayout'
+import { useFailureToast } from '@crook/web/toast/FailureToast'
 
 export type OpenMachine = (machine: MachineId, opener: HTMLElement) => void
 
@@ -76,8 +76,10 @@ function OfflineMachineRow({
     onOpen(id, opener)
   }
 
+  useFailureToast(forgetting.failure)
+
   return (
-    <li className="grid gap-2">
+    <li>
       <SwipeRow
         id={id}
         row={row}
@@ -86,7 +88,6 @@ function OfflineMachineRow({
       >
         <MachineCardBody card={card} />
       </SwipeRow>
-      <ActionFailure message={forgetting.failure} />
     </li>
   )
 }
