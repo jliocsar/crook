@@ -339,6 +339,48 @@ export const ASK_STORIES: readonly StoryMaker[] = [
     ],
   }),
   chatStory({
+    slug: 'answered-before-herdr-moves',
+    title: 'Ask, the dialog closes before herdr moves off blocked',
+    shows: { text: 'Run this command?' },
+    ends: { text: 'Edit Herd.ts?' },
+    link: blocked(bashAsk()),
+    events: LEAD_IN,
+    arrange: ({ link }) =>
+      Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(answeredApprove))),
+    settle: () => seesText('Run this command?'),
+    timeline: [
+      step<LinkStage>(500, 'Tap Yes', () => clicks('Yes')),
+      step<LinkStage>(700, 'The pid file leaves waiting, herdr still reads blocked', ({ link }) =>
+        SubscriptionRef.set(
+          link.state,
+          liveWith(
+            herd([
+              machine(
+                LAPTOP,
+                [
+                  agent('w1:p1', 'blocked', {
+                    ask: bashAsk(),
+                    title: CHAT_TITLE,
+                    seq: 1,
+                    secondsAgo: 30,
+                    claudeWaiting: false,
+                  }),
+                ],
+                { agentVersion: '0.0.1' },
+              ),
+            ]),
+          ),
+        ),
+      ),
+      step<LinkStage>(200, 'Claude moves on to an edit', ({ link }) =>
+        SubscriptionRef.set(
+          link.state,
+          liveWith(herd([machine(LAPTOP, [blockedRow(editAsk, 2)], { agentVersion: '0.0.1' })])),
+        ),
+      ),
+    ],
+  }),
+  chatStory({
     slug: 'same-dialog-again',
     title: 'Ask, the same dialog asked again after its answer',
     shows: { text: 'Answered. Waiting for Claude to move on.' },
