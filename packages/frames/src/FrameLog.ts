@@ -120,11 +120,9 @@ export const heightAt = (frame: RecordedFrame): Option.Option<number> =>
 export const liftsForNothing = (frame: RecordedFrame, next: RecordedFrame): boolean =>
   next.frame === frame.frame + 1 &&
   liftAt(next) - liftAt(frame) >= ROW_MOVE_PIXELS &&
-  Option.isSome(
-    Option.filter(
-      Option.zipWith(heightAt(frame), heightAt(next), (before, after) => after - before),
-      (grown) => grown < ROW_MOVE_PIXELS,
-    ),
+  pipe(
+    Option.zipWith(heightAt(frame), heightAt(next), (before, after) => after - before),
+    Option.exists((grown) => grown < ROW_MOVE_PIXELS),
   )
 
 export const p90FrameMs = (frames: readonly RecordedFrame[]): number => {

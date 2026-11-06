@@ -18,6 +18,7 @@ import {
   marksOf,
   movedAt,
   overshoots,
+  ROW_MOVE_PIXELS,
   shows,
   showsEmptyBand,
   statesOf,
@@ -298,7 +299,7 @@ const unpaidLiftsOf = (story: string, frames: readonly RecordedFrame[]): readonl
       toMs: Math.round(next.at),
       marks: marksOf(next),
       states: statesOf(next),
-      words: `The lift rose from ${liftAt(frame)} to ${liftAt(next)} px in a frame the thread's content stayed at ${next.thread?.height ?? 0} px. Nothing landed to lift, so a pin took a move of the scroll as growth, and the rows glide up for it.`,
+      words: `The lift rose from ${liftAt(frame)} to ${liftAt(next)} px in a frame the thread's content grew under ${ROW_MOVE_PIXELS} px. Nothing landed to lift, so a pin took a move of the scroll as growth, and the rows glide up for it.`,
     })),
   )
 
