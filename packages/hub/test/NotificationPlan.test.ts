@@ -23,6 +23,7 @@ import {
   nextStep,
   notificationKey,
   raisedBetween,
+  verdictOn,
 } from '@crook/hub/NotificationPlan'
 
 import { bashAsk, crookWorkspace, herdrLinkOf, machineStateWith } from './Fixtures'
@@ -250,6 +251,32 @@ describe('nextStep', () => {
       }),
     ).toEqual(Option.some(NotificationStep.Drop({ wanted: finished })))
     expect(nextStep(wanted, sent, HashSet.empty(), defaultNotificationPrefs)).toEqual(Option.none())
+  })
+})
+
+describe('verdictOn', () => {
+  it('says an approval is raised only by the row it was sent for', () => {
+    const approval = new WantedNotification({
+      machine: LAPTOP,
+      pane: PANE,
+      event: 'approvals',
+      terminal: TERMINAL,
+      stateChangeSeq: 7,
+      ask: Option.some(AskId.make('screen-1')),
+      title: TITLE,
+      body: 'Wants to run Bash',
+    })
+    const askingWith = (id: string, stateChangeSeq: number, terminal = TERMINAL) =>
+      stateWith([rowWith('blocked', stateChangeSeq, { terminal, ask: Option.some(bashAsk(id)) })])
+
+    expect(verdictOn(approval, askingWith('screen-1', 7))).toBe('raised')
+    expect(verdictOn(approval, askingWith('screen-1', 9))).toBe('movedOn')
+    expect(verdictOn(approval, askingWith('screen-1', 7, AFTER_HANDOFF))).toBe('movedOn')
+    expect(verdictOn(approval, askingWith('screen-2', 7))).toBe('movedOn')
+    expect(verdictOn(approval, stateWith([rowWith('working', 7)]))).toBe('movedOn')
+    expect(verdictOn(approval, stateWith([]))).toBe('movedOn')
+    expect(verdictOn(approval, stateWith([rowWith('unknown', 7)]))).toBe('undecided')
+    expect(verdictOn(approval, stateWith([], { lost: true }))).toBe('undecided')
   })
 })
 

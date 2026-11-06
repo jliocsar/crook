@@ -21,6 +21,8 @@ import {
   type RoutedCommand,
 } from '@crook/protocol/Commands'
 
+import { machineStateWith } from './Fixtures'
+
 const LAPTOP = MachineId.make('laptop')
 const WORK = MachineId.make('work')
 const PANE = PaneId.make('w1:p1')
@@ -33,6 +35,9 @@ const delivered = new InputDelivered({
   stateChangeSeq: 4,
 })
 
+const ANY_STATE = machineStateWith(LAPTOP, 1, [])
+const LATER_STATE = machineStateWith(LAPTOP, 2, [])
+
 const startRouter = Effect.map(Layer.build(CommandRouter.layer), (context) =>
   Context.get(context, CommandRouter),
 )
@@ -42,13 +47,17 @@ const attachAgent = Effect.fn('attachAgent')(function* (
   machine: MachineId,
 ) {
   const inbox = yield* Queue.unbounded<RoutedCommand>()
-  const attachment = yield* router.attach(machine).pipe(
+  const link = yield* router.linkFor(machine)
+  const attachment = yield* link.attach.pipe(
     Stream.runForEach((routed) => Queue.offer(inbox, routed)),
     Effect.forkChild({ startImmediately: true }),
   )
 
   return { inbox, detach: Fiber.interrupt(attachment) }
 })
+
+const liveLinkNow = (router: CommandRouter['Service']) =>
+  router.liveLink(LAPTOP).pipe(Stream.runHead, Effect.map(Option.flatten))
 
 const sendInBackground = (router: CommandRouter['Service'], machine: MachineId) =>
   Effect.forkChild(router.send(machine, ACTION, continuePrompt), { startImmediately: true })
@@ -163,6 +172,64 @@ it.effect('routes to the newest Attach while an older one is still closing', () 
     expect(routed.command).toEqual(continuePrompt)
     expect(yield* Queue.size(older.inbox)).toBe(0)
   }),
+)
+
+it.effect('sends over a judged link only while it is still the newest', () =>
+  Effect.gen(function* () {
+    const router = yield* startRouter
+    const older = yield* router.linkFor(LAPTOP)
+    const newer = yield* router.linkFor(LAPTOP)
+
+    yield* Effect.forkChild(Stream.runDrain(older.attach), { startImmediately: true })
+    yield* older.published(ANY_STATE)
+    const judged = Option.getOrThrow(yield* liveLinkNow(router))
+
+    yield* Effect.forkChild(Stream.runDrain(newer.attach), { startImmediately: true })
+    const refused = yield* router
+      .sendOver(LAPTOP, judged.link, ACTION, continuePrompt)
+      .pipe(Effect.flip)
+
+    expect(refused).toEqual(new MachineOffline({ machine: LAPTOP }))
+  }),
+)
+
+it.effect(
+  'reads a state live only on the newest link, in either order and despite a late one',
+  () =>
+    Effect.gen(function* () {
+      const router = yield* startRouter
+      const older = yield* router.linkFor(LAPTOP)
+      const newer = yield* router.linkFor(LAPTOP)
+      const liveNow = liveLinkNow(router)
+      const olderAttachment = yield* Effect.forkChild(Stream.runDrain(older.attach), {
+        startImmediately: true,
+      })
+      const beforeAnyState = yield* liveNow
+
+      yield* older.published(ANY_STATE)
+      const onItsLink = yield* liveNow
+
+      yield* newer.published(LATER_STATE)
+      const notAttachedYet = yield* liveNow
+
+      yield* Effect.forkChild(Stream.runDrain(newer.attach), { startImmediately: true })
+      const onceAttached = yield* liveNow
+
+      yield* older.published(ANY_STATE)
+      const afterALatePublish = yield* liveNow
+
+      yield* Fiber.interrupt(olderAttachment)
+      const afterTheOldLinkEnds = yield* liveNow
+
+      expect(Option.isNone(beforeAnyState)).toBe(true)
+      expect(Option.map(onItsLink, (live) => live.state)).toEqual(Option.some(ANY_STATE))
+      expect(Option.isNone(notAttachedYet)).toBe(true)
+      expect(Option.map(onceAttached, (live) => live.state)).toEqual(Option.some(LATER_STATE))
+      expect(Option.map(afterALatePublish, (live) => live.state)).toEqual(Option.some(LATER_STATE))
+      expect(Option.map(afterTheOldLinkEnds, (live) => live.state)).toEqual(
+        Option.some(LATER_STATE),
+      )
+    }),
 )
 
 it.effect('is offline again once the last Attach of a machine ends', () =>

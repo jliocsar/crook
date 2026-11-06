@@ -9,7 +9,8 @@
   "scripts": {
     "typecheck": "tsc",
     "test": "bun --bun vitest run --fsModuleCachePath node_modules/.vitest-cache",
-    "start": "bun src/main.ts"
+    "start": "bun src/main.ts",
+    "charts": "bun charts/Generate.ts"
   },
   "dependencies": {
     "@crook/domain": "workspace:*",

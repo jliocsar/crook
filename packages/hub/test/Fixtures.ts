@@ -166,12 +166,13 @@ export const harkServicesUnder = <Services, Failure, Needs>(
   )
 }
 
-export const configFor = (origin: string) =>
+export const configFor = (origin: string, more: Record<string, string> = {}) =>
   ConfigProvider.layer(
     ConfigProvider.fromUnknown({
       CROOK_OWNER_EMAIL: OWNER,
       CROOK_HUB_ORIGIN: origin,
       CROOK_WEB_ROOT: `${import.meta.dirname}/web`,
+      ...more,
     }),
   )
 
@@ -184,15 +185,22 @@ const testServer = BunHttpServer.layer({
 
 const testClient = HttpServer.layerTestClient.pipe(Layer.provide(FetchHttpClient.layer))
 
-const servedHub = Layer.mergeAll(
-  HttpRouter.serve(HubDaemon.routes, { disableLogger: true }),
-  testClient,
-).pipe(Layer.provideMerge(testServer))
+const servedHub = (hark: Layer.Layer<HttpClient.HttpClient>) =>
+  Layer.mergeAll(
+    HttpRouter.serve(HubDaemon.routesOver(hark), { disableLogger: true }),
+    testClient,
+  ).pipe(Layer.provideMerge(testServer))
 
 export const testHub = Layer.provideMerge(
-  Layer.provide(servedHub, configFor(HUB_ORIGIN)),
+  Layer.provide(servedHub(FetchHttpClient.layer), configFor(HUB_ORIGIN)),
   Database.layerAt(IN_MEMORY),
 )
+
+export const hubOverHark = (hark: Layer.Layer<HttpClient.HttpClient>, token: string) =>
+  Layer.provideMerge(
+    Layer.provide(servedHub(hark), configFor(HUB_ORIGIN, { CROOK_HUB_HARK_TOKEN: token })),
+    Database.layerAt(IN_MEMORY),
+  )
 
 export const discardingAgentAudit = Layer.succeed(
   AuditLog,

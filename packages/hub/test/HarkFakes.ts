@@ -116,6 +116,11 @@ export const interactionWaited = (status: string): HarkAnswer => ({
   body: { interaction: { status }, timedOut: status === 'pending' },
 })
 
+export const interactionRespondedTo = (status: string, respondedAt: string): HarkAnswer => ({
+  status: 200,
+  body: { interaction: { status, respondedAt }, timedOut: false },
+})
+
 export const activityChanged: HarkAnswer = {
   status: 200,
   body: { activity: { id: 'act_1', key: 'crook-herd' }, accepted: 1, failed: 0 },

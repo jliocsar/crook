@@ -1,0 +1,11 @@
+stateDiagram-v2
+  [*] --> Polling
+  Polling --> Holding: HarkAnswered / Hold
+  Polling --> Ended: HarkClosed<br/>Withdrawn
+  Holding --> Sending: AskOpen / Send
+  Holding --> Ended: Withdrawn / Record<br/>AskMovedOn / Record<br/>DeadlinePassed / Record
+  Sending --> Holding: SendFinished / Hold
+  Sending --> SendingWithdrawn: Withdrawn
+  Sending --> Ended: SendFinished / Record
+  SendingWithdrawn --> Ended: SendFinished / Record
+  Ended --> [*]

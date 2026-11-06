@@ -1,6 +1,7 @@
 import { expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as DateTime from 'effect/DateTime'
 import * as Deferred from 'effect/Deferred'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -36,10 +37,12 @@ import {
   HARK_TOKEN,
   type HarkScript,
   acceptingHark,
+  type HarkAnswer,
   created,
   fakeHark,
   harkIdFor,
   interactionCreated,
+  interactionRespondedTo,
   interactionWaited,
   isWait,
   tokenConfig,
@@ -267,7 +270,7 @@ it.effect('reads an approval as approved, denied, still pending or closed some o
     const statesOf = Effect.fn('statesOf')(function* (status: string) {
       const { client } = yield* withHarkClient(() => interactionWaited(status))
 
-      return yield* client.awaitApproval(HarkId.make('int_1'))
+      return (yield* client.awaitApproval(HarkId.make('int_1'))).state
     })
     const asked = yield* withHarkClient(() => interactionCreated('int_1'))
 
@@ -275,6 +278,24 @@ it.effect('reads an approval as approved, denied, still pending or closed some o
     expect(
       yield* Effect.forEach(['approved', 'denied', 'pending', 'canceled', 'expired'], statesOf),
     ).toEqual(['approved', 'denied', 'pending', 'closed', 'closed'])
+  }).pipe(Effect.scoped),
+)
+
+it.effect('reads when an approval was answered, and does without a time it cannot read', () =>
+  Effect.gen(function* () {
+    const respondedAtOf = Effect.fn('respondedAtOf')(function* (answer: HarkAnswer) {
+      const { client } = yield* withHarkClient(() => answer)
+
+      return (yield* client.awaitApproval(HarkId.make('int_1'))).respondedAt
+    })
+
+    expect(
+      yield* respondedAtOf(interactionRespondedTo('approved', '2026-07-25T18:06:52.000Z')),
+    ).toEqual(Option.some(DateTime.makeUnsafe('2026-07-25T18:06:52.000Z')))
+    expect(yield* respondedAtOf(interactionRespondedTo('approved', 'not a time'))).toEqual(
+      Option.none(),
+    )
+    expect(yield* respondedAtOf(interactionWaited('approved'))).toEqual(Option.none())
   }).pipe(Effect.scoped),
 )
 
