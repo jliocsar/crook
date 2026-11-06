@@ -60,15 +60,15 @@ const startOfRowHolding = (text: string): number =>
 beforeEach(() => {
   stubMediaQueries([])
   phoneViewport()
-  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
-    function rendered(this: HTMLElement) {
-      if (!this.hasAttribute('data-row')) {
-        return 0
-      }
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function rendered(
+    this: HTMLElement,
+  ) {
+    if (!this.hasAttribute('data-row')) {
+      return 0
+    }
 
-      return this.textContent.includes(HOLE_TEXT) ? HOLE_HEIGHT : LINE_HEIGHT
-    },
-  )
+    return this.textContent.includes(HOLE_TEXT) ? HOLE_HEIGHT : LINE_HEIGHT
+  })
 })
 
 afterEach(() => {

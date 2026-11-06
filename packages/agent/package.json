@@ -15,8 +15,8 @@
     "@crook/domain": "workspace:*",
     "@crook/herdr": "workspace:*",
     "@crook/protocol": "workspace:*",
-    "@effect/platform-bun": "4.0.5",
-    "effect": "4.0.5"
+    "@effect/platform-bun": "catalog:",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@crook/tsconfig": "workspace:*"

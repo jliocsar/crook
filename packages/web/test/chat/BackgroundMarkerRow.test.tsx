@@ -73,11 +73,11 @@ const measuredRows = () => {
   }
 
   vi.stubGlobal('ResizeObserver', ContentResizeObserver)
-  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
-    function rendered(this: HTMLElement) {
-      return this.hasAttribute('data-index') ? heightOf(this) : 0
-    },
-  )
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function rendered(
+    this: HTMLElement,
+  ) {
+    return this.hasAttribute('data-index') ? heightOf(this) : 0
+  })
 
   return () => {
     act(() => {

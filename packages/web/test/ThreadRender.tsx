@@ -129,11 +129,11 @@ export const liveTail = Effect.fn('liveTail')(function* (trailing: readonly Thre
 })
 
 export const quietTail = Effect.fn('quietTail')(function* () {
-  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
-    function rendered(this: HTMLElement) {
-      return this.hasAttribute('data-index') ? ESTIMATED_ROW_HEIGHT : 0
-    },
-  )
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function rendered(
+    this: HTMLElement,
+  ) {
+    return this.hasAttribute('data-index') ? ESTIMATED_ROW_HEIGHT : 0
+  })
 
   const { rerender } = render(thread([row('prompt')], null))
   const { grow } = scrollable(viewport())
@@ -220,17 +220,17 @@ export const catchUpLands = Effect.fn('catchUpLands')(function* (
   landedCount: number,
   options: { readonly holeFirst: boolean } = { holeFirst: false },
 ) {
-  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
-    function rendered(this: HTMLElement) {
-      const key = this.dataset['row'] ?? ''
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function rendered(
+    this: HTMLElement,
+  ) {
+    const key = this.dataset['row'] ?? ''
 
-      if (key.startsWith('landed')) {
-        return landedHeight
-      }
+    if (key.startsWith('landed')) {
+      return landedHeight
+    }
 
-      return key.startsWith('cached') ? cachedHeight : 0
-    },
-  )
+    return key.startsWith('cached') ? cachedHeight : 0
+  })
 
   const cached = Arr.makeBy(cachedCount, (index) => row(`cached ${index}`))
   const landed = Arr.makeBy(landedCount, (index) => ({
@@ -423,17 +423,17 @@ const heldMeasurements = (rowHeight: number) => {
 }
 
 export const inTallRowsFarAboveShortOnes = (count: number, tall: number, short: number) => {
-  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
-    function rendered(this: HTMLElement) {
-      const index = this.dataset['index']
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function rendered(
+    this: HTMLElement,
+  ) {
+    const index = this.dataset['index']
 
-      if (index === undefined) {
-        return 0
-      }
+    if (index === undefined) {
+      return 0
+    }
 
-      return Number(index) < count / 2 ? tall : short
-    },
-  )
+    return Number(index) < count / 2 ? tall : short
+  })
 
   const handle = React.createRef<ThreadHandle>()
 
@@ -491,11 +491,11 @@ export const rowsShrinkAfterOpen = (
   const measurements = heldMeasurements(measuredHeight)
   let laidOutHeight = renderedHeight
 
-  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
-    function rendered(this: HTMLElement) {
-      return this.hasAttribute('data-index') ? laidOutHeight : 0
-    },
-  )
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function rendered(
+    this: HTMLElement,
+  ) {
+    return this.hasAttribute('data-index') ? laidOutHeight : 0
+  })
 
   vi.stubGlobal('ResizeObserver', measurements.HeldResizeObserver)
   render(

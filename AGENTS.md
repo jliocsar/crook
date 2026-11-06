@@ -78,9 +78,10 @@ bump the three together. tsgo 0.58 added `effect-tsgo oxlint` and `effect-tsgo t
 patched binaries without touching `node_modules`; crook still patches, since editors and plain
 `tsc` launch the stock binaries.
 
-Any reinstall reverts the patch, and `prepare` then refuses to redo it because its backups still
-exist — `Unknown plugin: 'effecttsgo'` is what that looks like. Run `bunx effect-tsgo unpatch
---oxlint` first, then `bun run prepare` (measured, twice).
+A reinstall reverts the patch and `prepare` redoes it: `Unknown plugin: 'effecttsgo'` is what a
+missing patch looks like, and the Effect rules ran again after `bun install --force` and a patch
+(measured on tsgo 0.67.4). A toolchain bump still unpatches first, with `bunx effect-tsgo unpatch
+--oxlint`, since that restores the old build's binaries.
 :::
 
 The git hooks are plain scripts in `.githooks`, and `prepare` points `core.hooksPath` at them. Husky
@@ -93,6 +94,17 @@ a flag passes.
 Running `prepare` in a worktree whose branch has `.githooks` takes the hooks away from every worktree
 on a branch that doesn't, so while such a branch is out, install there with `--ignore-scripts` and
 run `bunx effect-tsgo patch --oxlint` by hand.
+
+Installs wait three days for a new release, set in `bunfig.toml`. A version an exact pin asks for
+fails too, and a young optional package is skipped with no error, which is how tsgo's platform
+binary goes missing. A lockfile's entries aren't re-checked: a frozen install from a clean copy found
+every one (measured). So a bump you mean to make runs `bun install --minimum-release-age 0` once, and
+every later install reads the lockfile.
+
+Effect's packages take their version from the `catalog` under the root's `workspaces`, and every
+manifest says `catalog:`, so one line moves them together. A frozen install resolves it to one copy of
+`effect`, and the release build bundles what the install resolved: the host build's binaries report
+their version, and the release smoke script passes on them (all measured).
 
 :::warning
 `typescript`, `oxlint`, `oxlint-tsgolint` AND `@effect/tsgo` itself are pinned EXACTLY (no `^`).

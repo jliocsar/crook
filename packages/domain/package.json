@@ -11,7 +11,7 @@
     "test": "vitest run --fsModuleCachePath node_modules/.vitest-cache"
   },
   "dependencies": {
-    "effect": "4.0.5"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@crook/tsconfig": "workspace:*"
