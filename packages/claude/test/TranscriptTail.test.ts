@@ -37,6 +37,7 @@ import {
   drained,
   encodeMessages,
   fixtureFile,
+  readToEnd,
   services,
 } from './Fixtures'
 
@@ -226,17 +227,18 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
 
   live.effect('resumes after a line offset it handed out, and nowhere else', () =>
     Effect.gen(function* () {
-      const tail = yield* TranscriptTail
       const file = fixtureFile('plain-turn.jsonl')
       const whole = yield* drained(file)
       const resumeAt = TranscriptOffset.make(20016)
-      const resumed = yield* tail.drain(file, resumeAt).pipe(Stream.runCollect)
-      const midLine = yield* tail
-        .drain(file, TranscriptOffset.make(20017))
-        .pipe(Stream.runCollect, Effect.flip)
-      const beyond = yield* tail
-        .drain(file, TranscriptOffset.make(10 ** 9))
-        .pipe(Stream.runCollect, Effect.flip)
+      const resumed = yield* Stream.runCollect(readToEnd(file, resumeAt))
+      const midLine = yield* readToEnd(file, TranscriptOffset.make(20017)).pipe(
+        Stream.runCollect,
+        Effect.flip,
+      )
+      const beyond = yield* readToEnd(file, TranscriptOffset.make(10 ** 9)).pipe(
+        Stream.runCollect,
+        Effect.flip,
+      )
 
       expect(messagesIn(resumed)).toEqual(
         messagesIn(whole).filter((message) => message.offset >= resumeAt),
@@ -253,7 +255,7 @@ layer(services, { excludeTestServices: true })('TranscriptTail', (live) => {
       const whole = yield* fixtureBytes('plain-turn.jsonl')
       const bytes = TranscriptTailBytes.make(Math.floor(whole.length / 2))
       const start = yield* tail.tailStart(file, START, bytes)
-      const resumed = yield* tail.drain(file, start).pipe(Stream.runCollect)
+      const resumed = yield* Stream.runCollect(readToEnd(file, start))
       const everything = yield* tail.tailStart(
         file,
         START,

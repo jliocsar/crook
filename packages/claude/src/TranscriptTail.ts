@@ -293,9 +293,6 @@ const make = Effect.gen(function* () {
     return { available, caughtUp }
   })
 
-  const drainWith = (file: TranscriptFile, from: TranscriptOffset, parse: LineParser) =>
-    Stream.unwrap(Effect.map(open(file, from, parse), ({ available }) => available))
-
   const followWith = (file: TranscriptFile, from: TranscriptOffset, parse: LineParser) =>
     Stream.unwrap(
       Effect.map(open(file, from, parse), ({ available, caughtUp }) =>
@@ -326,11 +323,9 @@ const make = Effect.gen(function* () {
         )
   }, Effect.scoped)
 
-  const drain = (file: TranscriptFile, from: TranscriptOffset) => drainWith(file, from, parseLine)
-
   const follow = (file: TranscriptFile, from: TranscriptOffset) => followWith(file, from, parseLine)
 
-  return TranscriptTail.of({ follow, drain, followWith, drainWith, tailStart })
+  return TranscriptTail.of({ follow, followWith, tailStart })
 })
 
 export class TranscriptTail extends Context.Service<
@@ -340,20 +335,11 @@ export class TranscriptTail extends Context.Service<
       file: TranscriptFile,
       from: TranscriptOffset,
     ) => Stream.Stream<TailEvent, TailError>
-    readonly drain: (
-      file: TranscriptFile,
-      from: TranscriptOffset,
-    ) => Stream.Stream<TranscriptChunk, TailError>
     readonly followWith: (
       file: TranscriptFile,
       from: TranscriptOffset,
       parse: LineParser,
     ) => Stream.Stream<TailEvent, TailError>
-    readonly drainWith: (
-      file: TranscriptFile,
-      from: TranscriptOffset,
-      parse: LineParser,
-    ) => Stream.Stream<TranscriptChunk, TailError>
     readonly tailStart: (
       file: TranscriptFile,
       from: TranscriptOffset,

@@ -14,8 +14,10 @@ import { LastTurn } from '@crook/claude/LastTurn'
 import { SessionScans } from '@crook/claude/SessionScans'
 import { SubagentRoster } from '@crook/claude/SubagentRoster'
 import { TranscriptFile } from '@crook/claude/TranscriptLocator'
-import { TranscriptTail, messagesIn } from '@crook/claude/TranscriptTail'
+import { parseLine } from '@crook/claude/TranscriptParser'
+import { type LineParser, TranscriptTail, messagesIn } from '@crook/claude/TranscriptTail'
 import { ClaudeSessionId, TranscriptOffset } from '@crook/domain/Ids'
+import { TranscriptCaughtUp, TranscriptChunk } from '@crook/domain/Transcript'
 import { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 export const FIXTURES = `${import.meta.dirname}/fixtures`
@@ -43,11 +45,22 @@ export const encodeMessages = Schema.encodeSync(Schema.Array(TranscriptMessage))
 export const fixtureFile = (name: string) =>
   new TranscriptFile({ session: SESSION, path: `${FIXTURES}/${name}` })
 
-export const drained = Effect.fn('drained')(function* (file: TranscriptFile) {
-  const tail = yield* TranscriptTail
+const isCaughtUp = Schema.is(TranscriptCaughtUp)
 
-  return yield* tail.drain(file, START).pipe(Stream.runCollect)
-})
+const isChunk = Schema.is(TranscriptChunk)
+
+export const readToEnd = (
+  file: TranscriptFile,
+  from: TranscriptOffset = START,
+  parse: LineParser = parseLine,
+) =>
+  Stream.unwrap(
+    Effect.map(Effect.service(TranscriptTail), (tail) =>
+      tail.followWith(file, from, parse).pipe(Stream.takeUntil(isCaughtUp), Stream.filter(isChunk)),
+    ),
+  )
+
+export const drained = (file: TranscriptFile) => Stream.runCollect(readToEnd(file))
 
 export const messagesOf = Effect.fn('messagesOf')(function* (name: string) {
   const chunks = yield* drained(fixtureFile(name))
