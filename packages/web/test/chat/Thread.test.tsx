@@ -12,6 +12,7 @@ import {
   historyOpen,
   holeFills,
   holeFillsWhileAway,
+  inTallRowsFarAboveShortOnes,
   liftOf,
   lifted,
   liftsWritten,
@@ -30,6 +31,7 @@ const LONG_ANSWER_HEIGHT = 5000
 const SHORT_SCROLL = 100
 const NUDGE = 20
 const MANY_ROWS = 60
+const FAR_UP_ROWS = 300
 const RENDERED_ROW_HEIGHT = 120
 const SHORT_ROW_HEIGHT = 20
 const OPENING_ROW_HEIGHTS = [130, 140, 150, 160, 170]
@@ -367,6 +369,41 @@ describe('Thread', () => {
 
       expect(opened.top()).toBe(opened.bottom())
       expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('starts Latest one screen from the end at most, and never further up than it is', () =>
+    Effect.sync(() => {
+      const opened = historyOpen()
+
+      opened.fingerScrollsUp(SHORT_SCROLL)
+
+      expect(opened.pressesLatestFromWhere()).toEqual([opened.bottom() - SHORT_SCROLL])
+
+      opened.growsBelow(LONG_ANSWER_HEIGHT)
+      opened.fingerScrollsUp(LONG_ANSWER_HEIGHT)
+
+      expect(opened.pressesLatestFromWhere()).toEqual([opened.bottom() - VIEWPORT_HEIGHT])
+    }),
+  )
+
+  it.effect('renders the rows Latest starts on in the commit of the press', () =>
+    Effect.sync(() => {
+      const opened = inTallRowsFarAboveShortOnes(FAR_UP_ROWS, LONG_ANSWER_HEIGHT, SHORT_ROW_HEIGHT)
+
+      opened.pressesLatest()
+
+      expect(opened.rowsReachUpTo()).toBeLessThanOrEqual(opened.top())
+    }),
+  )
+
+  it.effect('renders the end in the commit of a send from far up', () =>
+    Effect.sync(() => {
+      const opened = inTallRowsFarAboveShortOnes(FAR_UP_ROWS, LONG_ANSWER_HEIGHT, SHORT_ROW_HEIGHT)
+
+      opened.sends()
+
+      expect(opened.rowsReachUpTo()).toBeLessThanOrEqual(opened.top())
     }),
   )
 

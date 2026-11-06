@@ -226,6 +226,22 @@ const usePins = (
     }
   }, [viewport, lifted, askedPin])
 
+  const glideToBottom = React.useCallback(
+    (behavior: ScrollBehavior) => {
+      if (viewport.current !== null) {
+        const end = endOf(viewport.current, lifted())
+
+        askedPin()
+        viewport.current.scrollTop = Math.max(
+          viewport.current.scrollTop,
+          end - viewport.current.clientHeight,
+        )
+        viewport.current.scrollTo({ top: end, behavior })
+      }
+    },
+    [viewport, lifted, askedPin],
+  )
+
   const toWhereTheUserLeftIt = React.useCallback(() => {
     if (viewport.current !== null) {
       viewport.current.scrollTop = endOf(viewport.current, lifted()) - leftFromEnd.current
@@ -242,6 +258,7 @@ const usePins = (
 
   return {
     toBottom,
+    glideToBottom,
     pin,
     settle: () => {
       const repins = intent.settle()
@@ -530,8 +547,12 @@ export function Thread({
   const { raise, holdReach, lifting, pinMoved, current: liftNow } = lift
   const [, renderReach] = React.useReducer((renders: number) => renders + 1, 0)
 
-  const { askedPin } = intent
-  const { toBottom, pin, settle, scrollHeard } = usePins(viewport, followingRef, liftNow, intent)
+  const { toBottom, glideToBottom, pin, settle, scrollHeard } = usePins(
+    viewport,
+    followingRef,
+    liftNow,
+    intent,
+  )
   const onScrollStop = useOnScrollStop(settle)
 
   const virtualizer = useVirtualizer({
@@ -569,6 +590,13 @@ export function Thread({
     }
   }
 
+  const comesBackToTheEnd = () => {
+    if (!followingRef.current) {
+      virtualizer.scrollOffset = viewport.current?.scrollTop ?? null
+      follow(true)
+    }
+  }
+
   React.useLayoutEffect(() => {
     adjustsOnResizeWhile(virtualizer, followingRef.current)
   }, [virtualizer])
@@ -577,8 +605,8 @@ export function Thread({
     handle,
     () => ({
       scrollToEnd: () => {
-        follow(true)
         toBottom()
+        comesBackToTheEnd()
       },
     }),
     [virtualizer, toBottom],
@@ -704,12 +732,8 @@ export function Thread({
         <LatestButton
           following={following}
           onJump={() => {
-            follow(true)
-            askedPin()
-            viewport.current?.scrollTo({
-              top: viewport.current.scrollHeight,
-              behavior: reduce ? 'auto' : 'smooth',
-            })
+            glideToBottom(reduce ? 'auto' : 'smooth')
+            comesBackToTheEnd()
           }}
         />
       </Dimmed>

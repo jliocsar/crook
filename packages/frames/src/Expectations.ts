@@ -83,6 +83,10 @@ export const TIMELINE_EXPECTATIONS = {
     },
     { watchFrom: 'first-step' },
   ),
+  'transition/latest-from-far-up': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer') },
+    { watchFrom: 'first-step' },
+  ),
   'transition/show-earlier-at-hole-long': story(
     {
       thread: inSequence('thread-rows'),

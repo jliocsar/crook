@@ -5,10 +5,12 @@ import { answered, chunk, prompt, said, toolResult, toolUse } from '../test/Tran
 const MANY_LINES = 120
 const LINE_BYTES = 10
 const MANY_TURNS = 16
+const LONG_THREAD_TURNS = 60
 const LINES_PER_TURN = 4
 
 export const MANY_LINES_END = MANY_LINES * LINE_BYTES
 export const MANY_TURNS_END = MANY_TURNS * LINES_PER_TURN * LINE_BYTES
+export const LONG_THREAD_END = LONG_THREAD_TURNS * LINES_PER_TURN * LINE_BYTES
 
 export const manyLinesChunk = (from: number) =>
   chunk(
@@ -31,11 +33,13 @@ const turn = (from: number, index: number) => {
   ]
 }
 
-export const manyTurnsChunk = (from: number) =>
+const turnsChunk = (from: number, count: number) =>
   chunk(
     from,
-    from + MANY_TURNS_END,
-    Arr.makeBy(MANY_TURNS, (index) =>
-      turn(from + index * LINES_PER_TURN * LINE_BYTES, index),
-    ).flat(),
+    from + count * LINES_PER_TURN * LINE_BYTES,
+    Arr.makeBy(count, (index) => turn(from + index * LINES_PER_TURN * LINE_BYTES, index)).flat(),
   )
+
+export const manyTurnsChunk = (from: number) => turnsChunk(from, MANY_TURNS)
+
+export const longThreadChunk = () => turnsChunk(0, LONG_THREAD_TURNS)
