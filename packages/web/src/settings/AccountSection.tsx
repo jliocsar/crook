@@ -18,6 +18,7 @@ import { SettingsNote, SettingsSection } from '@crook/web/settings/SettingsSecti
 type LogOut = ReturnType<typeof useLogOut>
 
 const ACCOUNT_UNAVAILABLE = 'Shows once crook reconnects'
+const ACCOUNT_FAILED = 'Could not load'
 const LOST_PHONE_NOTE = 'Lost this phone? End its session on exe.dev from another device.'
 
 const LOG_OUT_SCOPE_NOTE =
@@ -42,7 +43,7 @@ function AccountEmail({
               <Skeleton className="ml-auto w-40" />
             </span>
           ),
-        onSome: (message) => <span className="text-destructive font-sans">{message}</span>,
+        onSome: () => <span className="text-muted-foreground font-sans">{ACCOUNT_FAILED}</span>,
       }),
     onSome: (known) => known.email,
   })
