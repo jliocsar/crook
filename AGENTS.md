@@ -1573,6 +1573,22 @@ package (measured on 4.22.0). That module only re-exports `cn`, which
 :::
 
 :::warning
+The app imports neither shadcn's stylesheet nor tw-animate-css, and buttons take no
+`class-variance-authority`. A component `shadcn add` writes may use `animate-in`, `fade-in` and the
+like, which now emit nothing and fail nowhere, and `data-open:` and its siblings, which fall back on
+Tailwind's own `[data-open]` selector (reasoned, not measured). Read what an add wrote before
+keeping it.
+
+A stylesheet can carry what a grep for its classes misses. Two `@utility` of one name in two
+stylesheets merge into one rule, so the app's own `no-scrollbar` got `scrollbar-width` only from
+shadcn's, and the declaration left the production CSS with the import (measured). Tailwind also
+emits a rule for any plain word in the source that names a utility, so the words `running` and
+`paused` kept tw-animate-css's rules of those names in the build, though the 438 catalog stories
+applied 589 distinct classes and neither was one (measured). So when a stylesheet goes, diff the
+production CSS rule by rule rather than trusting the grep.
+:::
+
+:::warning
 The PWA assets generator writes its PNGs next to the source image. The image must live in Vite's
 public directory or the icons never reach the build (measured).
 :::
