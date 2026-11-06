@@ -1,6 +1,7 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import { expect, layer } from '@effect/vitest'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
@@ -39,10 +40,17 @@ import {
   type HerdrSubscriptionError,
   type ScriptedResponse,
   type SentRequest,
+  HerdrTimedOut,
   decodeSentRequest,
+  scriptedRejection,
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
-import { AgentPromptMethod, AgentSendKeysMethod, PaneReadMethod } from '@crook/herdr/Methods'
+import {
+  AgentPromptMethod,
+  AgentSendKeysMethod,
+  HERDR_READ_TIMEOUT,
+  PaneReadMethod,
+} from '@crook/herdr/Methods'
 import {
   AskDialogUnreadable,
   AskNotPending,
@@ -434,6 +442,55 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
 
       expect(refused).toEqual(new AskOptionUnavailable({ pane: AGENT_PANE, option }))
       expect(yield* sentAfter(sent)).toEqual([])
+    }),
+  )
+
+  it.effect('asks for a re-read when herdr does not answer the read an answer starts with', () =>
+    Effect.gen(function* () {
+      const ask = new UnknownAsk({ id: AskId.make('blocked-term_1-4'), screen: '❯ \n' })
+      const blocked = machineStateWith([agentRow({ status: 'blocked', ask: Option.some(ask) })])
+      const invalidations = yield* Ref.make(0)
+      const silentHerdr = Layer.mock(HerdrClient, {
+        request: (method) =>
+          Effect.fail(
+            new HerdrTimedOut({
+              method: method.name,
+              timeoutMillis: Duration.toMillis(HERDR_READ_TIMEOUT),
+            }),
+          ),
+      })
+      const context = yield* Layer.build(
+        executorWith(silentHerdr, yield* SubscriptionRef.make(blocked), {
+          invalidate: Ref.update(invalidations, (count) => count + 1),
+        }),
+      )
+      const refused = yield* Context.get(context, CommandExecutor)
+        .execute(ACTION, answer(ask, new Approve({})))
+        .pipe(Effect.flip)
+
+      expect(refused).toEqual(new AskDialogUnreadable({ pane: AGENT_PANE }))
+      expect(yield* Ref.get(invalidations)).toBe(1)
+    }),
+  )
+
+  it.effect('asks for a re-read when the message after a decline does not land', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('12-native-bash-t20')
+      const ask = bashAsk(screen)
+      const { executor, sent, state, invalidations } = yield* startExecutor(ask, [
+        screenRead(screen),
+        keysSent,
+        scriptedRejection(AgentPromptMethod, 'agent_blocked', 'waiting at a dialog'),
+      ])
+      const declined = answer(ask, new Decline({ message: Option.some('use printf') }))
+      const running = yield* executor.execute(ACTION, declined).pipe(Effect.forkChild)
+
+      yield* Queue.take(sent)
+      yield* Queue.take(sent)
+      yield* SubscriptionRef.set(state, machineStateWith([agentRow({ status: 'idle' })]))
+      yield* Fiber.join(running).pipe(Effect.flip)
+
+      expect(yield* Ref.get(invalidations)).toBe(1)
     }),
   )
 

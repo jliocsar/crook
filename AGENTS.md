@@ -1640,8 +1640,15 @@ one refresh (a snapshot, then every pane's process info and detection read at on
 8 panes printing in a loop: `session.snapshot` had a median of 104 to 119 ms and a slowest of
 201 ms, with the panes printing; `pane.process_info` and `pane.read` a median of 101 to 104 ms and
 a slowest of 144 ms; `events.subscribe` a median of 1 to 4 ms and a slowest of 118 ms; a whole
-refresh a slowest of 270 ms. A lone call can answer in under 1 ms, but one right after another
-waits about 100 ms, which reads as a 100 ms grid (not read in its source). Only reads carry the timeout. A call
+refresh a slowest of 270 ms. What decides between about 1 ms and about 100 ms is when a request's bytes reach a
+new connection, not what came before it: herdr looks at a connection as it takes it and then on 100 ms marks
+counted from the connect. Written 5, 20, 50 and 150 ms after the connect, a ping on 20 idle panes was answered
+96, 81, 50 and 50 ms after its write, all 60 of each within 3 ms of that (read from the outside, not in its source). So it is a race
+between the client's first write and herdr's first look. A raw client writing inside its connect callback mostly
+won it, back to back on 20 panes: a median of 0.22 to 9.51 ms, with 0 to 62 of 200 calls near 100 ms. crook's client,
+which writes once its socket has opened, mostly lost it, a median of 102 to 110 ms with 119 to 179 of 200 near 100 ms,
+and spaced 150 ms apart a median of 4 to 13 ms with 14 to 18 of 40. A burst raises the raw client's share: 25 to 58 of
+120 at eight at once. Only reads carry the timeout. A call
 that legitimately waits, such as a prompt, an agent start, a wait for output or a worktree, stays
 under the budget of the command around it, since timing out a call that has already acted says
 nothing about whether it landed.
@@ -1649,8 +1656,43 @@ nothing about whether it landed.
 A refresh runs inside the state's lock, so its reads being bounded is what bounds every other state
 change. When an invalidation's re-read times out the state says herdr is lost at once and the
 following subscription is told, so the reconnect loop takes over and clears the mark when herdr
-answers again; nothing else would, since an idle machine sends no events. A hung herdr with an idle
-subscription and nobody asking for a re-read goes unnoticed: nothing polls.
+answers again; nothing else would, since an idle machine sends no events.
+
+A hung herdr says nothing by itself. With herdr 0.9.5's named server under SIGSTOP, a real agent and hub and a
+stand-in phone: its subscription socket stayed open and silent, 0 lines over 60 s running idle and 0 over 30 s
+stopped. A new connection still opens in under 1 ms and takes a write, and no reply comes, until 4094 of them queue
+and a connect is refused. herdr has no heartbeat: `ping` is a request and nothing in its API schema pushes on a
+subscription, so any signal from it is a request somebody makes. Over a 40 s hang with nothing asked the phone kept
+its rows, a `working` one included, and the agent logged nothing. The same subscription carried the next status flip
+afterwards, so a hang nobody touched costs no resync. A pane's program stops with it: one writing to its pane moved 0
+bytes over 4 s, 3 of 3 runs, and ran on at resume, so a `working` row can go on naming an agent that is held too
+(reasoned: no real Claude was run).
+
+So nothing polls, and a hang is noticed when something next asks herdr. What already asks: a pending ask from a hook
+marked it lost 2074 ms later, and a pid file moving 4187 ms later, one read and one subscribe. A command used to fail on
+its own and say nothing: a prompt, keys or a rename answered unknown after 4055 to 4120 ms, and 33 s of hang later the
+herd still read as live. A command whose failure can be herdr's silence now asks for a re-read, whose own bound decides,
+since the command's failure alone proves little: herdr's stall window for a prompt is longer than the command's
+budget, and an unreadable dialog can be just that (both reasoned, not measured). The phone read lost 6082 to 6103 ms
+after a prompt or keys were sent, seven runs. An answer and a launch read before they write, so they fail after 2051 to
+2092 ms with nothing sent, and the phone read lost 4079 to 4124 ms after them, five runs. Each cleared 250 to 378 ms after
+herdr resumed, as a resync. A chat opening asks herdr nothing, and a hub publish needs a state change first (both read
+in the code), so neither would carry it on an idle machine. The word shows on the machine's card and screen.
+
+A poll was left out on purpose, and its cost is not why. A ping through crook's client cost 1.18 to 1.68 ms of the agent's
+CPU, three runs of 1000, and about 0.3 ms of herdr's in the two with nothing printing, so one per 30 s is about 0.2
+CPU-seconds an hour. It would be a new interval on an idle machine, and until someone acts a hang costs a row reading as
+it last did.
+
+A test of a quiet subscription waits for the fake to answer the subscribe and the read after it before it goes silent.
+Gone silent straight after the sync was built, the subscribe itself went unanswered and marked herdr lost, so the test of
+a command passed with the re-read taken out, in 4418 ms (measured).
+
+Giving up on a request does not take it back. What a client wrote to a hung herdr stays in its socket and runs on
+resume, the client long gone: a `pane.send_input` from a closed connection landed 187 ms after SIGCONT, and each prompt
+the phone had been told was unknown reached the pane once herdr resumed, in all five hangs read back, up to 28 s after the reply.
+Two landed in the order sent in one run and reversed in the other. That is what unknown means here, so a resend after a
+hang can land twice.
 
 An agent reads herdr once as it starts, and on any failure attaches with an empty state marked lost
 instead of retrying. Retrying before it attached left an agent started before herdr showing the

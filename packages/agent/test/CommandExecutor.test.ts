@@ -24,6 +24,7 @@ import {
   Prompt,
   RenameAgent,
   SendKeys,
+  StartAgent,
   interrupt,
 } from '@crook/domain/Command'
 import { ClaudeSessionId, IdempotencyKey, PaneId } from '@crook/domain/Ids'
@@ -69,6 +70,7 @@ const AGENT_PANE = PaneId.make('w1:p1')
 const SHELL_PANE = PaneId.make('w1:p2')
 const FIRST_ACTION = IdempotencyKey.make('3f1c8a52-0b7e-4d0a-9a51-6f3f0d2f8e11')
 const SECOND_ACTION = IdempotencyKey.make('9b2e4d17-5c6a-4f81-8e0d-2a7c1b9f4e63')
+const MISSING_HERDR_SOCKET = `${import.meta.dirname}/missing-herdr.sock`
 
 const prompted = scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })
 const keysSent = scriptedResult(AgentSendKeysMethod, { type: 'ok' })
@@ -96,13 +98,15 @@ const startExecutor = Effect.fn('startExecutor')(function* (
   return { executor: Context.get(context, CommandExecutor), sent: Queue.clear(sent), state }
 })
 
-const startStuckExecutor = Effect.fn('startStuckExecutor')(function* () {
+const startStuckExecutor = Effect.fn('startStuckExecutor')(function* (
+  options: ExecutorOptions = {},
+) {
   const state = yield* SubscriptionRef.make(machineStateWith([agentRow()]))
   const requests = yield* Queue.unbounded<string>()
   const stuckHerdr = Layer.mock(HerdrClient, {
     request: (method) => Queue.offer(requests, method.name).pipe(Effect.andThen(Effect.never)),
   })
-  const context = yield* Layer.build(executorWith(stuckHerdr, state))
+  const context = yield* Layer.build(executorWith(stuckHerdr, state, options))
 
   return { executor: Context.get(context, CommandExecutor), requests }
 })
@@ -298,7 +302,7 @@ it.effect('reports herdr unavailable when its socket does not answer', () =>
   Effect.gen(function* () {
     const state = yield* SubscriptionRef.make(machineStateWith([agentRow()]))
     const context = yield* Layer.build(
-      executorWith(HerdrClient.layerAt(`${import.meta.dirname}/missing-herdr.sock`), state),
+      executorWith(HerdrClient.layerAt(MISSING_HERDR_SOCKET), state),
     )
     const failure = yield* Context.get(context, CommandExecutor)
       .execute(FIRST_ACTION, continuePrompt)
@@ -407,6 +411,56 @@ const closed = scriptedResult(PaneCloseMethod, { type: 'ok' })
 const rename = new RenameAgent({ pane: AGENT_PANE, label: Option.some('Payments') })
 const unconfirmedClose = new ClosePane({ pane: AGENT_PANE, confirmed: false })
 const confirmedClose = new ClosePane({ pane: AGENT_PANE, confirmed: true })
+
+describe('when herdr stays silent', () => {
+  const countingRereads = Effect.map(Ref.make(0), (rereads) => ({
+    rereads,
+    invalidate: Ref.update(rereads, (count) => count + 1),
+  }))
+
+  it.effect('asks for a re-read once a delivery has gone unanswered', () =>
+    Effect.gen(function* () {
+      const { rereads, invalidate } = yield* countingRereads
+      const { executor, requests } = yield* startStuckExecutor({ invalidate })
+      const caller = yield* Effect.forkChild(executor.execute(FIRST_ACTION, continuePrompt))
+
+      yield* Queue.take(requests)
+
+      const beforeTheBudgetRanOut = yield* Ref.get(rereads)
+
+      yield* TestClock.adjust(HERDR_DELIVERY_TIMEOUT)
+      yield* Fiber.join(caller).pipe(Effect.flip)
+
+      expect(beforeTheBudgetRanOut).toBe(0)
+      expect(yield* Ref.get(rereads)).toBe(1)
+    }),
+  )
+
+  it.effect('asks for a re-read when a launch finds herdr unavailable', () =>
+    Effect.gen(function* () {
+      const { rereads, invalidate } = yield* countingRereads
+      const state = yield* SubscriptionRef.make(machineStateWith([agentRow()]))
+      const context = yield* Layer.build(
+        executorWith(HerdrClient.layerAt(MISSING_HERDR_SOCKET), state, {
+          invalidate,
+        }),
+      )
+      const failure = yield* Context.get(context, CommandExecutor)
+        .execute(
+          FIRST_ACTION,
+          new StartAgent({
+            kind: 'claude',
+            folder: import.meta.dirname,
+            task: Option.none(),
+          }),
+        )
+        .pipe(Effect.flip)
+
+      expect(failure).toEqual(new HerdrUnavailable())
+      expect(yield* Ref.get(rereads)).toBe(1)
+    }),
+  )
+})
 
 it.effect('renames the pane in herdr and asks for a re-read, since herdr sends no event', () =>
   Effect.gen(function* () {
