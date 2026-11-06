@@ -28,6 +28,7 @@ const sampleMachine = (now: DateTime.Utc, id: string, label: string): MachineCar
   needsYou: 0,
   behindHub: false,
   herdrLostAt: Option.none(),
+  agentsUnseen: false,
 })
 
 const sampleMachines = (now: DateTime.Utc): MachinesLayout => ({

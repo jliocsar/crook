@@ -16,6 +16,9 @@ const MOST_RUN_DOTS = 3
 
 export const ASKING_BORDER = 'border-[color-mix(in_oklab,var(--warning)_45%,var(--border))]'
 
+const KEPT_ROW_TONE =
+  'text-muted-foreground [--accent:var(--muted-foreground)] [--primary:var(--muted-foreground)] [--warning:var(--muted-foreground)]'
+
 function Reveal({ id, children }: { id: string; children: React.ReactNode }) {
   const reduce = useReducedMotion() ?? false
   const tokens = motionTokens()
@@ -58,7 +61,11 @@ function AgentMeta({ card }: { card: AgentCardModel }) {
 
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <AgentStatusPill status={row.status} since={row.statusChangedAt} />
+      <AgentStatusPill
+        status={row.status}
+        since={row.statusChangedAt}
+        stoppedAt={card.herdrLostAt}
+      />
       {Option.match(row.branch, {
         onNone: () => null,
         onSome: (branch) => (
@@ -81,7 +88,11 @@ function AgentMeta({ card }: { card: AgentCardModel }) {
 function AgentAsk({ card, summary }: { card: AgentCardModel; summary: string }) {
   return (
     <span className="flex flex-col items-start gap-1.5">
-      <AgentStatusPill status={card.row.status} since={card.row.statusChangedAt} />
+      <AgentStatusPill
+        status={card.row.status}
+        since={card.row.statusChangedAt}
+        stoppedAt={card.herdrLostAt}
+      />
       <span
         data-slot="ask-summary"
         className="text-foreground inline-block max-w-full truncate rounded-[12px_12px_12px_4px] bg-[color-mix(in_oklab,var(--warning)_14%,var(--card))] px-2.5 py-1.5 font-mono text-[12px] leading-4"
@@ -94,9 +105,14 @@ function AgentAsk({ card, summary }: { card: AgentCardModel; summary: string }) 
 
 export function AgentCard({ card }: { card: AgentCardModel }) {
   const { row, needsYou } = card
+  const kept = Option.isSome(card.herdrLostAt)
 
   return (
-    <span data-slot="agent-card" className="flex min-w-0 flex-1 flex-col gap-1.5">
+    <span
+      data-slot="agent-card"
+      data-kept={kept ? '' : undefined}
+      className={cn('flex min-w-0 flex-1 flex-col gap-1.5', kept && KEPT_ROW_TONE)}
+    >
       <span
         data-slot="agent-place"
         className="text-muted-foreground flex min-w-0 items-center gap-1 text-[12px] leading-4"
@@ -116,11 +132,11 @@ export function AgentCard({ card }: { card: AgentCardModel }) {
         ) : null}
       </span>
       <span className="flex min-w-0 items-center gap-2">
-        <AgentStatusIcon status={row.status} />
+        <AgentStatusIcon status={row.status} still={kept} />
         <span
           data-slot="agent-title"
           className={cn(
-            'font-display min-w-0 truncate text-[17px] leading-6 tracking-[-0.01em]',
+            'font-display min-w-0 truncate text-[17px] leading-6 tracking-[-0.01em] transition-colors duration-(--motion) ease-(--ease-out)',
             needsYou ? 'font-semibold' : 'font-medium',
           )}
         >

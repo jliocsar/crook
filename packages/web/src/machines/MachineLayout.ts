@@ -12,7 +12,7 @@ import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import type { MachineId } from '@crook/domain/Ids'
 import type { Machine } from '@crook/domain/Machine'
 import { agentsIn } from '@crook/domain/MachineState'
-import { bodyFor, SectionBody } from '@crook/web/herd/HerdLayout'
+import { agentsUnseen, bodyFor, herdrLostAtOf, SectionBody } from '@crook/web/herd/HerdLayout'
 import { needsYouLabel } from '@crook/domain/NeedsYouLabel'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 
@@ -22,6 +22,7 @@ export interface MachineCardModel {
   readonly needsYou: number
   readonly behindHub: boolean
   readonly herdrLostAt: Option.Option<DateTime.Utc>
+  readonly agentsUnseen: boolean
 }
 
 export interface MachinesLayout {
@@ -46,14 +47,10 @@ export interface InfoRow {
 }
 
 const UNKNOWN_VERSION = 'unknown'
+const AGENTS_UNSEEN_ON_CARD = "Can't see its agents while herdr is away"
 
 const agentBehindHub = (machine: Machine, hubVersion: CrookVersion): boolean =>
   Option.exists(machine.agentVersion, (version) => isBehind(version, hubVersion))
-
-const herdrLostAtOf = ({ machine, state }: HerdMachine): Option.Option<DateTime.Utc> =>
-  machine.connection === 'online'
-    ? Option.flatMap(state, (shown) => shown.herdr.lostAt)
-    : Option.none()
 
 const machineCard = (herdMachine: HerdMachine, hubVersion: CrookVersion): MachineCardModel => ({
   machine: herdMachine.machine,
@@ -61,6 +58,7 @@ const machineCard = (herdMachine: HerdMachine, hubVersion: CrookVersion): Machin
   needsYou: needsYouCount(herdMachine),
   behindHub: agentBehindHub(herdMachine.machine, hubVersion),
   herdrLostAt: herdrLostAtOf(herdMachine),
+  agentsUnseen: agentsUnseen(herdMachine),
 })
 
 export const machinesLayout = (view: HerdView): MachinesLayout => ({
@@ -93,6 +91,7 @@ export const agentsHeading = (body: SectionBody): string =>
   SectionBody.$match(body, {
     Agents: ({ agents }) => `Agents · ${agents.length}`,
     NoAgents: () => 'Agents · 0',
+    AgentsUnseen: () => 'Agents',
     Offline: () => 'Agents',
   })
 
@@ -101,7 +100,7 @@ export const agentCountLabel = (count: number): string =>
 
 export const agentSummary = (card: MachineCardModel): string => {
   if (card.agents === 0) {
-    return 'No agents'
+    return card.agentsUnseen ? AGENTS_UNSEEN_ON_CARD : 'No agents'
   }
 
   return card.needsYou > 0

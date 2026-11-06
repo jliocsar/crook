@@ -49,6 +49,7 @@ const sampleCard = (
   workspace: 'project',
   tab: 'folder',
   askSummary: Option.none(),
+  herdrLostAt: Option.none(),
 })
 
 const sampleSection = (
@@ -67,6 +68,7 @@ const sampleSection = (
     herdrVersion: Option.none(),
   }),
   needsYou: 0,
+  herdrLostAt: Option.none(),
   body: SectionBody.Agents({ agents }),
 })
 

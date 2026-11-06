@@ -6,6 +6,8 @@ import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
 
+export const AGENTS_UNSEEN = "Can't see this machine's agents while herdr is away"
+
 export function NothingRunning({
   controlsEnabled,
   onNewAgent,
@@ -47,6 +49,10 @@ export function AllOffline() {
 
 export function NoAgentsLine() {
   return <p className="text-muted-foreground px-4 pt-1 pb-1 text-sm">No agents</p>
+}
+
+export function AgentsUnseenLine() {
+  return <p className="text-muted-foreground px-4 pt-1 pb-1 text-sm">{AGENTS_UNSEEN}</p>
 }
 
 export function OfflineLine({ lastSeenAt }: { lastSeenAt: DateTime.Utc }) {

@@ -659,7 +659,8 @@ that adds one.
 
 - **A card** is the herd card's surface. The label in display 20/28, then the machine badge and,
   when its crook agent is older than the hub, a warn "update agent" Status Pill. Then "N agents ·
-  N need you" ("No agents" with none), then the agent and Herdr versions in mono 12px, leaving out
+  N need you" ("No agents" with none, or "Can't see its agents while herdr is away" when herdr is
+  lost with none on record), then the agent and Herdr versions in mono 12px, leaving out
   a version the hub never heard. A chevron on the right. Tap pushes the machine.
 - **An offline card** reads "Swipe to forget, or wait for it to reconnect" in place of its counts,
   and swiping it reveals Forget (D15), on the swipe row's knobs. Forget is disabled while the hub
@@ -672,7 +673,9 @@ that adds one.
   - **Agents · N**: the machine's agents as the herd's cards, in the same order; tap opens the
     chat, and swipe and long-press act on them as on the herd. Offline the heading is plain
     "Agents", over "Offline, so its agents are unknown until it reconnects." None
-    reads "No agents running. Start one from Agents." Reconnecting dims them, like the herd.
+    reads "No agents running. Start one from Agents." Reconnecting dims them, like the herd. With
+    herdr lost and none on record the heading is plain "Agents", over "Can't see this machine's
+    agents while herdr is away". Kept rows read as on the herd.
   - **About** is a flat info list: Online for, Reconnecting for or Last seen (from the hub's last
     connection change), crook agent (a warn pill reading "0.0.9, hub has 0.1.0" when behind),
     Herdr ("unknown" when the hub never heard) and Machine id.
@@ -751,6 +754,10 @@ rule.
 - **Failed content dims to 60%,** and only then: while the hub is unreachable, while the phone is
   offline, and until the herd is back from either. Headers and the back button stay at full
   strength.
+- **A kept row loses its colour,** not its strength. While its machine has lost herdr a row's title,
+  icon and status go to the muted colour, its clock stops where herdr went and its working icon
+  stops breathing, and the card's frame, the swipe actions and the tap stay as they are, because
+  the row still works. Only that machine's rows change.
 - **Hub actions are disabled** only while a failure is on the banner. Back, tabs, scrolling and
   opening chats keep working.
 - **A dial looks live.** Nothing dims and every control stays open while crook dials, on a redial,
@@ -784,6 +791,10 @@ rule.
 - **Every machine offline:** a muted "All machines are offline" line at the top, and each machine
   keeps its "Last seen" line. The red banner stays reserved for the hub.
 - **A machine with no agents** next to busy ones: a muted "No agents" line under its header.
+- **Herdr lost with no agents on record:** a muted "Can't see this machine's agents while herdr is
+  away" line under that machine's header, with the herdr lost pill in the header. "Nothing running"
+  shows only if no machine is in that state, so a lost machine beside an empty one reads each its
+  own line.
 
 Unmeasured knobs, picked in the prototype; settle them on the phone: the 1.5s "Back online", the
 32px strip, the pull distances and its 0.5 resistance, the skeleton's three and two cards, and the

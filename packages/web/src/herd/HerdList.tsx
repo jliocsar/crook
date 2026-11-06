@@ -16,7 +16,13 @@ import { ASKING_BORDER, AgentCard } from '@crook/web/herd/AgentCard'
 import { useHeldOrder } from '@crook/web/herd/HeldOrder'
 import { SectionBody } from '@crook/web/herd/HerdLayout'
 import type { AgentCardModel, HerdLayout, HerdNotice } from '@crook/web/herd/HerdLayout'
-import { AllOffline, NoAgentsLine, NothingRunning, OfflineLine } from '@crook/web/herd/HerdNotices'
+import {
+  AgentsUnseenLine,
+  AllOffline,
+  NoAgentsLine,
+  NothingRunning,
+  OfflineLine,
+} from '@crook/web/herd/HerdNotices'
 import { MachineSection } from '@crook/web/herd/MachineSection'
 import { NoMachines } from '@crook/web/machines/NoMachines'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
@@ -95,7 +101,7 @@ const AgentCardBody = React.memo(function AgentCardBody({
       surface="agent"
       frameClassName={cn(
         'transition-[border-color] duration-(--motion) ease-(--ease-out)',
-        Option.isSome(card.askSummary) && ASKING_BORDER,
+        Option.isSome(card.askSummary) && Option.isNone(card.herdrLostAt) && ASKING_BORDER,
       )}
       actions={[
         pinAction(card.pinned, pin.toggle, !controlsEnabled || pin.pending),
@@ -210,6 +216,7 @@ export function HerdList({
               />
             ),
             NoAgents: () => <NoAgentsLine />,
+            AgentsUnseen: () => <AgentsUnseenLine />,
             Offline: () => <OfflineLine lastSeenAt={section.machine.lastSeenAt} />,
           })}
         </MachineSection>

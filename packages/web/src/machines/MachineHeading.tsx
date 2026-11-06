@@ -17,7 +17,7 @@ function UpdatePill({ behindHub }: { behindHub: boolean }) {
   )
 }
 
-function HerdrLostPill({ lostAt }: { lostAt: Option.Option<DateTime.Utc> }) {
+export function HerdrLostPill({ lostAt }: { lostAt: Option.Option<DateTime.Utc> }) {
   if (Option.isNone(lostAt)) {
     return null
   }

@@ -8,6 +8,7 @@ import { SPRING } from '@crook/web/motion/Springs'
 import { scale, useTransformString } from '@crook/web/motion/TransformString'
 
 const POP_FROM = 0.55
+const BREATHING = 'animate-breathe motion-reduce:animate-none'
 
 const STATUS_ICON_PATH = {
   working: (
@@ -44,14 +45,20 @@ const STATUS_ICON_PATH = {
 } satisfies Record<AgentStatus, React.ReactElement>
 
 const STATUS_ICON_TONE = {
-  working: 'text-primary animate-breathe motion-reduce:animate-none',
+  working: 'text-primary',
   blocked: 'text-warning',
   done: 'text-[color-mix(in_oklab,var(--accent)_85%,var(--foreground))]',
   idle: 'text-[color-mix(in_oklab,var(--muted-foreground)_75%,var(--background))]',
   unknown: 'text-[color-mix(in_oklab,var(--muted-foreground)_40%,var(--background))]',
 } satisfies Record<AgentStatus, string>
 
-export function AgentStatusIcon({ status }: { status: AgentStatus }) {
+export function AgentStatusIcon({
+  status,
+  still = false,
+}: {
+  status: AgentStatus
+  still?: boolean
+}) {
   const transform = useTransformString()
 
   return (
@@ -69,7 +76,11 @@ export function AgentStatusIcon({ status }: { status: AgentStatus }) {
           <svg
             viewBox="0 0 20 20"
             fill="currentColor"
-            className={cn('block size-full', STATUS_ICON_TONE[status])}
+            className={cn(
+              'block size-full transition-colors duration-(--motion) ease-(--ease-out)',
+              STATUS_ICON_TONE[status],
+              status === 'working' && !still && BREATHING,
+            )}
           >
             {STATUS_ICON_PATH[status]}
           </svg>

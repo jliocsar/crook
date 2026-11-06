@@ -16,6 +16,7 @@ import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { SectionBody } from '@crook/web/herd/HerdLayout'
 import { AgentCards } from '@crook/web/herd/HerdList'
+import { AGENTS_UNSEEN } from '@crook/web/herd/HerdNotices'
 import type { OpenAgent } from '@crook/web/herd/HerdList'
 import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
 import { useForgetMachine } from '@crook/web/machines/Forget'
@@ -66,6 +67,7 @@ function MachineAgents({
               No agents running. Start one from Agents.
             </p>
           ),
+          AgentsUnseen: () => <p className="text-muted-foreground px-4 text-sm">{AGENTS_UNSEEN}</p>,
           Offline: () => (
             <p className="text-muted-foreground px-4 text-sm">
               Offline, so its agents are unknown until it reconnects.
@@ -128,7 +130,11 @@ function MachineDetail({
       <PushedHeader
         title={card.machine.label}
         backLabel={BACK_LABEL}
-        subtitle={<MachineStatus card={card} />}
+        subtitle={
+          <span className="flex min-w-0 items-center gap-2">
+            <MachineStatus card={card} />
+          </span>
+        }
       />
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto pt-4 pb-[max(2rem,var(--safe-bottom))]">
         <BannerRoom>
