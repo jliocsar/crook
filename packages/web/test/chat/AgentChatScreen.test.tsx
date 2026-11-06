@@ -34,7 +34,7 @@ import {
   SubagentsChanged,
   SubagentTranscript,
 } from '@crook/domain/Transcript'
-import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
+import { SubagentLaunch, ThinkingBlock } from '@crook/domain/TranscriptMessage'
 import { PaneNotInHerd } from '@crook/protocol/ClientApi'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { STOP_SETTLE } from '@crook/web/chat/ChatCommands'
@@ -47,6 +47,7 @@ import { agent, CROOK_TAB, CROOK_WORKSPACE, herd, LAPTOP, machine, START } from 
 import { inputDelivered, STARTED_PANE } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 import {
+  assistant,
   caughtUp,
   chunk,
   CWD,
@@ -122,6 +123,22 @@ afterEach(() => {
 })
 
 describe('AgentChatScreen', () => {
+  it.effect('does not call a session empty when it holds only lines crook shows nothing for', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        chunk(0, 10, [assistant(0, [new ThinkingBlock({ text: 'Reading the link state.' })])]),
+        caughtUp(10),
+      ])
+      yield* Effect.promise(() => screen.findByText('Nothing crook can show yet'))
+
+      expect(screen.queryByText('No messages yet')).toBeNull()
+    }),
+  )
+
   it.effect("renders your prompt, Claude's markdown and a collapsed tool call", () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'idle')]))

@@ -9,7 +9,7 @@ import type { StoryMaker } from '../Story.tsx'
 
 const REAL_LENGTH = 1_000_000
 const ANY_ROW = '[data-row]'
-const THREAD = '[data-slot="chat-dock"]'
+const NOTHING_TO_SHOW = 'Nothing crook can show yet'
 
 const REAL_FIXTURES: readonly (readonly [string, string, () => Promise<{ default: string }>])[] = [
   ['plain-turn', 'A plain turn', () => import('@crook/claude/fixtures/plain-turn.jsonl?raw')],
@@ -94,7 +94,7 @@ const realStory = ([slug, title, load]: (typeof REAL_FIXTURES)[number]) =>
       Effect.flatMap(Effect.promise(load), ({ default: jsonl }) =>
         feed(link, [opened(), chunk(0, REAL_LENGTH, messagesOf(jsonl)), caughtUp(REAL_LENGTH)]),
       ),
-    shows: { selector: WITHOUT_ROWS.includes(slug) ? THREAD : ANY_ROW },
+    shows: WITHOUT_ROWS.includes(slug) ? { text: NOTHING_TO_SHOW } : { selector: ANY_ROW },
   })
 
 export const REAL_TRANSCRIPT_STORIES: readonly StoryMaker[] = [
