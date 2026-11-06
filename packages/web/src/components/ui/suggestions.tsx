@@ -76,14 +76,14 @@ export function Suggestions({
                   <span className="flex max-w-full min-w-0 items-baseline gap-2">
                     <span
                       id={`${idPrefix}-${suggestion.id}-label`}
-                      className="truncate font-mono text-sm"
+                      className="max-w-full shrink-0 truncate font-mono text-sm"
                     >
                       {suggestion.label}
                     </span>
                     {suggestion.hint === undefined ? null : (
                       <span
                         id={`${idPrefix}-${suggestion.id}-hint`}
-                        className="text-muted-foreground truncate font-mono text-xs"
+                        className="text-muted-foreground min-w-0 truncate font-mono text-xs"
                       >
                         {suggestion.hint}
                       </span>
