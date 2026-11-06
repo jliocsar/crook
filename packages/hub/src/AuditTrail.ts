@@ -1,3 +1,4 @@
+import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
@@ -85,7 +86,22 @@ const make = Effect.gen(function* () {
         ),
       )
 
-  return AuditTrail.of({ audited })
+  const hasConcluded = Effect.fn('AuditTrail.hasConcluded')(function* (
+    key: IdempotencyKey,
+    inconclusiveFailures: readonly string[],
+  ) {
+    const entries = yield* sql`
+      SELECT 1 AS concluded FROM audit
+      WHERE idempotency_key = ${key}
+        AND (outcome = 'succeeded'
+          OR (outcome = 'failed' AND failure NOT IN ${sql.in(inconclusiveFailures)}))
+      LIMIT 1
+    `
+
+    return Arr.isReadonlyArrayNonEmpty(entries)
+  })
+
+  return AuditTrail.of({ audited, hasConcluded })
 })
 
 export class AuditTrail extends Context.Service<
@@ -96,6 +112,10 @@ export class AuditTrail extends Context.Service<
     ) => <Success, Failure, Requirements>(
       action: Effect.Effect<Success, Failure, Requirements>,
     ) => Effect.Effect<Success, Failure, Requirements>
+    readonly hasConcluded: (
+      key: IdempotencyKey,
+      inconclusiveFailures: readonly string[],
+    ) => Effect.Effect<boolean, SqlError>
   }
 >()('@crook/hub/AuditTrail') {
   static readonly layer = Layer.effect(this, make)

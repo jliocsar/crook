@@ -486,7 +486,7 @@ it.effect(
       const { calls, start } = yield* withNotifier(approvingHark('approved'))
       const { herd, router } = yield* start
       const routed = yield* Effect.forkScoped(
-        router.attach(LAPTOP).pipe(Stream.take(2), Stream.runCollect),
+        router.attach(LAPTOP).pipe(Stream.take(1), Stream.runCollect),
         { startImmediately: true },
       )
 
@@ -516,11 +516,8 @@ it.effect(
       )
       expect(waited.url).toBe(`https://hark.ryan.ceo/api/agent/interactions/${INTERACTION_ID}/wait`)
       expect(waited.query).toBe('timeout=25')
-      expect(Arr.map(commands, (routedCommand) => routedCommand.key)).toEqual([
-        INTERACTION_ID,
-        INTERACTION_ID,
-      ])
-      expect(Arr.map(commands, (routedCommand) => routedCommand.command)).toEqual([answer, answer])
+      expect(Arr.map(commands, (routedCommand) => routedCommand.key)).toEqual([INTERACTION_ID])
+      expect(Arr.map(commands, (routedCommand) => routedCommand.command)).toEqual([answer])
     }).pipe(Effect.scoped),
 )
 

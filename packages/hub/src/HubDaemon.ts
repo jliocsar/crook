@@ -3,6 +3,7 @@ import * as Config from 'effect/Config'
 import * as Duration from 'effect/Duration'
 import * as Layer from 'effect/Layer'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+import type * as HttpClient from 'effect/http/HttpClient'
 import * as HttpRouter from 'effect/http/HttpRouter'
 
 import { AuditTrail } from '@crook/hub/AuditTrail'
@@ -27,23 +28,25 @@ export const socketOptions = {
   idleTimeout: Duration.toSeconds(SOCKET_SILENCE_TIMEOUT),
 }
 
-const harkClient = Layer.provide(HarkClient.layer, FetchHttpClient.layer)
-
 export const herdServices = Layer.provideMerge(
   Layer.mergeAll(Herd.layer, CommandRouter.layer, AuditTrail.layer),
   HerdStore.layer,
 )
 
-const notifications = Layer.provideMerge(HerdActivity.layer, HarkNotifier.layer).pipe(
-  Layer.provide([harkClient, NotificationStore.layer]),
-)
+const notificationsOver = (hark: Layer.Layer<HttpClient.HttpClient>) =>
+  Layer.provideMerge(HerdActivity.layer, HarkNotifier.layer).pipe(
+    Layer.provide([Layer.provide(HarkClient.layer, hark), NotificationStore.layer]),
+  )
 
-export const routes = Layer.provide(HttpRoutes.layer, [
-  Layer.provideMerge(notifications, herdServices),
-  TranscriptRelay.layer,
-  ExeDevIdentity.layer,
-  protocolSerialization,
-])
+export const routesOver = (hark: Layer.Layer<HttpClient.HttpClient>) =>
+  Layer.provide(HttpRoutes.layer, [
+    Layer.provideMerge(notificationsOver(hark), herdServices),
+    TranscriptRelay.layer,
+    ExeDevIdentity.layer,
+    protocolSerialization,
+  ])
+
+const routes = routesOver(FetchHttpClient.layer)
 
 const server = BunHttpServer.layerConfig({
   port: Config.Port('CROOK_HUB_PORT'),

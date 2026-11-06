@@ -35,6 +35,11 @@ import {
 
 export type HarkApprovalState = 'pending' | 'approved' | 'denied' | 'closed'
 
+export interface HarkApprovalRead {
+  readonly state: HarkApprovalState
+  readonly respondedAt: Option.Option<DateTime.Utc>
+}
+
 export type AfterHarkFailure = 'retry' | 'gaveUp'
 
 interface Turns {
@@ -53,7 +58,6 @@ const HARK_ACTIVITY_KEY = 'crook-herd'
 const HARK_ACTIVITY_TITLE = 'crook'
 const HARK_ACTIVITY_ACCENT = '#EEEBE4'
 const HARK_WAIT_LIMIT = Duration.seconds(25)
-const HARK_APPROVAL_EXPIRY = Duration.days(1)
 const HARK_ACTIVITY_STALE_WINDOW = Duration.hours(8)
 const HARK_OUTAGE_PAUSE = Duration.seconds(60)
 
@@ -65,6 +69,7 @@ export const HARK_IDEMPOTENCY_KEY_LIMIT = 200
 export const HARK_RATE_WINDOW = Duration.minutes(1)
 export const HARK_REQUEST_TIMEOUT = Duration.seconds(10)
 export const HARK_ACTIVITY_LIFETIME = Duration.hours(8)
+export const HARK_APPROVAL_EXPIRY = Duration.days(1)
 
 export const HARK_REQUEST_SPACING = Duration.divideUnsafe(
   HARK_RATE_WINDOW,
@@ -170,7 +175,10 @@ const NotificationNamed = Schema.Struct({ notification: Schema.Struct({ id: Sche
 const InteractionCreated = Schema.Struct({ interaction: Schema.Struct({ id: HarkId }) })
 
 const InteractionWaited = Schema.Struct({
-  interaction: Schema.Struct({ status: InteractionStatus }),
+  interaction: Schema.Struct({
+    status: InteractionStatus,
+    respondedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
 })
 
 const HarkErrorBody = Schema.Struct({ error: Schema.String })
@@ -276,7 +284,10 @@ const readInteraction = (response: HttpClientResponse.HttpClientResponse) =>
 
 const readApprovalState = (response: HttpClientResponse.HttpClientResponse) =>
   HttpClientResponse.schemaBodyJson(InteractionWaited)(response).pipe(
-    Effect.map((waited): HarkApprovalState => APPROVAL_STATES[waited.interaction.status]),
+    Effect.map(({ interaction }): HarkApprovalRead => ({
+      state: APPROVAL_STATES[interaction.status],
+      respondedAt: Option.flatMap(Option.fromNullishOr(interaction.respondedAt), DateTime.make),
+    })),
     Effect.mapError(unreadable),
   )
 
@@ -602,7 +613,7 @@ export class HarkClient extends Context.Service<
     readonly send: (notification: HarkNotification) => Effect.Effect<HarkSent, HarkFailure>
     readonly withdraw: (id: HarkId) => Effect.Effect<void, HarkFailure>
     readonly ask: (approval: HarkApproval) => Effect.Effect<HarkId, HarkFailure>
-    readonly awaitApproval: (id: HarkId) => Effect.Effect<HarkApprovalState, HarkFailure>
+    readonly awaitApproval: (id: HarkId) => Effect.Effect<HarkApprovalRead, HarkFailure>
     readonly cancel: (id: HarkId) => Effect.Effect<void, HarkFailure>
     readonly startActivity: (
       content: HarkActivityContent,

@@ -40,6 +40,8 @@ interface RaisedEvent {
 
 export type NotificationsByPane<Notification> = HashMap.HashMap<GlobalPaneId, Notification>
 
+export type RaisedVerdict = 'raised' | 'movedOn' | 'undecided'
+
 export type NotificationStep = Data.TaggedEnum<{
   Withdraw: { readonly sent: SentNotification }
   Send: { readonly wanted: WantedNotification }
@@ -208,33 +210,32 @@ const isRaisedBy = (wanted: WantedNotification) => (raised: RaisedEvent) =>
 const isSeenIn = (seen: HashSet.HashSet<PaneId>, wanted: WantedNotification) =>
   !isApproval(wanted) && HashSet.has(seen, wanted.pane)
 
+export const verdictOn = (wanted: WantedNotification, state: MachineState): RaisedVerdict => {
+  if (isHerdrLost(state)) {
+    return 'undecided'
+  }
+
+  return Option.match(rowIn(state, wanted.pane), {
+    onNone: () => 'movedOn',
+    onSome: (row) => {
+      if (row.status === 'unknown') {
+        return 'undecided'
+      }
+
+      return Option.exists(raisedEventOf(row), isRaisedBy(wanted)) &&
+        isSameSeenMark(seenMarkOf(row), wanted)
+        ? 'raised'
+        : 'movedOn'
+    },
+  })
+}
+
 export const isStillWanted = (
   wanted: WantedNotification,
   next: MachineState,
   seen: HashSet.HashSet<PaneId>,
-): boolean => {
-  if (isHerdrLost(next)) {
-    return true
-  }
-
-  if (isSeenIn(seen, wanted)) {
-    return false
-  }
-
-  return Option.match(rowIn(next, wanted.pane), {
-    onNone: () => false,
-    onSome: (row) => {
-      if (row.status === 'unknown') {
-        return true
-      }
-
-      return (
-        Option.exists(raisedEventOf(row), isRaisedBy(wanted)) &&
-        isSameSeenMark(seenMarkOf(row), wanted)
-      )
-    },
-  })
-}
+): boolean =>
+  isHerdrLost(next) || (!isSeenIn(seen, wanted) && verdictOn(wanted, next) !== 'movedOn')
 
 export const afterPublish = (
   wanted: NotificationsByPane<WantedNotification>,

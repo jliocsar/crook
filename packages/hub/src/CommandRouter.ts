@@ -9,6 +9,7 @@ import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Stream from 'effect/Stream'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import type { Command, CommandReceipt } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
@@ -46,7 +47,7 @@ const withoutOutbox =
     )
 
 const make = Effect.gen(function* () {
-  const attachments = yield* Ref.make(HashMap.empty<MachineId, readonly Outbox[]>())
+  const attachments = yield* SubscriptionRef.make(HashMap.empty<MachineId, readonly Outbox[]>())
   const pending = yield* Ref.make(HashMap.empty<CommandId, PendingCommand>())
   const nextId = yield* Ref.make(0)
 
@@ -56,10 +57,10 @@ const make = Effect.gen(function* () {
         const outbox = yield* Queue.unbounded<RoutedCommand>()
 
         yield* Effect.acquireRelease(
-          Ref.update(attachments, HashMap.modifyAt(machine, withOutbox(outbox))),
+          SubscriptionRef.update(attachments, HashMap.modifyAt(machine, withOutbox(outbox))),
           () =>
             Effect.andThen(
-              Ref.update(attachments, HashMap.modifyAt(machine, withoutOutbox(outbox))),
+              SubscriptionRef.update(attachments, HashMap.modifyAt(machine, withoutOutbox(outbox))),
               Queue.shutdown(outbox),
             ),
         )
@@ -69,7 +70,7 @@ const make = Effect.gen(function* () {
     )
 
   const newestOutbox = (machine: MachineId) =>
-    Effect.flatMap(Ref.get(attachments), (current) =>
+    Effect.flatMap(SubscriptionRef.get(attachments), (current) =>
       Effect.fromOption(
         pipe(HashMap.get(current, machine), Option.flatMap(Arr.last)),
         () => new MachineOffline({ machine }),
@@ -122,13 +123,17 @@ const make = Effect.gen(function* () {
     })
   })
 
-  return CommandRouter.of({ attach, send, complete })
+  const attached = (machine: MachineId) =>
+    SubscriptionRef.changes(attachments).pipe(Stream.map(HashMap.has(machine)))
+
+  return CommandRouter.of({ attach, attached, send, complete })
 })
 
 export class CommandRouter extends Context.Service<
   CommandRouter,
   {
     readonly attach: (machine: MachineId) => Stream.Stream<RoutedCommand>
+    readonly attached: (machine: MachineId) => Stream.Stream<boolean>
     readonly send: (
       machine: MachineId,
       key: IdempotencyKey,

@@ -580,7 +580,7 @@ path to it, a transition that throws or returns what the schema refuses, a state
 state that can no longer get home, an event nothing tried and a state space that keeps growing, and
 its own test shows each one failing. Two states that differ only by a token are one state: the
 walk's identity drops it, or a counter makes the walk endless. The walk gives up at 256 states, a
-guard and not a measurement: the machines here have 10, 11, 8, 117, 6, 3 and 3 (measured), so reaching it means a
+guard and not a measurement: the machines here have 10, 11, 8, 117, 6, 6, 3 and 3 (measured), so reaching it means a
 token got into a state's identity.
 
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
@@ -641,6 +641,22 @@ A command that finishes while a machine's atom computes its first value has no s
 A composer's failure has an exit other than the next send. A refused prompt holds while the field holds the words it refused, which the failure itself puts back, and clears once the draft moves on. A refused Stop has nothing to do with the draft: it clears on the next press or when the turn ends. A refused prompt outlives a turn ending, because the words are still unsent. Before, both stayed through an edit or the end of the turn (measured in the story harness). A failure lands one commit after the state that causes it, since those inputs reach the machine from effects: over 5 of 5 refused sends one frame sat between the spinner leaving and the failure line, 37 to 80 ms, showing an idle Send and nothing wrong (measured in Chromium at 4x CPU throttling). That frame stays, since it reads as neither a flash nor a state.
 
 The Background dock and its summary were reported to land apart, the dock on its second tick and the summary on its own timer. They do not: one timer wakes the screen, the dock reads the clock as it renders, and over 4 of 4 runs of a dock that ran its full 14 s the summary's row mounted one frame before the dock began to fade, 7 to 9 ms apart (measured in Chromium at 4x CPU throttling).
+:::
+
+:::warning
+A lock-screen answer waits for its machine; no timer retries it. The retry it replaced ran every 15 s with no limit and audited each try: 1 row after 5 s, 241 after an hour and 5761 after a day of a machine away, on the hub's real services over a fake Hark and the test clock (measured). Now a machine away for 23 hours costs 0 rows, and the answer costs 1 when its fate is known (held by a test).
+
+The worst bug here is an old answer landing on a new dialog, and an ask id alone cannot prevent it. A dialog read off the screen is named by its fingerprint, so the same dialog asked again carries the same id (read in the derivation), and the agent's own check compares only the id. The old retry also fired as soon as a link was up, before that link had published anything: a command was routed with no state from that connection (measured). So a held answer goes out only when a state published since the link last dropped shows the same terminal, state change sequence and ask id, by the same rule the notification plan judges with, and a test holds that the same id under the next sequence is never answered and raises its own prompt. What is left is a dialog changing in the moment between that state and the keys, which the wire has no field to close.
+
+A machine is back when both a link and a state have arrived, in either order. An agent's session starts its attach and its publishing side by side, so the hub can see either first (reasoned from the session); every session's publishing starts from the current state (read in the agent), which is why this needs nothing new from an older agent. A state that cannot tell, herdr lost or a row reading unknown, keeps the wait. If the old link's end reaches the hub between a new link's first publish and its attach, the answer waits for that link's next publish (reasoned, not measured).
+
+A send that timed out with the link still up is not sent again until a newer state or a new link. The timed-out command is still in that link's queue and the agent replays by key (read in both), so a timer added nothing but rows.
+
+A held answer ends a day after Hark says it was answered, the longest a prompt stays open, and the time comes from Hark's own read, so a restart cannot reset it. Before there was no end, and an Approve days old could land on a dialog the user had long forgotten. Past that the phone sees what it sees for any refused answer: the prompt reads answered, and the pane reads needs you once its machine is back.
+
+The answer was already durable, and stays so without a new table: it lives at Hark, and the sent notification's row says to read it again after a restart (measured: a restart of the old hub routed it once the machine attached). The audit table is what says it concluded, so a restart neither sends nor audits again. A row saying offline or timed out concludes nothing, which is what an older hub's retries left behind (a test seeds them). A hub stopping writes no row for an answer still held or still out, since the restart resumes it.
+
+This is a machine rather than one effect because it has six ways out, a delivery, a refusal, a state that moved on, a withdrawal, an age limit and a send that may not have landed going back to waiting, and the rules worth holding are about arrows: a send only from a hold on that hold's own open, one fate recorded on the way into the end, nothing after it. Whatever watches the link or the clock is one fiber per hold, in a scope that ends with the answer, inside the notifier's scope.
 :::
 
 ## Web

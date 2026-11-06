@@ -65,6 +65,7 @@ interface MachineEntry {
   readonly agentVersion: Option.Option<CrookVersion>
   readonly herdrVersion: Option.Option<string>
   readonly state: Option.Option<MachineState>
+  readonly publishedSinceDrop: boolean
   readonly seen: HashMap.HashMap<PaneId, SeenMark>
   readonly pinned: HashSet.HashSet<PaneId>
 }
@@ -130,6 +131,7 @@ const fromRecord =
     agentVersion: record.agentVersion,
     herdrVersion: record.herdrVersion,
     state: Option.none(),
+    publishedSinceDrop: false,
     seen: pipe(
       seen,
       Arr.filter((mark) => mark.machine === record.id),
@@ -155,6 +157,7 @@ const firstSighting = (id: MachineId, now: DateTime.Utc): MachineEntry => ({
   agentVersion: Option.none(),
   herdrVersion: Option.none(),
   state: Option.none(),
+  publishedSinceDrop: false,
   seen: HashMap.empty(),
   pinned: HashSet.empty(),
 })
@@ -181,6 +184,7 @@ const detached = (entry: MachineEntry, now: DateTime.Utc): MachineEntry =>
         connection: 'reconnecting',
         connectionChangedAt: now,
         lastSeenAt: now,
+        publishedSinceDrop: false,
       }
 
 const published = (state: MachineState) => {
@@ -193,6 +197,7 @@ const published = (state: MachineState) => {
     lastSeenAt: now,
     herdrVersion: isHerdrLost(state) ? entry.herdrVersion : Option.some(state.herdrVersion),
     state: Option.some(state),
+    publishedSinceDrop: true,
     seen: isHerdrLost(state)
       ? entry.seen
       : HashMap.filter(entry.seen, (mark, pane) =>
@@ -432,6 +437,15 @@ const make = Effect.gen(function* () {
     requireMachine,
     requirePane,
     subscribeChanges: Effect.map(PubSub.subscribe(changes), Stream.fromSubscription),
+    liveState: (id) =>
+      SubscriptionRef.changes(entries).pipe(
+        Stream.map((current) =>
+          HashMap.get(current, id).pipe(
+            Option.filter((entry) => entry.publishedSinceDrop),
+            Option.flatMap((entry) => entry.state),
+          ),
+        ),
+      ),
     view: SubscriptionRef.changes(entries).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
       Stream.map(toView),
@@ -462,6 +476,7 @@ export class Herd extends Context.Service<
       pane: PaneId,
     ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd>
     readonly subscribeChanges: Effect.Effect<Stream.Stream<HerdChange>, never, Scope.Scope>
+    readonly liveState: (id: MachineId) => Stream.Stream<Option.Option<MachineState>>
     readonly view: Stream.Stream<HerdView>
   }
 >()('@crook/hub/Herd') {
