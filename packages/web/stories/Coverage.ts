@@ -34,6 +34,15 @@ export const MOMENT_BEFORE_ANY_STATUS = 'before-first-value'
 export const STATE_COVERAGE = {
   chatItem: {
     UserPrompt: ['rows/prompt', 'rows/prompt-queued', 'rows/prompt-image'],
+    ForeignPrompt: [
+      'rows/plugin-prompt',
+      'rows/plugin-prompt-open',
+      'rows/plugin-prompt-unnamed',
+      'rows/script-prompt',
+      'rows/scheduled-prompt',
+      'rows/foreign-prompt-unknown',
+      'transition/plugin-prompt-while-sending',
+    ],
     AssistantText: ['rows/text-markdown', 'rows/text-failed'],
     Tool: ['rows/tool-running', 'rows/tool-read-open'],
     Subagents: ['rows/subagent-tree-running'],
@@ -46,6 +55,9 @@ export const STATE_COVERAGE = {
       'rows/slash-skill',
       'rows/slash-shell',
       'rows/slash-long-output',
+      'rows/script-command',
+      'rows/scheduled-command',
+      'transition/scheduled-fire-while-slash-sending',
       'real/slash-commands',
     ],
     Compacted: ['rows/compacted', 'rows/compacted-open'],
@@ -229,6 +241,8 @@ export const REQUIRED_TRANSITIONS: readonly string[] = [
   'transition/compact-ends-the-turn',
   'transition/slash-send-lands',
   'transition/slash-send-silent',
+  'transition/plugin-prompt-while-sending',
+  'transition/scheduled-fire-while-slash-sending',
   'subagent/turn-with-tools',
   'transition/herd-first-load-from-cache',
 ]

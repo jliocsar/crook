@@ -36,6 +36,8 @@ import {
   PIXEL_PNG,
   prompt,
   said,
+  sentCommand,
+  sentPrompt,
   stopHookFeedback,
   subagent,
   SESSION,
@@ -56,6 +58,10 @@ import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 const TOOL_HEADER = '[data-slot="tool-call-header"]'
 const STOP_HOOK_ROW = 'A Stop hook blocked the stop'
 const STOP_HOOK_WORDS = '[/made/up/check.sh]: Run the check before you stop.'
+const PLUGIN_ROW = 'From plannotator'
+
+const PLUGIN_WORDS =
+  'The plannotator plugin sent a message:\nPlannotator Inbox: a reply\nThe person replied to you in the Inbox.\nTheir reply: Ship the toast as it is.'
 
 const RICH_MARKDOWN = [
   '## What changed',
@@ -398,6 +404,72 @@ export const ROW_STORIES: readonly StoryMaker[] = [
     settle: () => clicks(STOP_HOOK_ROW),
     shows: { text: STOP_HOOK_WORDS },
   }),
+  rowStory(
+    'plugin-prompt',
+    'Row, a plugin sent the prompt, its words folded away',
+    [
+      answered(0, 'The banner looks right.'),
+      sentPrompt(10, PLUGIN_WORDS, { kind: 'plugin', name: 'plannotator' }),
+      said(20, 'Shipping the toast as it is.'),
+    ],
+    { text: PLUGIN_ROW },
+  ),
+  chatStory({
+    slug: 'plugin-prompt-open',
+    title: 'Row, a plugin sent the prompt, its words open',
+    events: opensWith([
+      answered(0, 'The banner looks right.'),
+      sentPrompt(10, PLUGIN_WORDS, { kind: 'plugin', name: 'plannotator' }),
+      said(20, 'Shipping the toast as it is.'),
+    ]),
+    settle: () => clicks(PLUGIN_ROW),
+    shows: { text: 'Their reply: Ship the toast as it is.' },
+  }),
+  rowStory(
+    'plugin-prompt-unnamed',
+    'Row, a plugin no line names sent the prompt',
+    [sentPrompt(0, 'A made-up message.', { kind: 'plugin' }), said(10, 'Read it.')],
+    { text: 'From a plugin' },
+  ),
+  rowStory(
+    'script-prompt',
+    'Row, a script sent the prompt',
+    [sentPrompt(0, 'Run the made-up check.', { kind: 'sdk' }), said(10, 'It passes.')],
+    { text: 'From a script' },
+  ),
+  rowStory(
+    'script-command',
+    'Row, a script sent a slash command',
+    [sentCommand(0, '/triage', 'one', { kind: 'sdk' }), said(10, 'Triaged it.')],
+    { text: 'From a script: /triage one' },
+  ),
+  rowStory(
+    'scheduled-prompt',
+    'Row, a scheduled task sent a prompt that reached the thread',
+    [sentPrompt(0, 'A made-up tick.', { kind: 'scheduled' }), said(10, 'Nothing changed.')],
+    { text: 'Scheduled' },
+  ),
+  rowStory(
+    'scheduled-command',
+    'Row, a scheduled task fired a slash command under its notice',
+    [
+      new SystemMessage({
+        offset: TranscriptOffset.make(0),
+        uuid: Option.none(),
+        timestamp: at(0),
+        blocks: [new NoticeBlock({ text: 'Running scheduled task (Oct 20 12:05pm)' })],
+      }),
+      sentCommand(10, '/sweep', 'tick', { kind: 'scheduled' }),
+      said(20, 'Swept.'),
+    ],
+    { text: 'Scheduled: /sweep tick' },
+  ),
+  rowStory(
+    'foreign-prompt-unknown',
+    'Row, a sender this build never heard of sent the prompt',
+    [sentPrompt(0, 'A made-up message.', { kind: 'made_up_origin' }), said(10, 'Read it.')],
+    { text: 'Not typed by you' },
+  ),
   chatStory({
     slug: 'compacted-open',
     title: 'Row, Conversation compacted, summary open',

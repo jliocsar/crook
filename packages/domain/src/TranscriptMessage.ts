@@ -1,3 +1,4 @@
+import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { SubagentId, TranscriptOffset } from '@crook/domain/Ids'
@@ -158,6 +159,13 @@ const entryFields = {
   timestamp: Schema.OptionFromNullOr(Schema.DateTimeUtcFromString),
 }
 
+export const PromptSender = Schema.Struct({
+  kind: Schema.String,
+  name: Schema.optionalKey(Schema.String),
+})
+
+export type PromptSender = typeof PromptSender.Type
+
 export class UserMessage extends Schema.TaggedClass<UserMessage>()('User', {
   ...entryFields,
   isMeta: Schema.Boolean,
@@ -165,7 +173,11 @@ export class UserMessage extends Schema.TaggedClass<UserMessage>()('User', {
   queued: Schema.Boolean,
   blocks: Schema.Array(UserBlock),
   stopHookFeedback: Schema.optionalKey(Schema.Boolean),
+  sentBy: Schema.optionalKey(PromptSender),
 }) {}
+
+export const senderOf = (message: UserMessage): Option.Option<PromptSender> =>
+  Option.fromUndefinedOr(message.sentBy)
 
 export class AssistantMessage extends Schema.TaggedClass<AssistantMessage>()('Assistant', {
   ...entryFields,

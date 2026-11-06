@@ -1,6 +1,7 @@
 import { cn } from 'cn'
 import * as Arr from 'effect/Array'
 import * as Equal from 'effect/Equal'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import {
   ChevronDown,
@@ -18,9 +19,10 @@ import {
 import * as React from 'react'
 
 import { relativeToFolder } from '@crook/domain/Ask'
-import type { ChatItem, PlanStep, SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
+import type { PromptSender } from '@crook/domain/TranscriptMessage'
+import type { ChatItem, SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
 import { ChatItem as ChatItems } from '@crook/web/chat/ChatItems'
-import { stringField, toolTitle } from '@crook/web/chat/ToolSummary'
+import { type PlanStep, stringField, toolTitle } from '@crook/web/chat/ToolSummary'
 import { useBackgroundMarker } from '@crook/web/chat/BackgroundMarker'
 import { Thumbs } from '@crook/web/chat/Images'
 import { RowAction } from '@crook/web/chat/RowAction'
@@ -64,6 +66,9 @@ export interface ThreadEnvironment {
 const INLINE_ICON_SIZE = 15
 const OUTPUT_CLASS = 'max-h-56 overflow-y-auto'
 const INLINE_CODE = /`([^`\n]+)`/u
+const PLUGIN_SENDER = 'plugin'
+const SCHEDULED_SENDER = 'scheduled'
+const SDK_SENDER = 'sdk'
 
 const TOOL_ICON = new Map([
   ['Read', FileText],
@@ -88,6 +93,14 @@ const sameItem = (
   previous: { readonly item: ChatItem; readonly environment: ThreadEnvironment },
   next: { readonly item: ChatItem; readonly environment: ThreadEnvironment },
 ): boolean => previous.environment === next.environment && Equal.equals(previous.item, next.item)
+
+const senderLabel = ({ kind, name }: PromptSender): string =>
+  Match.value(kind).pipe(
+    Match.when(PLUGIN_SENDER, () => (name === undefined ? 'From a plugin' : `From ${name}`)),
+    Match.when(SCHEDULED_SENDER, () => 'Scheduled'),
+    Match.when(SDK_SENDER, () => 'From a script'),
+    Match.orElse(() => 'Not typed by you'),
+  )
 
 const renderCode = (code: string, language: Option.Option<string>) => (
   <CodeBlock code={code} language={Option.getOrUndefined(language)} />
@@ -341,14 +354,19 @@ function CommandRow({
   text,
   shell,
   output,
+  sender,
 }: {
   text: string
   shell: boolean
   output: readonly string[]
+  sender: Option.Option<PromptSender>
 }) {
   return (
     <div data-slot="command" className="grid grid-cols-1 gap-1">
-      <Message>{text}</Message>
+      {Option.match(sender, {
+        onNone: () => <Message>{text}</Message>,
+        onSome: (found) => <Note>{`${senderLabel(found)}: ${text}`}</Note>,
+      })}
       {output.map((line, index) => (
         <CommandOutput key={index} text={line} shell={shell} />
       ))}
@@ -400,13 +418,13 @@ function RowDisclosure({
   )
 }
 
-function StopHookFeedback({ words }: { words: string }) {
-  const [open, setOpen] = useRowFlag('stop-hook', false)
+function FoldedWords({ label, words }: { label: string; words: string }) {
+  const [open, setOpen] = useRowFlag('folded-words', false)
 
   return (
     <div className="grid grid-cols-1">
       <RowDisclosure open={open} onToggle={setOpen}>
-        A Stop hook blocked the stop
+        {label}
       </RowDisclosure>
       <Collapse open={open}>
         <OutputText text={words} className={cn(OUTPUT_CLASS, 'text-muted-foreground mx-1')} />
@@ -452,6 +470,9 @@ function ThreadItemView({ item, environment }: { item: ChatItem; environment: Th
         {prompt.text}
       </Message>
     ),
+    ForeignPrompt: (prompt) => (
+      <FoldedWords label={senderLabel(prompt.sender)} words={prompt.words} />
+    ),
     AssistantText: (text) => (
       <Response className={cn('py-1', text.failed && 'text-destructive')} renderCode={renderCode}>
         {text.text}
@@ -465,9 +486,16 @@ function ThreadItemView({ item, environment }: { item: ChatItem; environment: Th
         <WithInlineCode text={note.text} />
       </Note>
     ),
-    StopHookFeedback: (feedback) => <StopHookFeedback words={feedback.words} />,
+    StopHookFeedback: (feedback) => (
+      <FoldedWords label="A Stop hook blocked the stop" words={feedback.words} />
+    ),
     Command: (command) => (
-      <CommandRow text={command.text} shell={command.shell} output={command.output} />
+      <CommandRow
+        text={command.text}
+        shell={command.shell}
+        output={command.output}
+        sender={command.sender}
+      />
     ),
     Compacted: (compacted) => <CompactedDivider summary={compacted.summary} />,
     Cleared: () => <Divider>Conversation cleared</Divider>,

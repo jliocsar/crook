@@ -77,6 +77,7 @@ const describeItem = (item: ChatItem): string =>
     Omitted: () => 'omitted',
     Unreadable: () => 'unreadable',
     StopHookFeedback: () => 'stop hook',
+    ForeignPrompt: () => 'foreign prompt',
   })
 
 const durationOf = (run: SubagentRun) =>

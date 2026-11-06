@@ -20,7 +20,7 @@ import type { ToolUseBlock, TranscriptMessage, UserMessage } from '@crook/domain
 
 const CODEMODE_RUN_TOOL = 'mcp__codemode__run'
 
-const isHumanPrompt = (message: UserMessage) =>
+const opensTurn = (message: UserMessage) =>
   !message.isMeta &&
   Arr.some(message.blocks, (block) =>
     Match.value(block).pipe(
@@ -37,7 +37,7 @@ const isHumanPrompt = (message: UserMessage) =>
 
 const startsTurn = (message: TranscriptMessage) =>
   Match.value(message).pipe(
-    Match.tag('User', isHumanPrompt),
+    Match.tag('User', opensTurn),
     Match.orElse(() => false),
   )
 

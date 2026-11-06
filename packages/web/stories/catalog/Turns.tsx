@@ -23,6 +23,8 @@ import {
   compactSummary,
   opened,
   prompt,
+  sentCommand,
+  sentPrompt,
   stopHookFeedback,
   toolResult,
   toolUse,
@@ -42,6 +44,8 @@ const COMPOSER_FIELD_NAME = /Message/u
 const TYPED_COMPACT = '/compact keep the toast'
 const STOP_HOOK_ROW = 'A Stop hook blocked the stop'
 const HOOK_WORDS = '[/made/up/check.sh]: Run the second check before you stop.'
+const PLUGIN_ROW = 'From plannotator'
+const PLUGIN_WORDS = 'The plannotator plugin sent a message:\nTheir reply: Ship the toast as it is.'
 const UNANSWERED_FIND_MS = Duration.toMillis(COMMAND_SILENCE) + 2000
 const BLIP_ANSWER_MS = 100
 const BLIP_LET_GO_MS = 117
@@ -272,6 +276,102 @@ export const TURN_STORIES: readonly StoryMaker[] = [
                 }),
               ],
               { seconds: TURN_START },
+            ),
+          ]),
+        ]),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'plugin-prompt-while-sending',
+    title:
+      'A send reads Sent, a plugin prompt takes a turn first, and the send holds until it lands',
+    shows: { text: 'The quiet redial' },
+    ends: {
+      all: [
+        { text: PLUGIN_ROW },
+        { text: 'The toast is fine too.' },
+        { absent: 'Sent' },
+        { selector: STILL_ACTIVITY },
+      ],
+    },
+    events: CONVERSATION,
+    timeline: [
+      step<LinkStage>(600, 'The user sends a prompt', sends(QUESTION)),
+      step<LinkStage>(500, 'herdr says working', ({ link }) =>
+        SubscriptionRef.set(link.state, WORKING_HERD),
+      ),
+      step<LinkStage>(500, 'A plugin prompt reaches the transcript first', ({ link }) =>
+        feed(link, [
+          chunk(50, 60, [
+            sentPrompt(50, PLUGIN_WORDS, { kind: 'plugin', name: 'plannotator' }, TURN_START),
+          ]),
+        ]),
+      ),
+      step<LinkStage>(600, 'The send still reads Sent', () => seesText('Sent')),
+      step<LinkStage>(900, 'Claude answers the plugin', ({ link }) =>
+        feed(link, [chunk(60, 70, [answered(60, 'Read the reply.', TURN_START + 2)])]),
+      ),
+      step<LinkStage>(500, 'That turn ends and the send reaches the transcript', ({ link }) =>
+        feed(link, [
+          chunk(70, 90, [turnDuration(70, TURN_START + 3), prompt(80, QUESTION, TURN_START + 4)]),
+        ]),
+      ),
+      step<LinkStage>(1800, 'Claude answers the send', ({ link }) =>
+        feed(link, [chunk(90, 100, [answered(90, 'The toast is fine too.', TURN_START + 6)])]),
+      ),
+      step<LinkStage>(300, 'herdr says idle', ({ link }) =>
+        SubscriptionRef.set(link.state, IDLE_HERD),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'scheduled-fire-while-slash-sending',
+    title:
+      'A slash send reads Sent, a scheduled command lands first, and the send holds until it lands',
+    shows: { text: 'The quiet redial' },
+    ends: {
+      all: [
+        { text: 'Scheduled: /sweep tick' },
+        { selector: '[data-slot="command"] code' },
+        { absent: 'Sent' },
+        { selector: STILL_ACTIVITY },
+      ],
+    },
+    events: CONVERSATION,
+    timeline: [
+      step<LinkStage>(600, 'The user sends /model opus', sends('/model opus')),
+      step<LinkStage>(500, 'herdr says working', ({ link }) =>
+        SubscriptionRef.set(link.state, WORKING_HERD),
+      ),
+      step<LinkStage>(500, 'A scheduled command reaches the transcript first', ({ link }) =>
+        feed(link, [
+          chunk(50, 60, [sentCommand(50, '/sweep', 'tick', { kind: 'scheduled' }, TURN_START)]),
+        ]),
+      ),
+      step<LinkStage>(600, 'The send still reads Sent', () => seesText('Sent')),
+      step<LinkStage>(600, 'Claude answers the fire', ({ link }) =>
+        feed(link, [
+          chunk(60, 80, [answered(60, 'Swept.', TURN_START + 2), turnDuration(70, TURN_START + 3)]),
+        ]),
+      ),
+      step<LinkStage>(400, 'herdr says idle', ({ link }) =>
+        SubscriptionRef.set(link.state, IDLE_HERD),
+      ),
+      step<LinkStage>(500, 'The send and its output land', ({ link }) =>
+        feed(link, [
+          chunk(80, 100, [
+            user(80, [new LocalCommandBlock({ name: '/model', args: 'opus' })], {
+              seconds: TURN_START + 11,
+            }),
+            user(
+              90,
+              [
+                new LocalCommandOutputBlock({
+                  text: 'Set model to `Opus 5.5` and saved as your default for new sessions',
+                }),
+              ],
+              { seconds: TURN_START + 11 },
             ),
           ]),
         ]),
