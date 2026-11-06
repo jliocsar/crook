@@ -26,7 +26,7 @@ export class PaneNotAgent extends Schema.TaggedError<PaneNotAgent>()('PaneNotAge
   pane: PaneId,
 }) {
   override get message(): string {
-    return `Pane ${this.pane} does not host an agent herdr recognizes, so crook refuses to type into it. The agent may have exited or the pane closed: refresh the herd and pick a live agent.`
+    return `That pane does not host an agent herdr recognizes, so crook refuses to type into it. The agent may have exited or the pane closed: refresh the herd and pick a live agent.`
   }
 }
 
@@ -35,7 +35,7 @@ export class PaneNotCreatedByCrook extends Schema.TaggedError<PaneNotCreatedByCr
   { pane: PaneId },
 ) {
   override get message(): string {
-    return `crook did not create pane ${this.pane}, so it will not close it unless you confirm that you mean it. Nothing was closed: confirm the close to close it anyway.`
+    return `crook did not create this pane, so it will not close it unless you confirm that you mean it. Nothing was closed: confirm the close to close it anyway.`
   }
 }
 
@@ -88,7 +88,7 @@ export class AskNotPending extends Schema.TaggedError<AskNotPending>()('AskNotPe
   ask: AskId,
 }) {
   override get message(): string {
-    return `Pane ${this.pane} is no longer waiting on the ask you answered (${this.ask}): Claude moved on, or it is asking something else now. Nothing was sent; look at what the agent asks now and answer that.`
+    return `Claude is no longer waiting on the ask you answered: it moved on, or it is asking something else now. Nothing was sent; look at what the agent asks now and answer that.`
   }
 }
 
@@ -97,7 +97,7 @@ export class AskDialogUnreadable extends Schema.TaggedError<AskDialogUnreadable>
   { pane: PaneId },
 ) {
   override get message(): string {
-    return `crook could not read the dialog's options from pane ${this.pane}'s screen, so it did not guess which key answers it. Nothing was sent; decline the ask, or answer it in the terminal.`
+    return `crook could not read the dialog's options from the screen, so it did not guess which key answers it. Nothing was sent; decline the ask, or answer it in the terminal.`
   }
 }
 
@@ -106,7 +106,7 @@ export class AskOptionUnavailable extends Schema.TaggedError<AskOptionUnavailabl
   { pane: PaneId, option: Schema.String },
 ) {
   override get message(): string {
-    return `The dialog on pane ${this.pane} offers no "${this.option}" option, so nothing was sent. Pick one of the options it shows.`
+    return `The dialog offers no "${this.option}" option, so nothing was sent. Pick one of the options it shows.`
   }
 }
 
@@ -115,7 +115,7 @@ export class QuestionnaireUnsupported extends Schema.TaggedError<QuestionnaireUn
   { pane: PaneId },
 ) {
   override get message(): string {
-    return `crook can only pick the answer to a single question with a single choice, and the questionnaire on pane ${this.pane} is not one. Nothing was sent; answer it in the terminal, or decline it with a message.`
+    return `crook can only pick the answer to a single question with a single choice, and this questionnaire is not one. Nothing was sent; answer it in the terminal, or decline it with a message.`
   }
 }
 
@@ -124,7 +124,7 @@ export class DeclineMessageUndelivered extends Schema.TaggedError<DeclineMessage
   { pane: PaneId, reason: Schema.String },
 ) {
   override get message(): string {
-    return `The ask on pane ${this.pane} was declined, but your message did not reach Claude: ${this.reason}. Send the message again as a prompt.`
+    return `The ask was declined, but your message did not reach Claude: ${this.reason}. Send the message again as a prompt.`
   }
 }
 
@@ -177,7 +177,7 @@ export class TaskNotDelivered extends Schema.TaggedError<TaskNotDelivered>()('Ta
   detail: Schema.String,
 }) {
   override get message(): string {
-    return `Claude started in pane ${this.pane}, but herdr refused the task before typing any of it: ${this.code}, ${this.detail}. Claude is most likely waiting at a dialog, such as the folder trust prompt: open the agent, answer it, and send the task from its chat.`
+    return `Claude started, but herdr refused the task before typing any of it: ${this.code}, ${this.detail}. Claude is most likely waiting at a dialog, such as the folder trust prompt: open the agent, answer it, and send the task from its chat.`
   }
 }
 
@@ -194,7 +194,7 @@ export class CommandTimedOut extends Schema.TaggedError<CommandTimedOut>()('Comm
   timeout: Schema.DurationFromMillis,
 }) {
   override get message(): string {
-    return `Machine "${this.machine}" did not answer the command within ${Duration.format(this.timeout)}. It may still run: send it again with the same idempotency key, and the agent answers with the first outcome instead of running it twice.`
+    return `Machine "${this.machine}" did not answer within ${Duration.format(this.timeout)}, and the command may still run. Look at the agent before you send it again.`
   }
 }
 

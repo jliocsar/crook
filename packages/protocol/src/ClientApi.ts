@@ -39,7 +39,7 @@ export class PaneNotInHerd extends Schema.TaggedError<PaneNotInHerd>()('PaneNotI
   pane: PaneId,
 }) {
   override get message(): string {
-    return `Machine "${this.machine}" has no agent in pane ${this.pane} in its last published state. The pane most likely closed: pull to resync.`
+    return `Machine "${this.machine}" has no agent in that pane in its last published state. The pane most likely closed: pull to resync.`
   }
 }
 
@@ -47,7 +47,7 @@ export class HubStorageFailed extends Schema.TaggedError<HubStorageFailed>()('Hu
   detail: Schema.String,
 }) {
   override get message(): string {
-    return `The hub could not write to its database, so nothing changed: ${this.detail}. Check the disk and the file at CROOK_HUB_DATABASE_PATH on the hub, then try again.`
+    return 'The hub could not save that, so nothing changed. Try again, and if it keeps failing, the disk of the machine running the hub needs a look.'
   }
 }
 

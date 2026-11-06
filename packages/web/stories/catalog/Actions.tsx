@@ -172,7 +172,7 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
     arrange: ({ link }) =>
       Ref.set(link.pinRefusal, Option.some(new HubStorageFailed({ detail: 'disk full' }))),
     settle: (stage) => Effect.andThen(openSheet(stage), clicks('Pin to top')),
-    shows: { text: 'disk full' },
+    shows: { text: 'could not save that' },
   }),
   story({
     slug: 'close-card-goes',

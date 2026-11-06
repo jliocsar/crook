@@ -275,7 +275,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
     arrange: ({ link }) =>
       Ref.set(link.commandAnswer, Exit.fail(new AskDialogUnreadable({ pane: PANE }))),
     settle: () => clicks('Yes'),
-    shows: { selector: '[role="alert"]' },
+    shows: { text: 'could not read the dialog' },
   }),
   chatStory({
     slug: 'decline-composer',

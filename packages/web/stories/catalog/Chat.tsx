@@ -217,7 +217,7 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
         yield* SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])])))
         yield* clicks('Start Claude here again')
       }),
-    shows: { selector: '[role="alert"]' },
+    shows: { text: 'the command may still run' },
   }),
   chatStory({
     slug: 'not-claude',

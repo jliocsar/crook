@@ -27,7 +27,12 @@ import { ClientApi, HubAccount, HubStorageFailed } from '@crook/protocol/ClientA
 import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 
 const storageFailureToWire = (error: SqlError) =>
-  Effect.fail(new HubStorageFailed({ detail: error.message }))
+  Effect.andThen(
+    Effect.logError(
+      `A client's call failed because the hub could not write to its database, so nothing changed: ${error.message}. Check the disk and the file at CROOK_HUB_DATABASE_PATH.`,
+    ),
+    Effect.fail(new HubStorageFailed({ detail: error.message })),
+  )
 
 const routes = Effect.gen(function* () {
   const herd = yield* Herd
