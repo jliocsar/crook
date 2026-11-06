@@ -6,6 +6,7 @@ import { Collapse } from '@crook/web/components/Collapse'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { MachineBadge } from '@crook/web/components/MachineBadge'
 import type { MachineSectionModel } from '@crook/web/herd/HerdLayout'
+import { HerdrLostPill } from '@crook/web/machines/MachineHeading'
 import { SPRING } from '@crook/web/motion/Springs'
 import { needsYouLabel } from '@crook/domain/NeedsYouLabel'
 
@@ -33,10 +34,11 @@ export function MachineSection({
           onClick={onToggle}
           className="flex min-h-11 w-full items-center gap-2.5 px-4 text-left"
         >
-          <span className="font-display shrink-0 text-lg leading-6 font-semibold tracking-[-0.015em] whitespace-nowrap">
+          <span className="font-display min-w-0 truncate text-lg leading-6 font-semibold tracking-[-0.015em]">
             {machine.label}
           </span>
           <MachineBadge machine={machine} plain />
+          <HerdrLostPill lostAt={section.herdrLostAt} />
           <span className="text-muted-foreground ml-auto truncate font-mono text-xs tabular-nums">
             {needsYou > 0 ? needsYouLabel(needsYou) : null}
           </span>

@@ -1,5 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
+import * as DateTime from 'effect/DateTime'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
@@ -11,9 +13,12 @@ import { AskId } from '@crook/domain/Ids'
 import { ANNOUNCED, EXPIRED, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
-import { click, eventually, findByRole, wait } from '../Dom.ts'
+import { click, eventually, findByRole, present, wait } from '../Dom.ts'
 import { agent, DESK, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
+
+const KEPT_TITLE = 'Port the herd screen'
+const HEALTHY_TITLE = 'Run the nightly build'
 
 const busyLaptop = machine(LAPTOP, [
   agent('w1:p1', 'working', { title: 'Port the herd screen', secondsAgo: 42 }),
@@ -32,6 +37,12 @@ const visibleText = (element: Element | null | undefined) =>
 
 const statusPills = () =>
   Array.from(document.querySelectorAll('[data-slot="agent-status"]'), visibleText)
+
+const cardOf = (title: string) =>
+  present(screen.getByText(title).closest('[data-slot="agent-card"]'), `The card titled ${title}`)
+
+const pillOf = (title: string) =>
+  visibleText(cardOf(title).querySelector('[data-slot="agent-status"]'))
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -208,6 +219,143 @@ describe('HerdScreen', () => {
       yield* eventually(() => {
         expect(screen.getByText('No agents')).toBeDefined()
       })
+    }),
+  )
+
+  it.effect('stops a lost machine at the moment herdr went and resumes it once herdr is back', () =>
+    Effect.gen(function* () {
+      const kept = [agent('w1:p1', 'working', { title: KEPT_TITLE, secondsAgo: 42 })]
+      const healthy = machine(DESK, [
+        agent('w2:p1', 'working', { title: HEALTHY_TITLE, secondsAgo: 42 }),
+      ])
+      const { link } = yield* renderApp(
+        '/',
+        liveWith(herd([machine(LAPTOP, kept, { herdrLostAt: START }), healthy])),
+      )
+
+      expect((yield* findByRole('button', 'laptop online herdr lost')).tagName).toBe('BUTTON')
+      expect(screen.getByRole('button', { name: 'desk online' })).toBeDefined()
+
+      vi.setSystemTime(DateTime.addDuration(START, Duration.minutes(1)).epochMilliseconds)
+
+      yield* eventually(() => {
+        expect(pillOf(HEALTHY_TITLE)).toBe('Working 1m 42s')
+      })
+
+      expect(pillOf(KEPT_TITLE)).toBe('Working 42s')
+      expect(present(cardOf(KEPT_TITLE).closest('[data-kept]'), 'The kept card')).toBeDefined()
+      expect(cardOf(HEALTHY_TITLE).closest('[data-kept]')).toBeNull()
+
+      yield* SubscriptionRef.set(
+        link.state,
+        liveWith(herd([machine(LAPTOP, kept, { herdrConnection: 2 }), healthy])),
+      )
+      yield* eventually(() => {
+        expect(pillOf(KEPT_TITLE)).toBe('Working 1m 42s')
+      })
+
+      expect(cardOf(KEPT_TITLE).closest('[data-kept]')).toBeNull()
+      expect(screen.getByRole('button', { name: 'laptop online' })).toBeDefined()
+    }),
+  )
+
+  it.effect('reads a stopped clock from when herdr went, however late the row mounts', () =>
+    Effect.gen(function* () {
+      vi.setSystemTime(DateTime.addDuration(START, Duration.minutes(5)).epochMilliseconds)
+
+      yield* renderApp(
+        '/',
+        liveWith(
+          herd([
+            machine(LAPTOP, [agent('w1:p1', 'working', { title: KEPT_TITLE, secondsAgo: 42 })], {
+              herdrLostAt: START,
+            }),
+          ]),
+        ),
+      )
+
+      yield* findByRole('button', 'laptop online herdr lost')
+
+      expect(pillOf(KEPT_TITLE)).toBe('Working 42s')
+    }),
+  )
+
+  it.effect('keeps a kept row still: no breathing and no asking border', () =>
+    Effect.gen(function* () {
+      const ask = new PermissionAsk({
+        id: AskId.make('toolu_kept'),
+        source: 'hook',
+        tool: 'Bash',
+        plugin: Option.none(),
+        action: new RunCommand({ command: 'bun run lint' }),
+        options: [],
+        dialog: Option.none(),
+      })
+
+      yield* renderApp(
+        '/',
+        liveWith(
+          herd([
+            machine(
+              LAPTOP,
+              [
+                agent('w1:p1', 'working', { title: KEPT_TITLE }),
+                agent('w1:p2', 'blocked', { title: HEALTHY_TITLE, ask }),
+              ],
+              { herdrLostAt: START },
+            ),
+          ]),
+        ),
+      )
+
+      yield* findByRole('button', 'laptop online herdr lost 1 needs you')
+      const working = document.querySelector(
+        '[data-slot="status-icon"] [data-status="working"] svg',
+      )
+
+      expect(working?.getAttribute('class')).not.toContain('animate-breathe')
+      expect(cardOf(KEPT_TITLE).className).toContain('[--primary:var(--muted-foreground)]')
+      expect(cardOf(HEALTHY_TITLE).closest('[data-slot="swipe-card"]')?.className).not.toContain(
+        'var(--warning)',
+      )
+    }),
+  )
+
+  it.effect('opens the chat of a row kept while herdr is lost', () =>
+    Effect.gen(function* () {
+      const { router } = yield* renderApp(
+        '/',
+        liveWith(
+          herd([
+            machine(LAPTOP, [agent('w1:p1', 'working', { title: KEPT_TITLE })], {
+              herdrLostAt: START,
+            }),
+          ]),
+        ),
+      )
+
+      const title = yield* Effect.promise(() => screen.findByText(KEPT_TITLE))
+
+      expect(title.closest('[data-kept]')).not.toBeNull()
+
+      yield* click(title)
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap1')
+      })
+    }),
+  )
+
+  it.effect('says each machine has its own reason for showing nothing', () =>
+    Effect.gen(function* () {
+      yield* renderApp(
+        '/',
+        liveWith(herd([machine(LAPTOP, [], { herdrLostAt: START }), machine(DESK, [])])),
+      )
+
+      expect(yield* findByRole('button', 'laptop online herdr lost')).toBeDefined()
+      expect(screen.getByText("Can't see this machine's agents while herdr is away")).toBeDefined()
+      expect(screen.getByText('No agents')).toBeDefined()
+      expect(screen.queryByText('Nothing running')).toBeNull()
     }),
   )
 

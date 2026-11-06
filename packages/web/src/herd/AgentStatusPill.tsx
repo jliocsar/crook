@@ -1,5 +1,6 @@
 import { cn } from 'cn'
 import type * as DateTime from 'effect/DateTime'
+import * as Option from 'effect/Option'
 import * as Str from 'effect/String'
 
 import type { AgentStatus } from '@crook/domain/AgentStatus'
@@ -20,27 +21,43 @@ const isLive = (status: AgentStatus): boolean => status === 'working' || status 
 
 const DRAWN_AS_ONE_BLOCK = { 'skullet-block': '' }
 
-function ElapsedLabel({ status, since }: { status: AgentStatus; since: DateTime.Utc }) {
-  const now = useNow()
+function ElapsedLabel({
+  status,
+  since,
+  stoppedAt,
+}: {
+  status: AgentStatus
+  since: DateTime.Utc
+  stoppedAt: Option.Option<DateTime.Utc>
+}) {
+  const ticking = useNow(Option.isNone(stoppedAt))
+  const now = Option.getOrElse(stoppedAt, () => ticking)
+  const digits = cn(
+    'font-mono text-[11.5px] font-normal tabular-nums',
+    Option.isNone(stoppedAt) && 'opacity-80',
+  )
 
   return isLive(status) ? (
     <>
-      <span
-        aria-hidden="true"
-        className="font-mono text-[11.5px] font-normal tabular-nums opacity-80"
-      >
+      <span aria-hidden="true" className={digits}>
         {clockElapsed(now, since)}
       </span>
       <span className="sr-only">{shortElapsed(now, since)}</span>
     </>
   ) : (
-    <span className="font-mono text-[11.5px] font-normal tabular-nums opacity-80">
-      {shortElapsed(now, since)}
-    </span>
+    <span className={digits}>{shortElapsed(now, since)}</span>
   )
 }
 
-export function AgentStatusPill({ status, since }: { status: AgentStatus; since: DateTime.Utc }) {
+export function AgentStatusPill({
+  status,
+  since,
+  stoppedAt,
+}: {
+  status: AgentStatus
+  since: DateTime.Utc
+  stoppedAt: Option.Option<DateTime.Utc>
+}) {
   return (
     <span
       data-slot="agent-status"
@@ -52,7 +69,7 @@ export function AgentStatusPill({ status, since }: { status: AgentStatus; since:
       )}
     >
       <Swap id={status}>{Str.capitalize(STATUS_WORD[status])}</Swap>
-      <ElapsedLabel status={status} since={since} />
+      <ElapsedLabel status={status} since={since} stoppedAt={stoppedAt} />
     </span>
   )
 }

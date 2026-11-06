@@ -1,15 +1,18 @@
+import * as DateTime from 'effect/DateTime'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { AgentStatus } from '@crook/domain/AgentStatus'
 import { RunCommand, PermissionAsk } from '@crook/domain/Ask'
-import { AskId } from '@crook/domain/Ids'
+import { AskId, MachineId } from '@crook/domain/Ids'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import { ANNOUNCED } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
-import { agent, DESK, herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
+import { agent, DESK, herd, LAPTOP, machine, START } from '../../test/HerdFixtures.ts'
 import { AGENTS_PATH, TEAM } from '../Fixtures.ts'
 import {
   clicks,
@@ -20,13 +23,23 @@ import {
   seesText,
   swipes,
 } from '../StageDom.ts'
-import { linkStory } from '../Story.tsx'
-import type { LinkStorySpec, StoryMaker } from '../Story.tsx'
+import { linkStory, step } from '../Story.tsx'
+import type { LinkStage, LinkStorySpec, StoryMaker } from '../Story.tsx'
+import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 
 const SWIPE_LEFT = [200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100]
 const FIRST_SWIPE_CARD = '[data-slot="swipe-card"]'
 const SWIPE_ACTIONS_OPEN = '[data-slot="swipe-actions"]:not([inert])'
 const PULL_DISTANCE = 200
+const HERDR_LOST = 'herdr lost'
+const LONG_MACHINE_NAME = 'build-server-in-the-basement-rack-two-west'
+const NOTHING_RUNNING = 'Nothing running'
+const AGENTS_UNSEEN = "Can't see this machine's agents while herdr is away"
+const KEPT_TITLE = 'Port the herd screen'
+const HEALTHY_TITLE = 'Run the nightly build'
+const KEPT_WORKING_CLOCK = '1m 30s'
+const KEPT_CARD = '[data-slot="agent-card"][data-kept]'
+const LIVE_CARD = '[data-slot="agent-card"]:not([data-kept])'
 
 const LONG_TITLE =
   'Find out why the reconnect banner flashes on every foreground and write down what it would take to stop it'
@@ -40,6 +53,29 @@ const lintAsk = new PermissionAsk({
   options: [],
   dialog: Option.none(),
 })
+
+const keptRows = [
+  agent('w1:p1', 'working', { title: KEPT_TITLE, secondsAgo: 90 }),
+  agent('w1:p2', 'blocked', { title: 'Wire the hub link', secondsAgo: 30 }),
+  agent('w1:p3', 'idle', { title: 'Tidy the notes', secondsAgo: 600, branch: 'main' }),
+]
+
+const lostWithRows = machine(LAPTOP, keptRows, { herdrLostAt: START })
+
+const lostWithEveryStatus = machine(
+  LAPTOP,
+  [
+    ...keptRows,
+    agent('w1:p4', 'done', { title: 'Write the banner', secondsAgo: 240 }),
+    agent('w1:p5', 'unknown', { title: 'Nothing says yet', secondsAgo: 300 }),
+    agent('w1:p6', 'blocked', { title: 'Lint the web package', secondsAgo: 60, ask: lintAsk }),
+  ],
+  { herdrLostAt: START },
+)
+
+const lostWithNothing = (id: MachineId) => machine(id, [], { herdrLostAt: START })
+
+const justNow = DateTime.addDuration(START, Duration.seconds(CLOCK_AFTER_START_SECONDS))
 
 const herdStory = (spec: Omit<LinkStorySpec, 'path'>) => linkStory({ ...spec, path: AGENTS_PATH })
 
@@ -141,6 +177,131 @@ export const HERD_STORIES: readonly StoryMaker[] = [
       ]),
     ),
     shows: { text: 'Port the herd screen' },
+  }),
+  herdStory({
+    slug: 'herdr-lost',
+    title: 'Agents, herdr lost with its rows kept, dimmed and with their clocks stopped',
+    link: liveWith(herd([lostWithEveryStatus])),
+    shows: {
+      all: [
+        { text: HERDR_LOST },
+        { text: KEPT_WORKING_CLOCK },
+        { selector: KEPT_CARD },
+        { absent: NOTHING_RUNNING },
+      ],
+    },
+  }),
+  herdStory({
+    slug: 'herdr-lost-nothing-on-record',
+    title: 'Agents, herdr lost with no agents on record',
+    link: liveWith(herd([lostWithNothing(LAPTOP)])),
+    shows: { all: [{ text: HERDR_LOST }, { text: AGENTS_UNSEEN }, { absent: NOTHING_RUNNING }] },
+  }),
+  herdStory({
+    slug: 'herdr-lost-every-machine',
+    title: 'Agents, herdr lost on every machine, none with agents on record',
+    link: liveWith(herd([lostWithNothing(LAPTOP), lostWithNothing(DESK)])),
+    shows: { all: [{ text: AGENTS_UNSEEN }, { absent: NOTHING_RUNNING }, { absent: 'No agents' }] },
+  }),
+  herdStory({
+    slug: 'herdr-lost-beside-empty',
+    title: 'Agents, one machine herdr lost and one known to be empty, so no tab notice',
+    link: liveWith(herd([lostWithNothing(LAPTOP), machine(DESK, [])])),
+    shows: { all: [{ text: AGENTS_UNSEEN }, { text: 'No agents' }, { absent: NOTHING_RUNNING }] },
+  }),
+  herdStory({
+    slug: 'herdr-lost-beside-offline',
+    title: 'Agents, one machine herdr lost and one offline, neither with agents on record',
+    link: liveWith(herd([lostWithNothing(LAPTOP), machine(DESK, [], { connection: 'offline' })])),
+    shows: {
+      all: [
+        { text: AGENTS_UNSEEN },
+        { text: 'Last seen' },
+        { absent: NOTHING_RUNNING },
+        { absent: 'All machines are offline' },
+      ],
+    },
+  }),
+  herdStory({
+    slug: 'herdr-lost-mixed',
+    title:
+      'Agents, a mix: kept rows dim, a healthy machine stays clear, each empty one says its own',
+    link: liveWith(
+      herd([
+        lostWithRows,
+        machine(DESK, [agent('w2:p1', 'working', { title: HEALTHY_TITLE, secondsAgo: 90 })]),
+        lostWithNothing(MachineId.make('nas')),
+        machine(MachineId.make('rack'), []),
+      ]),
+    ),
+    shows: {
+      all: [
+        { selector: LIVE_CARD },
+        { selector: KEPT_CARD },
+        { text: HEALTHY_TITLE },
+        { text: AGENTS_UNSEEN },
+        { text: 'No agents' },
+        { absent: NOTHING_RUNNING },
+      ],
+    },
+  }),
+  herdStory({
+    slug: 'herdr-lost-long-name',
+    title: 'Agents, herdr lost under a long name, beside a count of who needs you',
+    link: liveWith(
+      herd([machine(LAPTOP, keptRows, { herdrLostAt: START, label: LONG_MACHINE_NAME })]),
+    ),
+    shows: { all: [{ text: HERDR_LOST }, { text: LONG_MACHINE_NAME }] },
+  }),
+  herdStory({
+    slug: 'herdr-lost-reconnecting',
+    title: 'Agents, herdr lost on a machine that is reconnecting, pill and stopped clocks kept',
+    link: liveWith(
+      herd([machine(LAPTOP, keptRows, { connection: 'reconnecting', herdrLostAt: START })]),
+    ),
+    shows: { all: [{ text: HERDR_LOST }, { text: KEPT_WORKING_CLOCK }, { selector: KEPT_CARD }] },
+  }),
+  herdStory({
+    slug: 'herdr-lost-and-back',
+    title: 'Agents, herdr goes and comes back, its rows dimming and clearing',
+    link: liveWith(herd([machine(LAPTOP, keptRows)])),
+    shows: { all: [{ text: KEPT_TITLE }, { absent: HERDR_LOST }] },
+    ends: { all: [{ text: KEPT_TITLE }, { absent: HERDR_LOST }] },
+    timeline: [
+      step<LinkStage>(800, 'Herdr stops answering the agent', ({ link }) =>
+        SubscriptionRef.set(
+          link.state,
+          liveWith(herd([machine(LAPTOP, keptRows, { herdrLostAt: justNow })])),
+        ),
+      ),
+      step<LinkStage>(1600, 'Herdr answers again, on a new connection', ({ link }) =>
+        Effect.andThen(
+          seesText(HERDR_LOST),
+          SubscriptionRef.set(
+            link.state,
+            liveWith(herd([machine(LAPTOP, keptRows, { herdrConnection: 2 })])),
+          ),
+        ),
+      ),
+    ],
+  }),
+  herdStory({
+    slug: 'herdr-lost-nothing-then-back',
+    title: 'Agents, an agent started with herdr down, then herdr shows its agents',
+    link: liveWith(herd([lostWithNothing(LAPTOP)])),
+    shows: { all: [{ text: HERDR_LOST }, { absent: NOTHING_RUNNING }] },
+    ends: { all: [{ text: KEPT_TITLE }, { absent: HERDR_LOST }] },
+    timeline: [
+      step<LinkStage>(1600, 'Herdr answers for the first time, with agents', ({ link }) =>
+        Effect.andThen(
+          seesText(HERDR_LOST),
+          SubscriptionRef.set(
+            link.state,
+            liveWith(herd([machine(LAPTOP, keptRows, { herdrConnection: 2 })])),
+          ),
+        ),
+      ),
+    ],
   }),
   herdStory({
     slug: 'section-collapsed',

@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as Data from 'effect/Data'
+import type * as DateTime from 'effect/DateTime'
 import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
@@ -19,17 +20,20 @@ export interface AgentCardModel {
   readonly workspace: string
   readonly tab: string
   readonly askSummary: Option.Option<string>
+  readonly herdrLostAt: Option.Option<DateTime.Utc>
 }
 
 export type SectionBody = Data.TaggedEnum<{
   Agents: { readonly agents: readonly AgentCardModel[] }
   NoAgents: Record<never, never>
+  AgentsUnseen: Record<never, never>
   Offline: Record<never, never>
 }>
 
 export interface MachineSectionModel {
   readonly machine: Machine
   readonly needsYou: number
+  readonly herdrLostAt: Option.Option<DateTime.Utc>
   readonly body: SectionBody
 }
 
@@ -52,8 +56,12 @@ const labelOf = <Id extends string>(
     Option.getOrElse(() => id),
   )
 
+export const herdrLostAtOf = ({ machine, state }: HerdMachine): Option.Option<DateTime.Utc> =>
+  isOffline(machine) ? Option.none() : Option.flatMap(state, (shown) => shown.herdr.lostAt)
+
 export const cardFor = (herdMachine: HerdMachine) => {
   const loud = needsYou(herdMachine)
+  const herdrLostAt = herdrLostAtOf(herdMachine)
   const pinned = isPinned(herdMachine)
   const workspaces = Option.match(herdMachine.state, {
     onNone: () => [],
@@ -68,6 +76,7 @@ export const cardFor = (herdMachine: HerdMachine) => {
     workspace: labelOf(workspaces, row.workspace),
     tab: labelOf(tabs, row.tab),
     askSummary: pendingAskSummary(row),
+    herdrLostAt,
   })
 }
 
@@ -75,6 +84,9 @@ const agentCards = (herdMachine: HerdMachine): AgentCardModel[] =>
   Arr.map(orderAgents(herdMachine), cardFor(herdMachine))
 
 const hasNoAgents = (herdMachine: HerdMachine) => agentsIn(herdMachine.state).length === 0
+
+export const agentsUnseen = (herdMachine: HerdMachine): boolean =>
+  hasNoAgents(herdMachine) && Option.isSome(herdrLostAtOf(herdMachine))
 
 const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
   if (Arr.isReadonlyArrayEmpty(view.machines)) {
@@ -85,12 +97,21 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
     return Option.some('allOffline')
   }
 
-  return Arr.every(view.machines, hasNoAgents) ? Option.some('nothingRunning') : Option.none()
+  return Arr.every(
+    view.machines,
+    (herdMachine) => hasNoAgents(herdMachine) && !agentsUnseen(herdMachine),
+  )
+    ? Option.some('nothingRunning')
+    : Option.none()
 }
 
 export const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
   if (isOffline(herdMachine.machine)) {
     return SectionBody.Offline()
+  }
+
+  if (agentsUnseen(herdMachine)) {
+    return SectionBody.AgentsUnseen()
   }
 
   if (hasNoAgents(herdMachine) && !nothingRunning) {
@@ -109,6 +130,7 @@ export const herdLayout = (view: HerdView): HerdLayout => {
     sections: Arr.map(view.machines, (herdMachine) => ({
       machine: herdMachine.machine,
       needsYou: needsYouCount(herdMachine),
+      herdrLostAt: herdrLostAtOf(herdMachine),
       body: bodyFor(herdMachine, nothingRunning),
     })),
   }

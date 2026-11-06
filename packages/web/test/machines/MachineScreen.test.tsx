@@ -94,6 +94,47 @@ describe('MachineScreen', () => {
     }),
   )
 
+  it.effect('says it cannot see the agents when herdr went before any were on record', () =>
+    Effect.gen(function* () {
+      const started = machine(LAPTOP, [], { herdrLostAt: START })
+
+      yield* renderApp('/machines/laptop', liveWith(viewOf([started])))
+
+      expect(yield* findByRole('heading', 'Agents')).toBeDefined()
+      expect(screen.getByText("Can't see this machine's agents while herdr is away")).toBeDefined()
+      expect(screen.queryByText(/No agents running/u)).toBeNull()
+    }),
+  )
+
+  it.effect('leaves the gap between the header words wider than a dot to its own word', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/machines/laptop', liveWith(viewOf([laptop])))
+      const title = yield* findByRole('heading', 'laptop')
+      const header = present(title.closest('header'), 'The machine header')
+      const words = present(header.querySelector('[data-slot="status-pill"]'), 'A status word')
+
+      expect(words.parentElement?.className).toContain('gap-2')
+    }),
+  )
+
+  it.effect('opens the chat of a row kept while herdr is lost', () =>
+    Effect.gen(function* () {
+      const kept = machine(LAPTOP, [agent('w1:p2', 'working', { title: 'Wire the hub link' })], {
+        herdrLostAt: START,
+      })
+      const { router } = yield* renderApp('/machines/laptop', liveWith(viewOf([kept])))
+
+      const title = yield* Effect.promise(() => screen.findByText('Wire the hub link'))
+
+      expect(title.closest('[data-kept]')).not.toBeNull()
+
+      yield* click(title)
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap2')
+      })
+    }),
+  )
+
   it.effect('hides the agents of an offline machine and offers Hold to forget', () =>
     Effect.gen(function* () {
       const { router, link } = yield* renderApp('/machines', liveWith(viewOf([laptop, desk])))

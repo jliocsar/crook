@@ -136,6 +136,18 @@ describe('machine detail', () => {
     expect(herdrRowOf(laptop)).toEqual(Option.some({ label: 'Herdr', value: '0.9.5', warn: false }))
   })
 
+  it('says it cannot see the agents of a machine that lost herdr with none on record', () => {
+    const unseen = machine(LAPTOP, [], { herdrLostAt: START })
+    const heading = Option.map(machineDetail(viewOf([unseen]), LAPTOP), (detail) =>
+      agentsHeading(detail.body),
+    )
+
+    expect(heading).toEqual(Option.some('Agents'))
+    expect(agentSummary(cardOf(unseen))).toBe("Can't see its agents while herdr is away")
+    expect(agentSummary(cardOf(machine(LAPTOP, [])))).toBe('No agents')
+    expect(agentSummary(cardOf(withHerdrLost(laptop)))).toBe('3 agents · 2 need you')
+  })
+
   it('hides the agents of an offline machine and counts the rest', () => {
     const heading = (herdMachine: HerdMachine) =>
       Option.map(machineDetail(viewOf([herdMachine]), herdMachine.machine.id), (detail) =>

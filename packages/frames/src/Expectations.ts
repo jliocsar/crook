@@ -209,6 +209,22 @@ export const TIMELINE_EXPECTATIONS = {
     cards: inSequence('machine-card'),
     herdr: inSequence('herdr-lost'),
   }),
+  'herd/herdr-lost-and-back': story({
+    cards: inSequence('agent-card'),
+    herdr: inSequence('herdr-lost'),
+  }),
+  'herd/herdr-lost-nothing-then-back': story({
+    cards: inSequence('agent-card'),
+    herdr: inSequence('herdr-lost'),
+  }),
+  'machine/herdr-lost-since-start-then-back': story({
+    cards: inSequence('agent-card'),
+    herdr: inSequence('herdr-lost'),
+  }),
+  'machines/herdr-lost-since-start-then-back': story({
+    cards: inSequence('machine-card'),
+    herdr: inSequence('herdr-lost'),
+  }),
   'composer/send-answered-past-the-delay': story(A_CHAT_WITH_ROWS),
   'composer/send-failed-then-edited': story(A_CHAT_WITH_ROWS),
   'composer/claude-waiting-ends': story(A_CHAT_WITH_ROWS),
