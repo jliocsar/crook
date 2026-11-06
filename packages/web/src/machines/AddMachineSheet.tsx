@@ -46,12 +46,12 @@ export function AddMachineSheet({ open, onClose }: { open: boolean; onClose: () 
     >
       <ol className="grid gap-4">
         {setupSteps(hubUrl).map((step, index) => (
-          <li key={step.code} className="grid grid-cols-[1.5rem_1fr] gap-x-2 gap-y-2">
+          <li key={step.code} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-2 gap-y-2">
             <span className="bg-muted text-muted-foreground inline-flex size-6 items-center justify-center rounded-full font-mono text-xs">
               {index + 1}
             </span>
             <p className="text-sm leading-5">{step.text}</p>
-            <CodeBlock className="col-start-2" code={step.code} language={step.language} />
+            <CodeBlock className="col-start-2" code={step.code} language={step.language} wrap />
           </li>
         ))}
         <li className="text-muted-foreground grid grid-cols-[1.5rem_1fr] gap-x-2 text-sm leading-5">
