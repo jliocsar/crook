@@ -44,8 +44,9 @@ export const Finding = Schema.Struct({
 })
 export type Finding = typeof Finding.Type
 
+const FLASH_MS = 400
+
 export const FLASH_FRAMES = 24
-export const FLASH_MS = 400
 
 const FRAME_MS = FLASH_MS / FLASH_FRAMES
 
@@ -58,7 +59,7 @@ const endOf = (run: Run): number =>
 
 const millisecondsOf = (run: Run): number => Math.round(endOf(run) - first(run).at)
 
-const heldMsOf = (run: Run): number => last(run).at - first(run).at + FRAME_MS
+const heldMsOf = (run: Run): number => Math.round(last(run).at - first(run).at + FRAME_MS)
 
 const namesOf = (frame: RecordedFrame): string => {
   const marks = marksOf(frame)
@@ -148,7 +149,7 @@ const flashesOf = (
           'flash',
           `flash:${mark}`,
           run,
-          `"${mark}" showed for only ${run.frames.length} frames over ${Math.round(heldMsOf(run))} ms and went away. A state has to hold ${flashFrames} frames or ${FLASH_MS} ms, or not show at all, and a starved run's clock does not count.`,
+          `"${mark}" showed for only ${run.frames.length} frames over ${heldMsOf(run)} ms and went away. A state has to hold ${flashFrames} frames or ${FLASH_MS} ms, or not show at all.${clockCounts ? '' : ' This run was starved, so its clock does not count.'}`,
           clearestFrameOf(run, mark),
         ),
       ),

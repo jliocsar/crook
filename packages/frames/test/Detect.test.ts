@@ -59,15 +59,24 @@ describe('detect, over logs recorded from real runs', () => {
     expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
   })
 
-  it('keeps a state under 24 frames at a steady 60 Hz a flash', () => {
+  it('draws the line at 400 ms for a state under 24 frames, a steady 60 Hz well below it', () => {
     const story = 'transition/reconnect-chat-open'
     const log = decodeLog(flashFixture)
-    const atSixtyHertz = {
-      ...log,
-      frames: Arr.map(log.frames, (frame, index) => ({ ...frame, at: (index * 1000) / 60 })),
-    }
+    const keysAtGap = (gapMs: number) =>
+      keysOf(
+        detect(
+          story,
+          {
+            ...log,
+            frames: Arr.map(log.frames, (frame, index) => ({ ...frame, at: index * gapMs })),
+          },
+          expectationOf(story),
+        ),
+      )
 
-    expect(keysOf(detect(story, atSixtyHertz, expectationOf(story)))).toContain('flash:catching-up')
+    expect(keysAtGap(1000 / 60)).toContain('flash:catching-up')
+    expect(keysAtGap(18)).toContain('flash:catching-up')
+    expect(keysAtGap(19)).toEqual([])
   })
 
   it('reports a state gone within a long frame, however late the next frame came', () => {
@@ -91,6 +100,7 @@ describe('detect, over logs recorded from real runs', () => {
 
     expect(isStarved(stretched.frames)).toBe(true)
     expect(flash.lastFrame - flash.firstFrame + 1).toBeLessThan(24)
+    expect(flash.words).toContain('This run was starved')
   })
 
   it('reports a blank frame between the first frame and the first state', () => {
