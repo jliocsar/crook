@@ -263,6 +263,15 @@ const make = Effect.gen(function* () {
   ) {
     return yield* Cache.get(outcomes, { key, command }).pipe(
       Effect.flatMap(Effect.fromResult),
+      Effect.tapErrorTag(
+        [
+          'CommandDeliveryUnknown',
+          'HerdrUnavailable',
+          'AskDialogUnreadable',
+          'DeclineMessageUndelivered',
+        ],
+        () => sync.invalidate,
+      ),
       Effect.onExit((exit) =>
         audit
           .record(key, command, exit)
