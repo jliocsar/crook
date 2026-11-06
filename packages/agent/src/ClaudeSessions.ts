@@ -69,33 +69,47 @@ const make = (procRoot: string) =>
         Effect.withSpan('ClaudeSessions.sessionOfProcess'),
       )
 
-    const sessionOfPane = (paneId: string) =>
+    const stillOpen = (session: Option.Option<ClaudeSessionId>) =>
+      Option.match(session, {
+        onNone: () => Effect.succeed(false),
+        onSome: sessionFiles.holds,
+      })
+
+    const sessionOfForeground = (foreground: readonly PaneProcess[]) =>
+      Option.match(
+        Arr.findFirst(foreground, (process) => process.name === CLAUDE_PROCESS_NAME),
+        {
+          onNone: () => Effect.succeedNone,
+          onSome: (process) => sessionOfProcess(process.pid),
+        },
+      )
+
+    const sessionOfPane = (paneId: string, lastKnown: Option.Option<ClaudeSessionId>) =>
       herdr.request(PaneProcessInfoMethod, { pane_id: paneId }).pipe(
-        Effect.map((result) =>
-          Arr.findFirst(
-            result.process_info.foreground_processes,
-            (process) => process.name === CLAUDE_PROCESS_NAME,
-          ),
+        Effect.flatMap((result) =>
+          Option.match(result.process_info.foreground_processes, {
+            onNone: () =>
+              Effect.map(stillOpen(lastKnown), (open) => Option.filter(lastKnown, () => open)),
+            onSome: sessionOfForeground,
+          }),
         ),
-        flatMapSome((process: PaneProcess) => sessionOfProcess(process.pid)),
         Effect.catchTag('HerdrPaneNotFound', () => Effect.succeedNone),
       )
 
-    const resolve = Effect.fn('ClaudeSessions.resolve')(function* (agent: AgentInfo) {
+    const resolve = Effect.fn('ClaudeSessions.resolve')(function* (
+      agent: AgentInfo,
+      lastKnown: Option.Option<ClaudeSessionId>,
+    ) {
       if (!Option.contains(agent.agent, CLAUDE_AGENT)) {
         return Option.none()
       }
 
       const reported = reportedSession(agent)
-      const stillOpen = yield* Option.match(reported, {
-        onNone: () => Effect.succeed(false),
-        onSome: sessionFiles.holds,
-      })
 
-      return stillOpen
+      return (yield* stillOpen(reported))
         ? reported
         : yield* Effect.map(
-            sessionOfPane(agent.pane_id),
+            sessionOfPane(agent.pane_id, lastKnown),
             Option.orElse(() => reported),
           )
     })
@@ -108,6 +122,7 @@ export class ClaudeSessions extends Context.Service<
   {
     readonly resolve: (
       agent: AgentInfo,
+      lastKnown: Option.Option<ClaudeSessionId>,
     ) => Effect.Effect<
       Option.Option<ClaudeSessionId>,
       Exclude<HerdrRequestError, HerdrPaneNotFound> | ClaudeSessionFileUnreadable
