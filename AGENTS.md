@@ -1579,6 +1579,9 @@ like, which now emit nothing and fail nowhere, and `data-open:` and its siblings
 Tailwind's own `[data-open]` selector (reasoned, not measured). Read what an add wrote before
 keeping it.
 
+The agent status icons are filled, and lucide's are stroked, so they sit inline with the paths they
+always had. Moving them to lucide is a change of look, not a tidy-up.
+
 A stylesheet can carry what a grep for its classes misses. Two `@utility` of one name in two
 stylesheets merge into one rule, so the app's own `no-scrollbar` got `scrollbar-width` only from
 shadcn's, and the declaration left the production CSS with the import (measured). Tailwind also
