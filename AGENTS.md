@@ -30,16 +30,20 @@ the push hook failed on another agent's half-done worktree, once per tool (measu
 tracks one config of each, so nothing else changes.
 :::
 
-The `effecttsgo/*` Effect rules come from two `@effect/tsgo` presets that `.oxlintrc.json` extends:
-`recommended` and `effect-native`, which bans the globals Effect replaces — `process.env`, the
-global `console`, `Date`, `fetch`, timers, `new Promise`. `recommended` carried those itself until
-tsgo moved them out, so a bump that only follows `recommended` silently drops them (measured going
-from 0.36.1 to 0.64.1). They are type-aware, and the presets turn type-aware mode on — which is why
-no `--type-aware` flag appears in the scripts.
+The `effecttsgo/*` Effect rules come from four `@effect/tsgo` presets that `.oxlintrc.json` extends:
+`recommended`, `correctness` and `antipattern`, which add four rules `recommended` leaves off, and
+`effect-native`, which bans the globals Effect replaces — `process.env`, the global `console`,
+`Date`, `fetch`, timers, `new Promise`. `recommended` carried those itself until tsgo moved them
+out, so a bump that only follows `recommended` silently drops them (measured going from 0.36.1 to
+0.64.1). They are type-aware, and the presets turn type-aware mode on — which is why no
+`--type-aware` flag appears in the scripts. Since tsgo 0.67.3 they also read inside a class's
+`extends` expression, so a service's inline `make` is checked like any other code (measured).
 
 The tsgo rules that are off say why beside themselves in `.oxlintrc.json`. Two are off because
 their quickfixes write what begone-slop rejects: a map to `undefined` becomes `Effect.asVoid`, and a
-catch returning `Effect.void` becomes a log-less `Effect.ignore`. `unstable-api-usage` is off
+catch returning `Effect.void` becomes a log-less `Effect.ignore`. `unnecessary-effect-gen` stays on,
+but don't take its fix for a body with no return and a non-void success: it writes `Effect.asVoid`
+too (read in tsgo 0.67.4's source, not run). `unstable-api-usage` is off
 because crook is built on the modules Effect tags unstable — the platform services, SQL, RPC, atoms
 and `@effect/vitest` — so it flagged every use (1,679 on the bump) and could single out none.
 Schema classes carry no brand: the language-service plugin limits `brandedSchemaClasses` to
@@ -48,7 +52,7 @@ plain `Schema.Class` here is a wire shape decoded at a boundary.
 
 oxlint's `promise` rules decide whether `x.catch(…)` is a Promise call by looking at the receiver,
 and they treat a namespace import as one that might be a Promise. So `Effect.catch` and
-`Stream.catch` count as Promise chains (measured on oxlint 1.90.0). `prefer-await-to-then` reports
+`Stream.catch` count as Promise chains (measured on oxlint 1.90.0; `valid-params` still rejects it on 1.91.0). `prefer-await-to-then` reports
 each one that isn't under a `yield` or an `await`, which is why it's off. `valid-params` is a
 correctness rule and stays on, but it rejects the data-first `Effect.catch(self, handler)` as a
 `Promise.catch()` with two arguments, so use the pipe form. Never rewrite a catch into something

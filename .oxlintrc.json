@@ -6,6 +6,8 @@
   "extends": [
     "./node_modules/@effect/tsgo/oxlint-presets/recommended.json",
     "./node_modules/@effect/tsgo/oxlint-presets/effect-native.json",
+    "./node_modules/@effect/tsgo/oxlint-presets/correctness.json",
+    "./node_modules/@effect/tsgo/oxlint-presets/antipattern.json",
     "./node_modules/@jliocsar/begone-slop/preset.json"
   ],
 
@@ -74,7 +76,7 @@
     "no-nested-ternary": "error",
     "prefer-template": "error",
     "complexity": ["error", 15],
-    // Off, not tuned. One `Schema.TaggedErrorClass` per failure reason is this
+    // Off, not tuned. One `Schema.TaggedError` per failure reason is this
     // codebase's error doctrine, so a module that can fail two ways already
     // declares two classes and a service tag makes a third. A cap of one does not
     // shrink a module, it scatters one concern across several files.

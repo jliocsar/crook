@@ -9,13 +9,13 @@ code. Clone it, add a package under `packages/`, and the gate is already wired.
 
 Everything is oxc + TypeScript 7. No ESLint, no dprint, no Prettier.
 
-| Tool                                                                                                             | Job                                          |
-| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| [oxlint](https://oxc.rs)                                                                                         | Lint, including the type-aware pass          |
-| [oxfmt](https://oxc.rs)                                                                                          | Format                                       |
-| [typescript@7](https://github.com/microsoft/typescript-go) + [`@effect/tsgo`](https://github.com/Effect-TS/tsgo) | Typecheck, and 81 Effect-specific lint rules |
-| [`@jliocsar/begone-slop`](https://github.com/jliocsar/begone-slop)                                               | The house lint rules                         |
-| [Bun](https://bun.sh)                                                                                            | Runtime, package manager, test runner        |
+| Tool                                                                                                             | Job                                           |
+| ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| [oxlint](https://oxc.rs)                                                                                         | Lint, including the type-aware pass           |
+| [oxfmt](https://oxc.rs)                                                                                          | Format                                        |
+| [typescript@7](https://github.com/microsoft/typescript-go) + [`@effect/tsgo`](https://github.com/Effect-TS/tsgo) | Typecheck, and the Effect-specific lint rules |
+| [`@jliocsar/begone-slop`](https://github.com/jliocsar/begone-slop)                                               | The house lint rules                          |
+| [Bun](https://bun.sh)                                                                                            | Runtime, package manager, test runner         |
 
 ## Getting started
 

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Effect-TS/language-service/refs/heads/main/schema.json",
+  "$schema": "../../node_modules/@effect/tsgo/schema.json",
   "extends": "@jliocsar/begone-slop/tsconfig",
   "compilerOptions": {
     "types": ["bun"],
@@ -7,7 +7,8 @@
       {
         "name": "@effect/language-service",
         "diagnostics": false,
-        "brandedSchemaClasses": ["Error", "Opaque"]
+        "brandedSchemaClasses": ["Error", "Opaque"],
+        "namespaceImportPackages": ["effect"]
       }
     ]
   }
