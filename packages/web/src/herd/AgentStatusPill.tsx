@@ -18,6 +18,8 @@ const STATUS_PILL_TONE = {
 
 const isLive = (status: AgentStatus): boolean => status === 'working' || status === 'blocked'
 
+const DRAWN_AS_ONE_BLOCK = { 'skullet-block': '' }
+
 function ElapsedLabel({ status, since }: { status: AgentStatus; since: DateTime.Utc }) {
   const now = useNow()
 
@@ -43,6 +45,7 @@ export function AgentStatusPill({ status, since }: { status: AgentStatus; since:
     <span
       data-slot="agent-status"
       data-status={status}
+      {...DRAWN_AS_ONE_BLOCK}
       className={cn(
         'inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] leading-none font-semibold whitespace-nowrap transition-colors duration-(--motion) ease-(--ease-out)',
         STATUS_PILL_TONE[status],

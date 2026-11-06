@@ -31,6 +31,7 @@ import { detect, Finding } from '@crook/frames/Detect'
 import { expectationOf, TIMELINE_STORY_IDS } from '@crook/frames/Expectations'
 import { isStarved, p90FrameMs, STARVED_P90_FRAME_MS } from '@crook/frames/FrameLog'
 import { verdictLines } from '@crook/frames/Report'
+import { judgeSkeletonFit } from '@crook/frames/SkeletonFit'
 import { imageWithItsAge, NO_IMAGE, shotOfFrame } from '@crook/frames/Shots'
 
 import baselineJson from '../baseline.json' with { type: 'json' }
@@ -47,7 +48,7 @@ export class FramesFailed extends Schema.TaggedError<FramesFailed>()('FramesFail
   failed: Schema.Array(Schema.String),
 }) {
   override get message(): string {
-    return `frames failed on ${this.failed.join(', ')}. Each story's findings are above, with a frame image for each. A finding that is expected until its bug ticket lands goes in packages/frames/baseline.json; anything else is a bug.`
+    return `frames failed on ${this.failed.join(', ')}. Each finding is above, a story's with a frame image. A finding that is expected until its bug ticket lands goes in packages/frames/baseline.json; anything else is a bug.`
   }
 }
 
@@ -296,15 +297,18 @@ const run = Effect.fn('frames.run')(function* (input: {
   yield* warmUp(page)
 
   const judged = yield* Effect.forEach(names, (story) => judgeStory(page, story, output, baseline))
-  const failed = judged
+  const unfit = input.all ? yield* judgeSkeletonFit(page) : []
+  const failedStories = judged
     .filter(({ verdict, result }) => !isClean(verdict) || Option.isSome(result.storyFailure))
     .map(({ verdict }) => verdict.story)
+  const failed = [...failedStories, ...unfit]
   const finished = yield* Clock.currentTimeMillis
   const summary = yield* Schema.encodeEffect(SummaryFile)(judged.map(({ result }) => result))
 
   yield* fileSystem.writeFileString(path.join(output, 'summary.json'), summary)
+  yield* Effect.forEach(unfit, (finding) => Console.log(`SKELETON DOES NOT FIT ${finding}`))
   yield* Console.log(
-    `frames: ${judged.length} stories, ${failed.length} failed, ${Math.round((finished - started) / 1000)} s. Logs and shots under ${output}.`,
+    `frames: ${judged.length} stories, ${failedStories.length} failed, ${unfit.length} skeleton misfits, ${Math.round((finished - started) / 1000)} s. Logs and shots under ${output}.`,
   )
 
   if (failed.length > 0) {
@@ -323,7 +327,9 @@ const frames = Command.make(
     ),
     all: Flag.Boolean('all').pipe(
       Flag.withDefault(false),
-      Flag.withDescription('Play every timeline story not waiting on reserved room.'),
+      Flag.withDescription(
+        'Play every timeline story, then hold each skeleton to the real screen it stands for.',
+      ),
     ),
     noBaseline: Flag.Boolean('no-baseline').pipe(
       Flag.withDefault(false),

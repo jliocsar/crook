@@ -6,8 +6,9 @@ import { AgentStatus } from '@crook/domain/AgentStatus'
 import { RunCommand, PermissionAsk } from '@crook/domain/Ask'
 import { AskId } from '@crook/domain/Ids'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
+import { ANNOUNCED } from '@crook/web/rpc/HubLinkState'
 
-import { liveWith } from '../../test/AppWiring.tsx'
+import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { agent, DESK, herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
 import { AGENTS_PATH, TEAM } from '../Fixtures.ts'
 import {
@@ -75,6 +76,12 @@ const pulling = (distance: number) =>
   )
 
 export const HERD_STORIES: readonly StoryMaker[] = [
+  herdStory({
+    slug: 'skeleton',
+    title: 'Agents, the skeleton of a first visit',
+    link: stateWith(ANNOUNCED, Option.none()),
+    shows: { selector: '[data-slot="herd-skeleton"]' },
+  }),
   herdStory({
     slug: 'full',
     title: 'Agents, two machines at work',

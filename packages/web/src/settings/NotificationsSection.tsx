@@ -21,6 +21,7 @@ import type {
 } from '@crook/web/settings/SettingsLayout'
 import { SettingsNote, SettingsSection } from '@crook/web/settings/SettingsSection'
 import { ToggleRow } from '@crook/web/settings/ToggleRow'
+import { useFailureToast } from '@crook/web/toast/FailureToast'
 
 const UNAVAILABLE_NOTE = 'Your notification choices show once crook reconnects.'
 const SHARED_NOTE = 'Saved on the hub, so every device you log in on shares them.'
@@ -133,6 +134,8 @@ function TestNotification({ disabled }: { disabled: boolean }) {
   const test = useTestNotification()
   const unavailable = disabled || test.state === 'sending'
 
+  useFailureToast(test.failure)
+
   return (
     <div className="grid grid-cols-1 gap-2">
       <div className="px-4">
@@ -158,7 +161,6 @@ function TestNotification({ disabled }: { disabled: boolean }) {
           {test.state === 'sent' ? 'Test notification sent' : ''}
         </span>
       </div>
-      <ActionFailure className="px-4" message={test.failure} />
     </div>
   )
 }

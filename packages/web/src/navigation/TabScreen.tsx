@@ -1,7 +1,7 @@
 import { Outlet } from '@tanstack/react-router'
 import type * as React from 'react'
 
-import { HeaderBanner } from '@crook/web/connection/ConnectionBanner'
+import { BannerRoom, HeaderBanner } from '@crook/web/connection/ConnectionBanner'
 import { CoveredScope } from '@crook/web/navigation/Covered'
 import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 
@@ -39,7 +39,7 @@ export function TabScreen({
       >
         <CoveredScope covered={covered}>
           <TabHeader title={title} action={action} />
-          {children}
+          <BannerRoom>{children}</BannerRoom>
         </CoveredScope>
       </div>
       <Outlet />

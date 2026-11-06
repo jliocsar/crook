@@ -1,5 +1,3 @@
-import * as Arr from 'effect/Array'
-
 import type { MarkPair } from '@crook/frames/Marks'
 
 export interface Order {
@@ -23,17 +21,8 @@ export const fromTable = (table: Readonly<Record<string, readonly string[]>>): O
   next: new Map(Object.entries(table)),
 })
 
-const WAITING_ON_RESERVED_ROOM = [
-  'composer/send-failed-then-edited',
-  'composer/stop-failed-then-turn-ends',
-  'actions/rename-gives-up',
-  'actions/close-gives-up',
-  'new-agent/shows-after-giving-up',
-] satisfies readonly (keyof typeof TIMELINE_EXPECTATIONS)[]
-
 export const NOTHING_ALLOWED = inSequence()
 export const STILL_SHIFT_BUDGET = 0.01
-export const BANNER_SHIFT_BUDGET = 0.06
 
 const story = (
   order: Readonly<Record<string, Order>>,
@@ -132,9 +121,9 @@ export const TIMELINE_EXPECTATIONS = {
   'transition/older-agent-rejected-resume': story(A_CHAT_WITH_ROWS),
   'transition/reopen-while-dialing': story(
     { thread: inSequence('thread-rows'), dock: inSequence('composer') },
-    { watchFrom: 'first-step', shiftBudget: BANNER_SHIFT_BUDGET },
+    { watchFrom: 'first-step' },
   ),
-  'transition/reconnect-chat-open': story(A_CHAT, { shiftBudget: BANNER_SHIFT_BUDGET }),
+  'transition/reconnect-chat-open': story(A_CHAT),
   'transition/foreground-return': story({ ...A_CHAT, link: NOTHING_ALLOWED }),
   'transition/send-through-redial': story(
     { thread: inSequence('thread-rows'), dock: inSequence('composer'), link: NOTHING_ALLOWED },
@@ -192,18 +181,12 @@ export const TIMELINE_EXPECTATIONS = {
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
   }),
-  'transition/herd-first-load-from-cache': story(
-    { herd: inSequence('herd-list') },
-    { shiftBudget: BANNER_SHIFT_BUDGET },
-  ),
+  'transition/herd-first-load-from-cache': story({ herd: inSequence('herd-list') }),
   'transition/herd-first-load-fast': story({
     herd: inSequence('herd-list'),
     link: NOTHING_ALLOWED,
   }),
-  'transition/herd-first-load-empty': story(
-    { herd: inSequence('herd-skeleton', 'herd-list') },
-    { shiftBudget: BANNER_SHIFT_BUDGET },
-  ),
+  'transition/herd-first-load-empty': story({ herd: inSequence('herd-skeleton', 'herd-list') }),
   'transition/herd-first-link-value': story({
     herd: inSequence('herd-skeleton', 'herd-list'),
   }),
@@ -217,6 +200,10 @@ export const TIMELINE_EXPECTATIONS = {
   'composer/send-answered-past-the-delay': story(A_CHAT_WITH_ROWS),
   'composer/send-failed-then-edited': story(A_CHAT_WITH_ROWS),
   'composer/stop-failed-then-turn-ends': story(A_CHAT_WITH_ROWS),
+  'chat/restart-gives-up': story(
+    { thread: inSequence('thread-rows'), dock: inSequence('composer', 'edge-card') },
+    { watchFrom: 'first-step' },
+  ),
   'actions/rename-gives-up': story({}),
   'actions/close-gives-up': story({}),
   'new-agent/shows-after-giving-up': story({
@@ -241,10 +228,7 @@ export const TIMELINE_EXPECTATIONS = {
   }),
 } satisfies Record<string, Expectation>
 
-export const TIMELINE_STORY_IDS: readonly string[] = Arr.difference(
-  Object.keys(TIMELINE_EXPECTATIONS),
-  WAITING_ON_RESERVED_ROOM,
-)
+export const TIMELINE_STORY_IDS: readonly string[] = Object.keys(TIMELINE_EXPECTATIONS)
 
 export const expectationOf = (id: string): Expectation =>
   new Map<string, Expectation>(Object.entries(TIMELINE_EXPECTATIONS)).get(id) ?? NO_DECLARED_ORDER

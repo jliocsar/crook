@@ -848,7 +848,7 @@ describe('swiping a card', () => {
     }),
   )
 
-  it.effect("shows the hub's refusal of a pin beneath the card", () =>
+  it.effect("shows the hub's refusal of a pin in a toast, moving no card", () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/', liveWith(herd([everyone])))
       const refusal = new HubStorageFailed({ detail: 'disk full' })
@@ -867,10 +867,10 @@ describe('swiping a card', () => {
         expect(pin.parentElement).toHaveProperty('inert', false)
       })
       fireEvent.click(pin)
-      const alert = yield* Effect.promise(() => screen.findByRole('alert'))
+      const shown = yield* Effect.promise(() => screen.findByText(refusal.message))
 
-      expect(alert.textContent).toBe(refusal.message)
-      expect(alert.closest('li')?.textContent).toContain('Write the banner')
+      expect(shown.closest('[data-slot="toast"]')).not.toBeNull()
+      expect(swipeRow.textContent).not.toContain(refusal.message)
     }),
   )
 })

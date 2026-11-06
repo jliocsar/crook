@@ -5,7 +5,6 @@ import { CircleOff, SquareX } from 'lucide-react'
 import * as React from 'react'
 
 import type { EdgeKind } from '@crook/web/chat/ChatModel'
-import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Button } from '@crook/web/components/ui/button'
 import { SpinnerGlyph } from '@crook/web/components/ui/spinner'
 import { shortElapsed } from '@crook/web/time/Elapsed'
@@ -165,7 +164,6 @@ export function EdgeCard(props: EdgeCardProps) {
           />
         </div>
       )}
-      <ActionFailure message={Option.flatMap(restart, (found) => found.failure)} />
     </section>
   )
 }

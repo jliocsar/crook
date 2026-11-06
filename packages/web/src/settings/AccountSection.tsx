@@ -4,7 +4,7 @@ import * as React from 'react'
 
 import { failureMessage } from '@crook/web/atoms/ActionFailure'
 import type { HubAccount } from '@crook/protocol/ClientApi'
-import { ActionFailure } from '@crook/web/components/ActionFailure'
+import { failureNotice, FloatingNotices } from '@crook/web/components/FloatingNotices'
 import { InfoList } from '@crook/web/components/InfoList'
 import { Sheet } from '@crook/web/components/Sheet'
 import { Swap } from '@crook/web/components/Swap'
@@ -66,7 +66,7 @@ function LogOutSheet({
     >
       <div className="grid grid-cols-1 gap-2">
         <p className="text-muted-foreground pb-1 text-sm leading-5">{LOG_OUT_SCOPE_NOTE}</p>
-        <ActionFailure className="pb-1" message={logOut.failure} />
+        <FloatingNotices notices={Option.toArray(failureNotice('log-out', logOut.failure))} />
         <Button
           variant="destructive"
           size="touch"

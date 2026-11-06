@@ -78,6 +78,7 @@ export function Pressable({
     >
       <motion.span
         aria-hidden="true"
+        data-slot="press-highlight"
         className="bg-muted pointer-events-none absolute inset-0 rounded-[inherit]"
         initial={false}
         animate={{ opacity: highlightOpacity({ suppress, pressed, hovered }) }}
