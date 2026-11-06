@@ -14,10 +14,11 @@ import { agentVersion } from '@crook/agent/HubLink'
 import { readAllText, serveLocalSocket } from '@crook/agent/LocalSocket'
 import { stateFile } from '@crook/agent/StateDirectory'
 
-const SLOWEST_MEASURED_ANSWER = Duration.millis(21.269)
+const SLOWEST_MEASURED_ANSWER_AT_REST = Duration.millis(21.269)
+const SLOWEST_MEASURED_ANSWER_STARVED = Duration.millis(376.6)
 const STATUS_REQUEST = 'status\n'
-const STATUS_ANSWER_TIMEOUT = Duration.times(SLOWEST_MEASURED_ANSWER, 10)
 
+export const STATUS_ANSWER_TIMEOUT = Duration.times(SLOWEST_MEASURED_ANSWER_STARVED, 10)
 export const SLOWEST_MEASURED_STARTUP = Duration.millis(249.5)
 export const AGENT_STARTUP_TIMEOUT = Duration.times(SLOWEST_MEASURED_STARTUP, 10)
 
@@ -164,7 +165,7 @@ export const awaitAgentOtherThan = Effect.fn('StatusSocket.awaitAgentOtherThan')
   return yield* askAgentOtherThan(path, previous).pipe(
     Effect.retry({
       while: isNoAnswer,
-      schedule: Schedule.spaced(SLOWEST_MEASURED_ANSWER).pipe(
+      schedule: Schedule.spaced(SLOWEST_MEASURED_ANSWER_AT_REST).pipe(
         Schedule.upTo({ duration: AGENT_STARTUP_TIMEOUT }),
       ),
     }),

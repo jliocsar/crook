@@ -114,8 +114,18 @@ const logHerdrFailure = (error: HerdrSubscriptionError) =>
     Match.orElse((failure) => Effect.logWarning(failure.message)),
   )
 
-const sessionOf = (claudeSessions: ClaudeSessions['Service'], info: AgentInfo) =>
-  claudeSessions.resolve(info).pipe(
+const lastKnownSessionOf = (previousAgents: readonly AgentRow[], info: AgentInfo) =>
+  Arr.findFirst(
+    previousAgents,
+    (row) => row.pane === info.pane_id && row.terminal === info.terminal_id,
+  ).pipe(Option.flatMap((row) => row.claudeSession))
+
+const sessionOf = (
+  claudeSessions: ClaudeSessions['Service'],
+  info: AgentInfo,
+  previousAgents: readonly AgentRow[],
+) =>
+  claudeSessions.resolve(info, lastKnownSessionOf(previousAgents, info)).pipe(
     Effect.catchTags({
       ClaudeSessionFileUnreadable: (error) =>
         Effect.as(Effect.logWarning(error.message), Option.none()),
@@ -149,8 +159,8 @@ const make = Effect.gen(function* () {
         ),
     })
 
-  const claudeFactsOf = (info: AgentInfo, mark: number) =>
-    Effect.flatMap(sessionOf(claudeSessions, info), (claudeSession) =>
+  const claudeFactsOf = (info: AgentInfo, mark: number, previousAgents: readonly AgentRow[]) =>
+    Effect.flatMap(sessionOf(claudeSessions, info, previousAgents), (claudeSession) =>
       Effect.zipWith(
         asks.askOf(info, claudeSession, mark),
         Option.match(claudeSession, {
@@ -161,18 +171,18 @@ const make = Effect.gen(function* () {
       ),
     )
 
-  const resolveAgent = (mark: number) => (info: AgentInfo) =>
+  const resolveAgent = (mark: number, previousAgents: readonly AgentRow[]) => (info: AgentInfo) =>
     Effect.zipWith(
-      claudeFactsOf(info, mark),
+      claudeFactsOf(info, mark, previousAgents),
       branchOf(info),
       (facts, branch): ResolvedAgent => ({ info, branch, ...facts }),
       { concurrent: true },
     ).pipe(Effect.annotateLogs('pane', info.pane_id))
 
-  const read = Effect.fn('MachineStateSync.read')(function* () {
+  const read = Effect.fn('MachineStateSync.read')(function* (previousAgents: readonly AgentRow[]) {
     const mark = yield* asks.mark
     const snapshot = yield* herdr.snapshot
-    const agents = yield* Effect.forEach(snapshot.agents, resolveAgent(mark), {
+    const agents = yield* Effect.forEach(snapshot.agents, resolveAgent(mark, previousAgents), {
       concurrency: 'unbounded',
     })
 
@@ -209,7 +219,7 @@ const make = Effect.gen(function* () {
   const startedAt = yield* DateTime.now
 
   const readInitial = Effect.fn('MachineStateSync.readInitial')(function* () {
-    const reading = yield* read()
+    const reading = yield* read([])
     const contents = yield* contentsOf([], firstConnection, reading, startedAt, startedAt)
 
     return initialMachineState(machine, contents)
@@ -237,7 +247,7 @@ const make = Effect.gen(function* () {
 
   const refresh = SubscriptionRef.updateSomeAndGetEffect(state, (previous) =>
     Effect.gen(function* () {
-      const reading = yield* read()
+      const reading = yield* read(previous.agents)
       const connection = yield* connectionAfter(previous)
       const contents = yield* contentsOf(
         previous.agents,

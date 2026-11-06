@@ -3,14 +3,19 @@ import * as BunSocketServer from '@effect/platform-bun/BunSocketServer'
 import { expect, layer } from '@effect/vitest'
 import * as ConfigProvider from 'effect/ConfigProvider'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Fiber from 'effect/Fiber'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Socket from 'effect/socket/Socket'
+import * as TestClock from 'effect/testing/TestClock'
 
 import {
   AgentAnswerUnreadable,
   NoAgentAnswered,
+  STATUS_ANSWER_TIMEOUT,
   askRunningAgent,
   layer as statusLayer,
 } from '@crook/agent/StatusSocket'
@@ -50,6 +55,23 @@ const answerEveryoneWith = Effect.fn('answerEveryoneWith')(function* (path: stri
   }, Effect.scoped)
 
   yield* server.run(answer).pipe(Effect.forkScoped)
+})
+
+const silentAgentAt = Effect.fn('silentAgentAt')(function* (
+  path: string,
+  requestRead: Deferred.Deferred<void>,
+) {
+  const server = yield* BunSocketServer.make({ path })
+  const hold = Effect.fn('hold')(function* (socket: Socket.Socket) {
+    const pull = yield* Socket.readerBytes(socket)
+
+    yield* pull
+    yield* Deferred.succeed(requestRead, undefined)
+
+    return yield* Effect.never
+  }, Effect.scoped)
+
+  yield* server.run(hold).pipe(Effect.forkScoped)
 })
 
 layer(BunServices.layer, { excludeTestServices: true })('StatusSocket', (live) => {
@@ -104,5 +126,34 @@ layer(BunServices.layer, { excludeTestServices: true })('StatusSocket', (live) =
 
       expect(failure).toBeInstanceOf(AgentAnswerUnreadable)
     }),
+  )
+})
+
+layer(BunServices.layer)('StatusSocket with an agent that went silent', (it) => {
+  it.effect(
+    'reports an agent that read the request and never answers only once the budget runs out',
+    () =>
+      Effect.gen(function* () {
+        const path = yield* scratchSocket()
+        const requestRead = yield* Deferred.make<void>()
+
+        yield* silentAgentAt(path, requestRead)
+
+        const asked = yield* askRunningAgent(path).pipe(Effect.flip, Effect.forkScoped)
+
+        yield* Deferred.await(requestRead)
+        yield* TestClock.adjust(Duration.subtract(STATUS_ANSWER_TIMEOUT, Duration.millis(1)))
+
+        expect(asked.pollUnsafe()).toBeUndefined()
+
+        yield* TestClock.adjust(Duration.millis(1))
+
+        expect(yield* Fiber.join(asked)).toEqual(
+          new NoAgentAnswered({
+            path,
+            detail: 'it took longer than 3s 766ms to answer',
+          }),
+        )
+      }),
   )
 })

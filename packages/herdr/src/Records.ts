@@ -94,7 +94,7 @@ export class PaneProcess extends Schema.Class<PaneProcess>('PaneProcess')({
 
 export class PaneProcessInfo extends Schema.Class<PaneProcessInfo>('PaneProcessInfo')({
   pane_id: Schema.String,
-  foreground_processes: Schema.Array(PaneProcess),
+  foreground_processes: Schema.OptionFromOptionalNullOr(Schema.Array(PaneProcess)),
 }) {}
 
 export class SessionSnapshot extends Schema.Class<SessionSnapshot>('SessionSnapshot')({

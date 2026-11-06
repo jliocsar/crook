@@ -32,10 +32,14 @@ interface ProcessFixture {
 const LIVE_CLAUDE_STAT =
   '2224797 (claude) S 1815179 2224797 1815179 34828 2224797 4194304 1549769 10025154 33084 1757 63039 6528 14996 4773 20 0 31 0 248837515 5818683392 99488 18446744073709551615 27164160 97022672 140736926585248 0 0 0 0 4096 2072145151 0 0 0 17 0 0 0 0 0 0 97026768 270004224 755728384 140736926593345 140736926596185 140736926596185 140736926605241 0'
 
+const NO_FOREGROUND_JOB_REPLY =
+  '{"id":"pane.process_info","result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p1","shell_pid":3375068}}}'
+
 const LIVE_CLAUDE_PROC_START = '248837515'
 const LIVE_CLAUDE_PID = 2224797
 const SESSION_ID = '270d2fc3-129e-4a0d-aef3-78f495af98c9'
 const REPORTED_SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
+const LAST_KNOWN_SESSION = ClaudeSessionId.make('5f0c2a8e-91d4-4b6e-a3c7-2e8d6b1f4a90')
 
 const PidFile = Schema.fromJsonString(
   Schema.Struct({ pid: Schema.Int, sessionId: Schema.String, procStart: Schema.String }),
@@ -47,8 +51,16 @@ const pidFile = (procStart: string) =>
 const processInfo = (processes: readonly PaneProcess[]) =>
   scriptedResult(PaneProcessInfoMethod, {
     type: 'pane_process_info',
-    process_info: new PaneProcessInfo({ pane_id: 'w1:p1', foreground_processes: processes }),
+    process_info: new PaneProcessInfo({
+      pane_id: 'w1:p1',
+      foreground_processes: Option.some(processes),
+    }),
   })
+
+const noForegroundJob: ScriptedResponse = {
+  method: PaneProcessInfoMethod.name,
+  line: NO_FOREGROUND_JOB_REPLY,
+}
 
 const claudeInPane = processInfo([
   new PaneProcess({ pid: LIVE_CLAUDE_PID, name: 'claude' }),
@@ -103,7 +115,10 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
   it.effect('takes the session herdr reports while a pid file names it, without asking', () =>
     Effect.gen(function* () {
       const claudeSessions = yield* sessions([], workConfigDir, [REPORTED_SESSION])
-      const session = yield* claudeSessions.resolve(reportedSession('id', REPORTED_SESSION))
+      const session = yield* claudeSessions.resolve(
+        reportedSession('id', REPORTED_SESSION),
+        Option.none(),
+      )
 
       expect(session).toEqual(Option.some(REPORTED_SESSION))
     }),
@@ -112,7 +127,10 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
   it.effect('reads the pid file when herdr still reports the session a /clear just left', () =>
     Effect.gen(function* () {
       const claudeSessions = yield* sessions([claudeInPane])
-      const session = yield* claudeSessions.resolve(reportedSession('id', REPORTED_SESSION))
+      const session = yield* claudeSessions.resolve(
+        reportedSession('id', REPORTED_SESSION),
+        Option.none(),
+      )
 
       expect(session).toEqual(Option.some(SESSION_ID))
     }),
@@ -124,7 +142,10 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
         ...workConfigDir,
         pidFile: Option.none(),
       })
-      const session = yield* claudeSessions.resolve(reportedSession('id', REPORTED_SESSION))
+      const session = yield* claudeSessions.resolve(
+        reportedSession('id', REPORTED_SESSION),
+        Option.none(),
+      )
 
       expect(session).toEqual(Option.some(REPORTED_SESSION))
     }),
@@ -135,6 +156,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
       const claudeSessions = yield* sessions([claudeInPane])
       const session = yield* claudeSessions.resolve(
         reportedSession('path', '/home/jliocsar/.claude/projects/crook/session.jsonl'),
+        Option.none(),
       )
 
       expect(session).toEqual(Option.some(SESSION_ID))
@@ -144,7 +166,10 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
   it.effect('skips agents that are not claude', () =>
     Effect.gen(function* () {
       const claudeSessions = yield* sessions([])
-      const session = yield* claudeSessions.resolve(agentInfo({ agent: Option.some('codex') }))
+      const session = yield* claudeSessions.resolve(
+        agentInfo({ agent: Option.some('codex') }),
+        Option.none(),
+      )
 
       expect(session).toEqual(Option.none())
     }),
@@ -153,7 +178,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
   it.effect('falls back to the pid file under the process CLAUDE_CONFIG_DIR', () =>
     Effect.gen(function* () {
       const claudeSessions = yield* sessions([claudeInPane])
-      const session = yield* claudeSessions.resolve(agentInfo())
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.none())
 
       expect(session).toEqual(Option.some(SESSION_ID))
     }),
@@ -166,7 +191,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
         environ: (root) => `HOME=${root}/home\0`,
         sessionRoot: (root) => `${root}/home/.claude`,
       })
-      const session = yield* claudeSessions.resolve(agentInfo())
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.none())
 
       expect(session).toEqual(Option.some(SESSION_ID))
     }),
@@ -178,7 +203,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
         ...workConfigDir,
         pidFile: Option.some(pidFile('232309271')),
       })
-      const session = yield* claudeSessions.resolve(agentInfo())
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.none())
 
       expect(session).toEqual(Option.none())
     }),
@@ -190,7 +215,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
         ...workConfigDir,
         pidFile: Option.none(),
       })
-      const session = yield* claudeSessions.resolve(agentInfo())
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.none())
 
       expect(session).toEqual(Option.none())
     }),
@@ -202,7 +227,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
         ...workConfigDir,
         pidFile: Option.some('{}'),
       })
-      const error = yield* claudeSessions.resolve(agentInfo()).pipe(Effect.flip)
+      const error = yield* claudeSessions.resolve(agentInfo(), Option.none()).pipe(Effect.flip)
 
       expect(error).toBeInstanceOf(ClaudeSessionFileUnreadable)
     }),
@@ -213,7 +238,69 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
       const claudeSessions = yield* sessions([
         processInfo([new PaneProcess({ pid: 1232679, name: 'lx' })]),
       ])
-      const session = yield* claudeSessions.resolve(agentInfo())
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.none())
+
+      expect(session).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('keeps the session it last knew when the pane shows no foreground job', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([noForegroundJob], workConfigDir, [LAST_KNOWN_SESSION])
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+
+      expect(session).toEqual(Option.some(LAST_KNOWN_SESSION))
+    }),
+  )
+
+  it.effect('lets go of the session it last knew once no pid file names it', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([noForegroundJob])
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+
+      expect(session).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('prefers the session it last knew over a stale report when no job shows', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([noForegroundJob], workConfigDir, [LAST_KNOWN_SESSION])
+      const session = yield* claudeSessions.resolve(
+        reportedSession('id', REPORTED_SESSION),
+        Option.some(LAST_KNOWN_SESSION),
+      )
+
+      expect(session).toEqual(Option.some(LAST_KNOWN_SESSION))
+    }),
+  )
+
+  it.effect('keeps what herdr reports when no job shows and it knew no session', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([noForegroundJob])
+      const session = yield* claudeSessions.resolve(
+        reportedSession('id', REPORTED_SESSION),
+        Option.none(),
+      )
+
+      expect(session).toEqual(Option.some(REPORTED_SESSION))
+    }),
+  )
+
+  it.effect('finds nothing without failing when no job shows and nothing names a session', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([noForegroundJob])
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.none())
+
+      expect(session).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('drops the session it last knew once the foreground shows no claude', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([
+        processInfo([new PaneProcess({ pid: 1232679, name: 'lx' })]),
+      ])
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
 
       expect(session).toEqual(Option.none())
     }),
@@ -224,7 +311,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
       const claudeSessions = yield* sessions([
         scriptedRejection(PaneProcessInfoMethod, 'pane_not_found', 'pane not found'),
       ])
-      const session = yield* claudeSessions.resolve(agentInfo())
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.none())
 
       expect(session).toEqual(Option.none())
     }),

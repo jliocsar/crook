@@ -1658,11 +1658,46 @@ machine as offline (all four tests of it hung until their 20 s limit before the 
 state says nothing about the panes, so the hub keeps the machine's seen marks and herdr version
 through any lost state rather than treating its empty list as every pane gone.
 
-`pane.process_info` leaves out `foreground_processes` and `foreground_process_group_id` when it
-catches a pane's shell between two children (measured: 1 of 47 raw reads on panes running a printing
-loop; the first of 14 failed calls in one loaded run was this). crook's schema requires the first,
-so such a read fails as a changed protocol and that pane goes without a session for that one
-refresh. Whether a pane whose foreground stays Claude ever shows it is not measured.
+`pane.process_info` leaves out `foreground_processes` and `foreground_process_group_id` when the
+group holding the pane's terminal has no live process, which is a shell caught between two children.
+The two go together, and the list is never sent empty (read in a newer herdr's source; on 0.9.5, none
+of the reads below sent an empty list or one field without the other). Measured on herdr 0.9.5 in a
+named session, reading every pane back to back for 120 s, one run under zsh and one under bash, a copy
+of `sleep` named `claude` staying in the foreground showed it in 0 of 173115 reads, and a copy of
+bash named `claude` running one child after another in 0 of 98922. A shell's printing loop showed it
+in 8110 of 150885, a shell looping over a stand-in that lives 50 ms in 143 of 165531, an idle shell in
+0 of 241421, and a stand-in stopped with SIGTSTP in 0 of 188291, where the reply lists the shell.
+
+A real Claude was not read through that call, only through what it reports from. Seven Claudes
+running under herdr on the laptop, read from `/proc` every 5.6 ms for 900 s while one of them ran a
+subagent's tool calls, held the terminal in their own process group in all 161839 reads of each. Their
+tool shells sit in a session of their own with no terminal (read off `ps`), so a tool call never takes
+the foreground. So a pane whose foreground stays Claude does not show it, and it shows up around a
+Claude that exited or a pane that was never running one.
+
+Its absence therefore says nothing about the pane, while a list that holds no Claude does. Reading it
+as no Claude would cost more than a stale name: a session missing from one read dismisses what the
+hooks recorded for it, leaves its Ask to the screen alone and loses its waiting mark (read in the
+code), and such a read used to do that even with herdr reporting the session, since it failed as a
+changed protocol. So the row keeps the session it last held for that same terminal, as long as a pid
+file still names that session, then what herdr reports. A pid file going is what ends a Claude that
+stopped cleanly, so its wake cannot land on a read that keeps the session. A Claude killed outright
+leaves its pid file, so that wake is herdr dropping its agent (reasoned, not measured). A session
+under a Claude root the agent does not watch is never named, so it goes on such a read, as herdr's
+report of it already does (read in the code). None of this reaches the wire, which only ever carries
+the row's session, so older phones and hubs see nothing new.
+:::
+
+:::tip
+A status call gives a live agent 3.766 s, ten times the slowest answer measured on a starved machine, and only an agent that took the connection and then said nothing ever waits that out. Ten times the slowest answer at rest, 212.69 ms, called a live agent silent: 1 of 12 runs of a test beside 48 busy loops, and 15 of 15 asks with a stand-in agent stopped for 0.6 s from just before the asking process started, each failing at 220 to 225 ms; with the new budget those 15 answered in 484 to 532 ms, less than the stop because that process spends the first part of it starting up (the times measured, the reason reasoned).
+
+A fresh process asked a stand-in agent in a process of its own over a real socket, on 16 threads, with that many busy loops beside them at the same niceness. 0 loops: 300 asks, 9.3 to 19.4 ms, median 11.6. 12: 140 asks, 24.4 to 49.6, median 31.7. 24: 70 asks, 36.3 to 120.4, median 70.5. 48: 133 asks, 33.1 to 182.7, median 89.0. 96, a load average near 92: 111 asks, 64 with the budget out of the way and 47 under the old one, 43.2 to 376.6, median 177.7, with 42 past the old budget. An asker and an agent in one fresh process never read past the slowest of their level: at most 286.5 ms beside 96 loops. So the slowest answer grows about 3.7 ms per loop from rest to 96, and the budget reaches well past that load (reasoned from those).
+
+An answer later than the budget can still win: those 47 under the old budget all answered, though 17 took longer than it, up to the 376.6 ms above. The client's timer runs only when its own loop gets there, so the elapsed time overstates what the timer sees, which would be why the old budget failed so rarely (reasoned, not measured): 0 of 19 test runs beside 96 loops, and asks in a test's process, warm, reached at most 132.9 ms over 5255 asks in 40 runs beside 48 loops (both measured). The agent's own wait for the request uses the same budget. Its clock starts after the client's, so the client gives up first unless its own timer runs late (reasoned). A client hung up on before it writes reads an empty answer, as one it cannot read, and that now takes a client stalled for the whole budget between connecting and writing (reasoned, not measured). A connection that never writes holds its handler that long too.
+
+The budget costs a dead agent nothing. A missing socket and a dead agent's socket fail with `ENOENT` and `ECONNREFUSED` as fast as an answer comes: 6.9 to 9.9 ms at rest, 38.2 to 100.9 ms beside 48 loops, 35 of each. A stopped agent takes the connection and costs the whole budget, 3790 to 3795 ms at rest and 3828 to 3879 ms beside 48 loops, 3 of each (all measured). So raising it charges a person a few seconds once, on a machine with a hung agent, while the old budget charged a false report on any busy machine: `status` says a live agent is not answering, and `start` goes on to start a service that already runs and says it did (read in the code). `restart` asks before it restarts, so restarting a hung agent, the likeliest reason to, starts that much later (read in the code).
+
+The wait after a restart has a bound of its own, and that one stays as it is. A real agent run from source, with herdr's socket missing and the hub unreachable, first answered 181.8 to 257.7 ms after its spawn at rest (193 runs), 1057 to 2656 ms beside 48 loops (22 runs, 2 past the 2495 ms bound) and 1255 to 4947 ms beside 96 (12 runs, 8 past it), so a restart on a starved machine can still say no new agent answered (measured). A longer bound is not free the way this budget is: an agent that fails to start answers nothing, so every failed restart waits the whole of it. Each of its asks can now wait out the budget, so a new agent that takes the connection and hangs ends the wait up to 3.766 s past the bound (reasoned, not measured).
 :::
 
 :::tip

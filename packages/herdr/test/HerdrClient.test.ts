@@ -477,6 +477,19 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('HerdrClient live', (i
     }),
   )
 
+  it.effect('reads a pane with no foreground job as unknown, from the reply herdr sends', () =>
+    Effect.gen(function* () {
+      const { client } = yield* fakeHerdr([
+        replyOnce(
+          '{"id":"pane.process_info","result":{"type":"pane_process_info","process_info":{"pane_id":"w1:p3","shell_pid":3375042}}}',
+        ),
+      ])
+      const reply = yield* client.request(PaneProcessInfoMethod, { pane_id: 'w1:p3' })
+
+      expect(reply.process_info.foreground_processes).toEqual(Option.none())
+    }),
+  )
+
   it.effect('fails with HerdrPaneNotFound when herdr does not know the pane', () =>
     Effect.gen(function* () {
       const { client } = yield* fakeHerdr([
