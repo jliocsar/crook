@@ -82,23 +82,25 @@ afterEach(() => {
 })
 
 describe('a chat catching up', () => {
-  it.live('asks for nothing until a herd says whether the agent marks where it caught up', () =>
-    Effect.gen(function* () {
-      const { link } = yield* renderApp(CHAT, stateWith(COLD_START, Option.none()))
+  it.live(
+    'asks for nothing until a herd says whether the agent marks where it caught up',
+    () =>
+      Effect.gen(function* () {
+        const { link } = yield* renderApp(CHAT, stateWith(COLD_START, Option.none()))
 
-      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+        yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
 
-      expect(Ref.getUnsafe(link.resumes)).toHaveLength(0)
-      expect(screen.queryByText('No messages yet')).toBeNull()
+        expect(Ref.getUnsafe(link.resumes)).toHaveLength(0)
+        expect(screen.queryByText('No messages yet')).toBeNull()
 
-      yield* SubscriptionRef.set(link.state, current())
-      yield* eventually(() => {
-        expect(Ref.getUnsafe(link.resumes)).toHaveLength(1)
-      })
-      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+        yield* SubscriptionRef.set(link.state, current())
+        yield* eventually(() => {
+          expect(Ref.getUnsafe(link.resumes)).toHaveLength(1)
+        })
+        yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
 
-      expect(screen.queryByText('No messages yet')).toBeNull()
-    }),
+        expect(screen.queryByText('No messages yet')).toBeNull()
+      }),
     TWO_NOTICE_WAITS_LIMIT_MS,
   )
 
