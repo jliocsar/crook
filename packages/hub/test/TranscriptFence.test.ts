@@ -1,20 +1,15 @@
-import * as BunSocket from '@effect/platform-bun/BunSocket'
 import { expect, layer } from '@effect/vitest'
 import type { NonEmptyReadonlyArray } from 'effect/Array'
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
-import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
-import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
-import * as Schedule from 'effect/Schedule'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
-import * as HttpServer from 'effect/http/HttpServer'
-import * as RpcClient from 'effect/rpc/RpcClient'
+import type * as RpcClient from 'effect/rpc/RpcClient'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { ClaudeSessionId, MachineId, TranscriptOffset } from '@crook/domain/Ids'
@@ -29,7 +24,6 @@ import { UnrecognizedEntry } from '@crook/domain/TranscriptMessage'
 import { AgentLink } from '@crook/protocol/AgentLink'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
-import { protocolSerialization } from '@crook/protocol/Serialization'
 import type { TranscriptUpdate, TranscriptWatchId } from '@crook/protocol/Transcripts'
 
 import {
@@ -37,17 +31,15 @@ import {
   agentRow,
   agentToken,
   connect,
-  hello,
   machineShows,
   machineStateWith,
   ownerLogin,
   testHub,
 } from './Fixtures'
+import { agentThroughProxy, attach, heldProxy, hubPort, replyFrom } from './HeldProxy'
 
 const LEFT_SESSION = ClaudeSessionId.make('309f44d5-235f-4550-a0c7-1691715aad75')
 const CURRENT_SESSION = ClaudeSessionId.make('5b1e7c2a-8d34-4f6e-9a0b-c7d2e1f3a4b5')
-const LOOPBACK = '127.0.0.1'
-const DEAD_SOCKET_PING_INTERVAL = Duration.millis(250)
 
 const chunkOf = (session: ClaudeSessionId, offset: number, nextOffset: number) =>
   new TranscriptChunk({
@@ -76,109 +68,6 @@ const stateOn = (machine: MachineId) =>
       statusChangedAt: DateTime.makeUnsafe('2026-10-20T15:00:00Z'),
     }),
   ])
-
-const heldProxy = (hubPort: number) =>
-  Effect.acquireRelease(
-    Effect.gen(function* () {
-      const replies = yield* Queue.unbounded<string>()
-      const state = { holding: false }
-      const waiting: Uint8Array[] = []
-      const upstreams: Bun.Socket[] = []
-
-      const pump = () => {
-        if (state.holding) {
-          return
-        }
-
-        for (const upstream of upstreams) {
-          for (const bytes of waiting.splice(0)) {
-            upstream.write(bytes)
-          }
-        }
-      }
-
-      const server = Bun.listen({
-        hostname: LOOPBACK,
-        port: 0,
-        socket: {
-          open(client) {
-            void Bun.connect({
-              hostname: LOOPBACK,
-              port: hubPort,
-              socket: {
-                open(upstream) {
-                  upstreams.push(upstream)
-                  pump()
-                },
-                data(_upstream, bytes) {
-                  Queue.offerUnsafe(replies, bytes.toString())
-                  client.write(bytes)
-                },
-              },
-            })
-          },
-          data(_client, bytes) {
-            waiting.push(Uint8Array.from(bytes))
-            pump()
-          },
-          close() {
-            if (state.holding) {
-              return
-            }
-
-            for (const upstream of upstreams) {
-              upstream.end()
-            }
-          },
-        },
-      })
-
-      return {
-        port: server.port,
-        replies,
-        hold: Effect.sync(() => {
-          state.holding = true
-        }),
-        releaseFirstHeld: Effect.sync(() => {
-          for (const upstream of upstreams) {
-            for (const first of waiting.splice(0, 1)) {
-              upstream.write(first)
-            }
-          }
-        }),
-        stop: Effect.sync(() => {
-          for (const upstream of upstreams) {
-            upstream.end()
-          }
-
-          server.stop(true)
-        }),
-      }
-    }),
-    (proxy) => proxy.stop,
-  )
-
-const agentThroughProxy = (port: number, machine: MachineId) =>
-  Effect.gen(function* () {
-    const protocol = yield* Layer.build(
-      RpcClient.layerProtocolSocket({
-        pingInterval: DEAD_SOCKET_PING_INTERVAL,
-        retryPolicy: Schedule.recurs(0),
-      }).pipe(
-        Layer.provide([
-          BunSocket.layerWebSocket(`ws://${LOOPBACK}:${port}${AGENT_PATH}`, {
-            headers: agentToken(machine),
-          }),
-          protocolSerialization,
-        ]),
-      ),
-    )
-
-    return yield* RpcClient.make(AgentLink).pipe(Effect.provide(protocol))
-  })
-
-const attach = (client: RpcClient.FromGroup<typeof AgentLink, RpcClientError>) =>
-  client.Attach({ hello }).pipe(Stream.runDrain, Effect.ignore({ log: 'Debug' }), Effect.forkScoped)
 
 const firstWatch = (client: RpcClient.FromGroup<typeof AgentLink, RpcClientError>) =>
   client.TranscriptDemands().pipe(
@@ -216,17 +105,8 @@ const takeAll = (events: Queue.Queue<string>, count: number) =>
     Queue.take,
   )
 
-const replyFrom = (replies: Queue.Queue<string>, part: string) =>
-  Stream.fromQueue(replies).pipe(
-    Stream.filter((text) => text.includes(part)),
-    Stream.runHead,
-  )
-
 const stalePublishOf = Effect.fn('stalePublishOf')(function* (machine: MachineId) {
-  const hubPort = yield* HttpServer.addressFormattedWith((address) =>
-    Effect.succeed(Number(new URL(address).port)),
-  )
-  const proxy = yield* heldProxy(hubPort)
+  const proxy = yield* heldProxy(yield* hubPort)
   const socketScope = yield* Scope.fork(yield* Effect.scope)
 
   const dying = yield* agentThroughProxy(proxy.port, machine).pipe(Scope.provide(socketScope))

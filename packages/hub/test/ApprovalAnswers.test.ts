@@ -156,8 +156,7 @@ const dialLink = Effect.fn('dialLink')(function* (
     Stream.runForEach((routed) => Queue.offer(inbox, routed)),
     Effect.forkScoped({ startImmediately: true }),
   )
-  const publish = (state: MachineState) =>
-    herd.publish(LAPTOP, state).pipe(Effect.andThen(link.published(state)))
+  const publish = (state: MachineState) => link.publish(state, herd.publish(LAPTOP, state))
 
   return { inbox, attach, publish }
 })

@@ -434,6 +434,7 @@ CommandRouter (built in JC-103):
 - `complete` resolves the `Deferred` only if the answering connection is the machine the command was routed to; a late answer (after the timeout) or one from another machine is dropped with a debug log.
 - A timed-out command may still run. The phone retries with the same key, and the agent answers with the first outcome instead of running it twice. Nothing tells the agent the hub gave up, so a command queued behind a slow one still runs late: a late `esc` can interrupt a turn started after it. Commands carry no deadline today.
 - Commands are not persisted: a hub restart loses those in flight, and the phone sees them time out.
+- A state counts only while no newer link has published. Each upgrade mints a link with a rising number and the router keeps which link published last, per machine. `CommandLink.publish` checks that and runs `Herd.publish` inside one update of that record, so a call from a connection the agent has left drops its state, even one waiting behind a newer link's write, and still replies with success. Numbers are in AGENTS.md.
 
 Transcript relay (built in JC-100):
 
