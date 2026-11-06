@@ -18,6 +18,7 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TaskLiveness } from '@crook/agent/TaskLiveness'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
@@ -131,7 +132,10 @@ const streamsAt = Effect.fn('streamsAt')(function* (
   state: SubscriptionRef.SubscriptionRef<MachineState>,
 ) {
   const context = yield* Layer.build(
-    Layer.provide(AgentDaemon.transcriptStreamingAt([root]), MachineStateSync.layerTest(state)),
+    Layer.provide(AgentDaemon.transcriptStreamingAt([root]), [
+      MachineStateSync.layerTest(state),
+      ClaudeSessionFiles.layerTest(),
+    ]),
   )
 
   return Context.get(context, TranscriptStreams)

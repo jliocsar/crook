@@ -9,9 +9,11 @@ import * as Schema from 'effect/Schema'
 import {
   ClaudeSessionFileUnreadable,
   ClaudeSessionFiles,
+  contentsOfSessionFile,
+  isRunning,
   PROC_ROOT,
-  SessionFile,
-  startTime,
+  type SessionFile,
+  sessionFileOf,
 } from '@crook/agent/ClaudeSessionFiles'
 import { flatMapSome } from '@crook/agent/OptionEffect'
 import { ClaudeSessionId } from '@crook/domain/Ids'
@@ -55,29 +57,13 @@ const make = (procRoot: string) =>
         Effect.mapError((cause) => new ClaudeSessionFileUnreadable({ path, cause })),
       )
 
-    const readSessionFile = (path: string) =>
-      readFile(path).pipe(
-        flatMapSome((content: string) =>
-          Schema.decodeEffect(SessionFile)(content).pipe(
-            Effect.asSome,
-            Effect.mapError((cause) => new ClaudeSessionFileUnreadable({ path, cause })),
-          ),
-        ),
-      )
-
     const sessionOfProcess = (pid: number) =>
       readFile(`${procRoot}/${pid}/environ`).pipe(
         Effect.map(Option.flatMap(claudeRoot)),
-        flatMapSome((root: string) => readSessionFile(`${root}/sessions/${pid}.json`)),
-        flatMapSome((file: typeof SessionFile.Type) =>
-          readFile(`${procRoot}/${pid}/stat`).pipe(
-            Effect.map((stat) =>
-              stat.pipe(
-                Option.flatMap(startTime),
-                Option.filter((started) => started === file.procStart),
-                Option.as(file.sessionId),
-              ),
-            ),
+        flatMapSome((root: string) => contentsOfSessionFile(fileSystem, sessionFileOf(root, pid))),
+        flatMapSome((file: SessionFile) =>
+          Effect.map(isRunning(fileSystem, procRoot, file), (running) =>
+            running ? Option.some(file.sessionId) : Option.none(),
           ),
         ),
         Effect.withSpan('ClaudeSessions.sessionOfProcess'),

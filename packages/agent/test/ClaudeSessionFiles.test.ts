@@ -167,6 +167,31 @@ layer(services, { excludeTestServices: true })('ClaudeSessionFiles', (it) => {
     }),
   )
 
+  it.effect("names a session's running Claude, past a pid file a dead one left", () =>
+    Effect.gen(function* () {
+      const { root, files, fileSystem } = yield* waitingProbe(IDLE)
+
+      yield* fileSystem.writeFileString(
+        `${root}/sessions/${DEAD_PID}.json`,
+        fileSaying(WAITING, DEAD_PID),
+      )
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.runningPid(SESSION)).toEqual(Option.some(PID))
+      expect(yield* files.runningPid(CLEARED)).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('names no process once its pid belongs to another', () =>
+    Effect.gen(function* () {
+      const { procRoot, files, fileSystem } = yield* waitingProbe(IDLE)
+
+      yield* fileSystem.writeFileString(`${procRoot}/${PID}/stat`, statOf('999'))
+
+      expect(yield* files.runningPid(SESSION)).toEqual(Option.none())
+    }),
+  )
+
   it.effect('does not know for a pid file without a status, or a session no file names', () =>
     Effect.gen(function* () {
       const root = yield* rootWithSession(SESSION)

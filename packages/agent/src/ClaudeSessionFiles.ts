@@ -52,13 +52,40 @@ export const SessionFile = Schema.fromJsonString(
     status: Schema.optionalKey(Schema.String),
   }),
 )
-type SessionFile = typeof SessionFile.Type
+export type SessionFile = typeof SessionFile.Type
 
-export const startTime = (stat: string) =>
+const startTime = (stat: string) =>
   Arr.get(
     stat.slice(stat.lastIndexOf(STAT_COMM_TERMINATOR) + STAT_COMM_TERMINATOR.length).split(' '),
     STAT_START_TIME_INDEX,
   )
+
+export const sessionFileOf = (root: string, pid: number) =>
+  `${root}/${SESSIONS_FOLDER}/${pid}${SESSION_FILE_EXTENSION}`
+
+export const contentsOfSessionFile = (fileSystem: FileSystem.FileSystem, file: string) =>
+  fileSystem.readFileString(file).pipe(
+    Effect.flatMap(Schema.decodeEffect(SessionFile)),
+    Effect.asSome,
+    Effect.catchReason('PlatformError', 'NotFound', () =>
+      Effect.succeed(Option.none<SessionFile>()),
+    ),
+    Effect.mapError((cause) => new ClaudeSessionFileUnreadable({ path: file, cause })),
+  )
+
+export const isRunning = (
+  fileSystem: FileSystem.FileSystem,
+  procRoot: string,
+  { pid, procStart }: SessionFile,
+) => {
+  const statFile = `${procRoot}/${pid}/stat`
+
+  return fileSystem.readFileString(statFile).pipe(
+    Effect.map((stat) => Option.contains(startTime(stat), procStart)),
+    Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(false)),
+    Effect.mapError((cause) => new ClaudeSessionFileUnreadable({ path: statFile, cause })),
+  )
+}
 
 const noteRecord =
   (file: string, record: Option.Option<SessionRecord>) =>
@@ -78,18 +105,8 @@ const make = (roots: readonly string[], procRoot: string) =>
     const sessions = yield* Ref.make<SessionsByFile>(HashMap.empty())
     const moved = yield* Queue.sliding<void>(1)
 
-    const contentsOf = (file: string) =>
-      fileSystem.readFileString(file).pipe(
-        Effect.flatMap(Schema.decodeEffect(SessionFile)),
-        Effect.asSome,
-        Effect.catchReason('PlatformError', 'NotFound', () =>
-          Effect.succeed(Option.none<SessionFile>()),
-        ),
-        Effect.mapError((cause) => new ClaudeSessionFileUnreadable({ path: file, cause })),
-      )
-
     const readSessionFile = (file: string) =>
-      contentsOf(file).pipe(
+      contentsOfSessionFile(fileSystem, file).pipe(
         Effect.map(
           Option.map((contents): SessionRecord => ({
             session: contents.sessionId,
@@ -159,18 +176,17 @@ const make = (roots: readonly string[], procRoot: string) =>
       )
     }
 
-    const isRunning = ({ pid, procStart }: SessionFile) => {
-      const statFile = `${procRoot}/${pid}/stat`
-
-      return fileSystem.readFileString(statFile).pipe(
-        Effect.map((stat) => Option.contains(startTime(stat), procStart)),
-        Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(false)),
-        Effect.mapError((cause) => new ClaudeSessionFileUnreadable({ path: statFile, cause })),
+    const filesNaming = (session: ClaudeSessionId) =>
+      Effect.map(Ref.get(sessions), (known) =>
+        pipe(
+          Arr.fromIterable(known),
+          Arr.filter(([, record]) => record.session === session),
+          Arr.map(([file]) => file),
+        ),
       )
-    }
 
     const waitingIn = (session: ClaudeSessionId) => (file: string) =>
-      contentsOf(file).pipe(
+      contentsOfSessionFile(fileSystem, file).pipe(
         Effect.map(
           Option.filter(
             (contents) => contents.sessionId === session && contents.status !== undefined,
@@ -178,7 +194,7 @@ const make = (roots: readonly string[], procRoot: string) =>
         ),
         flatMapSome((contents: SessionFile) =>
           contents.status === WAITING_STATUS
-            ? Effect.asSome(isRunning(contents))
+            ? Effect.asSome(isRunning(fileSystem, procRoot, contents))
             : Effect.succeedSome(false),
         ),
         Effect.catchTag('ClaudeSessionFileUnreadable', (error) =>
@@ -187,12 +203,7 @@ const make = (roots: readonly string[], procRoot: string) =>
       )
 
     const waiting = Effect.fn('ClaudeSessionFiles.waiting')(function* (session: ClaudeSessionId) {
-      const files = pipe(
-        Arr.fromIterable(yield* Ref.get(sessions)),
-        Arr.filter(([, record]) => record.session === session),
-        Arr.map(([file]) => file),
-      )
-      const readings = yield* Effect.forEach(files, waitingIn(session), {
+      const readings = yield* Effect.forEach(yield* filesNaming(session), waitingIn(session), {
         concurrency: 'unbounded',
       })
 
@@ -201,6 +212,29 @@ const make = (roots: readonly string[], procRoot: string) =>
         Option.liftPredicate(Arr.isReadonlyArrayNonEmpty),
         Option.map(Arr.some((waits) => waits)),
       )
+    })
+
+    const runningPidIn = (session: ClaudeSessionId) => (file: string) =>
+      contentsOfSessionFile(fileSystem, file).pipe(
+        Effect.map(Option.filter((contents) => contents.sessionId === session)),
+        flatMapSome((contents: SessionFile) =>
+          Effect.map(isRunning(fileSystem, procRoot, contents), (running) =>
+            running ? Option.some(contents.pid) : Option.none(),
+          ),
+        ),
+        Effect.catchTag('ClaudeSessionFileUnreadable', (error) =>
+          Effect.as(Effect.logDebug(error.message), Option.none<number>()),
+        ),
+      )
+
+    const runningPid = Effect.fn('ClaudeSessionFiles.runningPid')(function* (
+      session: ClaudeSessionId,
+    ) {
+      const pids = yield* Effect.forEach(yield* filesNaming(session), runningPidIn(session), {
+        concurrency: 'unbounded',
+      })
+
+      return pipe(pids, Arr.getSomes, Arr.head)
     })
 
     yield* Effect.forEach(roots, (root) => Effect.forkScoped(followFolder(root)), {
@@ -215,6 +249,7 @@ const make = (roots: readonly string[], procRoot: string) =>
           HashMap.some((held) => held.session === session),
         ),
       waiting,
+      runningPid,
     })
   })
 
@@ -224,6 +259,7 @@ export class ClaudeSessionFiles extends Context.Service<
     readonly changes: Stream.Stream<void>
     readonly holds: (session: ClaudeSessionId) => Effect.Effect<boolean>
     readonly waiting: (session: ClaudeSessionId) => Effect.Effect<Option.Option<boolean>>
+    readonly runningPid: (session: ClaudeSessionId) => Effect.Effect<Option.Option<number>>
   }
 >()('@crook/agent/ClaudeSessionFiles') {
   static readonly layerAt = (roots: readonly string[], procRoot: string = PROC_ROOT) =>
@@ -235,6 +271,7 @@ export class ClaudeSessionFiles extends Context.Service<
     held: readonly ClaudeSessionId[] = [],
     changes: Stream.Stream<void> = Stream.never,
     waiting: Effect.Effect<Option.Option<boolean>> = Effect.succeedNone,
+    runningPid: Option.Option<number> = Option.none(),
   ) =>
     Layer.succeed(
       this,
@@ -242,6 +279,7 @@ export class ClaudeSessionFiles extends Context.Service<
         changes,
         holds: (session) => Effect.succeed(held.includes(session)),
         waiting: () => waiting,
+        runningPid: () => Effect.succeed(runningPid),
       }),
     )
 }

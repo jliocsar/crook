@@ -10,6 +10,7 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { ClaudeSessionId, PaneId, TranscriptOffset } from '@crook/domain/Ids'
@@ -209,7 +210,10 @@ const runCase = (root: string, followCase: FollowCase) =>
 
     const state = yield* SubscriptionRef.make(stateOn(followCase.pane))
     const context = yield* Layer.build(
-      Layer.provide(AgentDaemon.transcriptStreamingAt([root]), MachineStateSync.layerTest(state)),
+      Layer.provide(AgentDaemon.transcriptStreamingAt([root]), [
+        MachineStateSync.layerTest(state),
+        ClaudeSessionFiles.layerTest(),
+      ]),
     )
     const streams = Context.get(context, TranscriptStreams)
     const events = yield* Queue.unbounded<TranscriptEvent>()
