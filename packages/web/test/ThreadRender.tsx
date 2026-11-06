@@ -335,6 +335,9 @@ export const historyOpen = () => {
     fingerLifts: () => {
       fireEvent.touchEnd(scrolling)
     },
+    wheelsWithNoScroll: () => {
+      fireEvent.wheel(scrolling)
+    },
     correctedUp: movesUp,
     landsBelow: (added: number) => {
       grow(added)

@@ -1210,7 +1210,14 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   27 px, 118 to 208 ms later, 6 of 6, because that pin counted as one asked for. A finger resting
   on a nudge had the same 9 to 15 px taken back under it, 3 of 3. Now none of it, 9 of 9: the nudges
   end 16 and 32 px from the end, and one held through a landing keeps its 15 px while the lift and the
-  scroll both move 37 px and the rows stay (all measured).
+  scroll both move 37 px and the rows stay (all measured). The next batch with no scroll under way
+  goes to the end and lifts what landed and the nudge, so a nudge lasts until then. "Under way" is a
+  finger down, or a gesture with a scroll that has not settled. A finger that pauses past the settling
+  and lifts starts no further scroll, so it left the gesture's flag set, and a batch landing after it
+  lifted 17 px and kept the 9 px nudge, 3 of 3; now it lifts 26 px and reaches the end, 3 of 3, while a
+  finger still down keeps the nudge and lifts 17 px, 3 of 3 before and after (measured). A wheel that
+  scrolls nothing here, as over a nested code block, left the same flag (a test holds it, not driven in
+  a browser).
 - A pin runs only when the content changed. The thread's first wait ending used to run one too, and
   it read a scroll the thread had not heard, so the lift rose 9 px over content that had not grown,
   3 of 3 with the finger pressed before the thread mounted, and 20 px on an earlier recording; now
@@ -2094,8 +2101,11 @@ the screen once per animation frame and fails on what a settled screenshot canno
   in a frame the lift rose 82.4 px, driven through CDP at 4x (measured), so a frame with a finger down
   is skipped. A flick's momentum is not marked, but a thread scrolling up stops following and
   raises no lift (read in the code).
-- A lift that rises in a frame the thread's content grew under 2 px fails a story as `unpaid-lift`,
-  finger or no finger: every lift is paid for by what landed. Over the 57 timeline stories, one run
+- A lift that rises in a frame the thread's content grew under 2 px, the same guard as the two checks
+  above, fails a story as `unpaid-lift`, finger or no finger: every lift is paid for by what landed. A
+  log with no height, recorded before the recorder read it, is not judged. A landing whose rows and lift
+  reach two different frames would read as unpaid, and none does: over a sweep's 59 stories all 8 lifts
+  rose in the frame the content grew (measured). Over the 57 timeline stories, one run
   each, a lift rose by more than the content grew in no frame (measured), and each of three finger
   recordings before the fix had one such frame, 9 px with the content still. A landing can lift
   more than it grew, by what a nudge left, and passes: the check asks only that something landed.

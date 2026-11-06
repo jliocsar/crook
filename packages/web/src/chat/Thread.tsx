@@ -126,6 +126,7 @@ const useScrollIntent = () => {
   const scrolledWhileHeld = React.useRef(false)
   const gestured = React.useRef(false)
   const pinAsked = React.useRef(false)
+  const underWay = React.useRef(false)
 
   const gestureBegan = () => {
     gestured.current = true
@@ -149,7 +150,7 @@ const useScrollIntent = () => {
   const isUserScroll = () => held.current || gestured.current
 
   const keepsUsersPlace = React.useCallback(
-    () => (held.current || gestured.current) && !pinAsked.current,
+    () => (held.current || (gestured.current && underWay.current)) && !pinAsked.current,
     [],
   )
 
@@ -180,6 +181,8 @@ const useScrollIntent = () => {
       },
     },
     scrolled: () => {
+      underWay.current = true
+
       if (held.current) {
         scrolledWhileHeld.current = true
       }
@@ -190,6 +193,7 @@ const useScrollIntent = () => {
     settle: (): boolean => {
       const repins = !isUserScroll() || pinAsked.current
 
+      underWay.current = false
       gestured.current = held.current
       pinAsked.current = false
 

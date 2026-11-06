@@ -235,6 +235,60 @@ describe('Thread', () => {
     }),
   )
 
+  it.effect('keeps a wheel nudge while its scroll is still under way as a batch lands', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.wheelsUp(NUDGE)
+      opened.landsBelow(ANSWER_HEIGHT)
+
+      expect(lifted()).toBe(ANSWER_HEIGHT)
+      expect(opened.top()).toBe(opened.bottom() - NUDGE)
+    }),
+  )
+
+  it.effect('goes to the end on the next batch after a finger paused, then lifted', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.fingerHoldsAfter(NUDGE)
+      yield* wait(SETTLE_MS)
+      opened.fingerLifts()
+      opened.landsBelow(ANSWER_HEIGHT)
+
+      expect(lifted()).toBe(ANSWER_HEIGHT + NUDGE)
+      expect(opened.top()).toBe(opened.bottom())
+    }),
+  )
+
+  it.effect('goes to the end on the next batch after a wheel that scrolled nothing', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.fingerScrollsUp(NUDGE)
+      yield* wait(SETTLE_MS)
+      opened.wheelsWithNoScroll()
+      opened.landsBelow(ANSWER_HEIGHT)
+
+      expect(opened.top()).toBe(opened.bottom())
+    }),
+  )
+
+  it.effect('goes to the end when a prompt is sent while a finger holds a nudge', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.fingerHoldsAfter(NUDGE)
+      opened.sends(ANSWER_HEIGHT)
+
+      expect(opened.top()).toBe(opened.bottom())
+    }),
+  )
+
   it.effect('lifts nothing when the thread lands with the content unchanged under a scroll', () =>
     Effect.gen(function* () {
       const opened = historyOpen()
