@@ -1,5 +1,7 @@
 import { expect, layer } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 
 import { parseLine } from '@crook/claude/TranscriptParser'
@@ -17,6 +19,37 @@ const encoder = new TextEncoder()
 const lineOf = (text: string) => encoder.encode(text)
 
 layer(services, { excludeTestServices: true })('parseLine on real transcript lines', (live) => {
+  live.effect('names who sent a prompt only when the user did not type it', () =>
+    Effect.gen(function* () {
+      const messages = yield* messagesOf('prompt-origins.jsonl')
+      const sentByOf = Arr.flatMap(messages, (message) =>
+        Match.value(message).pipe(
+          Match.tag('User', (user) => [user.sentBy]),
+          Match.orElse(() => []),
+        ),
+      )
+
+      expect(sentByOf).toStrictEqual([
+        undefined,
+        undefined,
+        undefined,
+        { kind: 'plugin', name: 'madeup' },
+        { kind: 'plugin', name: 'madeup' },
+        undefined,
+        { kind: 'scheduled' },
+        undefined,
+        { kind: 'sdk' },
+        { kind: 'sdk' },
+        { kind: 'sdk' },
+        undefined,
+        undefined,
+        undefined,
+        { kind: 'made_up_origin' },
+        undefined,
+      ])
+    }),
+  )
+
   live.effect('reads a notification Claude queued while busy as the task notification it is', () =>
     Effect.gen(function* () {
       const messages = yield* messagesOf('stuck-runs/cc70b540-d22a-4ea4-aaf9-a0db3ce151aa.jsonl')

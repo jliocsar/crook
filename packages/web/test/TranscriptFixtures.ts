@@ -11,6 +11,7 @@ import {
   CompactSummaryBlock,
   ImageBlock,
   InterruptionBlock,
+  LocalCommandBlock,
   SystemMessage,
   TaskNotificationBlock,
   TextBlock,
@@ -21,6 +22,7 @@ import {
 } from '@crook/domain/TranscriptMessage'
 import type {
   AssistantBlock,
+  PromptSender,
   SubagentLaunch,
   TranscriptMessage,
   UserBlock,
@@ -40,9 +42,14 @@ export const at = (seconds: number) =>
 export const user = (
   offset: number,
   blocks: readonly UserBlock[],
-  options: { readonly isMeta?: boolean; readonly queued?: boolean; readonly seconds?: number } = {},
-) =>
-  new UserMessage({
+  options: {
+    readonly isMeta?: boolean
+    readonly queued?: boolean
+    readonly seconds?: number
+    readonly sentBy?: PromptSender
+  } = {},
+) => {
+  const fields = {
     offset: TranscriptOffset.make(offset),
     uuid: Option.none(),
     timestamp: at(options.seconds ?? 0),
@@ -50,7 +57,23 @@ export const user = (
     origin: Option.none(),
     queued: options.queued ?? false,
     blocks,
-  })
+  }
+
+  return options.sentBy === undefined
+    ? new UserMessage(fields)
+    : new UserMessage({ ...fields, sentBy: options.sentBy })
+}
+
+export const sentPrompt = (offset: number, words: string, sentBy: PromptSender, seconds = 0) =>
+  user(offset, [new TextBlock({ text: words })], { seconds, sentBy })
+
+export const sentCommand = (
+  offset: number,
+  name: string,
+  args: string,
+  sentBy: PromptSender,
+  seconds = 0,
+) => user(offset, [new LocalCommandBlock({ name, args, opensTurn: true })], { seconds, sentBy })
 
 export const stopHookFeedback = (offset: number, words: string, seconds = 0) =>
   new UserMessage({

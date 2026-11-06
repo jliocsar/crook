@@ -16,7 +16,7 @@ import { useBackgroundWorkOf } from '@crook/web/chat/BackgroundDock'
 import { backgroundJobs } from '@crook/web/chat/BackgroundModel'
 import { lastPromptAt, useEpisodeSummary } from '@crook/web/chat/BackgroundSummary'
 
-import { at, SESSION, user } from '../TranscriptFixtures.ts'
+import { at, sentCommand, sentPrompt, SESSION, user } from '../TranscriptFixtures.ts'
 
 const NOW = DateTime.makeUnsafe('2026-10-30T14:00:00Z')
 const SETTLE_SECONDS = 14
@@ -72,6 +72,16 @@ describe('lastPromptAt', () => {
           user(10, [new TextBlock({ text: 'expanded command' })], { isMeta: true, seconds: 4 }),
         ),
         lineOf(user(20, [new LocalCommandOutputBlock({ text: 'done' })], { seconds: 5 })),
+      ]),
+    ).toEqual(at(1))
+  })
+
+  it('leaves out a prompt no one typed, so it does not end the summary of work the user has not moved on from', () => {
+    expect(
+      lastPromptAt([
+        lineOf(user(0, [new TextBlock({ text: 'go' })], { seconds: 1 })),
+        lineOf(sentPrompt(10, 'A made-up reply', { kind: 'plugin', name: 'madeup' }, 2)),
+        lineOf(sentCommand(20, '/sweep', 'tick', { kind: 'scheduled' }, 3)),
       ]),
     ).toEqual(at(1))
   })

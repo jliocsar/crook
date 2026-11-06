@@ -30,6 +30,7 @@ import {
   ThinkingBlock,
   ToolReferenceBlock,
   ToolResultBlock,
+  type PromptSender,
   type ToolResultContent,
   type TranscriptMessage,
   ToolUseBlock,
@@ -64,6 +65,7 @@ const LINE_BREAK = '\n'
 const TYPED_COMPACT = /^\/compact(\s|$)/u
 const STOP_HOOK_FEEDBACK_PREFIX = 'Stop hook feedback:'
 const HUMAN_ORIGIN = 'human'
+const USER_TYPED_ORIGINS = [HUMAN_ORIGIN, 'typed', 'queued', 'suggestion_accepted']
 const QUEUED_PROMPT_MODE = 'prompt'
 const ANSI_ESCAPE = String.fromCodePoint(0x1b)
 const ANSI_SEQUENCE = new RegExp(`${ANSI_ESCAPE}\\[[0-9;]*[A-Za-z]`, 'gu')
@@ -175,6 +177,14 @@ const RawUser = Schema.Struct({
   toolUseResult: Schema.optionalKey(Schema.Json),
 })
 
+const RawPromptOrigin = Schema.Struct({
+  turnOrigin: Schema.optionalKey(Schema.String),
+  promptSource: Schema.optionalKey(Schema.String),
+  origin: Schema.optionalKey(
+    Schema.Struct({ kind: Schema.String, name: Schema.optionalKey(Schema.String) }),
+  ),
+})
+
 const RawAssistant = Schema.Struct({
   message: Schema.Struct({
     id: Schema.optionalKey(Schema.String),
@@ -284,6 +294,7 @@ const decodeMonitorLaunch = Schema.decodeUnknownOption(RawMonitorLaunch)
 const decodeCompactTrigger = Schema.decodeUnknownOption(CompactTrigger)
 const decodeEnvelope = Schema.decodeUnknownOption(Envelope)
 const decodeUser = Schema.decodeUnknownOption(RawUser)
+const decodePromptOrigin = Schema.decodeUnknownOption(RawPromptOrigin)
 const decodeAssistant = Schema.decodeUnknownOption(RawAssistant)
 const decodeSystem = Schema.decodeUnknownOption(RawSystem)
 const decodeAttachment = Schema.decodeUnknownOption(RawAttachment)
@@ -552,6 +563,28 @@ const unrecognizedEntry = (offset: TranscriptOffset, entryType: string) => [
   new UnrecognizedEntry({ offset, entryType }),
 ]
 
+const promptSenderOf = (json: Schema.Json): Option.Option<PromptSender> =>
+  pipe(
+    decodePromptOrigin(json),
+    Option.flatMap(({ origin, turnOrigin, promptSource }) =>
+      pipe(
+        Option.firstSomeOf([
+          Option.fromUndefinedOr(origin?.kind),
+          Option.fromUndefinedOr(turnOrigin),
+          Option.fromUndefinedOr(promptSource),
+        ]),
+        Option.filter((kind) => !Arr.contains(USER_TYPED_ORIGINS, kind)),
+        Option.map((kind) => (origin?.name === undefined ? { kind } : { kind, name: origin.name })),
+      ),
+    ),
+  )
+
+const isPromptBlock = (block: UserBlock): boolean =>
+  Match.value(block).pipe(
+    Match.tags({ Text: () => true, Image: () => true, LocalCommand: () => true }),
+    Match.orElse(() => false),
+  )
+
 const userMessage = (raw: RawUser, json: Schema.Json, offset: TranscriptOffset) => {
   const fields = {
     ...envelopeOf(json, offset),
@@ -561,9 +594,17 @@ const userMessage = (raw: RawUser, json: Schema.Json, offset: TranscriptOffset) 
     blocks: userBlocks(raw),
   }
 
-  return isStopHookFeedback(raw)
-    ? new UserMessage({ ...fields, stopHookFeedback: true })
-    : new UserMessage(fields)
+  return pipe(
+    promptSenderOf(json),
+    Option.filter(() => !fields.isMeta && Arr.some(fields.blocks, isPromptBlock)),
+    Option.match({
+      onSome: (sentBy) => new UserMessage({ ...fields, sentBy }),
+      onNone: () =>
+        isStopHookFeedback(raw)
+          ? new UserMessage({ ...fields, stopHookFeedback: true })
+          : new UserMessage(fields),
+    }),
+  )
 }
 
 const userEntry = (json: Schema.Json, offset: TranscriptOffset): readonly TranscriptMessage[] =>

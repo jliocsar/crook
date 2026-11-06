@@ -16,6 +16,7 @@ import {
 } from '@crook/domain/TranscriptMessage'
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import compactionManual from '@crook/claude/fixtures/compaction-manual.jsonl?raw'
+import promptOrigins from '@crook/claude/fixtures/prompt-origins.jsonl?raw'
 import slashCommands from '@crook/claude/fixtures/slash-commands.jsonl?raw'
 import stopHookCap from '@crook/claude/fixtures/stop-hook-cap.jsonl?raw'
 import {
@@ -53,6 +54,8 @@ import {
   prompt,
   REVIEWER,
   said,
+  sentCommand,
+  sentPrompt,
   SESSION,
   stopHookFeedback,
   subagent,
@@ -82,6 +85,7 @@ const context = (
 const describeItem = (item: ChatItem): string =>
   ChatItem.$match(item, {
     UserPrompt: (prompted) => `you: ${prompted.text}`,
+    ForeignPrompt: (foreign) => `${foreign.sender.kind}: ${foreign.words}`,
     AssistantText: (text) => `claude: ${text.text}`,
     Tool: (tool) => `${toolTitle(tool.call)} ${tool.call.status}`,
     Subagents: (subagents) =>
@@ -89,7 +93,11 @@ const describeItem = (item: ChatItem): string =>
     Plan: (plan) => `plan: ${plan.steps.map((step) => step.status).join(' ')}`,
     Note: (note) => `note: ${note.text}`,
     StopHookFeedback: (feedback) => `stop hook: ${feedback.words}`,
-    Command: (command) => [`command: ${command.text}`, ...command.output].join(' => '),
+    Command: (command) =>
+      [
+        `${Option.match(command.sender, { onNone: () => 'command', onSome: ({ kind }) => kind })}: ${command.text}`,
+        ...command.output,
+      ].join(' => '),
     Compacted: (compacted) => `compacted: ${Option.getOrElse(compacted.summary, () => '')}`,
     Cleared: () => 'cleared',
     Omitted: (omitted) => `omitted ${omitted.byteLength}`,
@@ -105,6 +113,34 @@ const reviewerInput = {
   subagent_type: 'code-reviewer',
   run_in_background: true,
 }
+
+describe('who sent a prompt, read from real shapes through the real parser', () => {
+  it('leaves what the user typed as bubbles and names everything else', () => {
+    expect(
+      chatItems(
+        Arr.map(messagesOf(promptOrigins), (message) => ({ session: SESSION, message })),
+        context('still'),
+      )
+        .filter((item) => !ChatItem.$is('Compacted')(item))
+        .map(describeItem),
+    ).toEqual([
+      'you: A typed prompt',
+      'you: An accepted suggestion',
+      'you: A prompt typed while Claude worked',
+      'plugin: The madeup plugin sent a message:\nA made-up reply',
+      'plugin: An older plugin line',
+      'note: Running scheduled task (Oct 20 12:00pm)',
+      'note: Running scheduled task (Oct 20 12:01pm)',
+      'scheduled: /sweep tick',
+      "sdk: A script's prompt",
+      'sdk: /triage one',
+      "sdk: A script's prompt from before turnOrigin",
+      'you: Typed through a host, from before turnOrigin',
+      'you: A prompt from before any of these fields',
+      'made_up_origin: A kind nothing here names',
+    ])
+  })
+})
 
 describe('slash commands, read from real shapes through the real parser', () => {
   const realItems = (jsonl: string) =>
@@ -270,6 +306,36 @@ describe('chatItems', () => {
       'claude: Ran it',
     ])
     expect(chatItems(linesOf(lines), context()).filter(ChatItem.$is('UserPrompt'))).toHaveLength(1)
+  })
+
+  it('shows a prompt no one typed as its own row, never as your prompt, and still as a new turn', () => {
+    const lines = [
+      prompt(0, 'go'),
+      toolUse(10, 'toolu_1', 'Bash', { command: 'sleep 100' }),
+      interrupted(20),
+      sentPrompt(30, 'A made-up reply', { kind: 'plugin', name: 'madeup' }),
+    ]
+
+    expect(shown(lines)).toEqual([
+      'you: go',
+      'Bash(sleep 100) stopped',
+      'note: Interrupted',
+      'plugin: A made-up reply',
+    ])
+    expect(chatItems(linesOf(lines), context()).filter(ChatItem.$is('UserPrompt'))).toHaveLength(1)
+  })
+
+  it('keeps a scheduled command and its output on one row that names who sent it', () => {
+    expect(
+      shown([
+        sentCommand(0, '/sweep', 'tick', { kind: 'scheduled' }),
+        user(10, [new LocalCommandOutputBlock({ text: 'Swept' })]),
+      ]),
+    ).toEqual(['scheduled: /sweep tick => Swept'])
+  })
+
+  it('reads a prompt from an agent too old to say who sent it as yours, as it always did', () => {
+    expect(shown([prompt(0, 'A line with no key')])).toEqual(['you: A line with no key'])
   })
 
   it('reads a call with no result as stopped once a later prompt started another turn', () => {

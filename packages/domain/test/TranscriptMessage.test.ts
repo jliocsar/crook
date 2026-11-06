@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
+import * as Struct from 'effect/Struct'
 
 import { TranscriptOffset } from '@crook/domain/Ids'
 import {
@@ -59,6 +60,47 @@ describe('a Stop hook feedback line on the wire', () => {
     expect(
       Schema.decodeSync(Schema.fromJsonString(OlderPhoneLine))(encode(feedback)),
     ).toStrictEqual({ isMeta: true })
+  })
+})
+
+describe('who sent a prompt, on the wire', () => {
+  const sent = new UserMessage({
+    offset: TranscriptOffset.make(0),
+    uuid: Option.none(),
+    timestamp: Option.none(),
+    isMeta: false,
+    origin: Option.none(),
+    queued: false,
+    blocks: [new TextBlock({ text: 'A made-up reply' })],
+    sentBy: { kind: 'plugin', name: 'madeup' },
+  })
+
+  it('keeps the key through the wire, a kind this build never heard of included', () => {
+    const unheardOf = new UserMessage(
+      Struct.evolve(sent, { sentBy: () => ({ kind: 'made_up_origin' }) }),
+    )
+
+    expect(decode(encode(sent))).toMatchObject({ sentBy: { kind: 'plugin', name: 'madeup' } })
+    expect(decode(encode(unheardOf))).toMatchObject({ sentBy: { kind: 'made_up_origin' } })
+  })
+
+  it('stays out of a line from an agent too old to send it', () => {
+    const older = encode(lineWith(new LocalCommandBlock({ name: '/handoff', args: 'made up' })))
+
+    expect(older).not.toContain('sentBy')
+    expect(decode(older)).not.toHaveProperty('sentBy')
+  })
+
+  it('is dropped by a phone too old to know it, which still reads the prompt', () => {
+    const OlderPhoneLine = Schema.Struct({
+      isMeta: Schema.Boolean,
+      blocks: Schema.Array(Schema.Struct({ text: Schema.String })),
+    })
+
+    expect(Schema.decodeSync(Schema.fromJsonString(OlderPhoneLine))(encode(sent))).toStrictEqual({
+      isMeta: false,
+      blocks: [{ text: 'A made-up reply' }],
+    })
   })
 })
 

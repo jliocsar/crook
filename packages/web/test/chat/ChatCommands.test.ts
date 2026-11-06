@@ -5,13 +5,15 @@ import * as Option from 'effect/Option'
 import compactionAuto from '@crook/claude/fixtures/compaction-auto.jsonl?raw'
 import compactionManual from '@crook/claude/fixtures/compaction-manual.jsonl?raw'
 import slashCommands from '@crook/claude/fixtures/slash-commands.jsonl?raw'
+import { LocalCommandBlock } from '@crook/domain/TranscriptMessage'
+import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import { pendingPromptRows, waitAfterSend, waitWithoutCommands } from '@crook/web/chat/ChatCommands'
 import type { PromptSend, PromptWait } from '@crook/web/chat/ChatCommands'
 import { ChatItem, chatItems } from '@crook/web/chat/ChatItems'
 import { NO_ROSTERS } from '@crook/web/chat/TranscriptState'
 
 import { messagesOf } from '../../stories/RealTranscriptFixtures.ts'
-import { CWD, SESSION } from '../TranscriptFixtures.ts'
+import { CWD, prompt, sentCommand, sentPrompt, SESSION, user } from '../TranscriptFixtures.ts'
 
 const NOTHING: PromptWait = { promptsAtSend: 0, commandsAtSend: 0, holesAtSend: 0, pending: [] }
 
@@ -35,6 +37,40 @@ const sending = (text: string, options: Partial<PromptSend> = {}): PromptSend =>
 const sent = (text: string) => ({ text, queued: false, command: false })
 
 const queued = (text: string) => ({ text, queued: true, command: false })
+
+describe('a send waiting while something else lands', () => {
+  const foldOf = (lines: readonly TranscriptMessage[]) =>
+    chatItems(
+      Arr.map(lines, (message) => ({ session: SESSION, message })),
+      { cwd: CWD, activity: 'still', rosters: NO_ROSTERS },
+    )
+  const shownOf = (wait: PromptWait, now: readonly ChatItem[]) =>
+    Arr.map(pendingPromptRows(wait, now, false), (row) => row.text)
+
+  it('keeps a prompt waiting through a prompt no one typed, and ends on its own', () => {
+    const wait = waitAfterSend(NOTHING, [], sending('Check the toast'))
+    const plugin = sentPrompt(0, 'A made-up reply', { kind: 'plugin', name: 'madeup' })
+    const script = sentPrompt(10, 'A made-up script', { kind: 'sdk' })
+
+    expect(shownOf(wait, foldOf([plugin, script]))).toEqual(['Check the toast'])
+    expect(shownOf(wait, foldOf([plugin, script, prompt(20, 'Check the toast')]))).toEqual([])
+  })
+
+  it('keeps a slash send waiting through a scheduled command, and ends on its own', () => {
+    const wait = waitAfterSend(NOTHING, [], sending('/model opus'))
+    const fire = sentCommand(0, '/sweep', 'tick', { kind: 'scheduled' })
+    const own = user(10, [new LocalCommandBlock({ name: '/model', args: 'opus' })])
+
+    expect(shownOf(wait, foldOf([fire]))).toEqual(['/model opus'])
+    expect(shownOf(wait, foldOf([fire, own]))).toEqual([])
+  })
+
+  it('still ends a send on a line from an agent too old to say who sent it', () => {
+    const wait = waitAfterSend(NOTHING, [], sending('Check the toast'))
+
+    expect(shownOf(wait, foldOf([prompt(0, 'Check the toast')]))).toEqual([])
+  })
+})
 
 describe('waitAfterSend', () => {
   it('waits for every prompt sent before the first one arrived', () => {

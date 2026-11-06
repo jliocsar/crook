@@ -185,11 +185,12 @@ const holeCount = (items: readonly ChatItem[]): number =>
 
 const answersACommand = (item: ChatItem): boolean =>
   ChatItem.$match(item, {
-    Command: () => true,
+    Command: (command) => Option.isNone(command.sender),
     Cleared: () => true,
     Note: (note) => note.answersACommand,
     Compacted: (compacted) => Option.contains(compacted.trigger, MANUAL_COMPACT),
     UserPrompt: () => false,
+    ForeignPrompt: () => false,
     AssistantText: () => false,
     Tool: () => false,
     Subagents: () => false,
