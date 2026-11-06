@@ -177,9 +177,9 @@ const make = (roots: readonly string[], procRoot: string) =>
           ),
         ),
         flatMapSome((contents: SessionFile) =>
-          Effect.map(isRunning(contents), (running) =>
-            Option.some(running && contents.status === WAITING_STATUS),
-          ),
+          contents.status === WAITING_STATUS
+            ? Effect.asSome(isRunning(contents))
+            : Effect.succeedSome(false),
         ),
         Effect.catchTag('ClaudeSessionFileUnreadable', (error) =>
           Effect.as(Effect.logDebug(error.message), Option.none<boolean>()),

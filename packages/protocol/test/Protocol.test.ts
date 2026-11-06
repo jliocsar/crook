@@ -53,11 +53,11 @@ import { ClientApi, HubAccount, MachineNotInHerd, PaneNotInHerd } from '@crook/p
 import {
   AgentNotStarted,
   AskDialogUnreadable,
-  CLAUDE_WAITING_NOTE,
-  CommandFailure,
   AskNotPending,
   AskOptionUnavailable,
+  CLAUDE_WAITING_NOTE,
   CommandDeliveryUnknown,
+  CommandFailure,
   CommandId,
   DeclineMessageUndelivered,
   QuestionnaireUnsupported,
