@@ -1583,8 +1583,9 @@ The agent status icons are filled, and lucide's are stroked, so they sit inline 
 always had. Moving them to lucide is a change of look, not a tidy-up.
 
 A stylesheet can carry what a grep for its classes misses. Two `@utility` of one name in two
-stylesheets merge into one rule, so the app's own `no-scrollbar` got `scrollbar-width` only from
-shadcn's, and the declaration left the production CSS with the import (measured). Tailwind also
+stylesheets merge into one rule, so an app utility sharing a name with a stylesheet's can lean on it
+unseen: one got `scrollbar-width` only from shadcn's, and the declaration left the production CSS
+with the import (measured). Tailwind also
 emits a rule for any plain word in the source that names a utility, so the words `running` and
 `paused` kept tw-animate-css's rules of those names in the build, though the 438 catalog stories
 applied 589 distinct classes and neither was one (measured). So when a stylesheet goes, diff the
