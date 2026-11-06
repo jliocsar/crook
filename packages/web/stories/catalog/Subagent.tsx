@@ -176,7 +176,7 @@ export const SUBAGENT_STORIES: readonly StoryMaker[] = [
       all: [
         { text: 'pane closed' },
         { absent: 'failed' },
-        { selector: '[data-slot="hollow-dot"]' },
+        { selector: '[data-run][data-status="pane closed"]' },
       ],
     },
     own: REVIEW_LINES,

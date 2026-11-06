@@ -25,10 +25,15 @@ const subagentsNoun = (count: number): string => (count === 1 ? 'subagent' : 'su
 const summaryOf = (runs: readonly AgentRun[]): string => {
   const running = runs.filter((run) => run.status === 'running').length
   const failed = runs.filter((run) => run.status === 'failed').length
+  const paneClosed = runs.filter((run) => run.status === 'pane closed').length
   const counted = `${runs.length} ${subagentsNoun(runs.length)}`
 
   if (running > 0) {
     return `${running} of ${counted} running`
+  }
+
+  if (paneClosed > 0) {
+    return `${counted}, ${paneClosed} cut off by the pane closing`
   }
 
   return failed > 0 ? `${counted} finished, ${failed} failed` : `${counted} finished`
@@ -73,6 +78,7 @@ function RunLine({ run }: { run: AgentRun }) {
 export function SubagentTree({ runs, onSelectRun, className, ...rootProps }: SubagentTreeProps) {
   const done = runs.filter((run) => run.status === 'done').length
   const failed = runs.filter((run) => run.status === 'failed').length
+  const paneClosed = runs.filter((run) => run.status === 'pane closed').length
 
   return (
     <div
@@ -89,6 +95,7 @@ export function SubagentTree({ runs, onSelectRun, className, ...rootProps }: Sub
         <span className="ms-auto tabular-nums">
           {done}/{runs.length} done
           {failed > 0 ? <span className="text-destructive ms-2">{failed} failed</span> : null}
+          {paneClosed > 0 ? <span className="ms-2">{paneClosed} pane closed</span> : null}
         </span>
       </p>
       <ul>
