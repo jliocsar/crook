@@ -28,7 +28,7 @@ import {
 } from '@crook/claude/HookPayload'
 import { firstUnmatchedToolUse } from '@crook/claude/LastTurn'
 import { dialogFingerprint, keysToSelect, parseDialog } from '@crook/claude/ScreenDialog'
-import { spikeScreen } from '@crook/claude/SpikeScreens'
+import { spikeScreen } from '@crook/claude/fixtures/SpikeScreens.ts'
 import { Ask } from '@crook/domain/Ask'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 

@@ -59,7 +59,7 @@ import {
   sessionSnapshot,
   tabInfo,
   workspaceInfo,
-} from '@crook/herdr/RecordFixtures'
+} from '@crook/herdr/fixtures/Records.ts'
 import {
   type AgentInfo,
   WorkspaceInfo,

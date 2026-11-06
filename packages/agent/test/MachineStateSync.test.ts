@@ -45,7 +45,7 @@ import {
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { EventsSubscribeMethod, SessionSnapshotMethod } from '@crook/herdr/Methods'
-import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from '@crook/herdr/RecordFixtures'
+import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from '@crook/herdr/fixtures/Records.ts'
 import { type AgentInfo, type SessionSnapshot, TabInfo } from '@crook/herdr/Records'
 import { RECONNECT_CAP } from '@crook/protocol/LinkTiming'
 

@@ -48,7 +48,7 @@ import {
   SessionSnapshotMethod,
   WorkspaceCreateMethod,
 } from '@crook/herdr/Methods'
-import { paneInfo, sessionSnapshot, tabInfo, workspaceInfo } from '@crook/herdr/RecordFixtures'
+import { paneInfo, sessionSnapshot, tabInfo, workspaceInfo } from '@crook/herdr/fixtures/Records.ts'
 import {
   AgentLink,
   Hello,

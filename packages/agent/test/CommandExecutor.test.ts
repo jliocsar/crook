@@ -42,7 +42,7 @@ import {
   PaneCloseMethod,
   PaneRenameMethod,
 } from '@crook/herdr/Methods'
-import { paneInfo } from '@crook/herdr/RecordFixtures'
+import { paneInfo } from '@crook/herdr/fixtures/Records.ts'
 import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
 import { HUB_RECONNECT_BASE } from '@crook/protocol/LinkTiming'
 import {

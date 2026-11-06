@@ -20,7 +20,7 @@ import {
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { PaneProcessInfoMethod } from '@crook/herdr/Methods'
-import { agentInfo } from '@crook/herdr/RecordFixtures'
+import { agentInfo } from '@crook/herdr/fixtures/Records.ts'
 import { AgentSessionInfo, PaneProcess, PaneProcessInfo } from '@crook/herdr/Records'
 
 interface ProcessFixture {

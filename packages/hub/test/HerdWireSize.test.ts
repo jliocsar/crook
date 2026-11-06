@@ -26,7 +26,7 @@ import { Pane } from '@crook/domain/Pane'
 import { Checkout, Place } from '@crook/domain/Place'
 import { Tab } from '@crook/domain/Tab'
 import { Workspace } from '@crook/domain/Workspace'
-import { agentInfo } from '@crook/herdr/RecordFixtures'
+import { agentInfo } from '@crook/herdr/fixtures/Records.ts'
 
 import { agentRow } from './Fixtures'
 
