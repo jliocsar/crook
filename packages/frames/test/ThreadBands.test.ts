@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
 
-import { bandsOf } from '@crook/frames/ThreadBands'
+import { bandsOf, movedSince } from '@crook/frames/ThreadBands'
 import type { VerticalBox } from '@crook/frames/ThreadBands'
 
 const box = (top: number, bottom: number): VerticalBox => ({ top, bottom, height: bottom - top })
@@ -49,5 +49,25 @@ describe('bandsOf', () => {
       middle: 20,
       bottom: 0,
     })
+  })
+})
+describe('movedSince', () => {
+  const previous = new Map([
+    ['first', 100],
+    ['second', 200],
+  ])
+
+  it('reads the move of the last row both frames hold, so a row landing below it does not count', () => {
+    const rows = [
+      { key: 'first', top: 90 },
+      { key: 'second', top: 163 },
+      { key: 'landed', top: 300 },
+    ]
+
+    expect(movedSince(previous, rows)).toBe(-37)
+  })
+
+  it('reads no move when the frames share no row', () => {
+    expect(movedSince(previous, [{ key: 'landed', top: 300 }])).toBe(0)
   })
 })

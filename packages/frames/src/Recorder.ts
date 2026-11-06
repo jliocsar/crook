@@ -5,6 +5,7 @@ import {
   MACHINE_ATTRIBUTE,
   MACHINE_SELECTOR,
   MARKS,
+  ROW_ATTRIBUTE,
   ROW_SELECTOR,
   SCREEN_SELECTOR,
   STAGE_SELECTOR,
@@ -14,7 +15,7 @@ import {
   UNSEEN_SAMPLE_SELECTOR,
 } from '@crook/frames/Marks'
 import type { MarkDefinition } from '@crook/frames/Marks'
-import { bandsOf } from '@crook/frames/ThreadBands'
+import { bandsOf, movedSince } from '@crook/frames/ThreadBands'
 
 interface SeenElement {
   readonly box: { x: number; y: number; width: number; height: number }
@@ -191,23 +192,35 @@ const showsContent = (stage: Element, covers: readonly Element[]): boolean => {
   return false
 }
 
-const readThread = (covers: readonly Element[]) => {
+const readThread = (
+  covers: readonly Element[],
+  previousTops: ReadonlyMap<string, number>,
+  held: boolean,
+) => {
   for (const viewport of document.querySelectorAll(THREAD_VIEWPORT_SELECTOR)) {
     const content = viewport.querySelector(THREAD_CONTENT_SELECTOR)
 
     if (content !== null && seenElement(viewport, covers) !== undefined) {
       const viewportBox = viewport.getBoundingClientRect()
       const contentBox = content.getBoundingClientRect()
-      const rows = Array.from(viewport.querySelectorAll(ROW_SELECTOR), (row) =>
-        row.getBoundingClientRect(),
-      )
-      const bands = bandsOf(viewportBox, contentBox, rows)
+      const rows = Array.from(viewport.querySelectorAll(ROW_SELECTOR))
+      const boxes = rows.map((row) => row.getBoundingClientRect())
+      const tops = rows.map((row, index) => ({
+        key: row.getAttribute(ROW_ATTRIBUTE) ?? '',
+        top: boxes[index]?.top ?? 0,
+      }))
+      const bands = bandsOf(viewportBox, contentBox, boxes)
 
       return {
-        lift: round(contentBox.top - viewportBox.top + viewport.scrollTop),
-        top: round(bands.top),
-        middle: round(bands.middle),
-        bottom: round(bands.bottom),
+        reading: {
+          lift: round(contentBox.top - viewportBox.top + viewport.scrollTop),
+          top: round(bands.top),
+          middle: round(bands.middle),
+          bottom: round(bands.bottom),
+          moved: round(movedSince(previousTops, tops)),
+          held,
+        },
+        tops: new Map(tops.map((row) => [row.key, row.top])),
       }
     }
   }
@@ -238,6 +251,8 @@ const install = (): void => {
   let added: string[] = []
   let removed: string[] = []
   let frameNumber = 0
+  let previousTops: ReadonlyMap<string, number> = new Map()
+  let held = false
 
   const collect = (records: readonly MutationRecord[]): void => {
     for (const record of records) {
@@ -254,6 +269,18 @@ const install = (): void => {
       }
     }
   }
+
+  const fingerDown = (event: Event): void => {
+    held = event.isTrusted
+  }
+
+  const fingerUp = (): void => {
+    held = false
+  }
+
+  window.addEventListener('touchstart', fingerDown, { capture: true, passive: true })
+  window.addEventListener('touchend', fingerUp, { capture: true, passive: true })
+  window.addEventListener('touchcancel', fingerUp, { capture: true, passive: true })
 
   const mutations = new MutationObserver(collect)
 
@@ -286,6 +313,9 @@ const install = (): void => {
         })
       : []
     const hasContentMark = readings.some(([mark]) => isContentMark(mark))
+    const thread = mounted ? readThread(covers, previousTops, held) : undefined
+
+    previousTops = thread?.tops ?? new Map()
 
     frames.push({
       frame: frameNumber,
@@ -295,7 +325,7 @@ const install = (): void => {
       mounted,
       blank: mounted && !hasContentMark && !showsContent(stage, covers),
       rows: mounted ? document.querySelectorAll(ROW_SELECTOR).length : 0,
-      thread: mounted ? readThread(covers) : undefined,
+      thread: thread?.reading,
       marks: Object.fromEntries(readings),
       states: mounted ? readStates() : {},
       added,

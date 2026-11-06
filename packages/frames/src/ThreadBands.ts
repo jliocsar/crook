@@ -10,6 +10,11 @@ export interface Bands {
   readonly bottom: number
 }
 
+export interface RowTop {
+  readonly key: string
+  readonly top: number
+}
+
 export const bandsOf = (
   viewport: VerticalBox,
   content: VerticalBox,
@@ -39,4 +44,13 @@ export const bandsOf = (
     middle: walked.middle,
     bottom: Math.max(0, to - walked.reached),
   }
+}
+
+export const movedSince = (
+  previous: ReadonlyMap<string, number>,
+  rows: readonly RowTop[],
+): number => {
+  const shared = rows.findLast((row) => previous.has(row.key))
+
+  return shared === undefined ? 0 : shared.top - (previous.get(shared.key) ?? shared.top)
 }

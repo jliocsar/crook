@@ -1,19 +1,24 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import { detect } from '@crook/frames/Detect'
 import type { Finding } from '@crook/frames/Detect'
 import { expectationOf, fromTable, inSequence } from '@crook/frames/Expectations'
-import { FrameLog, isStarved } from '@crook/frames/FrameLog'
+import { BACKTRACK_PIXELS, FrameLog, isStarved, movedAt } from '@crook/frames/FrameLog'
 
+import backtrackSmallFixture from './fixtures/backtrack-small.json' with { type: 'json' }
+import backtrackFixture from './fixtures/backtrack.json' with { type: 'json' }
 import blankFixture from './fixtures/blank.json' with { type: 'json' }
 import cleanFixture from './fixtures/clean.json' with { type: 'json' }
 import emptyBandFixture from './fixtures/empty-band.json' with { type: 'json' }
 import filledBandFixture from './fixtures/filled-band.json' with { type: 'json' }
+import fingerTurnsAroundFixture from './fixtures/finger-turns-around.json' with { type: 'json' }
 import flashFixture from './fixtures/flash.json' with { type: 'json' }
 import goneInALongFrameFixture from './fixtures/gone-in-a-long-frame.json' with { type: 'json' }
+import liftGlideFixture from './fixtures/lift-glide.json' with { type: 'json' }
 import pairFixture from './fixtures/pair.json' with { type: 'json' }
 import shiftFixture from './fixtures/shift.json' with { type: 'json' }
 import slowFramesHoldFixture from './fixtures/slow-frames-hold.json' with { type: 'json' }
@@ -112,6 +117,51 @@ describe('detect, over logs recorded from real runs', () => {
     expect(blank.check).toBe('blank')
     expect(blank.words).toContain('herd-skeleton')
     expect(blank.words).toContain('the first frame')
+  })
+
+  it('reports a row that moved up a frame before the lift caught it and back down after', () => {
+    const story = 'transition/slash-send-following'
+    const findings = detect(story, decodeLog(backtrackFixture), expectationOf(story))
+    const backtrack = findingNamed(findings, 'backtrack')
+
+    expect(keysOf(findings)).toEqual(['backtrack'])
+    expect(backtrack.check).toBe('backtrack')
+    expect(backtrack.firstFrame).toBe(142)
+    expect(backtrack.lastFrame).toBe(143)
+    expect(backtrack.words).toContain('moved up 37 px')
+    expect(backtrack.words).toContain('back down 37 px')
+  })
+
+  it('reports the same backtrack when only the last few pixels of a lift came late', () => {
+    const story = 'transition/slash-send-following-one-write'
+    const findings = detect(story, decodeLog(backtrackSmallFixture), expectationOf(story))
+
+    expect(keysOf(findings)).toEqual(['backtrack'])
+    expect(findingNamed(findings, 'backtrack').words).toContain('moved up 5 px')
+  })
+
+  it('reports no backtrack over a lift that starts in its commit and glides up', () => {
+    const story = 'transition/slash-send-following'
+    const log = decodeLog(liftGlideFixture)
+
+    expect(Arr.some(log.frames, (frame) => movedAt(frame) <= -BACKTRACK_PIXELS)).toBe(true)
+    expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
+  })
+
+  it('reports no backtrack where a finger turns around, though the row does move both ways', () => {
+    const story = 'transition/slash-send-following'
+    const log = decodeLog(fingerTurnsAroundFixture)
+    const turnsAround = pipe(
+      log.frames,
+      Arr.drop(1),
+      Arr.zip(log.frames),
+      Arr.some(
+        ([next, frame]) => movedAt(frame) <= -BACKTRACK_PIXELS && movedAt(next) >= BACKTRACK_PIXELS,
+      ),
+    )
+
+    expect(turnsAround).toBe(true)
+    expect(keysOf(detect(story, log, expectationOf(story)))).not.toContain('backtrack')
   })
 
   it('reports a band of the thread with no rows in it during a lift, at its widest frame', () => {

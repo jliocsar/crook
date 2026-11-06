@@ -7,11 +7,13 @@ import * as Schema from 'effect/Schema'
 
 import type { Expectation, Order as StateOrder } from '@crook/frames/Expectations'
 import {
+  backtracks,
   bandAt,
   BandPlace,
   EMPTY_BAND_PIXELS,
   isStarved,
   marksOf,
+  movedAt,
   shows,
   showsEmptyBand,
   statesOf,
@@ -26,7 +28,15 @@ interface Run {
   readonly after: Option.Option<RecordedFrame>
 }
 
-export const Check = Schema.Literals(['flash', 'pair', 'shift', 'blank', 'empty', 'order'])
+export const Check = Schema.Literals([
+  'flash',
+  'pair',
+  'shift',
+  'blank',
+  'empty',
+  'backtrack',
+  'order',
+])
 export type Check = typeof Check.Type
 
 export const Finding = Schema.Struct({
@@ -223,6 +233,32 @@ const emptiesOf = (story: string, frames: readonly RecordedFrame[]): readonly Fi
     ),
   )
 
+const backtracksOf = (story: string, frames: readonly RecordedFrame[]): readonly Finding[] =>
+  pipe(
+    frames,
+    Arr.drop(1),
+    Arr.zip(frames),
+    Arr.flatMap(([next, frame]) =>
+      backtracks(frame, next)
+        ? [
+            {
+              check: 'backtrack' as const,
+              key: 'backtrack',
+              story,
+              firstFrame: frame.frame,
+              lastFrame: next.frame,
+              imageFrame: frame.frame,
+              fromMs: Math.round(frame.at),
+              toMs: Math.round(next.at),
+              marks: marksOf(frame),
+              states: statesOf(frame),
+              words: `A row of the thread moved up ${Math.abs(movedAt(frame))} px in one frame and back down ${movedAt(next)} px in the next, with the lift at ${frame.thread?.lift ?? 0} px and then ${next.thread?.lift ?? 0} px. The scroll and the lift that should cancel out landed apart.`,
+            },
+          ]
+        : [],
+    ),
+  )
+
 const impactOf = (source: ShiftSource): number =>
   Math.hypot(source.to.x - source.from.x, source.to.y - source.from.y) *
   Math.max(source.from.width * source.from.height, source.to.width * source.to.height)
@@ -389,6 +425,7 @@ export const detect = (
             ...pairsOf(story, watched, [...NEVER_TOGETHER, ...expectation.forbiddenPairs]),
             ...blanksOf(story, watched),
             ...emptiesOf(story, watched),
+            ...backtracksOf(story, watched),
             ...shiftsOf(story, log, watched, expectation),
             ...Object.entries(expectation.order).flatMap(([track, order]) =>
               brokenOrderOf(story, watched, track, order),
