@@ -21,6 +21,8 @@ const SHORT_ROW_HEIGHT = 20
 const TALL_ROW_HEIGHT = 300
 const CACHED_ROWS = 4
 const LANDED_ROWS = 120
+const ROWS_THAT_FIT_ONCE_MEASURED = 8
+const ROW_GAP = 12
 
 const renderedMicrotasks = Effect.promise(() => Promise.resolve())
 
@@ -96,6 +98,38 @@ describe('Thread glide', () => {
       })
 
       expect(Math.max(...written())).toBeCloseTo(VIEWPORT_HEIGHT)
+    }),
+  )
+
+  it.effect('lifts what a row measures, not what it was estimated at', () =>
+    Effect.gen(function* () {
+      yield* catchUpLands(TALL_ROW_HEIGHT, CACHED_ROWS, SHORT_ROW_HEIGHT, 1)
+
+      expect(lifted()).toBe(SHORT_ROW_HEIGHT + ROW_GAP)
+    }),
+  )
+
+  it.effect('lifts what a row measures when the virtualizer still reads a scroll as it lands', () =>
+    Effect.gen(function* () {
+      const landing = yield* catchUpLands(TALL_ROW_HEIGHT, CACHED_ROWS, SHORT_ROW_HEIGHT, 1)
+
+      landing.scrollHeard()
+      landing.landsAgain()
+
+      expect(lifted()).toBeCloseTo(2 * (SHORT_ROW_HEIGHT + ROW_GAP))
+    }),
+  )
+
+  it.effect('lifts nothing when rows estimated past the screen measure short enough to fit', () =>
+    Effect.gen(function* () {
+      yield* catchUpLands(
+        SHORT_ROW_HEIGHT,
+        CACHED_ROWS,
+        SHORT_ROW_HEIGHT,
+        ROWS_THAT_FIT_ONCE_MEASURED,
+      )
+
+      expect(lifted()).toBe(0)
     }),
   )
 
