@@ -146,6 +146,15 @@ const live = (rows: readonly AgentRow[]) => liveWith(herd([machine(LAPTOP, rows)
 const blockedOn = (ask: PermissionAsk | QuestionAsk | UnknownAsk) =>
   live([agent('w1:p1', 'blocked', { ask, title: 'Lint the web package' })])
 
+const blockedAt = (seq: number, ask: PermissionAsk = bashAsk()) =>
+  live([agent('w1:p1', 'blocked', { ask, seq, title: 'Lint the web package' })])
+
+const workingAt = (seq: number) =>
+  live([agent('w1:p1', 'working', { seq, title: 'Lint the web package' })])
+
+const ANSWERED_NOTE = 'Answered. Waiting for Claude to move on.'
+const ALREADY_ANSWERED_NOTE = 'Already answered'
+
 const dock = () => {
   const found = document.querySelector<HTMLElement>('[data-slot="ask-dock"]')
 
@@ -291,6 +300,53 @@ describe('the ask dock', () => {
     }),
   )
 
+  it.effect('holds the buttons again while a retry under the same key is out', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedOn(bashAsk()))
+      const refusal = new AskDialogUnreadable({ pane: PANE })
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(refusal))
+      yield* click(yield* findByRole('button', 'Yes'))
+      yield* Effect.promise(() => screen.findByText(refusal.message))
+      yield* link.commandAnswers.close
+      yield* click(screen.getByRole('button', { name: 'Yes' }))
+      yield* eventually(() => {
+        expect(screen.getByRole('button', { name: 'No' })).toHaveProperty('disabled', true)
+        expect(screen.queryByText(refusal.message)).toBeNull()
+      })
+    }),
+  )
+
+  it.effect('holds the buttons while a decline is out, whichever turn the row is on', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedAt(1))
+      const field = yield* findByRole('textbox', 'Tell Claude what to do instead')
+
+      yield* Effect.promise(() => userEvent.type(field, 'Lint only the web package'))
+      yield* link.commandAnswers.close
+      yield* click(screen.getByRole('button', { name: 'Decline and send' }))
+      yield* eventually(() => {
+        expect(screen.getByRole('button', { name: 'Yes' })).toHaveProperty('disabled', true)
+      })
+      yield* SubscriptionRef.set(
+        link.state,
+        blockedAt(
+          3,
+          bashAsk(
+            dialogOptions([
+              ['Yes', 'yes'],
+              ['No', 'no'],
+            ]),
+          ),
+        ),
+      )
+      yield* eventually(() => {
+        expect(screen.queryByRole('button', { name: 'Always' })).toBeNull()
+        expect(screen.getByRole('button', { name: 'Yes' })).toHaveProperty('disabled', true)
+      })
+    }),
+  )
+
   it.effect('takes a second tap on an ask still open after the answer, under a new key', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, blockedOn(bashAsk()))
@@ -309,6 +365,128 @@ describe('the ask dock', () => {
 
       expect(second?.command).toEqual(answered(new Approve()))
       expect(second?.key).not.toBe(first?.key)
+    }),
+  )
+
+  it.effect(
+    'opens the same dialog asked again with no word of the last answer, and answers it',
+    () =>
+      Effect.gen(function* () {
+        const { link } = yield* renderApp(CHAT, blockedAt(1))
+
+        yield* Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(answered(new Approve()))))
+        yield* click(yield* findByRole('button', 'Yes'))
+        yield* Effect.promise(() => screen.findByText(ANSWERED_NOTE))
+        yield* SubscriptionRef.set(link.state, workingAt(2))
+        yield* eventually(() => {
+          expect(document.querySelector('[data-slot="ask-dock"]')).toBeNull()
+        })
+        yield* SubscriptionRef.set(link.state, blockedAt(3))
+        const yes = yield* findByRole('button', 'Yes')
+
+        yield* eventually(() => {
+          expect(screen.queryByText(ANSWERED_NOTE)).toBeNull()
+        })
+
+        expect(yes).toHaveProperty('disabled', false)
+
+        yield* click(yes)
+        yield* Effect.promise(() => screen.findByText(ANSWERED_NOTE))
+
+        const [first, second] = Ref.getUnsafe(link.sent)
+
+        expect(second?.command).toEqual(answered(new Approve()))
+        expect(second?.key).not.toBe(first?.key)
+      }),
+  )
+
+  it.effect('leaves an already answered behind when the same dialog is asked again', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedAt(1))
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(new AskNotPending({ pane: PANE, ask: BASH_ID })))
+      yield* click(yield* findByRole('button', 'Yes'))
+      yield* Effect.promise(() => screen.findByText(ALREADY_ANSWERED_NOTE))
+      yield* SubscriptionRef.set(link.state, blockedAt(3))
+      yield* eventually(() => {
+        expect(screen.queryByText(ALREADY_ANSWERED_NOTE)).toBeNull()
+      })
+    }),
+  )
+
+  it.effect('leaves a refusal behind when the same dialog is asked again', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedAt(1))
+      const refusal = new AskDialogUnreadable({ pane: PANE })
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(refusal))
+      yield* click(yield* findByRole('button', 'Yes'))
+      yield* Effect.promise(() => screen.findByText(refusal.message))
+      yield* SubscriptionRef.set(link.state, blockedAt(3))
+      yield* eventually(() => {
+        expect(screen.queryByText(refusal.message)).toBeNull()
+      })
+    }),
+  )
+
+  it.effect('treats one id over a new dialog as a new ask, as the agent does', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedAt(1))
+
+      yield* Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(answered(new Approve()))))
+      yield* click(yield* findByRole('button', 'Yes'))
+      yield* Effect.promise(() => screen.findByText(ANSWERED_NOTE))
+      yield* SubscriptionRef.set(
+        link.state,
+        blockedAt(
+          1,
+          new PermissionAsk({
+            id: BASH_ID,
+            source: 'hook',
+            tool: 'Bash',
+            plugin: Option.none(),
+            action: new RunCommand({ command: 'bun run lint' }),
+            options: THREE_OPTIONS,
+            dialog: Option.some('another fingerprint'),
+          }),
+        ),
+      )
+      yield* eventually(() => {
+        expect(screen.queryByText(ANSWERED_NOTE)).toBeNull()
+      })
+    }),
+  )
+
+  it.effect('keeps saying answered while the row still shows the dialog it answered', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedAt(1))
+
+      yield* Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(answered(new Approve()))))
+      yield* click(yield* findByRole('button', 'Yes'))
+      yield* Effect.promise(() => screen.findByText(ANSWERED_NOTE))
+      yield* SubscriptionRef.set(link.state, blockedAt(1))
+
+      expect(yield* Effect.promise(() => screen.findByText(ANSWERED_NOTE))).toBeDefined()
+    }),
+  )
+
+  it.effect('tells a refused decline on the composer and leaves the ask to answer', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedOn(bashAsk()))
+      const refusal = new AskDialogUnreadable({ pane: PANE })
+      const field = yield* findByRole('textbox', 'Tell Claude what to do instead')
+
+      yield* Effect.promise(() => userEvent.type(field, 'Lint only the web package'))
+      yield* Ref.set(link.commandAnswer, Exit.fail(refusal))
+      yield* click(screen.getByRole('button', { name: 'Decline and send' }))
+      yield* Effect.promise(() => screen.findByText(refusal.message))
+
+      expect(screen.getByRole('button', { name: 'Yes' })).toHaveProperty('disabled', false)
+      expect(field).toHaveProperty('value', 'Lint only the web package')
+      expect(document.querySelector('[data-machine="composer-failure"]')).toHaveProperty(
+        'dataset.state',
+        'PromptFailed',
+      )
     }),
   )
 

@@ -40,6 +40,7 @@ import type { LinkStage, StoryMaker } from '../Story.tsx'
 const ASK_DOCK = '[data-slot="ask-dock"]'
 const BASH_ID = AskId.make('toolu_bash')
 const EDIT_ID = AskId.make('toolu_edit')
+const SCREEN_ID = AskId.make('screen-928861183')
 
 const LONG_COMMAND =
   'bun run lint && bun run typecheck && bun run test && bun run fmt:check && git add -A && git commit -m "fix(web): keep the banner still" && git push origin HEAD'
@@ -174,6 +175,16 @@ const askStory = (slug: string, title: string, ask: Ask, shows = ASK_DOCK) =>
 
 const answeredApprove = new AnswerAsk({ pane: PANE, ask: BASH_ID, answer: new Approve() })
 
+const sameDialogAsk = new PermissionAsk({
+  id: SCREEN_ID,
+  source: 'screen',
+  tool: 'Bash',
+  plugin: Option.none(),
+  action: new RunCommand({ command: 'bun run lint' }),
+  options: THREE_OPTIONS,
+  dialog: Option.some('fingerprint'),
+})
+
 export const ASK_STORIES: readonly StoryMaker[] = [
   askStory('permission-command', 'Ask, run a command', bashAsk()),
   askStory('permission-long-command', 'Ask, a long command', bashAsk(LONG_COMMAND)),
@@ -235,6 +246,15 @@ export const ASK_STORIES: readonly StoryMaker[] = [
         link.commandAnswers.close,
       ),
     settle: () => clicks('Yes'),
+  }),
+  chatStory({
+    slug: 'declining',
+    title: 'Ask, a decline with a message on its way',
+    shows: { selector: '[data-machine="ask-answer"][data-state="Open"] button:disabled' },
+    link: blocked(bashAsk()),
+    events: LEAD_IN,
+    arrange: ({ link }) => link.commandAnswers.close,
+    settle: () => Effect.andThen(types(/./u, 'Run the tests first'), clicks('Decline and send')),
   }),
   chatStory({
     slug: 'answered',
@@ -314,6 +334,45 @@ export const ASK_STORIES: readonly StoryMaker[] = [
         SubscriptionRef.set(
           link.state,
           liveWith(herd([machine(LAPTOP, [blockedRow(editAsk, 2)], { agentVersion: '0.0.1' })])),
+        ),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'same-dialog-again',
+    title: 'Ask, the same dialog asked again after its answer',
+    shows: { text: 'Answered. Waiting for Claude to move on.' },
+    ends: { selector: '[data-machine="ask-answer"][data-state="Open"]' },
+    link: blocked(sameDialogAsk),
+    events: LEAD_IN,
+    arrange: ({ link }) =>
+      Ref.set(
+        link.commandAnswer,
+        Exit.succeed(
+          inputDelivered(new AnswerAsk({ pane: PANE, ask: SCREEN_ID, answer: new Approve() })),
+        ),
+      ),
+    settle: () =>
+      Effect.andThen(clicks('Yes'), seesText('Answered. Waiting for Claude to move on.')),
+    timeline: [
+      step<LinkStage>(700, 'Claude runs the command', ({ link }) =>
+        SubscriptionRef.set(
+          link.state,
+          liveWith(
+            herd([
+              machine(LAPTOP, [agent('w1:p1', 'working', { title: CHAT_TITLE, seq: 2 })], {
+                agentVersion: '0.0.1',
+              }),
+            ]),
+          ),
+        ),
+      ),
+      step<LinkStage>(1100, 'Claude asks the same thing again', ({ link }) =>
+        SubscriptionRef.set(
+          link.state,
+          liveWith(
+            herd([machine(LAPTOP, [blockedRow(sameDialogAsk, 3)], { agentVersion: '0.0.1' })]),
+          ),
         ),
       ),
     ],

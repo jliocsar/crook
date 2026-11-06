@@ -1,6 +1,6 @@
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
 import type { Ask, AskedAction } from '@crook/domain/Ask'
-import type { AskAnswerState } from '@crook/web/chat/AskModel'
+import type { AskAnswerState } from '@crook/web/chat/AskAnswerMachine'
 import type { ActivityState } from '@crook/web/chat/ActivityMachine'
 import type { JobKind, JobState } from '@crook/web/chat/BackgroundModel'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
@@ -150,7 +150,7 @@ export const STATE_COVERAGE = {
   askAnswer: {
     Open: ['ask/permission-command'],
     Answering: ['ask/answering'],
-    Answered: ['ask/answered'],
+    Answered: ['ask/answered', 'ask/same-dialog-again'],
     AlreadyAnswered: ['ask/already-answered'],
     Refused: ['ask/refused'],
   } satisfies Record<AskAnswerState['_tag'], readonly string[]>,

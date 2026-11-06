@@ -1,0 +1,10 @@
+stateDiagram-v2
+  [*] --> Open
+  state "from any state" as Anywhere
+  Answering --> Answered: Delivered
+  Answering --> AlreadyAnswered: NotPending
+  Answering --> Refused: AnswerRefused
+  Answered --> Refused: AnswerRefused
+  Refused --> Answered: Delivered
+  Anywhere --> Open: AskShown
+  Anywhere --> Answering: AnswerPressed
