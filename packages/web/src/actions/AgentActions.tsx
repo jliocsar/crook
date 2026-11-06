@@ -10,7 +10,7 @@ import * as Result from 'effect/Result'
 import { Pencil, Pin, PinOff } from 'lucide-react'
 import * as React from 'react'
 
-import { type AgentRow, agentTitle, agentTitleOrPane } from '@crook/domain/AgentRow'
+import { type AgentRow, agentTitle, agentTitleOrChat } from '@crook/domain/AgentRow'
 import { toGlobalPaneId } from '@crook/domain/Ids'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import {
@@ -301,7 +301,7 @@ function AgentActionsSheet({
       openerGone={Option.exists(shown, ({ view }) => Option.isNone(view.card))}
       title={Option.match(shown, {
         onNone: () => '',
-        onSome: ({ card }) => agentTitleOrPane(card.row),
+        onSome: ({ card }) => agentTitleOrChat(card.row),
       })}
       description={Option.match(shown, {
         onNone: () => '',

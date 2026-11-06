@@ -82,11 +82,13 @@ const jobsOf = (
   runs: readonly DockRun[],
   now: DateTime.Utc,
   activity: readonly SubagentActivity[] = [],
+  paneClosed = false,
 ) =>
   backgroundJobs({
     background: Option.some(new BackgroundChanged({ session: SESSION, tasks, activity })),
     runs,
     now,
+    paneClosed,
   })
 
 const keys = (jobs: readonly BackgroundJob[]) => Arr.map(jobs, (job) => job.key)
@@ -128,6 +130,27 @@ describe('backgroundJobs', () => {
     expect(stateOf(jobsOf([persistent], [], at(24 * 60 * 60)), 'toolu_mon')).toEqual(
       Option.some('running'),
     )
+  })
+
+  it('counts nothing as running once its pane has closed, and leaves what already ended', () => {
+    const jobs = jobsOf(
+      [shell({ key: 'dev', alive: Option.some(true) }), monitor(Option.none())],
+      [
+        reviewer('running', Option.none()),
+        { ...reviewer('done', Option.some(5)), toolUseId: 'done' },
+      ],
+      at(10),
+      [],
+      true,
+    )
+
+    expect(dockOf(jobs, at(10)).running).toBe(0)
+    expect(stateOf(jobs, 'toolu_dev')).toEqual(Option.some('unconfirmed'))
+    expect(stateOf(jobs, 'toolu_mon')).toEqual(Option.some('unconfirmed'))
+    expect(stateOf(jobs, reviewer('running', Option.none()).toolUseId)).toEqual(
+      Option.some('unconfirmed'),
+    )
+    expect(stateOf(jobs, 'done')).toEqual(Option.some('done'))
   })
 
   it('counts no unconfirmed subagent as running, so its clock never shows', () => {

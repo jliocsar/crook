@@ -204,6 +204,7 @@ export const useBackgroundWorkOf = (
 export const useBackgroundWork = (
   view: Option.Option<TranscriptView>,
   items: readonly ChatItem[],
+  paneClosed: boolean,
   onOpenSubagent: (job: BackgroundJob) => void,
 ): BackgroundHandle => {
   const session = Option.getOrUndefined(sessionOf(view))
@@ -218,8 +219,8 @@ export const useBackgroundWork = (
   )
   const jobsAt = React.useCallback(
     (now: DateTime.Utc) =>
-      backgroundJobs({ background: Option.fromUndefinedOr(background), runs, now }),
-    [background, runs],
+      backgroundJobs({ background: Option.fromUndefinedOr(background), runs, now, paneClosed }),
+    [background, runs, paneClosed],
   )
 
   return useBackgroundWorkOf(jobsAt, onOpenSubagent)

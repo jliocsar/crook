@@ -6,6 +6,7 @@ import * as Schema from 'effect/Schema'
 import * as Str from 'effect/String'
 
 import { AskId } from '@crook/domain/Ids'
+import { toolName } from '@crook/domain/ToolName'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
 
 const PATH_SEPARATOR = '/'
@@ -120,7 +121,7 @@ export const askSummary = (ask: Ask, folder: string): Option.Option<string> =>
   Match.value(ask).pipe(
     Match.tagsExhaustive({
       PermissionAsk: (permission) =>
-        Option.some(actionSummary(permission.tool, permission.action, folder)),
+        Option.some(actionSummary(toolName(permission.tool), permission.action, folder)),
       QuestionAsk: (question) => Option.some(Arr.headNonEmpty(question.questions).question),
       UnknownAsk: () => Option.none(),
     }),

@@ -47,6 +47,7 @@ const jobsAt = (now: DateTime.Utc) =>
     ),
     runs: [],
     now,
+    paneClosed: false,
   })
 
 describe('lastPromptAt', () => {

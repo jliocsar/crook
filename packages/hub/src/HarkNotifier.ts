@@ -17,6 +17,7 @@ import { type NotificationEvent, NotificationSettings, withPref } from '@crook/d
 import {
   type HarkFailure,
   HarkReachedNoDevice,
+  harkFailureForTheLog,
   type TestNotificationFailure,
 } from '@crook/protocol/Hark'
 
@@ -262,6 +263,9 @@ const make = Effect.gen(function* () {
   const sendTest = hark.send(TEST_NOTIFICATION).pipe(
     Effect.flatMap((created) =>
       created.accepted === 0 ? Effect.fail(new HarkReachedNoDevice()) : Effect.void,
+    ),
+    Effect.tapError((failure) =>
+      Effect.logWarning(`A test notification failed: ${harkFailureForTheLog(failure)}`),
     ),
     Effect.withSpan('HarkNotifier.sendTest'),
   )

@@ -12,7 +12,7 @@ import * as Str from 'effect/String'
 import {
   type AgentRow,
   StateChangeSeq,
-  agentTitleOrPane,
+  agentTitleOrChat,
   isSameSeenMark,
   seenMarkOf,
   settledStatusOf,
@@ -28,6 +28,7 @@ import {
 } from '@crook/domain/Ids'
 import { type MachineState, isHerdrLost, isResync } from '@crook/domain/MachineState'
 import { NotificationEvent, type NotificationPrefs } from '@crook/domain/Notifications'
+import { toolName } from '@crook/domain/ToolName'
 
 import { HARK_IDEMPOTENCY_KEY_LIMIT, HARK_TITLE_LIMIT, HarkId } from '@crook/hub/HarkClient'
 import type { PublishedMachine } from '@crook/hub/Herd'
@@ -88,7 +89,7 @@ const blockedEvent = (row: AgentRow): RaisedEvent =>
     onSome: (permission) => ({
       event: 'approvals',
       ask: Option.some(permission.id),
-      verb: `Wants to run ${permission.tool}`,
+      verb: `Wants to run ${toolName(permission.tool)}`,
     }),
   })
 
@@ -160,7 +161,7 @@ const wantedFor = (
     terminal: mark.terminal,
     stateChangeSeq: mark.stateChangeSeq,
     ask: raised.ask,
-    title: harkTitleOf(agentTitleOrPane(row)),
+    title: harkTitleOf(agentTitleOrChat(row)),
     body: `${raised.verb} · ${machineLabel} / ${workspaceLabelOf(state, row)}`,
   })
 }

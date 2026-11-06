@@ -1,4 +1,5 @@
 import * as Duration from 'effect/Duration'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
@@ -46,7 +47,7 @@ export class HerdrRefusedCommand extends Schema.TaggedError<HerdrRefusedCommand>
   override get message(): string {
     return this.code === CLAUDE_WAITING_CODE
       ? CLAUDE_WAITING_NOTE
-      : `Herdr refused the command with ${this.code}: ${this.detail}. Nothing was sent to the agent; look at the agent before trying again.`
+      : 'Herdr refused the command, so nothing was sent to the agent. Look at the agent before trying again.'
   }
 }
 
@@ -70,7 +71,7 @@ export class HerdrAnswerUnreadable extends Schema.TaggedError<HerdrAnswerUnreada
   { method: Schema.String, issue: Schema.String },
 ) {
   override get message(): string {
-    return `Herdr answered ${this.method} with something crook cannot read (${this.issue}), so nothing was sent. The agent and herdr on that machine most likely speak different protocol versions: update one to match the other, then send again.`
+    return `Herdr answered with something crook cannot read, so nothing was sent. The agent and herdr on that machine most likely speak different protocol versions: update one to match the other, then send again.`
   }
 }
 
@@ -124,7 +125,7 @@ export class DeclineMessageUndelivered extends Schema.TaggedError<DeclineMessage
   { pane: PaneId, reason: Schema.String },
 ) {
   override get message(): string {
-    return `The ask was declined, but your message did not reach Claude: ${this.reason}. Send the message again as a prompt.`
+    return 'The ask was declined, but your message did not reach Claude. Send the message again as a prompt.'
   }
 }
 
@@ -141,7 +142,7 @@ export class FolderUnreadable extends Schema.TaggedError<FolderUnreadable>()('Fo
   reason: Schema.String,
 }) {
   override get message(): string {
-    return `crook could not look at the folder ${this.folder} on the machine (${this.reason}), so it started nothing. Check that the agent runs as a user who can read that folder, then start the agent again.`
+    return `crook could not look at the folder ${this.folder} on the machine, so it started nothing. Check that the agent runs as a user who can read that folder, then start the agent again.`
   }
 }
 
@@ -167,7 +168,7 @@ export class AgentNotStarted extends Schema.TaggedError<AgentNotStarted>()('Agen
         `, but the worktree it made at ${path} stays on disk: remove it with \`git worktree remove ${shellQuoted(path)}\` if you do not want it`,
     })
 
-    return `Claude did not start in ${this.folder}: herdr answered ${this.code}, ${this.detail}. crook closed the panes it opened for it${leftOnDisk}. Look at the machine, then start the agent again as a new action.`
+    return `Claude did not start in ${this.folder}: herdr refused it. crook closed the panes it opened for it${leftOnDisk}. Look at the machine, then start the agent again as a new action.`
   }
 }
 
@@ -177,7 +178,7 @@ export class TaskNotDelivered extends Schema.TaggedError<TaskNotDelivered>()('Ta
   detail: Schema.String,
 }) {
   override get message(): string {
-    return `Claude started, but herdr refused the task before typing any of it: ${this.code}, ${this.detail}. Claude is most likely waiting at a dialog, such as the folder trust prompt: open the agent, answer it, and send the task from its chat.`
+    return `Claude started, but herdr refused the task before typing any of it. Claude is most likely waiting at a dialog, such as the folder trust prompt: open the agent, answer it, and send the task from its chat.`
   }
 }
 
@@ -217,6 +218,41 @@ export const AgentCommandFailure = Schema.Union([
   TaskNotDelivered,
 ])
 export type AgentCommandFailure = typeof AgentCommandFailure.Type
+
+const withItsOwnWords = (failure: { readonly message: string }, ownWords: string) =>
+  Option.some(`${failure.message} (${ownWords})`)
+
+const withHerdrsAnswer = (failure: {
+  readonly message: string
+  readonly code: string
+  readonly detail: string
+}) => withItsOwnWords(failure, `${failure.code}: ${failure.detail}`)
+
+const nothingLeftOut = () => Option.none<string>()
+
+export const commandFailureForTheLog = (failure: AgentCommandFailure): Option.Option<string> =>
+  Match.value(failure).pipe(
+    Match.tagsExhaustive({
+      HerdrRefusedCommand: (refused) =>
+        refused.code === CLAUDE_WAITING_CODE ? nothingLeftOut() : withHerdrsAnswer(refused),
+      AgentNotStarted: withHerdrsAnswer,
+      TaskNotDelivered: withHerdrsAnswer,
+      HerdrAnswerUnreadable: (unreadable) =>
+        withItsOwnWords(unreadable, `${unreadable.method}: ${unreadable.issue}`),
+      DeclineMessageUndelivered: (undelivered) => withItsOwnWords(undelivered, undelivered.reason),
+      FolderUnreadable: (unreadable) => withItsOwnWords(unreadable, unreadable.reason),
+      PaneNotAgent: nothingLeftOut,
+      PaneNotCreatedByCrook: nothingLeftOut,
+      HerdrUnavailable: nothingLeftOut,
+      CommandDeliveryUnknown: nothingLeftOut,
+      AskNotPending: nothingLeftOut,
+      AskDialogUnreadable: nothingLeftOut,
+      AskOptionUnavailable: nothingLeftOut,
+      QuestionnaireUnsupported: nothingLeftOut,
+      FolderNotFound: nothingLeftOut,
+      FolderNotCheckout: nothingLeftOut,
+    }),
+  )
 
 export const CommandFailure = Schema.Union([
   MachineOffline,

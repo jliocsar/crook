@@ -326,7 +326,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     },
     [navigate, machine, pane, session],
   )
-  const backgroundWork = useBackgroundWork(view, items, openSubagentJob)
+  const backgroundWork = useBackgroundWork(view, items, paneClosed, openSubagentJob)
   const backgroundContext = React.useMemo(() => Option.some(backgroundWork), [backgroundWork])
   const episodeSummary = useEpisodeSummary(backgroundWork, lines)
   const earlierPending = isLoadingEarlier(state)

@@ -11,7 +11,8 @@ import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
 import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
-import { type AgentRow, agentTitleOrPane, settledStatusOf } from '@crook/domain/AgentRow'
+import { type AgentRow, agentTitleOrChat, settledStatusOf } from '@crook/domain/AgentRow'
+import { toolName } from '@crook/domain/ToolName'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { type MachineState, isHerdrLost, isResync } from '@crook/domain/MachineState'
@@ -107,7 +108,7 @@ const activityAgentOf =
     return Option.some(
       new ActivityAgent({
         machineLabel,
-        title: agentTitleOrPane(row),
+        title: agentTitleOrChat(row),
         status: settled.status,
         since: settled.statusChangedAt,
         tool: Option.map(permissionOf(row), (permission) => permission.tool),
@@ -307,7 +308,7 @@ const workingLine = (count: number) => `${count} working`
 const asking = (agent: ActivityAgent) =>
   Option.match(agent.tool, {
     onNone: () => 'has a question',
-    onSome: (tool) => `wants ${tool}`,
+    onSome: (tool) => `wants ${toolName(tool)}`,
   })
 
 const cutContent = (status: string, detail: string, symbol: HarkActivityContent['symbol']) =>

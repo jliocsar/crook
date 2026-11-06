@@ -339,11 +339,12 @@ describe('The refusal of a prompt while Claude waits', () => {
     expect(Schema.decodeSync(CommandFailure)(encoded)).toEqual(claudeWaitingRefusal())
   })
 
-  it('reads as the note, and leaves every other refusal as it was', () => {
+  it('reads as the note, and every other refusal says only that herdr refused', () => {
     const elsewhere = new HerdrRefusedCommand({ code: 'agent_blocked', detail: 'at an approval' })
 
     expect(claudeWaitingRefusal().message).toBe(CLAUDE_WAITING_NOTE)
-    expect(elsewhere.message).toContain('Herdr refused the command with agent_blocked')
+    expect(elsewhere.message).toContain('Herdr refused the command')
+    expect(elsewhere.message).not.toContain('agent_blocked')
   })
 })
 

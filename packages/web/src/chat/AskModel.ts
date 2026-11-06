@@ -10,6 +10,7 @@ import type { Ask, AskOption, AskQuestion, PermissionAsk, QuestionAsk } from '@c
 import { Approve, ApproveAlways, Decline } from '@crook/domain/Command'
 import type { AskAnswer, Command } from '@crook/domain/Command'
 import type { AskId, ClaudeSessionId } from '@crook/domain/Ids'
+import { toolName } from '@crook/domain/ToolName'
 import { AskNotPending } from '@crook/protocol/Commands'
 import { ActionProgress, UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
 import { ChatItem } from '@crook/web/chat/ChatItems'
@@ -53,8 +54,6 @@ const ANSWER_PREFIXES = ['Yes, and always ', 'Yes, and ', 'Yes, ']
 const KEY_HINT = /\s+\([a-z+]+\)$/u
 const RUN_COMMAND_TITLE = 'Run this command?'
 const UNKNOWN_ASK_TITLE = "Claude is waiting on something crook can't read"
-const MCP_TOOL = /^mcp__(?<server>.+?)__(?<name>.+)$/u
-const PLUGIN_SERVER = /^plugin_.+_(?<server>[^_]+)$/u
 
 export const NEEDS_YOU = 'Needs you'
 export const PLAIN_DECLINE = new Decline({ message: Option.none() })
@@ -91,20 +90,6 @@ const isRefused = AskAnswerState.$is('Refused')
 
 export const isAnswerSettled = (state: AskAnswerState): boolean =>
   isAlreadyAnsweredState(state) || isRefused(state)
-
-const spoken = (identifier: string): string => identifier.replaceAll('_', ' ')
-
-const serverName = (server: string): string =>
-  spoken(PLUGIN_SERVER.exec(server)?.groups?.['server'] ?? server)
-
-export const toolName = (tool: string): string =>
-  pipe(
-    Option.fromNullishOr(MCP_TOOL.exec(tool)?.groups),
-    Option.match({
-      onNone: () => tool,
-      onSome: ({ server = '', name = '' }) => `${spoken(name)} from ${serverName(server)}`,
-    }),
-  )
 
 const permissionTitle = (ask: PermissionAsk): string =>
   Match.value(ask.action).pipe(

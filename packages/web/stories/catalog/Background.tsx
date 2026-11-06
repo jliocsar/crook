@@ -4,13 +4,15 @@ import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Struct from 'effect/Struct'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { MonitorEvent, MonitorTask, ShellTask, SubagentActivity } from '@crook/domain/Background'
 import type { SubagentStatus } from '@crook/domain/Subagent'
 import { BackgroundChanged, SubagentsChanged } from '@crook/domain/Transcript'
 import { SubagentLaunch } from '@crook/domain/TranscriptMessage'
 
-import { START } from '../../test/HerdFixtures.ts'
+import { liveWith } from '../../test/AppWiring.tsx'
+import { herd, LAPTOP, machine, START } from '../../test/HerdFixtures.ts'
 import {
   answered,
   caughtUp,
@@ -195,6 +197,20 @@ export const BACKGROUND_STORIES: readonly StoryMaker[] = [
       [new ShellTask(Struct.evolve(shell('completed'), { endedAt: () => Option.some(ago(60)) }))],
       'completed',
     ),
+  }),
+  chatStory({
+    slug: 'pane-closes',
+    title: 'Background dock, the pane closes while work runs',
+    shows: { selector: DOCK },
+    ends: { all: [{ text: 'This pane closed' }, { absent: '3 running' }] },
+    row: chatAgent('working'),
+    events: changed([shell(), monitor()]),
+    settle: () => seesText('3 running'),
+    timeline: [
+      step<LinkStage>(800, 'The pane closes', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])]))),
+      ),
+    ],
   }),
   chatStory({
     slug: 'dock-to-summary',

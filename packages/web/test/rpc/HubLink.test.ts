@@ -61,7 +61,7 @@ const laterView = herd([machine(LAPTOP, [agent('w1:p1', 'idle')])])
 const redialingView = herd([
   machine(LAPTOP, [agent('w1:p1', 'done')], { connection: 'reconnecting' }),
 ])
-const refused = new HubConnectionLost({ detail: 'connection refused' })
+const refused = new HubConnectionLost()
 
 const isDialing = LinkStatus.isAnyOf(['ColdStart', 'Redialing', 'Announced', 'Returning'])
 const isLive = LinkStatus.guards.Live

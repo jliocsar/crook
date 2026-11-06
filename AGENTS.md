@@ -300,6 +300,8 @@ the code.
 the real clock or real IO (sockets, temp dirs) passes `layer(L, { excludeTestServices: true })` and
 keeps writing `it.effect`.
 
+A test that reads what an effect logged provides `Logger.CurrentLoggers` through `Effect.provideService`. `Effect.provide` of a logger layer is what `effecttsgo/strict-effect-provide` rejects there (measured).
+
 A test that moves the `TestClock` past an effect which does real IO first, such as a launch that
 stats its folder, waits for a sign the IO is over, like the request the effect sends next, before
 it adjusts. Otherwise the adjust can run while the IO is still out, and the sleep registered after
@@ -719,7 +721,8 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   what happened and what to do, in words, with no pane id, ask id, idempotency key, env var or
   database text, and its fields stay on the wire as they were, since older phones and agents decode
   them. A disk failing under the hub reads "could not save that" on the phone, and the database's own
-  words and the setting to check go to the hub's log as it refuses the call.
+  words and the setting to check go to the hub's log as it refuses the call. The hub or agent logs what it leaves out at the moment it tells the phone, herdr's code, Hark's status and answer, the setting.
+  The one place the phone names a setting is the note that the hub has no Hark token. Whoever reads it runs the hub, it stands where the test button it disables would have answered, and nothing else on the phone could say what to set, so it keeps the variable and the scopes. The failure a send meets when there is no token still reads in words. A connection failure only the phone ever sees has no log to keep a detail for, so it carries none.
 - A session can hold lines and no rows: of the real transcripts in the catalog, three hold only
   redacted thinking, entries a newer Claude wrote, or notices for runs outside the slice. Those read
   as nothing crook can show, not as no messages, because the second says something untrue about the
@@ -729,9 +732,11 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   unconfirmed there, the word that work nothing said ended already has, and it leaves the count.
 - A pane closing says nothing about whether a run failed, so a run cut off that way reads "pane
   closed" with a neutral dot rather than red.
+- The dock went on counting that run: "1 running" with its clock going, under a row reading "pane closed", since the row read the pane and the dock read only the run's own status (seen in a story, with the pane's presence reading closed). Once a pane has closed the dock counts nothing as running, shells and monitors included, because nothing can say they still run, and the thread's markers read them as last seen. What already ended keeps how it ended.
+- An MCP tool reads in words on a card, in a notification and on a Live Activity: its name, then the server it comes from. Code mode's one tool is named `run`, which would read "Wants to run run from codemode", so it reads as "code mode". The words sit in the domain member for the thread's tool rows to take up when they are redesigned; until then those rows keep the raw name, and so does the ask's mono line, which shows the exact thing being approved.
 - A chat's title holds its room before the link's first value, invisible rather than absent, so
   nothing moves when the name lands, and after that value a pane the herd has no name for reads
-  "Chat". It used to read the raw pane id in both.
+  "Chat". It used to read the raw pane id in both. A card, a sheet, a notification and a Live Activity read the same word, so two untitled panes in one folder read alike on the list.
 - A blocked agent reads "needs you" wherever its status is put in words, the same words the tab
   badge and the machine counts use; "blocked" is herdr's word, not the user's.
 - The herdr lost pill keeps one line beside a machine's badge and update pill. On a card the three take 226.4 px of 285 at 375 wide and of 300 at 390, and in the machine's header, whose 8 px gap is the same as a dot to its own word, so a dot never sits nearer the word before it, 218.4 of 319 and of 334; at 320 the card has 3.6 px to spare and the header 45.6. A long name truncates and leaves that row alone. The Herdr row stays 44 px tall as a version and as a lost time. The pill arriving moves the update pill sideways in one frame, 79.8 px on a card and 75.8 in the header, for 0.00076 and 0.00128 of layout shift, with the row's own value in the second (all measured in Chromium, the shifts at 390x844 and 4x CPU throttling).
@@ -1908,6 +1913,8 @@ phone's keyboard is emulated by redefining `visualViewport.height` and dispatchi
 :::
 
 :::warning
+A test of the service unit takes every variable name spelled alone in a quoted string, in the code the agent bundles, for one the agent reads. A constant holding a setting only the hub reads, in a member both import, failed it (measured). A sentence holding the name passes.
+
 Never run `install-service`, `uninstall-service`, `systemctl --user` start/enable/stop or `launchctl` against the real user's session, not even with a temporary `HOME`: `systemctl --user` talks to the running user manager whatever `HOME` says. The installer reaches them only through a service whose test layer records the calls. Check a generated unit offline with `systemd-analyze verify` on a file under `tmp/`, which reports a missing binary or a bad directive and starts nothing (measured), and a plist with Python's `plistlib`.
 :::
 
@@ -2133,6 +2140,8 @@ the screen once per animation frame and fails on what a settled screenshot canno
   page does not cost the sweep, and it prints that it did.
 - The Working row's ghost takes no mark. It lives for a fade, under the 24 frames a state has to hold, so a mark on it read as a flash on every turn (measured).
 - A story opening on a quiet state waits past a flash's limit before its first step. A 400 ms wait straddled it, the state holding 22 frames in 510 ms on one sweep and 24 to 25 on others (measured), so the same story passed and failed with nothing changed.
+- A state story about where a transition ends opens there when it can, and leaves the transition to a timeline: a settle's change is recorded like any other, so a story that closed the pane in its settle failed on a flash of the Working row. A subagent's own rows still show with the pane gone from the first herd (measured). A chat's rows need the pane open first, so that settle holds its opening state past the flash limit before it changes it.
+- A pane closing under an open chat moves the dock up 28 px, 127 to 155 px at 390 wide, because the closed card is that much taller than the composer. It reads 0.0063 of layout shift alone, and 0.0316 with the background dock riding it on the way out, the same before and after that dock stopped counting closed work (measured in Chromium at 4x). The second is over the budget and sits in the baseline.
 - A contact sheet that added a tile only when the marks changed never showed a `/clear`, since that
   swaps rows for rows with the same marks around them (read in how it picks tiles). It also takes a tile
   when the row count changes and always shows the last frame.

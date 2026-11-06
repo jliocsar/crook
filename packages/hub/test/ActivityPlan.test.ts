@@ -4,9 +4,11 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
+import * as Struct from 'effect/Struct'
 
 import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
 import type { AgentRow } from '@crook/domain/AgentRow'
+import { PermissionAsk } from '@crook/domain/Ask'
 import { MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import type { MachineState } from '@crook/domain/MachineState'
 import {
@@ -108,6 +110,22 @@ const stepAt = (
   })
 
 describe('herdContent', () => {
+  it('reads an MCP tool in words, and an agent with no title as a chat', () => {
+    const herd = herdOf(
+      stateOf(LAPTOP, [
+        agentAt('w1:p1', '', 'blocked', 10, {
+          ask: Option.some(
+            new PermissionAsk(
+              Struct.evolve(bashAsk('toolu_1'), { tool: () => 'mcp__codemode__run' }),
+            ),
+          ),
+        }),
+      ]),
+    )
+
+    expect(contentOf(herd).detail).toEqual(Option.some('Chat wants code mode · laptop'))
+  })
+
   it('names the herd in one line, and the agent that has waited longest', () => {
     const herd = herdOf(
       stateOf(LAPTOP, [

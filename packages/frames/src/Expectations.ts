@@ -250,6 +250,11 @@ export const TIMELINE_EXPECTATIONS = {
     thread: inSequence('thread-skeleton', 'thread-rows'),
     dock: inSequence('composer'),
   }),
+  'background/pane-closes': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer', 'edge-card'),
+    background: inSequence('background-dock'),
+  }),
   'background/dock-to-summary': story({
     thread: inSequence('thread-rows'),
     background: inSequence('background-dock', 'background-summary'),

@@ -7,7 +7,7 @@ import * as Struct from 'effect/Struct'
 import {
   AgentRow,
   StatusBeforeHandoff,
-  agentTitleOrPane,
+  agentTitleOrChat,
   settledStatusOf,
 } from '@crook/domain/AgentRow'
 import { PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
@@ -33,14 +33,14 @@ const rowTitled = (pane: string, title: string, label: Option.Option<string> = O
     claudeWaiting: Option.none(),
   })
 
-describe('agentTitleOrPane', () => {
-  it('titles an agent herdr knows no title for by its pane id', () => {
-    expect(agentTitleOrPane(rowTitled('w1:p1', 'Port the herd'))).toBe('Port the herd')
-    expect(agentTitleOrPane(rowTitled('w1:p2', ''))).toBe('w1:p2')
+describe('agentTitleOrChat', () => {
+  it('reads an agent herdr knows no title for as a chat, never by its pane id', () => {
+    expect(agentTitleOrChat(rowTitled('w1:p1', 'Port the herd'))).toBe('Port the herd')
+    expect(agentTitleOrChat(rowTitled('w1:p2', ''))).toBe('Chat')
   })
 
   it('titles an agent by the name its pane was given in herdr over its own title', () => {
-    expect(agentTitleOrPane(rowTitled('w1:p3', 'Port the herd', Option.some('Payments')))).toBe(
+    expect(agentTitleOrChat(rowTitled('w1:p3', 'Port the herd', Option.some('Payments')))).toBe(
       'Payments',
     )
   })

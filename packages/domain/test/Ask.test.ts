@@ -129,6 +129,21 @@ describe('pendingAskSummary', () => {
     expect(pendingAskSummary(rowAsking('blocked', Option.none()))).toEqual(Option.none())
   })
 
+  it('reads an MCP tool in words, with or without what it asks about', () => {
+    const useTool = new UseTool({ input: {} })
+    const onScreen = new ScreenDetail({ subject: Option.some('a.ts'), text: '' })
+
+    expect(askSummary(permission('mcp__plannotator__send_message', useTool), FOLDER)).toEqual(
+      Option.some('send message from plannotator'),
+    )
+    expect(askSummary(permission('mcp__codemode__run', useTool), FOLDER)).toEqual(
+      Option.some('code mode'),
+    )
+    expect(askSummary(permission('mcp__lx__fetch_doc', onScreen), FOLDER)).toEqual(
+      Option.some('fetch doc from lx a.ts'),
+    )
+  })
+
   it('carries the ask across the JSON codec the wire uses', () => {
     const codec = Schema.fromJsonString(Schema.toCodecJson(AgentRow))
     const rows = [

@@ -5,7 +5,7 @@ import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 
-import { agentTitleOrPane } from '@crook/domain/AgentRow'
+import { agentTitleOrChat, UNTITLED_CHAT } from '@crook/domain/AgentRow'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { findMachine } from '@crook/domain/HerdView'
@@ -25,8 +25,6 @@ export type ChatStatus = Data.TaggedEnum<{
   Ended: { readonly label: string }
   Quiet: Record<never, never>
 }>
-
-const UNTITLED_CHAT = 'Chat'
 
 export const ChatStatus = Data.taggedEnum<ChatStatus>()
 
@@ -115,7 +113,7 @@ export const cwdOf = (model: ChatScreenModel): string =>
   Option.match(model.row, { onNone: () => '', onSome: (row) => row.cwd })
 
 export const titleOf = (model: ChatScreenModel): string =>
-  Option.match(model.row, { onNone: () => UNTITLED_CHAT, onSome: agentTitleOrPane })
+  Option.match(model.row, { onNone: () => UNTITLED_CHAT, onSome: agentTitleOrChat })
 
 export const edgeKindOf = (model: ChatScreenModel): Option.Option<EdgeKind> =>
   PresenceState.match<Option.Option<EdgeKind>>(model.presence, {
