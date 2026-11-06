@@ -935,6 +935,33 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   giving up, so the numbers follow the agent's own order, and an older link asking late cannot move
   the fence back. A publish parked on a full mailbox wakes when its link is replaced and lets go,
   rather than delivering once the phone drains.
+- A machine's state has the same race as a transcript publish, so the hub fences it per connection
+  as well. A real agent's state frame held behind a proxy and released alone, after its successor's
+  first state, while the old socket was still open, ran over the newer state in 12 of 12 runs held at
+  a random point of the ping period, and over raw clients in 10 of 10; released in one read with the
+  ping and close frame behind it, in 0 of 10 (all measured). What it took was the machine's real
+  state: the phone read the older row, still there after 20 s with nothing else happening, and an
+  idle machine publishes nothing to correct it. The next state replaced it in 5 to 30 ms, but the
+  pane's seen mark was gone by then, and against a fake Hark the same late state sent a "Has a
+  question" push and moved the Live Activity to "1 needs you" for a dialog already answered
+  (measured). The gap is short: over 12 runs with nothing released, the hub closed the silent socket
+  before the agent gave up in 6, which tells the agent at once, and 776 to 1470 ms after the
+  successor's first state in the other 6 (measured). That a network delivers the oldest segment
+  alone inside it is still reasoned.
+- The state's fence is the record of which link last published, checked and written in one update
+  around the herd's write, so an older link's call waiting behind a newer one's is dropped too. It
+  needs no second notion of the current link and no word from the agent: the reply stays a success,
+  so an older agent is covered, and with the fence on, 4 of 4 releases left the newer state and no
+  Hark call followed (measured). It moves at a publish rather than at the demand: an agent's first
+  state and its demand go out side by side, and a dial the agent gave up on never publishes. A late
+  state landing before the successor's first is kept until that first state replaces it, which is
+  safe because a session starts publishing from the current state (read in the agent), and dropping
+  an older link's state loses nothing for the same reason. In that order its push can still go out,
+  and the first state then withdraws it (reasoned, not measured). The record has one permit across
+  machines, which costs nothing new, since the herd's write already takes one across machines (read
+  in both). A check of the state's version could not
+  do this: it restarts at 0 with the agent (read in the agent), and would refuse a restarted agent's
+  first state.
 - A watch's delivered position lives beside the watch, outside the set the agents' demands are
   built from, so only a watch that comes or goes works out a machine's demand again. Updating
   the position inside that set recomputed the demand once per event: 21 events cost 21

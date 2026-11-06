@@ -482,7 +482,7 @@ const approvingHark =
   }
 
 const publishOver = (herd: Herd['Service'], link: CommandLink, state: MachineState) =>
-  herd.publish(LAPTOP, state).pipe(Effect.andThen(link.published(state)))
+  link.publish(state, herd.publish(LAPTOP, state))
 
 it.effect(
   'asks for a permission on the lock screen and routes the answer as AnswerAsk keyed by the interaction',

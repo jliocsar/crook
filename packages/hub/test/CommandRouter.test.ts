@@ -1,11 +1,14 @@
 import { expect, it } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
+import * as Deferred from 'effect/Deferred'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
@@ -13,7 +16,11 @@ import * as TestClock from 'effect/testing/TestClock'
 import { InputDelivered, Prompt, StartAgent } from '@crook/domain/Command'
 import { IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import { CommandRouter } from '@crook/hub/CommandRouter'
-import { COMMAND_TIMEOUT, LAUNCH_COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
+import {
+  COMMAND_TIMEOUT,
+  LAUNCH_COMMAND_TIMEOUT,
+  MachineIdMismatch,
+} from '@crook/protocol/AgentLink'
 import {
   CommandTimedOut,
   MachineOffline,
@@ -181,7 +188,7 @@ it.effect('sends over a judged link only while it is still the newest', () =>
     const newer = yield* router.linkFor(LAPTOP)
 
     yield* Effect.forkChild(Stream.runDrain(older.attach), { startImmediately: true })
-    yield* older.published(ANY_STATE)
+    yield* older.publish(ANY_STATE, Effect.void)
     const judged = Option.getOrThrow(yield* liveLinkNow(router))
 
     yield* Effect.forkChild(Stream.runDrain(newer.attach), { startImmediately: true })
@@ -206,16 +213,16 @@ it.effect(
       })
       const beforeAnyState = yield* liveNow
 
-      yield* older.published(ANY_STATE)
+      yield* older.publish(ANY_STATE, Effect.void)
       const onItsLink = yield* liveNow
 
-      yield* newer.published(LATER_STATE)
+      yield* newer.publish(LATER_STATE, Effect.void)
       const notAttachedYet = yield* liveNow
 
       yield* Effect.forkChild(Stream.runDrain(newer.attach), { startImmediately: true })
       const onceAttached = yield* liveNow
 
-      yield* older.published(ANY_STATE)
+      yield* older.publish(ANY_STATE, Effect.void)
       const afterALatePublish = yield* liveNow
 
       yield* Fiber.interrupt(olderAttachment)
@@ -230,6 +237,78 @@ it.effect(
         Option.some(LATER_STATE),
       )
     }),
+)
+
+const publishLog = Effect.map(Ref.make<readonly string[]>([]), (written) => ({
+  written,
+  write: (name: string) => Ref.update(written, Arr.append(name)),
+}))
+
+it.effect(
+  'runs a state from the link that published last and a later one, and drops an older one',
+  () =>
+    Effect.gen(function* () {
+      const router = yield* startRouter
+      const { written, write } = yield* publishLog
+      const older = yield* router.linkFor(LAPTOP)
+      const newer = yield* router.linkFor(LAPTOP)
+
+      yield* older.publish(ANY_STATE, write('older first'))
+      yield* older.publish(LATER_STATE, write('older second'))
+      yield* newer.publish(ANY_STATE, write('first on newer'))
+      yield* older.publish(LATER_STATE, write('late on older'))
+      yield* newer.publish(LATER_STATE, write('second on newer'))
+
+      expect(yield* Ref.get(written)).toEqual([
+        'older first',
+        'older second',
+        'first on newer',
+        'second on newer',
+      ])
+    }),
+)
+
+it.effect('fences nothing for a link that has not published, or a failed write', () =>
+  Effect.gen(function* () {
+    const router = yield* startRouter
+    const { written, write } = yield* publishLog
+    const older = yield* router.linkFor(LAPTOP)
+    const newer = yield* router.linkFor(LAPTOP)
+    const other = yield* router.linkFor(WORK)
+
+    yield* newer
+      .publish(
+        ANY_STATE,
+        Effect.fail(new MachineIdMismatch({ connectedMachine: LAPTOP, publishedMachine: WORK })),
+      )
+      .pipe(Effect.flip)
+    yield* older.publish(ANY_STATE, write('older'))
+    yield* other.publish(machineStateWith(WORK, 1, []), write('other machine'))
+
+    expect(yield* Ref.get(written)).toEqual(['older', 'other machine'])
+  }),
+)
+
+it.effect('drops an older state that waits while a newer link writes', () =>
+  Effect.gen(function* () {
+    const router = yield* startRouter
+    const { written, write } = yield* publishLog
+    const older = yield* router.linkFor(LAPTOP)
+    const newer = yield* router.linkFor(LAPTOP)
+    const finishWrite = yield* Deferred.make<void>()
+    const writing = yield* newer
+      .publish(ANY_STATE, Effect.andThen(Deferred.await(finishWrite), write('newer')))
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    const late = yield* older
+      .publish(LATER_STATE, write('late on older'))
+      .pipe(Effect.forkChild({ startImmediately: true }))
+
+    yield* Deferred.succeed(finishWrite, undefined)
+    yield* Fiber.join(writing)
+    yield* Fiber.join(late)
+
+    expect(yield* Ref.get(written)).toEqual(['newer'])
+  }),
 )
 
 it.effect('is offline again once the last Attach of a machine ends', () =>

@@ -37,7 +37,10 @@ export interface LiveLink {
 
 export interface CommandLink {
   readonly attach: Stream.Stream<RoutedCommand>
-  readonly published: (state: MachineState) => Effect.Effect<void>
+  readonly publish: <Failure>(
+    state: MachineState,
+    write: Effect.Effect<void, Failure>,
+  ) => Effect.Effect<void, Failure>
 }
 
 interface PendingCommand {
@@ -97,22 +100,26 @@ const make = Effect.gen(function* () {
       }),
     )
 
-  const recordPublish = (machine: MachineId, link: number) => (state: MachineState) =>
-    SubscriptionRef.update(
-      publishes,
-      HashMap.modifyAt(machine, (current) =>
-        Option.exists(current, (newest) => newest.link > link)
-          ? current
-          : Option.some({ link, state }),
-      ),
-    )
+  const publishOver =
+    (machine: MachineId, link: number) =>
+    <Failure>(state: MachineState, write: Effect.Effect<void, Failure>) =>
+      SubscriptionRef.updateSomeEffect(publishes, (current) =>
+        Option.exists(HashMap.get(current, machine), (newest) => newest.link > link)
+          ? Effect.as(
+              Effect.logDebug(
+                `Dropped a state of machine ${machine} (version ${state.version}): a newer connection of that machine has already published.`,
+              ),
+              Option.none(),
+            )
+          : Effect.as(write, Option.some(HashMap.set(current, machine, { link, state }))),
+      )
 
   const linkFor = (machine: MachineId) =>
     Effect.map(
       Ref.getAndUpdate(nextLink, (current) => current + 1),
       (link): CommandLink => ({
         attach: attachAs(machine, link),
-        published: recordPublish(machine, link),
+        publish: publishOver(machine, link),
       }),
     )
 

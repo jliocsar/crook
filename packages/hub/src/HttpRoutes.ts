@@ -129,8 +129,7 @@ const routes = Effect.gen(function* () {
           AgentLink.toHandlers({
             Attach: ({ hello }) =>
               Stream.merge(Stream.fromEffectDrain(herd.hold(machine, hello)), commands.attach),
-            PublishState: ({ state }) =>
-              herd.publish(machine, state).pipe(Effect.andThen(commands.published(state))),
+            PublishState: ({ state }) => commands.publish(state, herd.publish(machine, state)),
             CompleteCommand: ({ id, result }) => router.complete(machine, id, result),
             TranscriptDemands: () => link.demands,
             PublishTranscript: ({ watch, update }) => link.publish(watch, [update]),
