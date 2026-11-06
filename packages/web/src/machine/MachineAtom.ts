@@ -4,7 +4,7 @@ import * as Option from 'effect/Option'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 
-import type { Machine } from '@crook/web/machine/Machine'
+import type { Machine } from '@crook/state-machine/Machine'
 
 export interface MachineDriver<State, Event, Command, Services, RuntimeFailure> {
   readonly machine: Machine<State, Event, Command>

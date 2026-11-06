@@ -12,7 +12,7 @@ import {
   isIndicatorShown,
 } from '@crook/web/machine/IndicatorMachine'
 import type { IndicatorCommand } from '@crook/web/machine/IndicatorMachine'
-import { stateMark } from '@crook/web/machine/Machine'
+import { stateMark } from '@crook/state-machine/Machine'
 import { useMachine } from '@crook/web/machine/UseMachine'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 

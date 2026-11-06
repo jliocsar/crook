@@ -12,8 +12,8 @@ import {
   IndicatorState,
 } from '@crook/web/machine/IndicatorMachine'
 import type { IndicatorEvent } from '@crook/web/machine/IndicatorMachine'
-import { stateName } from '@crook/web/machine/Machine'
-import { walk } from '@crook/web/machine/Walk'
+import { stateName } from '@crook/state-machine/Machine'
+import { walk } from '@crook/state-machine/Walk'
 
 import { indicatorWalk } from '../../charts/IndicatorWalk.ts'
 

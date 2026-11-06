@@ -5,8 +5,8 @@ import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 import { vi } from 'vitest'
 
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 import { useMachine } from '@crook/web/machine/UseMachine'
 
 const ProbeState = Schema.TaggedUnion({ Idle: {}, Waiting: {}, Finished: {} })

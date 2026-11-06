@@ -16,8 +16,8 @@ import {
   sameActivity,
   STATUS_UNKNOWN,
 } from '@crook/web/chat/ActivityMachine'
-import { caseName } from '@crook/web/machine/Machine'
-import type { WalkSpec } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import type { WalkSpec } from '@crook/state-machine/Walk'
 
 const A_FLIP = DateTime.makeUnsafe(1000)
 

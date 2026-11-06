@@ -44,7 +44,7 @@ import {
   redialing,
 } from '@crook/web/chat/PresenceMachine'
 import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
-import { walk } from '@crook/web/machine/Walk'
+import { walk } from '@crook/state-machine/Walk'
 
 import { activityWalk } from '../../charts/ActivityWalk.ts'
 import { agent, START } from '../HerdFixtures.ts'

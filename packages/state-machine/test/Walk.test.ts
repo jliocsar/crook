@@ -2,10 +2,10 @@ import { describe, expect, it } from '@effect/vitest'
 import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
-import { chartOf, walk, WalkFinding } from '@crook/web/machine/Walk'
-import type { Walk, WalkSpec } from '@crook/web/machine/Walk'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
+import { chartOf, walk, WalkFinding } from '@crook/state-machine/Walk'
+import type { Walk, WalkSpec } from '@crook/state-machine/Walk'
 
 const DoorState = Schema.TaggedUnion({
   Closed: {},

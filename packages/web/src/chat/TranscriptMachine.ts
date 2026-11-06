@@ -23,8 +23,8 @@ import {
   TranscriptView,
   withoutPendingCatchUp,
 } from '@crook/web/chat/TranscriptState'
-import { caseName, to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { caseName, to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 import { NOTICE_DELAY, NOTICE_HOLD } from '@crook/web/machine/NoticeTiming'
 import { HubCallDefected } from '@crook/web/rpc/HubConnection'
 

@@ -18,8 +18,8 @@ import {
   PresenceState,
   quietEnded,
 } from '@crook/web/chat/PresenceMachine'
-import { caseName } from '@crook/web/machine/Machine'
-import type { WalkSpec } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import type { WalkSpec } from '@crook/state-machine/Walk'
 
 const A_DROP = DateTime.makeUnsafe(1000)
 const ANOTHER_DROP = DateTime.makeUnsafe(2000)

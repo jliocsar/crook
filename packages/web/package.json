@@ -22,6 +22,7 @@
     "@base-ui/react": "^1.9.0",
     "@crook/domain": "workspace:*",
     "@crook/protocol": "workspace:*",
+    "@crook/state-machine": "workspace:*",
     "@effect/atom-react": "4.0.5",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",

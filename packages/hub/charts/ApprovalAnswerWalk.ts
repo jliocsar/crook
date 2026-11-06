@@ -13,8 +13,8 @@ import {
   WITHDRAWN,
   approvalAnswerMachine,
 } from '@crook/hub/ApprovalAnswerMachine'
-import { caseName } from '@crook/web/machine/Machine'
-import type { WalkSpec } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import type { WalkSpec } from '@crook/state-machine/Walk'
 
 const A_DEADLINE = 1000
 const AN_ANSWER: AskAnswer = new Approve()

@@ -18,7 +18,7 @@ import type { SentWaitEvent } from '@crook/web/actions/SentWaitMachine'
 import { ActionProgress, progressOf } from '@crook/web/atoms/ActionProgress'
 import { hubRuntime } from '@crook/web/atoms/Hub'
 import { boundedProgressAtom, sentWaitEventOf, withSentWait } from '@crook/web/atoms/SentBound'
-import { walk } from '@crook/web/machine/Walk'
+import { walk } from '@crook/state-machine/Walk'
 
 import { sentWaitWalk } from '../../charts/SentWaitWalk.ts'
 import { liveWith } from '../AppWiring.tsx'

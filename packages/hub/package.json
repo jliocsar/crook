@@ -15,6 +15,7 @@
   "dependencies": {
     "@crook/domain": "workspace:*",
     "@crook/protocol": "workspace:*",
+    "@crook/state-machine": "workspace:*",
     "@crook/web": "workspace:*",
     "@effect/platform-bun": "4.0.5",
     "@effect/sql-sqlite-bun": "4.0.5",

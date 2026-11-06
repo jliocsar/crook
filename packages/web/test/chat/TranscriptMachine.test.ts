@@ -46,8 +46,8 @@ import {
   resumeOf,
   type TranscriptLine,
 } from '@crook/web/chat/TranscriptState'
-import { caseName } from '@crook/web/machine/Machine'
-import { walk } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import { walk } from '@crook/state-machine/Walk'
 
 import { transcriptWalk } from '../../charts/TranscriptWalk.ts'
 import {

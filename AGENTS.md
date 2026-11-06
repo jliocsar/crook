@@ -583,6 +583,8 @@ walk's identity drops it, or a counter makes the walk endless. The walk gives up
 guard and not a measurement: the machines here have 10, 11, 8, 117, 6, 6, 3 and 3 (measured), so reaching it means a
 token got into a state's identity.
 
+The shape and the walker live in a member of their own, which the phone and the hub both depend on, so an app reaches no other app for code it runs. The hub's first machine imported them from the phone's member. They were pure, so nothing broke, but the graph lets an app be read only for a value both sides must agree on. They stayed out of the domain member because there a machine means a laptop, and a domain leaf with that name would read as one, which is also why their member's name says state machine in full. The machines themselves stay with their apps, and so does whatever drives one through atoms. The compiled hub takes the shape and leaves the walker, which only charts and tests import (measured in its bundle's inputs).
+
 The element that shows a machine carries `data-machine` and `data-state`, the state's name, read
 through the union's guards since `_tag` stays unread. The frame tool's mark table is the one place
 that says which selector means which state: a mark on a machine names the machine and its states,

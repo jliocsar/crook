@@ -5,8 +5,8 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 
 export type LinkCommand = 'StartNoticeTimer' | 'StartRecoveredTimer'
 

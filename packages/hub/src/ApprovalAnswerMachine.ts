@@ -5,8 +5,8 @@ import * as Schema from 'effect/Schema'
 
 import { AskAnswer } from '@crook/domain/Command'
 import { CommandFailure, CommandTimedOut, MachineOffline } from '@crook/protocol/Commands'
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 
 export type AnswerFate = Data.TaggedEnum<{
   Delivered: Record<never, never>

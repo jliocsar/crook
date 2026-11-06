@@ -12,8 +12,8 @@ import {
   noticeOf,
   syncedAtOf,
 } from '@crook/web/connection/ConnectionView'
-import { caseName } from '@crook/web/machine/Machine'
-import type { WalkSpec } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import type { WalkSpec } from '@crook/state-machine/Walk'
 import {
   ATTEMPT_BEGAN,
   CONNECTION_DROPPED,

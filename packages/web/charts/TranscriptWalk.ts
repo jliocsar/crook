@@ -45,8 +45,8 @@ import {
   sessionOf,
 } from '@crook/web/chat/TranscriptState'
 import type { TranscriptView } from '@crook/web/chat/TranscriptState'
-import { caseName } from '@crook/web/machine/Machine'
-import type { WalkSpec } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import type { WalkSpec } from '@crook/state-machine/Walk'
 
 const SESSION_A = ClaudeSessionId.make('session-a')
 const SESSION_B = ClaudeSessionId.make('session-b')

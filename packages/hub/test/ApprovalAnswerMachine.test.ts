@@ -19,7 +19,7 @@ import {
   WITHDRAWN,
   approvalAnswerMachine,
 } from '@crook/hub/ApprovalAnswerMachine'
-import { chartOf, walk } from '@crook/web/machine/Walk'
+import { chartOf, walk } from '@crook/state-machine/Walk'
 import { CommandTimedOut, MachineOffline } from '@crook/protocol/Commands'
 
 import { approvalAnswerWalk } from '../charts/ApprovalAnswerWalk.ts'
