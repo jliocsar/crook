@@ -6,15 +6,17 @@ import * as Schema from 'effect/Schema'
 import { detect } from '@crook/frames/Detect'
 import type { Finding } from '@crook/frames/Detect'
 import { expectationOf, fromTable, inSequence } from '@crook/frames/Expectations'
-import { FrameLog } from '@crook/frames/FrameLog'
+import { FrameLog, isStarved } from '@crook/frames/FrameLog'
 
 import blankFixture from './fixtures/blank.json' with { type: 'json' }
 import cleanFixture from './fixtures/clean.json' with { type: 'json' }
 import emptyBandFixture from './fixtures/empty-band.json' with { type: 'json' }
 import filledBandFixture from './fixtures/filled-band.json' with { type: 'json' }
 import flashFixture from './fixtures/flash.json' with { type: 'json' }
+import goneInALongFrameFixture from './fixtures/gone-in-a-long-frame.json' with { type: 'json' }
 import pairFixture from './fixtures/pair.json' with { type: 'json' }
 import shiftFixture from './fixtures/shift.json' with { type: 'json' }
+import slowFramesHoldFixture from './fixtures/slow-frames-hold.json' with { type: 'json' }
 import swapFixture from './fixtures/swap.json' with { type: 'json' }
 
 const decodeLog = Schema.decodeUnknownSync(FrameLog)
@@ -46,6 +48,49 @@ describe('detect, over logs recorded from real runs', () => {
     const lowEnough = detect(story, log, expectationOf(story), 2)
 
     expect(keysOf(lowEnough)).toEqual([])
+  })
+
+  it('passes a state that held 400 ms in fewer frames, because a few frames ran long', () => {
+    const story = 'transition/reconnect-chat-open'
+    const log = decodeLog(slowFramesHoldFixture)
+    const held = log.frames.filter((frame) => frame.marks['catching-up'] !== undefined)
+
+    expect(held.length).toBeLessThan(24)
+    expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
+  })
+
+  it('keeps a state under 24 frames at a steady 60 Hz a flash', () => {
+    const story = 'transition/reconnect-chat-open'
+    const log = decodeLog(flashFixture)
+    const atSixtyHertz = {
+      ...log,
+      frames: Arr.map(log.frames, (frame, index) => ({ ...frame, at: (index * 1000) / 60 })),
+    }
+
+    expect(keysOf(detect(story, atSixtyHertz, expectationOf(story)))).toContain('flash:catching-up')
+  })
+
+  it('reports a state gone within a long frame, however late the next frame came', () => {
+    const story = 'actions/toast-after-chat-close'
+    const findings = detect(story, decodeLog(goneInALongFrameFixture), expectationOf(story))
+    const flash = findingNamed(findings, 'flash:spinner')
+
+    expect(flash.toMs - flash.fromMs).toBeGreaterThan(400)
+    expect(flash.words).toContain('only 6 frames over 101 ms')
+  })
+
+  it('does not take the clock of a starved run, where a real flash reads as a long hold', () => {
+    const story = 'transition/reconnect-chat-open'
+    const log = decodeLog(flashFixture)
+    const stretched = {
+      ...log,
+      frames: Arr.map(log.frames, (frame) => ({ ...frame, at: frame.at * 2 })),
+      steps: Arr.map(log.steps, (step) => ({ ...step, at: step.at * 2 })),
+    }
+    const flash = findingNamed(detect(story, stretched, expectationOf(story)), 'flash:catching-up')
+
+    expect(isStarved(stretched.frames)).toBe(true)
+    expect(flash.lastFrame - flash.firstFrame + 1).toBeLessThan(24)
   })
 
   it('reports a blank frame between the first frame and the first state', () => {

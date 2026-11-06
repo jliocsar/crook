@@ -41,7 +41,7 @@ know what the marks name; your eyes on the sheet are the rest of the check.
 
 | Key | Meaning |
 |---|---|
-| `flash:<mark>` | A state held under 24 frames (400 ms at 60 Hz) and went away |
+| `flash:<mark>` | A state held under 24 frames and under 400 ms, first read to last plus one frame, and went away. A starved run's clock does not count |
 | `pair:<a>+<b>` | Two states that must never show together did |
 | `blank` | The content area showed nothing between states |
 | `empty:<top\|middle\|bottom>` | The thread's viewport held a band with no row in it wider than the thread's own spacing, while rows were on screen. The image is the frame where the band was widest |
@@ -55,8 +55,12 @@ screencast can go a few hundred ms with no new picture, so a short state may not
 That does not clear it. The log read the DOM saying it was visible; say both.
 
 A line reading `STARVED` means a tenth of that run's frames took over 30 ms. Other work
-on the machine starved it, and the tool has already retried twice. Its frame counts mean little.
+on the machine starved it, and the tool has already retried twice. Its frame counts mean little,
+and a flash there is judged on frames alone, since its clock runs slow with them.
 Run the story again when the machine is quieter before believing a finding from it.
+
+A `PASS` beside other work is weaker for a flash than one on a quiet machine: a state that work
+holds rather than a timer stretches with the load, and can pass the 400 ms there and fail alone.
 
 ## The baseline
 
