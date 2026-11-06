@@ -1,37 +1,108 @@
-import * as Arr from 'effect/Array'
+import * as DateTime from 'effect/DateTime'
+import * as Duration from 'effect/Duration'
+import { constVoid } from 'effect/Function'
+import * as Option from 'effect/Option'
+import * as React from 'react'
 
-import { Skeleton } from '@crook/web/components/ui/skeleton'
+import { AgentRow } from '@crook/domain/AgentRow'
+import type { AgentStatus } from '@crook/domain/AgentStatus'
+import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
+import { Machine } from '@crook/domain/Machine'
+import { MeasuredSkeleton } from '@crook/web/components/MeasuredSkeleton'
+import { SectionBody } from '@crook/web/herd/HerdLayout'
+import type { AgentCardModel, HerdLayout, MachineSectionModel } from '@crook/web/herd/HerdLayout'
+import { HerdList } from '@crook/web/herd/HerdList'
+import { FrozenScope } from '@crook/web/navigation/Covered'
 
-const SKELETON_SECTIONS = [3, 2] as const
+const SAMPLE_WORKSPACE = WorkspaceId.make('sample-workspace')
+const SAMPLE_TAB = TabId.make('sample-tab')
+const SAMPLE_STATUS_AGE = Duration.minutes(5)
 
-function CardSkeleton() {
-  return (
-    <div
-      data-slot="card-skeleton"
-      className="bg-card grid grid-cols-1 gap-2 rounded-xl border px-3.5 pt-2.5 pb-3"
-    >
-      <Skeleton className="h-3 w-24" />
-      <div className="flex items-center gap-2">
-        <Skeleton className="size-5 shrink-0 rounded-full" />
-        <Skeleton className="h-4 w-3/5" />
-      </div>
-      <Skeleton className="h-6 w-28 rounded-full" />
-    </div>
-  )
-}
+const sampleCard = (
+  now: DateTime.Utc,
+  pane: string,
+  status: AgentStatus,
+  title: string,
+  branch: string,
+): AgentCardModel => ({
+  row: new AgentRow({
+    pane: PaneId.make(pane),
+    workspace: SAMPLE_WORKSPACE,
+    tab: SAMPLE_TAB,
+    terminal: TerminalId.make(pane),
+    status,
+    title,
+    label: Option.none(),
+    createdByCrook: false,
+    cwd: '/',
+    branch: Option.some(branch),
+    claudeSession: Option.none(),
+    stateChangeSeq: 0,
+    statusChangedAt: DateTime.subtractDuration(now, SAMPLE_STATUS_AGE),
+    beforeHandoff: Option.none(),
+    ask: Option.none(),
+    runningSubagents: Option.none(),
+  }),
+  needsYou: false,
+  pinned: false,
+  workspace: 'project',
+  tab: 'folder',
+  askSummary: Option.none(),
+})
+
+const sampleSection = (
+  now: DateTime.Utc,
+  id: string,
+  label: string,
+  agents: readonly AgentCardModel[],
+): MachineSectionModel => ({
+  machine: new Machine({
+    id: MachineId.make(id),
+    label,
+    connection: 'online',
+    connectionChangedAt: now,
+    lastSeenAt: now,
+    agentVersion: Option.none(),
+    herdrVersion: Option.none(),
+  }),
+  needsYou: 0,
+  body: SectionBody.Agents({ agents }),
+})
+
+const sampleHerd = (now: DateTime.Utc): HerdLayout => ({
+  notice: Option.none(),
+  sections: [
+    sampleSection(now, 'sample-one', 'machine', [
+      sampleCard(now, 'sample-1', 'working', 'Tidy the settings screen', 'feat/settings'),
+      sampleCard(now, 'sample-2', 'done', 'Write the migration notes', 'docs/migration'),
+      sampleCard(now, 'sample-3', 'idle', 'Check the release build', 'fix/release'),
+    ]),
+    sampleSection(now, 'sample-two', 'other', [
+      sampleCard(now, 'sample-4', 'working', 'Run the nightly build', 'main'),
+      sampleCard(now, 'sample-5', 'idle', 'Clean up old branches', 'main'),
+    ]),
+  ],
+})
+
+const alwaysOpen = () => true
 
 export function HerdSkeleton({ label }: { label: string }) {
+  const [layout] = React.useState(() => sampleHerd(DateTime.nowUnsafe()))
+
   return (
-    <div role="status" data-slot="herd-skeleton" className="grid grid-cols-1 gap-5 px-3 pt-2">
-      <span className="sr-only">{label}</span>
-      {SKELETON_SECTIONS.map((rows, section) => (
-        <div key={section} className="grid grid-cols-1 gap-2">
-          <Skeleton className="mx-1 mb-1 h-4 w-24" />
-          {Arr.makeBy(rows, (row) => (
-            <CardSkeleton key={row} />
-          ))}
-        </div>
-      ))}
-    </div>
+    <MeasuredSkeleton slot="herd-skeleton" label={label}>
+      <FrozenScope>
+        <HerdList
+          layout={layout}
+          controlsEnabled={false}
+          isOpen={alwaysOpen}
+          onToggle={constVoid}
+          onOpenAgent={constVoid}
+          onOpenActions={constVoid}
+          onNewAgent={constVoid}
+          onAddMachine={constVoid}
+        />
+      </FrozenScope>
+    </MeasuredSkeleton>
   )
 }

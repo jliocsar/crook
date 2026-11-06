@@ -1,3 +1,9 @@
+import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
+import * as Ref from 'effect/Ref'
+
+import { HerdrUnavailable } from '@crook/protocol/Commands'
+
 import { liveWith } from '../../test/AppWiring.tsx'
 import { herd } from '../../test/HerdFixtures.ts'
 import { chatStory } from '../ChatFixtures.ts'
@@ -33,6 +39,21 @@ export const ENVIRONMENT_STORIES: readonly StoryMaker[] = [
     events: CONVERSATION,
     settle: () => types(/Message|Reply/u, '/'),
     shows: { text: 'Claude Code' },
+  }),
+  chatStory({
+    slug: 'keyboard-send-failed',
+    title: 'Keyboard up, a refused send floats over the thread',
+    env: KEYBOARD_UP,
+    events: CONVERSATION,
+    arrange: ({ link }) => Ref.set(link.commandAnswer, Exit.fail(new HerdrUnavailable())),
+    settle: () => Effect.andThen(types(/Message|Reply/u, 'Now check the toast'), clicks('Send')),
+    shows: { selector: '[role="alert"]' },
+  }),
+  chatStory({
+    slug: 'reduced-skeleton',
+    title: 'Reduced motion, the thread skeleton',
+    env: REDUCED,
+    shows: { selector: '[data-slot="thread-skeleton"]' },
   }),
   linkStory({
     slug: 'keyboard-new-agent',

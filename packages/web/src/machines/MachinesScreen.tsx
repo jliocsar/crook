@@ -7,9 +7,9 @@ import { connectionAtom } from '@crook/web/atoms/Connection'
 import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
 import { machinesLayoutAtom } from '@crook/web/atoms/Machines'
 import { Dimmed } from '@crook/web/components/Dimmed'
-import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
 import { AddMachineButton, AddMachineSheet } from '@crook/web/machines/AddMachineSheet'
 import { MachineList } from '@crook/web/machines/MachineList'
+import { MachinesSkeleton } from '@crook/web/machines/MachinesSkeleton'
 import type { OpenMachine } from '@crook/web/machines/MachineList'
 import { NoMachines } from '@crook/web/machines/NoMachines'
 import { useShownAtomValue } from '@crook/web/navigation/Covered'
@@ -21,7 +21,7 @@ function MachinesBody({ onOpen, onAddMachine }: { onOpen: OpenMachine; onAddMach
   const layout = useShownAtomValue(machinesLayoutAtom)
 
   return Option.match(layout, {
-    onNone: () => <HerdSkeleton label="Loading your machines" />,
+    onNone: () => <MachinesSkeleton />,
     onSome: (machines) => (
       <Dimmed dimmed={dimsContent(connection)}>
         {Arr.isReadonlyArrayEmpty(machines.machines) ? (

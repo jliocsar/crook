@@ -50,7 +50,7 @@ function SheetLayer({
           <motion.div
             data-slot="sheet"
             className={cn(
-              'bg-card text-card-foreground border-border fixed bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl border-t px-4 pb-[max(1rem,var(--safe-bottom))] outline-none',
+              'bg-card text-card-foreground border-border fixed bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-2xl border-t outline-none',
               !present && 'pointer-events-none',
             )}
             inert={!present}
@@ -75,29 +75,31 @@ function SheetLayer({
           />
         }
       >
-        <div
-          ref={handle}
-          tabIndex={-1}
-          data-slot="sheet-handle"
-          className="cursor-grab touch-none pt-2 pb-1 outline-none"
-          onPointerDown={(event) => {
-            drag.start(event)
-          }}
-        >
+        <div className="min-h-0 overflow-y-auto rounded-t-2xl px-4 pb-[max(1rem,var(--safe-bottom))]">
           <div
-            aria-hidden="true"
-            className="bg-muted-foreground/30 mx-auto mb-3 h-1 w-9 rounded-full"
-          />
-          <Dialog.Title className="font-display truncate text-xl leading-7 font-semibold tracking-[-0.015em]">
-            {title}
-          </Dialog.Title>
-          {description === undefined ? null : (
-            <Dialog.Description className="text-muted-foreground mt-0.5 truncate text-sm">
-              {description}
-            </Dialog.Description>
-          )}
+            ref={handle}
+            tabIndex={-1}
+            data-slot="sheet-handle"
+            className="cursor-grab touch-none pt-2 pb-1 outline-none"
+            onPointerDown={(event) => {
+              drag.start(event)
+            }}
+          >
+            <div
+              aria-hidden="true"
+              className="bg-muted-foreground/30 mx-auto mb-3 h-1 w-9 rounded-full"
+            />
+            <Dialog.Title className="font-display truncate text-xl leading-7 font-semibold tracking-[-0.015em]">
+              {title}
+            </Dialog.Title>
+            {description === undefined ? null : (
+              <Dialog.Description className="text-muted-foreground mt-0.5 truncate text-sm">
+                {description}
+              </Dialog.Description>
+            )}
+          </div>
+          <div className="mt-3">{children}</div>
         </div>
-        <div className="mt-3">{children}</div>
       </Dialog.Popup>
     </Dialog.Portal>
   )

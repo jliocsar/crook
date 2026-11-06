@@ -27,10 +27,11 @@ const FRAME_PAGE = `${ORIGIN}/stories/frame.html`
 const WARM_UP_STORY = 'transition/machine-redial'
 const STORY_TIMEOUT_MS = 60_000
 const TAIL_MS = 2000
-const SETTLED_PHASES: readonly string[] = ['ready', 'done', 'failed']
 const ENDED_PHASES: readonly string[] = ['done', 'failed']
 const FAILED_PHASE = 'failed'
 const SHOT_NUMBER_WIDTH = 4
+
+export const SETTLED_PHASES: readonly string[] = ['ready', 'done', 'failed']
 
 const READ_LOG =
   'JSON.stringify({ ...JSON.parse(window.__frames.read()), steps: window.__story?.snapshot().log ?? [] })'
@@ -63,7 +64,7 @@ const phaseAt = (page: Page, url: string) =>
       Effect.orElseSucceed(() => ''),
     )
 
-const waitForPhase = (page: Page, story: string, url: string, phases: readonly string[]) =>
+export const waitForPhase = (page: Page, story: string, url: string, phases: readonly string[]) =>
   phaseAt(page, url).pipe(
     Effect.filterOrFail(
       (phase) => phases.includes(phase),
@@ -76,7 +77,7 @@ const waitForPhase = (page: Page, story: string, url: string, phases: readonly s
     }),
   )
 
-const navigate = (page: Page, url: string) => page.send('Page.navigate', { url })
+export const navigate = (page: Page, url: string) => page.send('Page.navigate', { url })
 
 export const warmUp = Effect.fn('Capture.warmUp')(function* (page: Page) {
   const url = frameUrl(WARM_UP_STORY, false)

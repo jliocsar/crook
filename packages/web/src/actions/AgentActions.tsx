@@ -1,7 +1,7 @@
 import { useAtomSet, useAtomValue } from '@effect/atom-react/Hooks'
 import { RegistryContext } from '@effect/atom-react/RegistryContext'
 import { useRouter } from '@tanstack/react-router'
-import { cn } from 'cn'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import * as Equal from 'effect/Equal'
 import { pipe } from 'effect/Function'
@@ -34,7 +34,8 @@ import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { allowsActions } from '@crook/web/connection/ConnectionView'
 import { ToastIntent, toastAtom } from '@crook/web/atoms/Toast'
-import { ActionFailure } from '@crook/web/components/ActionFailure'
+import { failureNotice, FloatingNotices } from '@crook/web/components/FloatingNotices'
+import type { FloatingNotice } from '@crook/web/components/FloatingNotices'
 import { Sheet } from '@crook/web/components/Sheet'
 import { Button } from '@crook/web/components/ui/button'
 import { HoldButton } from '@crook/web/components/ui/hold-button'
@@ -52,6 +53,9 @@ interface ShownAgent {
 
 const SHEET_ACTION = 'w-full justify-start text-base'
 const CLOSING_LABEL = 'Closing…'
+
+const CLOSE_CONFIRMATION =
+  "crook didn't open this pane. Closing it ends whatever runs there, not just Claude."
 
 export const useOpenAgentActions = (): OpenAgentActions => {
   const dispatch = useAtomSet(agentActionsAtom)
@@ -119,16 +123,17 @@ function RenameField({
   row,
   progress,
   disabled,
+  onInvalid,
   onRename,
 }: {
   row: AgentRow
   progress: CommandProgress
   disabled: boolean
+  onInvalid: (message: Option.Option<string>) => void
   onRename: (label: Option.Option<string>) => void
 }) {
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(() => agentTitle(row))
-  const [invalid, setInvalid] = React.useState(Option.none<string>())
   const field = React.useRef<HTMLInputElement>(null)
   const saving = isInFlightOrDone(progress)
 
@@ -156,15 +161,14 @@ function RenameField({
 
   return (
     <form
-      className="grid gap-2"
       onSubmit={(event) => {
         event.preventDefault()
         Result.match(labelFromInput(draft), {
           onFailure: (error) => {
-            setInvalid(Option.some(error.message))
+            onInvalid(Option.some(error.message))
           },
           onSuccess: (label) => {
-            setInvalid(Option.none())
+            onInvalid(Option.none())
 
             if (keepsName(row, label)) {
               setEditing(false)
@@ -191,8 +195,83 @@ function RenameField({
           {saving ? 'Saving…' : 'Save'}
         </Button>
       </div>
-      <ActionFailure message={Option.orElse(invalid, () => failureOf(progress))} />
     </form>
+  )
+}
+
+function AgentSheetActions({
+  view,
+  card,
+  canAct,
+  canPin,
+  onRename,
+  onPin,
+  onClose,
+}: {
+  view: AgentActionsView
+  card: AgentCardModel
+  canAct: boolean
+  canPin: boolean
+  onRename: (label: Option.Option<string>) => void
+  onPin: (pinned: boolean) => void
+  onClose: (confirmed: boolean) => void
+}) {
+  const [invalid, setInvalid] = React.useState(Option.none<string>())
+  const confirming = closeNeedsConfirmation(card.row, view.close, view.session.close)
+  const closing = isInFlightOrDone(view.close)
+  const confirmation: Option.Option<FloatingNotice> = confirming
+    ? Option.some({
+        id: 'close-confirmation',
+        tone: 'quiet',
+        text: CLOSE_CONFIRMATION,
+        slot: 'close-confirmation',
+      })
+    : Option.none()
+
+  return (
+    <div className="grid gap-2">
+      <FloatingNotices
+        notices={Arr.getSomes([
+          failureNotice(
+            'rename',
+            Option.orElse(invalid, () => failureOf(view.rename)),
+          ),
+          failureNotice('pin', failureOf(view.pin)),
+          confirmation,
+          failureNotice('close', failureOf(view.close)),
+        ])}
+      />
+      <RenameField
+        row={card.row}
+        progress={view.rename}
+        disabled={!canAct}
+        onInvalid={setInvalid}
+        onRename={onRename}
+      />
+      <Button
+        variant="secondary"
+        size="touch"
+        className={SHEET_ACTION}
+        disabled={!canPin || isInFlightOrDone(view.pin)}
+        onClick={() => {
+          onPin(!card.pinned)
+        }}
+      >
+        {card.pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
+        {card.pinned ? 'Unpin' : 'Pin to top'}
+      </Button>
+      <HoldButton
+        disabled={!canAct || closing}
+        pending={closing}
+        pendingLabel={CLOSING_LABEL}
+        className="mt-2 w-full text-base"
+        onComplete={() => {
+          onClose(confirming)
+        }}
+      >
+        {confirming ? 'Hold to close anyway' : 'Hold to close agent'}
+      </HoldButton>
+    </div>
   )
 }
 
@@ -239,57 +318,18 @@ function AgentActionsSheet({
     >
       {Option.match(shown, {
         onNone: () => null,
-        onSome: ({ view, card }) => {
-          const confirming = closeNeedsConfirmation(card.row, view.close, view.session.close)
-          const closing = isInFlightOrDone(view.close)
-
-          return (
-            <div
-              key={toGlobalPaneId(view.session.agent.machine, view.session.agent.pane)}
-              className="grid gap-2"
-            >
-              <RenameField
-                row={card.row}
-                progress={view.rename}
-                disabled={!canAct}
-                onRename={onRename}
-              />
-              <Button
-                variant="secondary"
-                size="touch"
-                className={SHEET_ACTION}
-                disabled={!canPin || isInFlightOrDone(view.pin)}
-                onClick={() => {
-                  onPin(!card.pinned)
-                }}
-              >
-                {card.pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}
-                {card.pinned ? 'Unpin' : 'Pin to top'}
-              </Button>
-              <ActionFailure message={failureOf(view.pin)} />
-              {confirming ? (
-                <p
-                  data-slot="close-confirmation"
-                  className="text-muted-foreground mt-2 text-sm leading-5"
-                >
-                  crook didn't open this pane. Closing it ends whatever runs there, not just Claude.
-                </p>
-              ) : null}
-              <HoldButton
-                disabled={!canAct || closing}
-                pending={closing}
-                pendingLabel={CLOSING_LABEL}
-                className={cn('w-full text-base', !confirming && 'mt-2')}
-                onComplete={() => {
-                  onClose(confirming)
-                }}
-              >
-                {confirming ? 'Hold to close anyway' : 'Hold to close agent'}
-              </HoldButton>
-              <ActionFailure message={failureOf(view.close)} />
-            </div>
-          )
-        },
+        onSome: ({ view, card }) => (
+          <AgentSheetActions
+            key={toGlobalPaneId(view.session.agent.machine, view.session.agent.pane)}
+            view={view}
+            card={card}
+            canAct={canAct}
+            canPin={canPin}
+            onRename={onRename}
+            onPin={onPin}
+            onClose={onClose}
+          />
+        ),
       })}
     </Sheet>
   )

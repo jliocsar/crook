@@ -87,8 +87,9 @@ describe('a slash send', () => {
       expect(Ref.getUnsafe(link.sent)).toEqual([])
 
       fireEvent.change(field(), { target: { value: '/resume' } })
-
-      expect(screen.queryByText(/needs the laptop/u)).toBeNull()
+      yield* eventually(() => {
+        expect(screen.queryByText(/needs the laptop/u)).toBeNull()
+      })
 
       fireEvent.change(field(), { target: { value: '/model' } })
 

@@ -161,9 +161,9 @@ describe('SettingsScreen', () => {
         expect(switchOf('Questions').getAttribute('aria-checked')).toBe('true')
       })
       yield* click(switchOf('Questions'))
-      const alert = yield* Effect.promise(() => screen.findByRole('alert'))
+      const shown = yield* Effect.promise(() => screen.findByText(refusal.message))
 
-      expect(alert.textContent).toBe(refusal.message)
+      expect(shown.closest('[data-slot="toast"]')).not.toBeNull()
       expect(switchOf('Questions').getAttribute('aria-checked')).toBe('true')
     }),
   )
@@ -220,9 +220,9 @@ describe('SettingsScreen', () => {
         expect(testButton().getAttribute('aria-disabled')).toBe('false')
       })
       yield* click(testButton())
-      const alert = yield* Effect.promise(() => screen.findByRole('alert'))
+      const shown = yield* Effect.promise(() => screen.findByText(refusal.message))
 
-      expect(alert.textContent).toBe(refusal.message)
+      expect(shown.closest('[data-slot="toast"]')).not.toBeNull()
       expect(testButton().textContent).toBe('Send a test')
     }),
   )
@@ -299,7 +299,10 @@ describe('SettingsScreen', () => {
       yield* click(yield* findByRole('button', 'Log out'))
       const reopened = yield* findByRole('dialog', 'Log out of crook?')
 
-      expect(within(reopened).queryByRole('alert')).toBeNull()
+      yield* eventually(() => {
+        expect(within(reopened).queryByRole('alert')).toBeNull()
+      })
+
       expect(yield* Ref.get(link.logOuts)).toBe(0)
     }),
   )

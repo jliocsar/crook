@@ -286,7 +286,7 @@ export function PushedHeader({
             {title}
           </h1>
           {subtitle === undefined ? null : (
-            <div className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs leading-4">
+            <div className="text-muted-foreground flex min-h-4 min-w-0 items-center gap-1.5 text-xs leading-4">
               {subtitle}
             </div>
           )}

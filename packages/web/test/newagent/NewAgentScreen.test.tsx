@@ -94,14 +94,14 @@ describe('NewAgentScreen', () => {
       yield* typeTask(TASK)
       yield* click(startButton())
 
-      expect(yield* Effect.promise(() => screen.findByText('Starting Claude…'))).toBeDefined()
+      expect(yield* findByRole('button', 'Starting Claude…')).toBeDefined()
       expect(Ref.getUnsafe(link.sent).map((sent) => sent.command)).toEqual([
         startInCrook(Option.some(TASK)),
       ])
       expect(screen.queryByRole('button', { name: 'Start without a task' })).toBeNull()
 
       yield* link.commandAnswers.open
-      yield* Effect.promise(() => screen.findByText('Opening the chat…'))
+      yield* findByRole('button', 'Opening the chat…')
 
       expect(router.state.location.pathname).toBe('/new')
 
@@ -113,6 +113,24 @@ describe('NewAgentScreen', () => {
       yield* eventually(() => {
         expect(router.state.location.pathname).toBe('/')
       })
+    }),
+  )
+
+  it.effect('keeps keyboard focus on Start without a task while it starts', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/new', liveWith(herd([laptop])))
+
+      yield* Ref.set(link.commandAnswer, started)
+      yield* link.commandAnswers.close
+
+      const start = yield* findByRole('button', 'Start without a task')
+
+      start.focus()
+      yield* click(start)
+      yield* findByRole('button', 'Starting Claude…')
+
+      expect(document.activeElement).toBe(start)
+      expect(start.getAttribute('aria-disabled')).toBe('true')
     }),
   )
 
@@ -183,7 +201,7 @@ describe('NewAgentScreen', () => {
 
       expect(screen.getByRole('button', { name: 'Branch, new: name the branch' })).toBeDefined()
       expect(screen.getByText(/in a new worktree once its branch has a name/u)).toBeDefined()
-      expect(withoutTask()).toHaveProperty('disabled', true)
+      expect(withoutTask().getAttribute('aria-disabled')).toBe('true')
 
       yield* typeTask(TASK)
 
@@ -236,7 +254,7 @@ describe('NewAgentScreen', () => {
       yield* Ref.set(link.commandAnswer, started)
       yield* typeTask(TASK)
       yield* click(startButton())
-      yield* Effect.promise(() => screen.findByText('Opening the chat…'))
+      yield* findByRole('button', 'Opening the chat…')
       yield* click(screen.getByRole('button', { name: 'Open the chat' }))
       yield* eventually(() => {
         expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap9')
@@ -287,14 +305,14 @@ describe('NewAgentScreen', () => {
       expect(
         yield* Effect.promise(() => screen.findByText('Every machine is offline')),
       ).toBeDefined()
-      expect(withoutTask()).toHaveProperty('disabled', true)
+      expect(withoutTask().getAttribute('aria-disabled')).toBe('true')
 
       yield* SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])])))
 
       expect(
         yield* Effect.promise(() => screen.findByText('Pick a folder on laptop')),
       ).toBeDefined()
-      expect(withoutTask()).toHaveProperty('disabled', true)
+      expect(withoutTask().getAttribute('aria-disabled')).toBe('true')
 
       yield* click(screen.getByRole('button', { name: 'Folder, Pick a folder' }))
 
@@ -312,7 +330,7 @@ describe('NewAgentScreen', () => {
         expect(screen.getByText('Claude starts in crook')).toBeDefined()
       })
 
-      expect(withoutTask()).toHaveProperty('disabled', false)
+      expect(withoutTask().getAttribute('aria-disabled')).toBe('false')
     }),
   )
 
@@ -379,12 +397,12 @@ describe('NewAgentScreen', () => {
       const openChat = yield* findByRole('button', 'Open the chat')
 
       expect(startButton()).toHaveProperty('disabled', true)
-      expect(withoutTask()).toHaveProperty('disabled', true)
+      expect(withoutTask().getAttribute('aria-disabled')).toBe('true')
 
       yield* typeTask('!')
 
       expect(startButton()).toHaveProperty('disabled', false)
-      expect(withoutTask()).toHaveProperty('disabled', false)
+      expect(withoutTask().getAttribute('aria-disabled')).toBe('false')
 
       yield* click(openChat)
       yield* eventually(() => {

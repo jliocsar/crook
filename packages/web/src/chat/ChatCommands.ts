@@ -68,6 +68,11 @@ import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
 export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
 
+export interface ComposerStatus {
+  readonly failure: ComposerFailureState
+  readonly note: Option.Option<string>
+}
+
 interface ArrivedSends {
   readonly prompts: number
   readonly commands: number
@@ -82,6 +87,7 @@ export type AskDockCommands = Omit<AskDockProps, 'cwd'>
 
 export interface ChatCommands {
   readonly composer: ComposerCommands
+  readonly composerStatus: ComposerStatus
   readonly ask: Option.Option<AskDockCommands>
   readonly alwaysNotes: readonly AlwaysNote[]
   readonly restart: Option.Option<Restart>
@@ -630,6 +636,8 @@ export const useChatCommands = ({
       stopping,
       placeholder: placeholderOf(canAct, mode, blocked),
       label: mode === 'decline' ? 'Tell Claude what to do instead' : 'Message to Claude',
+    },
+    composerStatus: {
       failure: composerFailure.failure,
       note: Option.orElse(refusal, () => prompted.unanswered),
     },

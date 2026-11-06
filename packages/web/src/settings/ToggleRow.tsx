@@ -2,7 +2,7 @@ import { Switch } from '@base-ui/react/switch'
 import type * as Option from 'effect/Option'
 import * as React from 'react'
 
-import { ActionFailure } from '@crook/web/components/ActionFailure'
+import { useFailureToast } from '@crook/web/toast/FailureToast'
 
 export function ToggleRow({
   label,
@@ -23,6 +23,8 @@ export function ToggleRow({
 }) {
   const id = React.useId()
   const detailId = `${id}-detail`
+
+  useFailureToast(failure)
 
   return (
     <div data-slot="toggle-row">
@@ -48,7 +50,6 @@ export function ToggleRow({
           <Switch.Thumb className="bg-background block size-6 rounded-full shadow-sm transition-transform duration-[var(--motion)] ease-[var(--ease-out)] data-[checked]:translate-x-5 motion-reduce:transition-none" />
         </Switch.Root>
       </div>
-      <ActionFailure className="px-4" message={failure} />
     </div>
   )
 }

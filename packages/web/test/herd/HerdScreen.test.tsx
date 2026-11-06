@@ -165,7 +165,7 @@ describe('HerdScreen', () => {
       const loading = yield* Effect.promise(() => screen.findByText('Loading your agents'))
 
       expect(loading.closest('[role="status"]')).not.toBeNull()
-      expect(document.querySelectorAll('[data-slot="card-skeleton"]')).toHaveLength(5)
+      expect(document.querySelectorAll('[skullet-ghost] [data-slot="swipe-card"]')).toHaveLength(5)
       expect(screen.getByRole('link', { name: 'Agents' })).toBeDefined()
       expect(screen.getAllByText('Connecting to the hub').length).toBeGreaterThan(0)
     }),

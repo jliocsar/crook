@@ -8,7 +8,10 @@ import { connectionAtom } from '@crook/web/atoms/Connection'
 import { allowsActions, dimsContent, isVerified } from '@crook/web/connection/ConnectionView'
 import { herdViewAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
+import { FloatingNotices } from '@crook/web/components/FloatingNotices'
+import type { FloatingNotice } from '@crook/web/components/FloatingNotices'
 import { Sheet } from '@crook/web/components/Sheet'
+import { Swap } from '@crook/web/components/Swap'
 import { Button } from '@crook/web/components/ui/button'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { isOnlineMachine } from '@crook/web/herd/HerdLayout'
@@ -44,44 +47,23 @@ const PICKER_TITLE = {
 } satisfies Record<Picker, string>
 
 const STATUS_SPINNER_SIZE = 14
+const START_EMPTY_LABEL = 'Start without a task'
 
-function LaunchStatus({ text }: { text: string }) {
-  return (
-    <p
-      role="status"
-      className="text-muted-foreground flex items-center justify-center gap-2 text-sm leading-5"
-    >
-      <Spinner holdsRoom size={STATUS_SPINNER_SIZE} />
-      {text}
-    </p>
-  )
-}
+const launchNotice = (message: string, onOpenChat: Option.Option<() => void>): FloatingNotice => ({
+  id: 'launch-failure',
+  tone: 'failure',
+  text: message,
+  action: Option.match(onOpenChat, {
+    onNone: () => null,
+    onSome: (open) => <OpenChatButton onOpen={open} />,
+  }),
+})
 
 function OpenChatButton({ onOpen }: { onOpen: () => void }) {
   return (
     <Button variant="secondary" size="touch" onClick={onOpen}>
       Open the chat
     </Button>
-  )
-}
-
-function LaunchFailureNotice({
-  message,
-  onOpenChat,
-}: {
-  message: string
-  onOpenChat: Option.Option<() => void>
-}) {
-  return (
-    <div className="grid gap-1">
-      <p role="alert" className="text-destructive text-sm leading-5">
-        {message}
-      </p>
-      {Option.match(onOpenChat, {
-        onNone: () => null,
-        onSome: (open) => <OpenChatButton onOpen={open} />,
-      })}
-    </div>
   )
 }
 
@@ -174,6 +156,7 @@ function NewAgentFlow() {
       })),
     )
   const restartBlocked = launch.blocksRestart && !editedSinceStart
+  const launchStatus = launch.pending ? 'Starting Claude…' : 'Opening the chat…'
   const ready =
     allowsActions(connection) && online && !busy && !restartBlocked && Option.isSome(commandFor(''))
 
@@ -223,12 +206,13 @@ function NewAgentFlow() {
             ),
           },
         )}
-        {Option.match(launch.failure, {
-          onNone: () => null,
-          onSome: (message) => (
-            <LaunchFailureNotice message={message} onOpenChat={launch.openChatAfterFailure} />
-          ),
-        })}
+        <FloatingNotices
+          notices={Option.toArray(
+            Option.map(launch.failure, (message) =>
+              launchNotice(message, launch.openChatAfterFailure),
+            ),
+          )}
+        />
         <TaskComposer
           task={task}
           disabled={busy}
@@ -242,27 +226,34 @@ function NewAgentFlow() {
             start(task)
           }}
         />
-        {busy ? (
-          <div className="flex h-11 items-center justify-center gap-3">
-            <LaunchStatus text={launch.pending ? 'Starting Claude…' : 'Opening the chat…'} />
-            {Option.match(launch.opening, {
-              onNone: () => null,
-              onSome: (open) => <OpenChatButton onOpen={open} />,
-            })}
-          </div>
-        ) : (
+        <p role="status" className="sr-only">
+          {busy ? launchStatus : ''}
+        </p>
+        <div className="flex h-11 items-center justify-center gap-3">
           <Button
             variant="ghost"
             size="touch"
-            disabled={!ready}
-            className="text-muted-foreground text-sm"
+            aria-disabled={!ready}
+            className="text-muted-foreground min-w-0 flex-1 text-sm aria-disabled:pointer-events-none aria-disabled:opacity-50 aria-busy:opacity-100"
+            aria-busy={busy || undefined}
             onClick={() => {
-              start('')
+              if (ready) {
+                start('')
+              }
             }}
           >
-            Start without a task
+            <span className="inline-flex items-center gap-2">
+              {busy ? <Spinner holdsRoom size={STATUS_SPINNER_SIZE} /> : null}
+              <Swap id={busy ? launchStatus : START_EMPTY_LABEL}>
+                {busy ? launchStatus : START_EMPTY_LABEL}
+              </Swap>
+            </span>
           </Button>
-        )}
+          {Option.match(launch.opening, {
+            onNone: () => null,
+            onSome: (open) => <OpenChatButton onOpen={open} />,
+          })}
+        </div>
       </div>
       {Option.match(shown, {
         onNone: () => null,
