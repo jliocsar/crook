@@ -413,8 +413,10 @@ screen" on the Ask.
     updates in place.
   - **Subagents** (the `Agent` tool) are a Subagent Tree titled "Subagents", one per turn. Each
     row is 44px: the status dot, the description, a mono line with the agent type and model, the
-    running time and a chevron. When the pane closes, a running subagent reads "failed" with
-    "Pane closed".
+    running time and a chevron. When the pane closes, a running subagent reads "pane closed" with
+    a neutral dot, since nothing says it failed, only that the pane went. A run with no roster,
+    in a session that has gone idle, still reads "running" with no clock, and the background
+    dock counts it as unconfirmed, not as running.
   - **Notes** are centred muted 12px lines: "Interrupted", or an Always grant. "Conversation
     compacted" (with "Show summary") and "Conversation cleared" are dividers across the thread.
     History not loaded yet reads "Earlier messages not loaded (N KB)", and tapping it loads it.
@@ -431,6 +433,8 @@ screen" on the Ask.
     next open. Prompts sent from the phone, and anything that arrives after the catch-up, never
     get it, and neither does a cold open, which shows the skeleton and then the conversation.
   - Before anything arrives the thread reads "Loading the conversation", then "No messages yet".
+    A session whose lines hold nothing crook draws, such as only redacted thinking or an entry
+    from a newer Claude, reads "Nothing crook can show yet" instead, since it is not empty.
     A pane that isn't running Claude has no transcript: its chat reads "Not a Claude pane" and
     nothing else, with no dock.
 - **The background dock** sits between the thread and the dock, on `bg-background` with a
@@ -666,8 +670,8 @@ that adds one.
 - **The machine screen** is pushed, "Back to machines". Its header is the label over the badge and
   the update pill.
   - **Agents · N**: the machine's agents as the herd's cards, in the same order; tap opens the
-    chat, and swipe and long-press act on them as on the herd. Offline reads "–" and "Offline,
-    so its agents are unknown until it reconnects." None
+    chat, and swipe and long-press act on them as on the herd. Offline the heading is plain
+    "Agents", over "Offline, so its agents are unknown until it reconnects." None
     reads "No agents running. Start one from Agents." Reconnecting dims them, like the herd.
   - **About** is a flat info list: Online for, Reconnecting for or Last seen (from the hub's last
     connection change), crook agent (a warn pill reading "0.0.9, hub has 0.1.0" when behind),
@@ -715,8 +719,9 @@ rule.
 - **No Hark token**: a muted note under the rule, "Notifications are off", with the hub's own
   sentence for it and "These switches are saved meanwhile, and apply once it has one." The switches
   stay usable; "Send a test" is disabled.
-- **Account**: "Logged in as" with the exe.dev email the hub admitted, a full-width destructive "Log
-  out", and "Lost this phone? End its session on exe.dev from another device."
+- **Account**: "Logged in as" with the exe.dev email the hub admitted, or "Could not load" when the
+  read failed, since the sentence for that failure already shows once on the page, a full-width
+  destructive "Log out", and "Lost this phone? End its session on exe.dev from another device."
 - **Log out** asks in a sheet: "Log out of crook?", "Your agents keep running.", a muted line
   saying it ends crook's exe.dev session on this phone only, since exe.dev itself stays signed in
   and "Log in with exe.dev" may bring the user straight back, then Log out and Cancel. Log out reads
