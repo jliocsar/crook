@@ -1,6 +1,4 @@
 @import 'tailwindcss';
-@import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
 @import '@fontsource-variable/bricolage-grotesque';
 @import '@fontsource-variable/schibsted-grotesk';
 @import '@fontsource-variable/geist-mono';
@@ -164,6 +162,8 @@ a:focus-visible {
 }
 
 @utility no-scrollbar {
+  scrollbar-width: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
