@@ -5,6 +5,7 @@ import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import * as Struct from 'effect/Struct'
 
 import type { ClaudeSessionId } from '@crook/domain/Ids'
@@ -16,6 +17,7 @@ import {
   positionAfter,
   TRANSCRIPT_START,
   type TranscriptEvent,
+  TranscriptOpened,
   type TranscriptPosition,
   type TranscriptTailBytes,
 } from '@crook/domain/Transcript'
@@ -72,17 +74,13 @@ export const isOpened = (view: TranscriptView): boolean => Option.isSome(view.po
 
 export const hasLines = (view: TranscriptView): boolean => Arr.isReadonlyArrayNonEmpty(view.lines)
 
+const isTranscriptOpened = Schema.is(TranscriptOpened)
+
 export const opensAnotherSession = (
   position: Option.Option<TranscriptPosition>,
   event: TranscriptEvent,
 ): boolean =>
-  Match.value(event).pipe(
-    Match.tag(
-      'TranscriptOpened',
-      (opened) => Option.isSome(position) && !inSession(position, opened.session),
-    ),
-    Match.orElse(() => false),
-  )
+  isTranscriptOpened(event) && Option.isSome(position) && !inSession(position, event.session)
 
 const withoutSession = (view: TranscriptView): TranscriptView =>
   new TranscriptView(

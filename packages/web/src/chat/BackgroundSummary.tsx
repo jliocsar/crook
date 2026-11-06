@@ -5,7 +5,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
-import type { TranscriptMessage, UserBlock } from '@crook/domain/TranscriptMessage'
+import { type TranscriptMessage, isTypedBlock } from '@crook/domain/TranscriptMessage'
 import { JOB_DOT } from '@crook/web/chat/BackgroundMarker'
 import {
   type BackgroundJob,
@@ -20,16 +20,10 @@ import { clockElapsed } from '@crook/web/time/Elapsed'
 
 const SUMMARY_KEY = 'background-summary'
 
-const isTyped = (block: UserBlock): boolean =>
-  Match.value(block).pipe(
-    Match.tags({ Text: () => true, Image: () => true, LocalCommand: () => true }),
-    Match.orElse(() => false),
-  )
-
 const promptTimeOf = (message: TranscriptMessage): Option.Option<DateTime.Utc> =>
   Match.value(message).pipe(
     Match.tag('User', (user) =>
-      !user.isMeta && Arr.some(user.blocks, isTyped) ? user.timestamp : Option.none(),
+      !user.isMeta && Arr.some(user.blocks, isTypedBlock) ? user.timestamp : Option.none(),
     ),
     Match.orElse(() => Option.none()),
   )

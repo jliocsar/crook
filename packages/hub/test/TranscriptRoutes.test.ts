@@ -8,6 +8,7 @@ import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Schema from 'effect/Schema'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -16,6 +17,7 @@ import { ClaudeSessionId, MachineId, PaneId, TranscriptOffset } from '@crook/dom
 import {
   CHUNK_READ_LIMIT,
   PaneTranscript,
+  TranscriptCaughtUp,
   type TranscriptEvent,
   TranscriptPosition,
   TranscriptTailBytes,
@@ -162,11 +164,7 @@ const watchRawOnPhone = Effect.fn('watchRawOnPhone')(function* (
   return events
 })
 
-const isCaughtUpEvent = (event: TranscriptEvent) =>
-  Match.value(event).pipe(
-    Match.tag('TranscriptCaughtUp', () => true),
-    Match.orElse(() => false),
-  )
+const isCaughtUpEvent = Schema.is(TranscriptCaughtUp)
 
 const untilCaughtUp = (events: Queue.Queue<TranscriptEvent>) =>
   Stream.fromQueue(events).pipe(Stream.takeUntil(isCaughtUpEvent), Stream.runCollect)

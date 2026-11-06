@@ -8,6 +8,7 @@ import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import * as Path from 'effect/Path'
 import * as Record from 'effect/Record'
 import * as Ref from 'effect/Ref'
@@ -20,6 +21,7 @@ import { type AgentKind, AgentStarted, type LaunchCommand } from '@crook/domain/
 import { PaneId } from '@crook/domain/Ids'
 import {
   HerdrClient,
+  HerdrPaneBusy,
   type HerdrConnectionClosed,
   type HerdrTimedOut,
   type HerdrRequestError,
@@ -226,11 +228,7 @@ const shellReadyWait = (pane: PaneId): typeof PaneWaitForOutputMethod.params.Typ
   timeout_ms: Duration.toMillis(SHELL_READY_TIMEOUT),
 })
 
-const isPaneBusy = (error: HerdrRequestError) =>
-  Match.value(error).pipe(
-    Match.tag('HerdrPaneBusy', () => true),
-    Match.orElse(() => false),
-  )
+const isPaneBusy = Schema.is(HerdrPaneBusy)
 
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient

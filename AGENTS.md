@@ -470,10 +470,17 @@ and bound to that connection, one RPC server per connection, never read back fro
 :::
 
 :::warning
-Never read `_tag`. The `_` prefix means private. Use `Match.tag`/`Match.tags`/`Match.tagsExhaustive`,
-a library guard (`Cause.isTimeoutError`, `Exit.isFailure`, `Result.isFailure`), or `instanceof` where
-the module instance is shared. Prefer exhaustive so a new variant fails to compile.
-Enforced: `begone-slop/no-tag-access`.
+Never read `_tag`. A read keeps compiling when a variant is added, so the new case goes unhandled.
+Use `Match.tagsExhaustive`, so a new variant fails to compile, then `Match.tag`/`Match.tags`, a library
+guard (`Cause.isTimeoutError`, `Exit.isFailure`, `Result.isFailure`), or `instanceof` where the module
+instance is shared. Privacy isn't the argument: Effect declares `_tag` as a schema field and reads it
+in its own docs. `Match.orElse` gives up exhaustiveness as well, so reach for it only where a new
+variant really belongs in the fallback. Enforced: `begone-slop/no-tag-access`.
+
+A predicate is one of two things. One that decides something about every variant, such as which
+blocks a person typed, what starts a turn, or which failures retry, is exhaustive: the new variant
+needs that decision. One that only asks whether a value is one named variant is `Schema.is(X)`, which
+works on a tagged class and a tagged error alike, and needs no fallback at all.
 
 Nested `reason` unions too — `SqlError`/`AiError` put the variant in `reason`, out of the failure
 channel, so `catchTag` misses it and some `effect-best-practices` snippets write `error.reason._tag`.
@@ -498,9 +505,8 @@ wrapper that swallowed it — and never loosen the catch to meet the code:
 Only the second is machine-checked (it ends in a `_tag` read, so `begone-slop/no-tag-access`
 rejects it — measured). The other two read as ordinary code; they are on you.
 
-`Effect.retry`'s `while` takes a plain predicate, with no tag-based variant, so the tag-free form is
-`Match.value(error).pipe(Match.tag('X', () => true), Match.orElse(() => false))`. Verbose, and still
-not a licence to read `_tag`.
+`Effect.retry`'s `while` takes a plain predicate, with no tag-based variant, so it gets one of those
+two, and neither is a licence to read `_tag`.
 :::
 
 :::warning

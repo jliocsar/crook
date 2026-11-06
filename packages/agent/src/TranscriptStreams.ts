@@ -169,13 +169,10 @@ const backgroundOf =
 const hasBackgroundWork = (snapshot: BackgroundSnapshot) =>
   snapshot.tasks.length > 0 || snapshot.activity.length > 0
 
+const isShellTask = Schema.is(ShellTask)
+
 const hasRunningShell = (snapshot: BackgroundSnapshot): boolean =>
-  Arr.some(snapshot.tasks, (task) =>
-    Match.value(task).pipe(
-      Match.tag('ShellTask', (shell) => shell.status === 'running'),
-      Match.orElse(() => false),
-    ),
-  )
+  Arr.some(snapshot.tasks, (task) => isShellTask(task) && task.status === 'running')
 
 const missedShells = (snapshot: BackgroundSnapshot, open: OpenTasks): HashSet.HashSet<string> =>
   Option.match(open, {

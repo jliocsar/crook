@@ -138,8 +138,10 @@ export const askRunningAgent = Effect.fn('StatusSocket.askRunningAgent')(functio
 
 const isNoAnswer = (error: NoAgentAnswered | AgentAnswerUnreadable) =>
   Match.value(error).pipe(
-    Match.tag('NoAgentAnswered', () => true),
-    Match.orElse(() => false),
+    Match.tagsExhaustive({
+      NoAgentAnswered: () => true,
+      AgentAnswerUnreadable: () => false,
+    }),
   )
 
 const askAgentOtherThan = Effect.fn('StatusSocket.askAgentOtherThan')(function* (
