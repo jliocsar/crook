@@ -203,13 +203,15 @@ const readThread = (
     if (content !== null && seenElement(viewport, covers) !== undefined) {
       const viewportBox = viewport.getBoundingClientRect()
       const contentBox = content.getBoundingClientRect()
-      const rows = Array.from(viewport.querySelectorAll(ROW_SELECTOR))
-      const boxes = rows.map((row) => row.getBoundingClientRect())
-      const tops = rows.map((row, index) => ({
+      const rows = Array.from(viewport.querySelectorAll(ROW_SELECTOR), (row) => ({
         key: row.getAttribute(ROW_ATTRIBUTE) ?? '',
-        top: boxes[index]?.top ?? 0,
+        box: row.getBoundingClientRect(),
       }))
-      const bands = bandsOf(viewportBox, contentBox, boxes)
+      const bands = bandsOf(
+        viewportBox,
+        contentBox,
+        rows.map((row) => row.box),
+      )
 
       return {
         reading: {
@@ -217,10 +219,15 @@ const readThread = (
           top: round(bands.top),
           middle: round(bands.middle),
           bottom: round(bands.bottom),
-          moved: round(movedSince(previousTops, tops)),
+          moved: round(
+            movedSince(
+              previousTops,
+              rows.map((row) => ({ key: row.key, top: row.box.top })),
+            ),
+          ),
           held,
         },
-        tops: new Map(tops.map((row) => [row.key, row.top])),
+        tops: new Map(rows.map((row) => [row.key, row.box.top])),
       }
     }
   }
@@ -270,12 +277,12 @@ const install = (): void => {
     }
   }
 
-  const fingerDown = (event: Event): void => {
+  const fingerDown = (event: TouchEvent): void => {
     held = event.isTrusted
   }
 
-  const fingerUp = (): void => {
-    held = false
+  const fingerUp = (event: TouchEvent): void => {
+    held = event.touches.length > 0
   }
 
   window.addEventListener('touchstart', fingerDown, { capture: true, passive: true })

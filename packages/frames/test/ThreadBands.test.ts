@@ -51,6 +51,7 @@ describe('bandsOf', () => {
     })
   })
 })
+
 describe('movedSince', () => {
   const previous = new Map([
     ['first', 100],

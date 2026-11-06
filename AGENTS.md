@@ -1107,7 +1107,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   all 57 timeline stories no pin landed between those two reads (measured), which is where such a
   frame would be painted (reasoned). It mattered past the log: a pin in a second commit before that
   frame read a scroll height short of the lift and left the scroll up by the lift. A test
-  holds that, and none of the 57 stories reached it (measured).
+  holds that, and none of the 57 stories reached it (measured). The transform written by hand stays
+  beside the motion value: Motion only writes in a microtask or a frame, and a pin in the commit
+  flushed right after, before either, reads the scroll height through it.
 - A row can still jump down in a following thread as a batch lands, then glide up. A pin raises the
   lift by the rows' estimated height and only moves the scroll back when they measure shorter, so
   the difference stays in the lift: 12 px on a send at the end of 120 lines and 98 px on a short
@@ -1971,7 +1973,8 @@ the screen once per animation frame and fails on what a settled screenshot canno
   before the fix (37 and 5 px, 10785 frames) and never after it (10777 frames), so neither the lift
   nor the glide nor a landing does it (measured). A finger does it where it turns around: 11 up then
   9 down, 5 then 6, and 35 then 50 between two strokes, over three gestures driven through CDP at 4x
-  (measured). So the recorder marks a frame with a finger down, and the check skips it.
+  (measured). So the recorder marks a frame with a finger down, and the check skips it. A wheel or a
+  scrollbar turning around is not marked, since the phone has neither and no story drives one.
 - The log's read is the frame's first animation callback, ahead of Motion's in all 40 runs that
   tell, so it holds what the last frame painted plus any commit since, and a Motion value reads a
   frame behind what that frame paints. A `ResizeObserver` on an element whose size that first

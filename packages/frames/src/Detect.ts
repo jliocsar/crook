@@ -238,25 +238,20 @@ const backtracksOf = (story: string, frames: readonly RecordedFrame[]): readonly
     frames,
     Arr.drop(1),
     Arr.zip(frames),
-    Arr.flatMap(([next, frame]) =>
-      backtracks(frame, next)
-        ? [
-            {
-              check: 'backtrack' as const,
-              key: 'backtrack',
-              story,
-              firstFrame: frame.frame,
-              lastFrame: next.frame,
-              imageFrame: frame.frame,
-              fromMs: Math.round(frame.at),
-              toMs: Math.round(next.at),
-              marks: marksOf(frame),
-              states: statesOf(frame),
-              words: `A row of the thread moved up ${Math.abs(movedAt(frame))} px in one frame and back down ${movedAt(next)} px in the next, with the lift at ${frame.thread?.lift ?? 0} px and then ${next.thread?.lift ?? 0} px. The scroll and the lift that should cancel out landed apart.`,
-            },
-          ]
-        : [],
-    ),
+    Arr.filter(([next, frame]) => backtracks(frame, next)),
+    Arr.map(([next, frame]) => ({
+      check: 'backtrack' as const,
+      key: 'backtrack',
+      story,
+      firstFrame: frame.frame,
+      lastFrame: next.frame,
+      imageFrame: frame.frame,
+      fromMs: Math.round(frame.at),
+      toMs: Math.round(next.at),
+      marks: marksOf(frame),
+      states: statesOf(frame),
+      words: `A row of the thread moved up ${Math.abs(movedAt(frame))} px in one frame and back down ${movedAt(next)} px in the next, with the lift at ${frame.thread?.lift ?? 0} px and then ${next.thread?.lift ?? 0} px. The scroll and the lift that should cancel out landed apart.`,
+    })),
   )
 
 const impactOf = (source: ShiftSource): number =>

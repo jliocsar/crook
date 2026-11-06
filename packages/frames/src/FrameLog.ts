@@ -24,8 +24,8 @@ export const ThreadReading = Schema.Struct({
   top: Schema.Finite,
   middle: Schema.Finite,
   bottom: Schema.Finite,
-  moved: Schema.optional(Schema.Finite),
-  held: Schema.optional(Schema.Boolean),
+  moved: Schema.Finite,
+  held: Schema.Boolean,
 })
 export type ThreadReading = typeof ThreadReading.Type
 

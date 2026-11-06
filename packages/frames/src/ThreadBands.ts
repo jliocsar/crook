@@ -49,8 +49,11 @@ export const bandsOf = (
 export const movedSince = (
   previous: ReadonlyMap<string, number>,
   rows: readonly RowTop[],
-): number => {
-  const shared = rows.findLast((row) => previous.has(row.key))
+): number =>
+  rows
+    .flatMap((row) => {
+      const before = previous.get(row.key)
 
-  return shared === undefined ? 0 : shared.top - (previous.get(shared.key) ?? shared.top)
-}
+      return before === undefined ? [] : [row.top - before]
+    })
+    .at(-1) ?? 0
