@@ -75,8 +75,8 @@ describe('detect, over logs recorded from real runs', () => {
       )
 
     expect(keysAtGap(1000 / 60)).toContain('flash:catching-up')
-    expect(keysAtGap(18)).toContain('flash:catching-up')
-    expect(keysAtGap(19)).toEqual([])
+    expect(keysAtGap(23)).toContain('flash:catching-up')
+    expect(keysAtGap(24)).toEqual([])
   })
 
   it('reports a state gone within a long frame, however late the next frame came', () => {
