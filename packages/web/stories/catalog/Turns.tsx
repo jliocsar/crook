@@ -28,7 +28,7 @@ import {
   user,
 } from '../../test/TranscriptFixtures.ts'
 import { chatHerd, chatStory, delivered } from '../ChatFixtures.ts'
-import { chatAgent, CONVERSATION, feed } from '../Fixtures.ts'
+import { chatAgent, chatAgentSaying, CONVERSATION, feed } from '../Fixtures.ts'
 import { MANY_LINES_END, manyLinesChunk } from '../ManyLines.ts'
 import { clicks, seesText, seesWithin, types } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
@@ -39,6 +39,8 @@ const STILL_ACTIVITY = '[data-machine="activity"][data-state="Still"]'
 const COMPOSER_FIELD_NAME = /Message/u
 const TYPED_COMPACT = '/compact keep the toast'
 const UNANSWERED_FIND_MS = Duration.toMillis(COMMAND_SILENCE) + 2000
+const BLIP_ANSWER_MS = 100
+const BLIP_LET_GO_MS = 117
 const FLIPS_WORKING_AT = DateTime.add(START, { seconds: CLOCK_AFTER_START_SECONDS })
 const FLIPS_IDLE_AT = DateTime.add(FLIPS_WORKING_AT, { seconds: 10 })
 
@@ -301,6 +303,69 @@ export const TURN_STORIES: readonly StoryMaker[] = [
             ),
           ]),
         ]),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'slash-send-opens-a-dialog',
+    title: 'A slash send that opens a dialog says so a second after the row does, until it closes',
+    shows: { text: 'The quiet redial' },
+    ends: {
+      all: [
+        { absent: 'No answer to /model sonnet' },
+        { absent: 'Sent' },
+        { selector: STILL_ACTIVITY },
+      ],
+    },
+    row: chatAgentSaying(false),
+    events: CONVERSATION,
+    timeline: [
+      step<LinkStage>(600, 'The user sends a command that opens a dialog', sends('/model sonnet')),
+      step<LinkStage>(220, 'The row says Claude waits on the laptop', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgentSaying(true)))),
+      ),
+      step<LinkStage>(0, 'The row has said it for a second', () =>
+        seesText('No answer to /model sonnet'),
+      ),
+      step<LinkStage>(1500, 'The dialog closes on the laptop', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgentSaying(false)))),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'slash-send-waiting-blip',
+    title: 'A slash send whose command reads as waiting for a moment shows no note on its way',
+    shows: { text: 'The quiet redial' },
+    ends: {
+      all: [{ text: 'Effort level: auto' }, { absent: 'No answer to' }, { absent: 'Sent' }],
+    },
+    row: chatAgentSaying(false),
+    events: CONVERSATION,
+    timeline: [
+      step<LinkStage>(
+        600,
+        'The user sends a command that answers at once',
+        sends('/effort status'),
+      ),
+      step<LinkStage>(
+        220,
+        'The row says Claude waits, for as long as the command takes',
+        ({ link }) => SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgentSaying(true)))),
+      ),
+      step<LinkStage>(BLIP_ANSWER_MS, 'The command and its output land', ({ link }) =>
+        feed(link, [
+          chunk(50, 70, [
+            user(50, [new LocalCommandBlock({ name: '/effort', args: 'status' })], {
+              seconds: TURN_START,
+            }),
+            user(60, [new LocalCommandOutputBlock({ text: 'Effort level: auto' })], {
+              seconds: TURN_START,
+            }),
+          ]),
+        ]),
+      ),
+      step<LinkStage>(BLIP_LET_GO_MS, 'The row lets go', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgentSaying(false)))),
       ),
     ],
   }),

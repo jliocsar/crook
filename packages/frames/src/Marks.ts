@@ -97,6 +97,7 @@ export const MARKS: readonly MarkDefinition[] = [
     selector: '[data-slot="prompt-input-field"]:disabled',
   },
   { mark: 'ask-dock', track: 'ask', selector: '[data-slot="ask-dock"]' },
+  { mark: 'composer-note', track: 'composer-note', selector: '[data-slot="composer-note"]' },
   { mark: 'banner', track: 'link', selector: '[data-slot="connection-banner"]' },
   { mark: 'spinner', track: 'indicator', selector: '[data-slot="spinner"]' },
   { mark: 'toast', track: 'toast', selector: '[data-slot="toast"]' },

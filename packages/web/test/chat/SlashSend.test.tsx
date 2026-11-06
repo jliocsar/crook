@@ -17,6 +17,7 @@ import { PaneTranscript } from '@crook/domain/Transcript'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { CLAUDE_WAITING_NOTE, claudeWaitingRefusal } from '@crook/protocol/Commands'
 import { COMMAND_SILENCE } from '@crook/web/chat/ChatCommands'
+import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
 import { click, eventually, findByRole, present, wait } from '../Dom.ts'
@@ -35,6 +36,10 @@ import {
 import { messagesOf } from '../../stories/RealTranscriptFixtures.ts'
 
 const SHORTENED_SILENCE_MS = 40
+const PAST_THE_HOLD_MS = Duration.toMillis(NOTICE_DELAY) + 300
+const TWO_HOLDS_LIMIT_MS = 15_000
+const SHORTENED_BESIDE_AN_ASK_MS = 1500
+const UNDER_THE_HOLD_MS = 30
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
 const VIEWPORT_WIDTH = 375
@@ -44,15 +49,12 @@ const live = (rows: readonly AgentRow[]) => liveWith(herd([machine(LAPTOP, rows)
 
 const field = () => present(screen.queryByRole('textbox'), 'The composer')
 
-const shortensTheSilence = () => {
+const shortensTheSilence = (toMs = SHORTENED_SILENCE_MS) => {
   const realSetTimeout = globalThis.setTimeout
 
   vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler, delay) =>
     // oxlint-disable-next-line effecttsgo/global-timers
-    realSetTimeout(
-      handler,
-      delay === Duration.toMillis(COMMAND_SILENCE) ? SHORTENED_SILENCE_MS : delay,
-    ),
+    realSetTimeout(handler, delay === Duration.toMillis(COMMAND_SILENCE) ? toMs : delay),
   )
 }
 
@@ -363,6 +365,130 @@ describe('a slash send', () => {
       yield* eventually(() => {
         expect(screen.getByText('Queued')).toBeDefined()
         expect(silences()).toBe(2)
+      })
+    }),
+  )
+
+  const sentAndWaitingOnIt = Effect.fn('sentAndWaitingOnIt')(function* (command: string) {
+    const { link } = yield* renderApp(
+      CHAT,
+      live([agent('w1:p1', 'idle', { claudeWaiting: false })]),
+    )
+    const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+    yield* Ref.set(
+      link.commandAnswer,
+      Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: command }))),
+    )
+    yield* Queue.offerAll(transcript, [opened(), caughtUp(0)])
+    yield* Effect.promise(() => screen.findByText('No messages yet'))
+    fireEvent.change(field(), { target: { value: command } })
+    yield* click(yield* findByRole('button', 'Send'))
+    yield* Effect.promise(() => screen.findByText('Sent'))
+
+    return link
+  })
+
+  it.effect('says a dialog may be open a second after the row says so, until it closes', () =>
+    Effect.gen(function* () {
+      const link = yield* sentAndWaitingOnIt('/model sonnet')
+
+      yield* SubscriptionRef.set(
+        link.state,
+        live([agent('w1:p1', 'idle', { claudeWaiting: true })]),
+      )
+
+      expect(screen.queryByText(/No answer to/u)).toBeNull()
+
+      yield* Effect.promise(() => screen.findByText(/No answer to \/model sonnet/u))
+
+      expect(screen.queryByText('Sent')).toBeNull()
+
+      yield* SubscriptionRef.set(
+        link.state,
+        live([agent('w1:p1', 'idle', { claudeWaiting: false })]),
+      )
+      yield* eventually(() => {
+        expect(screen.queryByText(/No answer to/u)).toBeNull()
+      })
+    }),
+  )
+
+  it.effect(
+    'says nothing for a wait shorter than the hold, and still answers a longer one',
+    () =>
+      Effect.gen(function* () {
+        const timers = vi.spyOn(globalThis, 'setTimeout')
+        const link = yield* sentAndWaitingOnIt('/effort status')
+
+        yield* SubscriptionRef.set(
+          link.state,
+          live([agent('w1:p1', 'idle', { claudeWaiting: true })]),
+        )
+        yield* wait(UNDER_THE_HOLD_MS)
+        yield* SubscriptionRef.set(
+          link.state,
+          live([agent('w1:p1', 'idle', { claudeWaiting: false })]),
+        )
+        yield* wait(PAST_THE_HOLD_MS)
+
+        expect(screen.queryByText(/No answer to/u)).toBeNull()
+        expect(screen.getByText('Sent')).toBeDefined()
+        expect(
+          timers.mock.calls.filter(([, delay]) => delay === Duration.toMillis(COMMAND_SILENCE)),
+        ).toHaveLength(1)
+
+        yield* SubscriptionRef.set(
+          link.state,
+          live([agent('w1:p1', 'idle', { claudeWaiting: true })]),
+        )
+        yield* Effect.promise(() => screen.findByText(/No answer to \/effort status/u))
+      }),
+    TWO_HOLDS_LIMIT_MS,
+  )
+
+  it.effect(
+    'holds off beside an ask, and says so a second after the ask has gone',
+    () =>
+      Effect.gen(function* () {
+        const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: 'Do you want to?' })
+        const link = yield* sentAndWaitingOnIt('/model sonnet')
+
+        yield* SubscriptionRef.set(
+          link.state,
+          live([agent('w1:p1', 'blocked', { ask, claudeWaiting: true })]),
+        )
+        yield* wait(PAST_THE_HOLD_MS)
+
+        expect(screen.queryByText(/No answer to/u)).toBeNull()
+
+        yield* SubscriptionRef.set(
+          link.state,
+          live([agent('w1:p1', 'idle', { claudeWaiting: true })]),
+        )
+        yield* Effect.promise(() => screen.findByText(/No answer to \/model sonnet/u))
+      }),
+    TWO_HOLDS_LIMIT_MS,
+  )
+
+  it.effect('drops a note its full bound raised once the row stops saying Claude waits', () =>
+    Effect.gen(function* () {
+      shortensTheSilence(SHORTENED_BESIDE_AN_ASK_MS)
+
+      const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: 'Do you want to?' })
+      const link = yield* sentAndWaitingOnIt('/mcp now')
+
+      yield* SubscriptionRef.set(
+        link.state,
+        live([agent('w1:p1', 'blocked', { ask, claudeWaiting: true })]),
+      )
+      yield* Effect.promise(() => screen.findByText(/No answer to \/mcp now/u))
+      yield* SubscriptionRef.set(
+        link.state,
+        live([agent('w1:p1', 'idle', { claudeWaiting: false })]),
+      )
+      yield* eventually(() => {
+        expect(screen.queryByText(/No answer to/u)).toBeNull()
       })
     }),
   )
