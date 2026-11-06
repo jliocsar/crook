@@ -13,7 +13,12 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 import { Prompt } from '@crook/domain/Command'
 import { PaneId, TranscriptOffset } from '@crook/domain/Ids'
-import { omittedBetween, omittedUpTo, PaneTranscript } from '@crook/domain/Transcript'
+import {
+  omittedBetween,
+  omittedUpTo,
+  PaneTranscript,
+  SubagentTranscript,
+} from '@crook/domain/Transcript'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 import { COLD_START } from '@crook/web/rpc/HubLinkState'
@@ -23,7 +28,15 @@ import { click, eventually, findByRole, present } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
-import { caughtUp, chunk, NEXT_SESSION, opened, said, SESSION } from '../TranscriptFixtures.ts'
+import {
+  caughtUp,
+  chunk,
+  NEXT_SESSION,
+  opened,
+  REVIEWER,
+  said,
+  SESSION,
+} from '../TranscriptFixtures.ts'
 
 const PANE = PaneId.make('w1:p1')
 const CHAT = '/m/laptop/p/w1:p1'
@@ -49,7 +62,7 @@ const laptop = (connection: 'online' | 'offline') => laptopOn(connection, '0.0.1
 
 const current = () => laptop('online')
 
-const catchingUpPill = () => document.querySelector('[data-slot="catching-up-pill"]')
+const catchingUpCapsule = () => document.querySelector('[data-slot="catching-up-capsule"]')
 
 const dimmedFlags = () =>
   Array.from(document.querySelectorAll('[data-state="dimmed"]'), () => 'true')
@@ -98,7 +111,7 @@ describe('a chat catching up', () => {
       ])
       yield* Effect.promise(() => screen.findByText('Seen before.'))
 
-      expect(catchingUpPill()).toBeNull()
+      expect(catchingUpCapsule()).toBeNull()
 
       yield* Effect.promise(() => router.navigate({ to: '/' }))
       yield* eventually(() => {
@@ -109,7 +122,7 @@ describe('a chat catching up', () => {
       )
       yield* Effect.promise(() => screen.findByText('Seen before.'))
 
-      expect(catchingUpPill()).toBeNull()
+      expect(catchingUpCapsule()).toBeNull()
       expect(dimmedFlags()).not.toContain('true')
 
       yield* Queue.offerAll(yield* link.transcriptFor(source), [
@@ -119,7 +132,7 @@ describe('a chat catching up', () => {
       ])
       yield* Effect.promise(() => screen.findByText('Missed while away.'))
 
-      expect(catchingUpPill()).toBeNull()
+      expect(catchingUpCapsule()).toBeNull()
     }),
   )
 
@@ -143,7 +156,14 @@ describe('a chat catching up', () => {
       yield* Effect.promise(() => screen.findByText('Seen before.'))
       yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
 
-      expect(catchingUpPill()).not.toBeNull()
+      expect(catchingUpCapsule()).not.toBeNull()
+      expect(
+        present(catchingUpCapsule(), 'The capsule').closest('[data-machine="transcript"]'),
+      ).not.toBeNull()
+      expect(
+        present(catchingUpCapsule(), 'The capsule').closest('.pointer-events-none'),
+      ).not.toBeNull()
+      expect(document.querySelector('header')?.textContent).not.toContain('Catching up')
       expect(screen.getAllByRole('status').map((status) => status.textContent)).toContain(
         'Catching up',
       )
@@ -156,8 +176,40 @@ describe('a chat catching up', () => {
       ])
       yield* Effect.promise(() => screen.findByText('Missed while away.'))
       yield* eventually(() => {
-        expect(catchingUpPill()).toBeNull()
+        expect(catchingUpCapsule()).toBeNull()
       })
+    }),
+  )
+
+  it.live('says so over a subagent thread too, and leaves its header alone', () =>
+    Effect.gen(function* () {
+      const subagentPath = `/m/laptop/p/w1:p1/sub/${SESSION}/${REVIEWER}`
+      const { link, router } = yield* renderApp(subagentPath, current())
+      const own = new SubagentTranscript({ session: SESSION, subagent: REVIEWER })
+
+      yield* Queue.offerAll(yield* link.transcriptFor(own), [
+        opened(),
+        chunk(0, 10, [said(0, 'Seen before.')]),
+        caughtUp(10),
+      ])
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByText('Seen before.')).toBeNull()
+      })
+      yield* Effect.promise(() =>
+        router.navigate({
+          to: '/m/$machine/p/$pane/sub/$session/$subagent',
+          params: { machine: LAPTOP, pane: PANE, session: SESSION, subagent: REVIEWER },
+        }),
+      )
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+
+      expect(
+        present(catchingUpCapsule(), 'The capsule').closest('[data-machine="transcript"]'),
+      ).not.toBeNull()
+      expect(document.querySelector('header')?.textContent).not.toContain('Catching up')
     }),
   )
 
@@ -359,7 +411,7 @@ describe('a chat catching up', () => {
         expect(dimmedFlags()).toContain('true')
       })
 
-      expect(catchingUpPill()).toBeNull()
+      expect(catchingUpCapsule()).toBeNull()
     }),
   )
 

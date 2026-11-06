@@ -987,14 +987,3 @@ export const chatItems = (
 
 export const runsIn = (items: readonly ChatItem[]): readonly SubagentRun[] =>
   Arr.flatMap(items, (item) => (isSubagents(item) ? item.runs : []))
-
-const isRunning = (run: SubagentRun): boolean => run.status === 'running'
-
-export const runningCount = (items: readonly ChatItem[]): number =>
-  Arr.filter(runsIn(items), isRunning).length
-
-export const firstRunningTreeKey = (items: readonly ChatItem[]): Option.Option<string> =>
-  pipe(
-    Arr.findFirst(items, (item) => isSubagents(item) && item.runs.some(isRunning)),
-    Option.map((item) => item.key),
-  )

@@ -5,7 +5,7 @@ import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { AgentStarted } from '@crook/domain/Command'
-import { omittedUpTo } from '@crook/domain/Transcript'
+import { omittedUpTo, SubagentsChanged } from '@crook/domain/Transcript'
 import { TranscriptOffset } from '@crook/domain/Ids'
 import { CommandTimedOut } from '@crook/protocol/Commands'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
@@ -14,7 +14,7 @@ import { UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
 import { COLD_START, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
-import { herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
+import { agent, herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
 import { keepOnThisDevice, STARTED_PANE } from '../../test/HubFakes.ts'
 import { manyLinesChunk } from '../ManyLines.ts'
 import {
@@ -25,6 +25,7 @@ import {
   prompt,
   said,
   SESSION,
+  subagent,
   toolResult,
   toolUse,
 } from '../../test/TranscriptFixtures.ts'
@@ -39,6 +40,9 @@ const READ_FAILED = new TranscriptReadFailed({ detail: 'disk unplugged' })
 const VIEWPORT = '[data-slot="conversation-viewport"]'
 const COMMAND_TIMEOUT_SECONDS = 45
 const SETTLE_BEFORE_SCROLL_MS = 150
+
+const LONG_CHAT_TITLE =
+  'Find out why the reconnect banner flashes on every foreground and write down what it would take to stop it'
 
 const failWatch = ({ link }: LinkStage) => link.endTranscript(CHAT_SOURCE, READ_FAILED)
 
@@ -220,10 +224,53 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
   }),
   chatStory({
     slug: 'catching-up',
-    title: 'Chat, Catching up pill on a reopen that runs past the delay',
+    title: 'Chat, Catching up capsule on a reopen that runs past the delay',
     events: CONVERSATION,
     settle: (stage) => Effect.andThen(seesText('The quiet redial'), leaveAndReopen(stage)),
-    shows: { selector: '[data-slot="catching-up-pill"]' },
+    shows: { selector: '[data-slot="catching-up-capsule"]' },
+  }),
+  chatStory({
+    slug: 'catching-up-long-title',
+    title: 'Chat, Catching up capsule under a title long enough to truncate',
+    row: agent('w1:p1', 'idle', {
+      title: LONG_CHAT_TITLE,
+      secondsAgo: 42,
+      branch: 'fix/reconnect-banner',
+      claudeSession: SESSION,
+    }),
+    events: CONVERSATION,
+    settle: (stage) => Effect.andThen(seesText('The quiet redial'), leaveAndReopen(stage)),
+    shows: { selector: '[data-slot="catching-up-capsule"]' },
+  }),
+  chatStory({
+    slug: 'catching-up-reduced',
+    title: 'Chat, Catching up capsule with motion reduced',
+    env: { reducedMotion: true },
+    events: CONVERSATION,
+    settle: (stage) => Effect.andThen(seesText('The quiet redial'), leaveAndReopen(stage)),
+    shows: { selector: '[data-slot="catching-up-capsule"]' },
+  }),
+  chatStory({
+    slug: 'foreground-subagent-running',
+    title: 'Chat, a foreground subagent running, Claude waiting on it',
+    row: chatAgent('working'),
+    events: [
+      opened(),
+      chunk(0, 20, [
+        prompt(0, 'Review the diff'),
+        toolUse(10, 'toolu_review', 'Agent', {
+          description: 'Review the herd diff',
+          prompt: 'Read the diff and list the risks.',
+          subagent_type: 'code-reviewer',
+        }),
+      ]),
+      caughtUp(20),
+      new SubagentsChanged({
+        session: SESSION,
+        subagents: [subagent({ toolUseId: 'toolu_review', background: false })],
+      }),
+    ],
+    shows: { selector: '[data-slot="background-chip"]' },
   }),
   chatStory({
     slug: 'failed-with-lines',

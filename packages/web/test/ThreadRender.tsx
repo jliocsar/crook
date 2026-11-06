@@ -305,9 +305,6 @@ export const historyOpen = () => {
       movesUp(by)
     },
     correctedUp: movesUp,
-    jumpsTo: (key: string) => {
-      handle.current?.scrollToKey(key)
-    },
     pressesLatest: () => {
       fireEvent.click(
         present(

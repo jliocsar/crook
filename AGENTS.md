@@ -745,22 +745,22 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   `Atom`'s stream constructor), so the result of an atom over a stream that never ends, such as a
   chat's transcript, is waiting from its first value on and says nothing about a refresh. So the
   chat's atom emits a machine's state, which holds both the view on screen and the fold still
-  being read: the header's "Catching up" pill and the pending Show earlier and Try again rows are
+  being read: the thread's "Catching up" capsule and the pending Show earlier and Try again rows are
   each a tag of that state, and a screen reads nothing else. The cue hides while the chat is
   dimmed, since the dim already says the hub or the machine is away, and once the pane no longer
   runs Claude, whose transcript never catches up. A failed watch is not catching up, and pressing
   Try again is a tag of its own.
-- A read that ends within a second says nothing. The pill used to show as soon as a watch
+- A read that ends within a second says nothing. The cue used to show as soon as a watch
   resumed, and on a reconnect and a foreground return it held 17 frames (317 ms) and 14 frames
   (238 ms), each with its spinner, and read as a flash every run. Waiting the second a link's
   notice waits, neither shows at all. Once shown it stays until it has held 400 ms, the frame
-  tool's limit: a read landing 1.8 s after the tap showed the pill at full opacity for 36 frames
+  tool's limit: a read landing 1.8 s after the tap showed the cue at full opacity for 36 frames
   (all measured in Chromium at 4x CPU throttling).
-- The pill, the failure rows and the rows read one state, deferred once, so they commit together:
-  on that 1.8 s read the pill starts to fade in the frame the rows land (measured as above). The
+- The cue, the failure rows and the rows read one state, deferred once, so they commit together:
+  on that 1.8 s read the cue starts to fade in the frame the rows land (measured as above). The
   rows are slow to render and the deferred read can skip a state on its way: a read landing about
   1.1 s after the tap went from held rows to landed rows with the state that says catching up never
-  committed, so the pill first showed in the frame the rows landed, and held its 400 ms over a read
+  committed, so the cue first showed in the frame the rows landed, and held its 400 ms over a read
   already done, 37 frames with its fades (measured as above). The atom cannot know what committed.
 - A catch-up that lands before the cached rows ever committed gets its divider like any other. What
   is new is what the cache did not hold, whichever rows the chat got to show: the fold keeps the
@@ -912,7 +912,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - A hole's row and the line that fills it used to share a key, the line's offset and index, so the filled row kept the hole's measured 80 px while it rendered 32, and the rows below moved only after a ResizeObserver reported it: Show earlier landing left 60 px with no row for one frame of 14 to 64 ms in all 14 runs, and in pictures. TanStack Virtual measures through its ref only at mount, and that report renders in a later task (read in its source). Keyed apart, a filled row mounts and measures in the commit that lands it, with no band in 3 of 3 runs at 390 wide and 1 of 1 at 430, a thread still following keeping the row under the hole at 185 px and one scrolled up to it the row above at 293 px in every frame, the lift at 0, Show earlier pending from the tap until the rows land with no frame of Show earlier between, and no layout shift at the landing (measured at 4x CPU throttling). The landing's worst frame stayed within what it moves from run to run: 49 to 64 ms before and 51 to 59 after, 58 to 73 and 61 to 79 scrolled up to the hole, 128 to 142 and 139 to 148 still following (four runs each, measured as above).
 - A row that truly changes height under its key still moves the rows below it a frame late, for the reason above. Over a sweep of all 43 timeline stories no row reported a height other than the one it was measured at, so no story reaches that path and nothing checks it (measured with the same tracing). Which rows can do it on real data is not measured.
 - A browser asks for a font only once text needing it lays out, so a chat whose rows were the first text to want it measured them in the fallback font. The font landed before the next frame, while the commits after the mount still held the main thread: a prompt measured 76 px where it renders 52, and 36 px stayed empty between rows for one frame of 47 to 87 ms in 11 of 11 runs at 390 wide; at 430 three tall rows measured 608 where they render 560, 60 and 64 px empty on the first frame (measured at 4x CPU throttling). Asking for the three families when the app's entry runs has them in hand before those rows commit, and waits for nothing: no band in 3 of 3 runs at 390 wide and 1 of 1 at 430, the band back in all four with only that ask taken out, and the first frames' worst frame at 325 to 338 ms against 325 to 343 (measured as above). In a production build, unthrottled and on a screen with no mono text, all three answered 64 ms before the first contentful paint (measured once). The ask names no text, so of the 11 faces only the three whose range covers a space load, and a chat in another script still swaps its own faces late (reasoned, not measured). A font slower than the first rows still swaps under them, and a phone with the service worker behind it is not measured.
-- A scroll position written further than the rendered rows reach shows an empty thread for one frame when the frame comes before the virtualizer's render: a story's write of 0 from the end of 47 rows read 660 px with no row at the lift of 0, and the screencast shows that frame with nothing between the header and the dock, so the tool told the truth (measured once at 4x, 1 of 43 stories in a sweep; 2 of 229 story runs before it). The write was 0.7 ms before the frame and the render landed 30 ms after. A finger's scroll moves far less than the overscan per frame (reasoned, not measured); the writes the app makes itself are the jump to the end, which renders the end beside the range, and a jump to a row under reduced motion, which is not measured.
+- A scroll position written further than the rendered rows reach shows an empty thread for one frame when the frame comes before the virtualizer's render: a story's write of 0 from the end of 47 rows read 660 px with no row at the lift of 0, and the screencast shows that frame with nothing between the header and the dock, so the tool told the truth (measured once at 4x, 1 of 43 stories in a sweep; 2 of 229 story runs before it). The write was 0.7 ms before the frame and the render landed 30 ms after. A finger's scroll moves far less than the overscan per frame (reasoned, not measured); the one write the app makes itself is the jump to the end, which renders the end beside the range.
 - Filling a hole is not new content at the end, so it lifts nothing. With the lift, a thread still following when the whole file landed lost its rows for 115 ms and glided the row under the hole from 668 px back to the 361 px it had been at. Without it, that row read 185 px in every frame before and after the landing, and a thread scrolled up to the hole kept the row above it at 293 px while the filled rows opened under it and pushed the rest down (all measured at 4x CPU throttling, 390x844).
 - A playback speed scales only the delays between a story's steps, and a chat's slide-out does not scale. The reopen catch-up story lost its divider at twice and four times the speed because its tap fell inside the slide-out, so the chat never left and the rows landed as live lines: its thread went from Current to Current and never held anything, 4 of 4 runs with the wait for the chat to leave taken out. With that wait it ends on its divider at 0.5, 1, 2 and 4 times the speed, 2 of 2 each, and at 8 and 16 with even the wait for the held rows taken out (all measured in Chromium, at 4x CPU throttling except the 16). How fast the rows land was never the cause.
 - A real resume does not land before the chat's first commit. The chat's first commit with a view comes before the request even leaves, so a shorter round trip cannot get ahead of it. Tapping a card on a local hub and agent, a real transcript and a stand-in Claude, the Chromium dev server at 4x and at an emulated 300 ms round trip: first commit 55 to 91 ms after the tap, the resume going out 267 to 391 ms after it, the caught-up mark arriving at 899 to 1055 ms and the rows committed at 1038 to 1327 ms, a 1.3 MB gap among them. At 1x those were 18 to 22, 94 to 105, 710 to 735 and 746 to 768 ms. With the proxy delaying nothing, at 4x: 68 to 114, 450 to 473, 619 to 663 and 783 to 859 ms. Reloading the page onto the chat, timed from navigation at 4x, the first commit takes 909 to 2887 ms and the mark still arrives 782 to 981 ms after it; with the proxy delaying nothing, 381 to 486 ms after it. At 20x with the proxy delaying nothing the first commit still came first: 406 and 420 ms against a mark at 2267 and 2310 on a tap, and 6251 to 8308 against 8083 to 10207 on a reload. A production build and a phone are not measured.
@@ -1292,7 +1292,7 @@ a turn of its own, enqueued as a task notification.
   a chat with nothing cached says "No messages yet" a second later and a cached chat lands with no
   catch-up (read in the chat's machine, not measured). A dial that fails before its first herd ends the watch quietly, as any lost connection
   does, and the next dial asks again. Each dial resumes, so a failing backoff restarts the chat's
-  notice wait, and the link's own notice dims the chat at that same second, which hides the pill
+  notice wait, and the link's own notice dims the chat at that same second, which hides the capsule
   (reasoned, not measured).
 - A covered screen reads atoms through a derived atom that returns its own previous value while
   the covered flag is set and reads nothing else, so a herd update wakes none of its components.
@@ -1348,7 +1348,7 @@ a turn of its own, enqueued as a task notification.
   transcripts at every cut. A chat that opened current, a cold open, a watch that failed or started
   over, and a catch-up that added no row get nothing. The fold judges the lines when the read ends,
   and the screen turns them into row keys, since only it has rows.
-- The catch-up shows nothing but the header's "Catching up" pill, past its first second, while it
+- The catch-up shows nothing but the thread's "Catching up" capsule, past its first second, while it
   waits for the fresher view. Its rows then land in one commit under one ordinary lift capped at a screen,
   with a static divider above the first new row. Releasing them one row at a time, with a chip
   carried down a trail, held a reopen back from its end: reopening a thread of 120 lines with 40

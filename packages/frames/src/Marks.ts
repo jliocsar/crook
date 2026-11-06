@@ -67,7 +67,7 @@ export const MARKS: readonly MarkDefinition[] = [
   { mark: 'empty-state', track: 'cards', selector: '[data-slot="empty-state"]', content: true },
   { mark: 'task-composer', track: 'new-agent', selector: '[data-slot="task-composer"]' },
   { mark: 'dimmed', track: 'dimmed', selector: `[${STATE_ATTRIBUTE}="dimmed"]` },
-  { mark: 'catching-up', track: 'header', selector: '[data-slot="catching-up-pill"]' },
+  { mark: 'catching-up', track: 'catching-up', selector: '[data-slot="catching-up-capsule"]' },
   { mark: 'working', track: 'activity', selector: '[data-row="working"]' },
   {
     mark: 'activity-quiet',

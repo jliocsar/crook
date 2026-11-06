@@ -32,7 +32,6 @@ interface Ghost {
 }
 
 export interface ThreadHandle {
-  readonly scrollToKey: (key: string) => void
   readonly scrollToEnd: () => void
 }
 
@@ -473,23 +472,12 @@ export function Thread({
   React.useImperativeHandle(
     handle,
     () => ({
-      scrollToKey: (key: string) => {
-        const index = rows.findIndex((row) => row.key === key)
-
-        if (index >= 0) {
-          follow(false)
-          virtualizer.scrollToIndex(index, {
-            align: 'center',
-            behavior: reduce ? 'auto' : 'smooth',
-          })
-        }
-      },
       scrollToEnd: () => {
         follow(true)
         toBottom()
       },
     }),
-    [rows, virtualizer, reduce, toBottom],
+    [virtualizer, toBottom],
   )
 
   React.useLayoutEffect(() => {

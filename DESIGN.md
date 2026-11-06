@@ -373,13 +373,16 @@ screen" on the Ask.
 - **The header** is the pushed screen's: the back button, the agent's title (display, 20/28,
   620, truncated), and one line under it: the status dot, the status word (blocked reads "needs
   you"), a `·`, then `machine · workspace` in mono 12px. The status word is a polite live
-  region, so a screen reader hears the agent move on. On the right:
-  - "Catching up", a muted pill with a spinner, while the chat shows a cached transcript and a
-    fresher one is still on its way. It hides while the chat is dimmed or the pane no longer
-    runs Claude;
-  - "2 running", a pill shown while any subagent runs. Tapping it scrolls to the running tree;
-  - `…`, which opens the agent's action sheet (The herd), while the agent is live or its machine
-    is offline.
+  region, so a screen reader hears the agent move on. On the right, `…` opens the agent's action
+  sheet (The herd), while the agent is live or its machine is offline. Nothing else goes in the
+  header, so the title's width never moves.
+- **"Catching up"** is a capsule with a spinner floating 8px below the header, centered over the
+  top of the thread (32px tall, `bg-card` at 90% with the header's blur, muted text), while the
+  chat shows a cached transcript and a fresher one is on its way. A subagent's screen shows the
+  same one. It hides while the chat is dimmed or the pane no longer runs Claude. It covers a row
+  or two of text while it shows and takes no touch: a tap or a scroll lands on what is under it. A
+  screen reader hears "Catching up" through a polite status when it shows, and nothing when it
+  ends.
 - **The transcript** follows the live tail. Only the user scrolling up lets go of it: content that
   grows, a row that remeasures or a scroll the page makes itself never does. Scrolled up, a
   "Latest" pill (`bg-foreground`, 44px) shows above the dock and jumps back down, and sending a

@@ -248,19 +248,6 @@ describe('Thread', () => {
     }),
   )
 
-  it.effect('stays on the row it jumped to once that scroll settles', () =>
-    Effect.gen(function* () {
-      const opened = historyOpen()
-
-      yield* wait(SETTLE_MS)
-      opened.jumpsTo('prompt')
-      yield* wait(SETTLE_MS)
-
-      expect(following()).toBe(false)
-      expect(opened.top()).toBeLessThan(opened.bottom())
-    }),
-  )
-
   it.effect('goes back to the end when Latest is pressed', () =>
     Effect.gen(function* () {
       const opened = historyOpen()

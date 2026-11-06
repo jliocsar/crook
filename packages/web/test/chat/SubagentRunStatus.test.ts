@@ -11,7 +11,6 @@ import {
   type AgentActivity,
   ChatItem,
   chatItems,
-  runningCount,
   runsIn,
   type SubagentRun,
 } from '@crook/web/chat/ChatItems'
@@ -126,8 +125,8 @@ describe('a background subagent run', () => {
     ])
     const after = applyTranscriptEvent(before, opened(NEXT_SESSION))
 
-    expect(runningCount(itemsOf(before, 'working'))).toBe(1)
-    expect(runningCount(itemsOf(after, 'working'))).toBe(0)
+    expect(runsIn(itemsOf(before, 'working')).map((run) => run.status)).toEqual(['running'])
+    expect(runsIn(itemsOf(after, 'working'))).toEqual([])
     expect(HashMap.has(after.rosters, SESSION)).toBe(false)
   })
 })
