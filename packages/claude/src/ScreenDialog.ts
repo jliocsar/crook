@@ -68,6 +68,8 @@ const isOptionLine = (line: string) => OPTION_LINE.test(line)
 
 const isBlank = (line: string) => line.trim().length === 0
 
+export const saysEsc = (text: string): boolean => ESC_OPTION_END.test(text)
+
 const withoutIndent = (line: string) => (line.startsWith(' ') ? line.slice(1) : line).trimEnd()
 
 const nextContent = (lines: readonly string[], from: number) =>
@@ -79,7 +81,7 @@ const footerIndex = (lines: readonly string[]) =>
 const endOnLastLine = (lines: readonly string[], last: number): Option.Option<number> => {
   const line = lines[last] ?? ''
 
-  if (ESC_OPTION_END.test(line)) {
+  if (saysEsc(line)) {
     return Option.some(last + 1)
   }
 

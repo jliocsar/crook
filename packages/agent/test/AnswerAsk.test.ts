@@ -217,6 +217,18 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
     }),
   )
 
+  it.effect('declines a plan approval with Esc', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('125-plan-approval')
+      const ask = bashAsk(screen)
+      const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
+
+      yield* executor.execute(ACTION, answer(ask, new Decline({ message: Option.none() })))
+
+      expect(yield* sentAfter(sent)).toEqual([READ_REQUEST, keysRequest(['esc'])])
+    }),
+  )
+
   it.effect('refuses an answer to such a dialog once another one is on screen', () =>
     Effect.gen(function* () {
       const screen = yield* spikeScreen('124-webfetch-blocked')

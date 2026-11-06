@@ -101,6 +101,45 @@ layer(platform)('how a permission dialog ends and what its answers mean', (it) =
     }),
   )
 
+  it.effect('leaves an unknown dialog its own, with a plan call waiting', () =>
+    Effect.gen(function* () {
+      const ask = deriveAsk({
+        ...noEvidence(yield* spikeScreen('124-webfetch-blocked')),
+        dialog: Option.map(parseDialog(yield* spikeScreen('124-webfetch-blocked')), (dialog) => ({
+          ...dialog,
+          header: 'Something new',
+        })),
+        toolUse: Option.some(
+          new ToolUseBlock({
+            id: 'toolu_plan',
+            name: 'ExitPlanMode',
+            input: { plan: 'Create a.txt holding the word hi.' },
+          }),
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(expect.objectContaining({ source: 'screen' }))
+    }),
+  )
+
+  it.effect('does not take a plan footer above the input box for a dialog', () =>
+    Effect.gen(function* () {
+      const answer = [
+        '─'.repeat(40),
+        ' The plan dialog said:',
+        '  1. Yes',
+        '  ctrl+g to edit in Vim',
+        '',
+        '─'.repeat(40),
+        '❯ ',
+        '─'.repeat(40),
+        '  ? for shortcuts',
+      ].join('\n')
+
+      expect(parseDialog(answer)).toEqual(Option.none())
+    }),
+  )
+
   it.effect('does not take a line saying esc in the conversation for a dialog', () =>
     Effect.gen(function* () {
       const answer = [

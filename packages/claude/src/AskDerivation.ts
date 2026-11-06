@@ -14,6 +14,7 @@ import {
   type ScreenDialog,
   dialogFingerprint,
   optionText,
+  saysEsc,
 } from '@crook/claude/ScreenDialog'
 import {
   type Ask,
@@ -62,7 +63,6 @@ interface ToolCall {
 
 const YES_LABEL = 'Yes'
 const NO_LABEL = 'No'
-const ESC_HINT = ' (esc)'
 const ALWAYS_DESCRIPTION = 'always allow'
 const OTHER_DESCRIPTION = 'other'
 const LINE_BREAK = '\n'
@@ -141,7 +141,7 @@ export const optionChoice = (label: string): AskChoice => {
     return 'yes'
   }
 
-  if (Arr.contains(ONE_TIME_NO_LABELS, label) || label.endsWith(ESC_HINT)) {
+  if (Arr.contains(ONE_TIME_NO_LABELS, label) || saysEsc(label)) {
     return 'no'
   }
 
@@ -290,10 +290,9 @@ const showsQuestion = (dialog: ScreenDialog, call: ToolCall) =>
 const showsPermission = (dialog: ScreenDialog, call: ToolCall) =>
   call.toolName !== QUESTION_TOOL &&
   Option.match(toolOfHeader(dialog.header), {
-    onNone: () => true,
-    onSome: (tool) => tool === call.toolName,
-  }) &&
-  (call.toolName === PLAN_TOOL || showsAction(dialog, call))
+    onNone: () => showsAction(dialog, call),
+    onSome: (tool) => tool === call.toolName && (tool === PLAN_TOOL || showsAction(dialog, call)),
+  })
 
 const isConsistent = (dialog: Option.Option<ScreenDialog>) => (call: ToolCall) =>
   Option.match(dialog, {

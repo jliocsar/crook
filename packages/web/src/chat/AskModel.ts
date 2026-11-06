@@ -175,11 +175,14 @@ export const permissionButtons = (ask: PermissionAsk): readonly AskButton[] => [
 ]
 
 export const laptopOnlyOptions = (ask: PermissionAsk): readonly string[] => {
-  const drawn = Arr.getSomes([askOption(ask, 'yes'), askOption(ask, 'always')])
+  const drawn = pipe(
+    Arr.getSomes([askOption(ask, 'yes'), askOption(ask, 'always')]),
+    Arr.map((option) => option.number),
+  )
 
   return pipe(
     ask.options,
-    Arr.filter((option) => option.choice !== 'no' && !Arr.contains(drawn, option)),
+    Arr.filter((option) => option.choice !== 'no' && !Arr.contains(drawn, option.number)),
     Arr.map((option) => option.label.replace(KEY_HINT, '')),
   )
 }
