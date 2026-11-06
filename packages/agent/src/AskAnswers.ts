@@ -38,6 +38,7 @@ import {
 
 interface AnsweredAsk {
   readonly ask: AskId
+  readonly dialog: Option.Option<string>
   readonly terminal: AgentRow['terminal']
   readonly stateChangeSeq: number
 }
@@ -75,8 +76,11 @@ const requireChoosable = (
     Match.orElse(() => Effect.fail(new AskOptionUnavailable({ pane, option: chosen.answer }))),
   )
 
+const dialogOf = (row: AgentRow) => Option.flatMap(row.ask, askDialog)
+
 const isSameAnswer = (row: AgentRow, ask: AskId) => (answered: AnsweredAsk) =>
   answered.ask === ask &&
+  Equal.equals(answered.dialog, dialogOf(row)) &&
   answered.terminal === row.terminal &&
   answered.stateChangeSeq === row.stateChangeSeq
 
@@ -138,6 +142,7 @@ const make = Effect.gen(function* () {
       answered,
       HashMap.set(answer.pane, {
         ask: answer.ask,
+        dialog: dialogOf(row),
         terminal: row.terminal,
         stateChangeSeq: row.stateChangeSeq,
       }),

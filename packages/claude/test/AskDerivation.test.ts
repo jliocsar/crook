@@ -1,6 +1,7 @@
 import { expect, layer } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
@@ -24,6 +25,7 @@ import {
 import {
   type HookPayload,
   PermissionRequestPayload,
+  PostToolUsePayload,
   PreToolUsePayload,
 } from '@crook/claude/HookPayload'
 import { firstUnmatchedToolUse } from '@crook/claude/LastTurn'
@@ -31,6 +33,7 @@ import { dialogFingerprint, keysToSelect, parseDialog } from '@crook/claude/Scre
 import { spikeScreen } from '@crook/claude/fixtures/SpikeScreens.ts'
 import { Ask } from '@crook/domain/Ask'
 import { ClaudeSessionId } from '@crook/domain/Ids'
+import { ToolUseBlock } from '@crook/domain/TranscriptMessage'
 
 import { platform, spikeHooks, spikeTranscript } from './Fixtures'
 
@@ -102,6 +105,34 @@ const toolOf = (payload: HookPayload): Option.Option<string> =>
 
 const isEvent = (event: HookPayload['hook_event_name'], tool: string) => (payload: HookPayload) =>
   payload.hook_event_name === event && Option.contains(toolOf(payload), tool)
+
+const readStarted = (filePath: string, toolUseId: string) =>
+  new PreToolUsePayload({
+    hook_event_name: 'PreToolUse',
+    session_id: NATIVE_SESSION,
+    tool_name: 'Read',
+    tool_input: { file_path: filePath },
+    tool_use_id: toolUseId,
+  })
+
+const permissionAsked = (toolName: string, toolInput: Schema.Json) =>
+  new PermissionRequestPayload({
+    hook_event_name: 'PermissionRequest',
+    session_id: NATIVE_SESSION,
+    tool_name: toolName,
+    tool_input: toolInput,
+  })
+
+const readAsked = (filePath: string) => permissionAsked('Read', { file_path: filePath })
+
+const readFinished = (filePath: string, toolUseId: string) =>
+  new PostToolUsePayload({
+    hook_event_name: 'PostToolUse',
+    session_id: NATIVE_SESSION,
+    tool_name: 'Read',
+    tool_input: { file_path: filePath },
+    tool_use_id: toolUseId,
+  })
 
 const withCursorOn = (screen: string, option: string) =>
   screen.replace('❯ 1. Yes', '  1. Yes').replace(`  ${option}`, `❯ ${option}`)
@@ -441,6 +472,22 @@ layer(platform)('deriveAsk', (it) => {
     }),
   )
 
+  it.effect('tells two calls of one command apart by their place in the queue', () =>
+    Effect.gen(function* () {
+      const payloads = yield* spikeHooks('codemode-bash-timeout-retry-zombies-declined')
+      const askOn = (screen: string) =>
+        deriveAsk({
+          ...noEvidence(screen),
+          pending: pendingPermissions(replay(payloads), sessionOf(payloads)),
+        }).id
+      const first = askOn(yield* spikeScreen('112-codemode6-zombie'))
+      const second = askOn(yield* spikeScreen('113-codemode6-zombie-declined'))
+
+      expect(first).toEqual(ZOMBIE_CALL)
+      expect(second).not.toEqual(first)
+    }),
+  )
+
   it.effect('reads the screen when the hook names another command than the dialog shows', () =>
     Effect.gen(function* () {
       const payloads = retriedWithAnotherCommand(
@@ -601,6 +648,228 @@ layer(platform)('deriveAsk', (it) => {
               ],
             },
           ],
+        }),
+      )
+    }),
+  )
+
+  it.effect('names the call the dialog shows, whichever request reached the agent first', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('120-parallel-read-1-of-2')
+      const ask = deriveAsk({
+        ...noEvidence(screen),
+        pending: pendingPermissions(
+          replay([
+            readStarted('/etc/hostname', 'toolu_hostname'),
+            readStarted('/etc/os-release', 'toolu_os_release'),
+            readAsked('/etc/os-release'),
+            readAsked('/etc/hostname'),
+          ]),
+          NATIVE_SESSION,
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(
+        expect.objectContaining({
+          id: 'toolu_hostname',
+          source: 'hook',
+          action: { _tag: 'UseTool', input: { file_path: '/etc/hostname' } },
+        }),
+      )
+    }),
+  )
+
+  it.effect('names the call a dialog with no counter shows, not the latest request', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('122-read-outside-working-directories')
+      const ask = deriveAsk({
+        ...noEvidence(screen),
+        pending: pendingPermissions(
+          replay([
+            readStarted('/etc/hostname', 'toolu_hostname'),
+            readAsked('/etc/hostname'),
+            readStarted('/etc/passwd', 'toolu_passwd'),
+            readAsked('/etc/passwd'),
+          ]),
+          NATIVE_SESSION,
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(expect.objectContaining({ id: 'toolu_hostname' }))
+    }),
+  )
+
+  it.effect('follows the second dialog of a batch once the first call has finished', () =>
+    Effect.gen(function* () {
+      const ask = deriveAsk({
+        ...noEvidence(yield* spikeScreen('121-parallel-read-2-of-2')),
+        pending: pendingPermissions(
+          replay([
+            readStarted('/etc/hostname', 'toolu_hostname'),
+            readStarted('/etc/os-release', 'toolu_os_release'),
+            readAsked('/etc/os-release'),
+            readAsked('/etc/hostname'),
+            readFinished('/etc/hostname', 'toolu_hostname'),
+          ]),
+          NATIVE_SESSION,
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(expect.objectContaining({ id: 'toolu_os_release' }))
+    }),
+  )
+
+  it.effect('reads the screen when two different calls could each be the dialog', () =>
+    Effect.gen(function* () {
+      const ask = deriveAsk({
+        ...noEvidence(yield* spikeScreen('120-parallel-read-1-of-2')),
+        pending: pendingPermissions(
+          replay([readAsked('/etc/host'), readAsked('/etc/hostname')]),
+          NATIVE_SESSION,
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(
+        expect.objectContaining({
+          source: 'screen',
+          tool: 'Read',
+          action: { _tag: 'ScreenDetail', subject: null, text: 'Read(/etc/hostname)' },
+        }),
+      )
+    }),
+  )
+
+  it.effect('never shows a declined call over a new dialog of a tool it has no header for', () =>
+    Effect.gen(function* () {
+      const screen = (yield* spikeScreen('122-read-outside-working-directories')).replace(
+        'Read outside the working directories',
+        'Tool of the future',
+      )
+      const ask = deriveAsk({
+        ...noEvidence(screen),
+        pending: pendingPermissions(replay([readAsked('/etc/passwd')]), NATIVE_SESSION),
+      })
+
+      expect(encodeAsk(ask)).toEqual(
+        expect.objectContaining({
+          source: 'screen',
+          tool: 'Tool of the future',
+          action: { _tag: 'ScreenDetail', subject: null, text: 'Read(/etc/hostname)' },
+        }),
+      )
+    }),
+  )
+
+  it.effect('reads the screen over a call whose input holds nothing the dialog could show', () =>
+    Effect.gen(function* () {
+      const ask = deriveAsk({
+        ...noEvidence(yield* spikeScreen('122-read-outside-working-directories')),
+        pending: pendingPermissions(
+          replay([permissionAsked('Read', { limit: 3 })]),
+          NATIVE_SESSION,
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(expect.objectContaining({ source: 'screen' }))
+    }),
+  )
+
+  it.effect('names a call of a tool with no header once the dialog shows all it asks', () =>
+    Effect.gen(function* () {
+      const ask = deriveAsk({
+        ...noEvidence(yield* spikeScreen('123-mcp-input-over-lines')),
+        pending: pendingPermissions(
+          replay([
+            permissionAsked('mcp__probe__note', {
+              title: 'He said "hi"',
+              body: `line one\nline two\nline three\n${pipe(Arr.replicate('lorem', 109), Arr.join(' '))}`,
+              urgent: true,
+            }),
+          ]),
+          NATIVE_SESSION,
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(expect.objectContaining({ source: 'hook' }))
+    }),
+  )
+
+  it.effect('reads the screen over an earlier call of a tool with no header', () =>
+    Effect.gen(function* () {
+      const ask = deriveAsk({
+        ...noEvidence(yield* spikeScreen('123-mcp-input-over-lines')),
+        pending: pendingPermissions(
+          replay([permissionAsked('mcp__probe__note', { title: 'Stand up', body: 'short' })]),
+          NATIVE_SESSION,
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(expect.objectContaining({ source: 'screen' }))
+    }),
+  )
+
+  it.effect('takes the screen over the transcript when the first call is not the dialog', () =>
+    Effect.gen(function* () {
+      const ask = deriveAsk({
+        ...noEvidence(yield* spikeScreen('121-parallel-read-2-of-2')),
+        toolUse: Option.some(
+          new ToolUseBlock({
+            id: 'toolu_hostname',
+            name: 'Read',
+            input: { file_path: '/etc/hostname' },
+          }),
+        ),
+      })
+
+      expect(encodeAsk(ask)).toEqual(
+        expect.objectContaining({
+          source: 'screen',
+          action: {
+            _tag: 'ScreenDetail',
+            subject: 'This will read /usr/lib/os-release (outside working directory) via a symlink',
+            text: 'Read(/etc/os-release)',
+          },
+        }),
+      )
+    }),
+  )
+
+  it.effect('names the first call of the transcript only over the first dialog of a queue', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('20-edit-blocked')
+      const toolUse = Option.some(
+        new ToolUseBlock({
+          id: 'toolu_first_edit',
+          name: 'Edit',
+          input: { file_path: '/spikes/seed.txt', old_string: 'hello', new_string: 'there' },
+        }),
+      )
+      const sourceAt = (position: number) =>
+        deriveAsk({
+          ...noEvidence(screen.replace('Edit file', `Edit file   ${position} of 2`)),
+          toolUse,
+        })
+
+      expect(encodeAsk(sourceAt(1))).toEqual(expect.objectContaining({ source: 'transcript' }))
+      expect(encodeAsk(sourceAt(2))).toEqual(expect.objectContaining({ source: 'screen' }))
+    }),
+  )
+
+  it.effect('names no call with no dialog to tell two different requests apart', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('70-ask-blocked')
+      const pending = pendingPermissions(
+        replay([readAsked('/etc/hostname'), readAsked('/etc/passwd')]),
+        NATIVE_SESSION,
+      )
+
+      expect(encodeAsk(deriveAsk({ ...noEvidence(screen), pending }))).toEqual(
+        expect.objectContaining({ _tag: 'UnknownAsk' }),
+      )
+      expect(encodeAsk(deriveAsk({ ...noEvidence(screen), pending: pending.slice(0, 1) }))).toEqual(
+        expect.objectContaining({
+          source: 'hook',
+          action: { _tag: 'UseTool', input: { file_path: '/etc/hostname' } },
         }),
       )
     }),
