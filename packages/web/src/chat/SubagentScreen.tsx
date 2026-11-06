@@ -40,7 +40,7 @@ import {
   transcriptMachine,
 } from '@crook/web/chat/TranscriptMachine'
 import { linesOf, NO_ROSTERS, rostersOf } from '@crook/web/chat/TranscriptState'
-import { stateMark } from '@crook/web/machine/Machine'
+import { stateMark } from '@crook/state-machine/Machine'
 import { Response } from '@crook/web/components/ui/response'
 import { RunDot } from '@crook/web/components/ui/subagent-tree'
 import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'

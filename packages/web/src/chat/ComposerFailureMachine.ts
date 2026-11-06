@@ -2,8 +2,8 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 
 export const ComposerFailureState = Schema.TaggedUnion({
   NoFailure: {},

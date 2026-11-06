@@ -6,8 +6,8 @@ import * as Order from 'effect/Order'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import { caseName, caseNames } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { caseName, caseNames } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 
 export interface Invariant<State> {
   readonly name: string

@@ -5,7 +5,7 @@ import { pipe } from 'effect/Function'
 import { MARKS } from '@crook/frames/Marks'
 import { activityMachine } from '@crook/web/chat/ActivityMachine'
 import { presenceMachine } from '@crook/web/chat/PresenceMachine'
-import { caseNames } from '@crook/web/machine/Machine'
+import { caseNames } from '@crook/state-machine/Machine'
 import { linkMachine } from '@crook/web/rpc/HubLinkState'
 
 const MACHINE_TABLES = new Map([

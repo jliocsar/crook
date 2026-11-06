@@ -10,8 +10,8 @@ import {
   IndicatorState,
   isIndicatorShown,
 } from '@crook/web/machine/IndicatorMachine'
-import { caseName } from '@crook/web/machine/Machine'
-import type { WalkSpec } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import type { WalkSpec } from '@crook/state-machine/Walk'
 
 const STALE_ATTEMPT = -1
 

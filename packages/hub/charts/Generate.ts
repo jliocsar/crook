@@ -3,7 +3,7 @@ import * as BunRuntime from '@effect/platform-bun/BunRuntime'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 
-import { chartOf, walk } from '@crook/web/machine/Walk'
+import { chartOf, walk } from '@crook/state-machine/Walk'
 
 import { approvalAnswerWalk } from './ApprovalAnswerWalk.ts'
 

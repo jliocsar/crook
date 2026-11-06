@@ -13,7 +13,7 @@ import {
   STARTING_VIEW,
 } from '@crook/web/connection/ConnectionView'
 import { COLD_START, linkMachine } from '@crook/web/rpc/HubLinkState'
-import { stateMark } from '@crook/web/machine/Machine'
+import { stateMark } from '@crook/state-machine/Machine'
 
 const linkValueAtom = Atom.make((get) => AsyncResult.value(get(linkStateAtom)))
 

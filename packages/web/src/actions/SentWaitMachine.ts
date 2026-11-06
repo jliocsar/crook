@@ -5,8 +5,8 @@ import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Schema from 'effect/Schema'
 
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 
 export type SentWaitCommand = Data.TaggedEnum<{
   WaitOutBound: { readonly answeredAt: number }

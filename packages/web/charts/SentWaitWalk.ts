@@ -8,8 +8,8 @@ import {
   SentWaitState,
   SETTLED,
 } from '@crook/web/actions/SentWaitMachine'
-import { caseName } from '@crook/web/machine/Machine'
-import type { WalkSpec } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import type { WalkSpec } from '@crook/state-machine/Walk'
 
 const AN_ANSWER = 1000
 const ANOTHER_ANSWER = 2000

@@ -13,7 +13,7 @@ import {
   TURN_ENDED,
 } from '@crook/web/chat/ComposerFailureMachine'
 import type { ComposerFailureEvent } from '@crook/web/chat/ComposerFailureMachine'
-import { walk } from '@crook/web/machine/Walk'
+import { walk } from '@crook/state-machine/Walk'
 
 import { composerFailureWalk } from '../../charts/ComposerFailureWalk.ts'
 

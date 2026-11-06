@@ -7,8 +7,8 @@ import * as Atom from 'effect/reactivity/Atom'
 import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 import * as Schema from 'effect/Schema'
 
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 import { machineAtom } from '@crook/web/machine/MachineAtom'
 
 interface WarmUp {

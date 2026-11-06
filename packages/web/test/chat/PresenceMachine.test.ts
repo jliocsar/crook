@@ -27,7 +27,7 @@ import {
 } from '@crook/web/chat/PresenceMachine'
 import type { PresenceEvent, PresenceState } from '@crook/web/chat/PresenceMachine'
 import { PaneId } from '@crook/domain/Ids'
-import { walk } from '@crook/web/machine/Walk'
+import { walk } from '@crook/state-machine/Walk'
 
 import { presenceWalk } from '../../charts/PresenceWalk.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'

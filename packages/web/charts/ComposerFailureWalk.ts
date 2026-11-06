@@ -10,8 +10,8 @@ import {
   stopRefused,
   TURN_ENDED,
 } from '@crook/web/chat/ComposerFailureMachine'
-import { caseName } from '@crook/web/machine/Machine'
-import type { WalkSpec } from '@crook/web/machine/Walk'
+import { caseName } from '@crook/state-machine/Machine'
+import type { WalkSpec } from '@crook/state-machine/Walk'
 import * as Option from 'effect/Option'
 
 const REFUSAL = 'Refused.'

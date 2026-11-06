@@ -5,7 +5,7 @@ import * as Fiber from 'effect/Fiber'
 import { constVoid } from 'effect/Function'
 import * as React from 'react'
 
-import type { Machine } from '@crook/web/machine/Machine'
+import type { Machine } from '@crook/state-machine/Machine'
 
 export const useMachine = <State, Event, Command>(
   machine: Machine<State, Event, Command>,

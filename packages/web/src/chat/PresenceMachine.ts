@@ -10,8 +10,8 @@ import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { panePresence } from '@crook/domain/MachineState'
 import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 
 export type PresenceCommand = Data.TaggedEnum<{

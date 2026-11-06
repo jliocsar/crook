@@ -84,6 +84,7 @@
       "dependencies": {
         "@crook/domain": "workspace:*",
         "@crook/protocol": "workspace:*",
+        "@crook/state-machine": "workspace:*",
         "@crook/web": "workspace:*",
         "@effect/platform-bun": "4.0.5",
         "@effect/sql-sqlite-bun": "4.0.5",
@@ -120,6 +121,16 @@
         "@crook/tsconfig": "workspace:*",
       },
     },
+    "packages/state-machine": {
+      "name": "@crook/state-machine",
+      "version": "0.0.8",
+      "dependencies": {
+        "effect": "4.0.5",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
     "packages/tsconfig": {
       "name": "@crook/tsconfig",
       "version": "0.0.8",
@@ -131,6 +142,7 @@
         "@base-ui/react": "^1.9.0",
         "@crook/domain": "workspace:*",
         "@crook/protocol": "workspace:*",
+        "@crook/state-machine": "workspace:*",
         "@effect/atom-react": "4.0.5",
         "@fontsource-variable/bricolage-grotesque": "^5.3.0",
         "@fontsource-variable/geist-mono": "^5.3.0",
@@ -396,6 +408,8 @@
     "@crook/protocol": ["@crook/protocol@workspace:packages/protocol"],
 
     "@crook/release": ["@crook/release@workspace:packages/release"],
+
+    "@crook/state-machine": ["@crook/state-machine@workspace:packages/state-machine"],
 
     "@crook/tsconfig": ["@crook/tsconfig@workspace:packages/tsconfig"],
 

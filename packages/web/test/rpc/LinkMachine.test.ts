@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 
-import { walk } from '@crook/web/machine/Walk'
+import { walk } from '@crook/state-machine/Walk'
 import {
   ATTEMPT_BEGAN,
   COLD_START,

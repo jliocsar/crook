@@ -17,8 +17,8 @@ import type {
 import type { AgentActivity } from '@crook/web/chat/ChatItems'
 import { PresenceState } from '@crook/web/chat/PresenceMachine'
 import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
-import { to } from '@crook/web/machine/Machine'
-import type { Machine, Step } from '@crook/web/machine/Machine'
+import { to } from '@crook/state-machine/Machine'
+import type { Machine, Step } from '@crook/state-machine/Machine'
 
 export interface TurnEvidence {
   readonly ends: boolean

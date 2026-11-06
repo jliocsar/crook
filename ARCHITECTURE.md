@@ -10,13 +10,14 @@ How the code is laid out and the patterns it follows. The _what_ and _why_ of th
                  @crook/protocol (Effect RPC groups: AgentLink, ClientApi)
           ┌─────────────┼─────────────────┐
    @crook/agent    @crook/hub          @crook/web
-     │      │
-@crook/herdr  @crook/claude
+     │      │           └──────────────┬──┘
+@crook/herdr  @crook/claude     @crook/state-machine (the shape of a machine, and its walker)
 ```
 
 - Arrows point at dependencies. Nothing depends on an app (`agent`, `hub`, `web`), except for two leaves that each hold a value both sides must agree on: the hub reads the CSP from `@crook/web/csp/ContentSecurityPolicy`, and the hub and `@crook/release` read the web build's directory names from `@crook/web/build/WebBuild`.
 - `herdr` and `claude` are libraries only the agent uses. The phone never parses a transcript or talks Herdr; it receives `domain` values.
-- `domain` + `protocol` are the only packages the PWA bundle pulls from the monorepo, so they stay free of Node/Bun-only imports.
+- `state-machine` holds what every state machine is built on and the walker its tests and charts use, for the phone and the hub alike. It knows nothing of crook: no `domain` import, and only `effect` beneath it. It is a member of its own because in `domain` a `Machine` is a laptop.
+- `domain`, `protocol` and `state-machine` are the only packages the PWA bundle pulls from the monorepo, so they stay free of Node/Bun-only imports.
 
 ## 2. Packages
 
@@ -29,6 +30,7 @@ packages/
   protocol/   @crook/protocol   RPC definitions + wire errors
   herdr/      @crook/herdr      Effect client for the Herdr socket API
   claude/     @crook/claude     Claude transcript locate/tail/parse + Ask derivation
+  state-machine/  @crook/state-machine  the shape of a machine, and the walker its tests and charts use
   agent/      @crook/agent      per-machine daemon (compiled binary) + herdr plugin
   hub/        @crook/hub        exe.dev server (compiled binary, embeds web build)
   web/        @crook/web        PWA (React + Vite)
