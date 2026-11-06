@@ -22,7 +22,7 @@ import {
 import { PermissionRequestPayload, PreToolUsePayload } from '@crook/claude/HookPayload'
 import { LastTurn } from '@crook/claude/LastTurn'
 import { dialogFingerprint, parseDialog } from '@crook/claude/ScreenDialog'
-import { spikeScreen } from '@crook/claude/SpikeScreens'
+import { spikeScreen } from '@crook/claude/fixtures/SpikeScreens.ts'
 import { TranscriptLocator } from '@crook/claude/TranscriptLocator'
 import {
   type Ask,
@@ -35,7 +35,7 @@ import {
 import { AskId, ClaudeSessionId } from '@crook/domain/Ids'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
 import { HerdrConnectionClosed } from '@crook/herdr/HerdrClient'
-import { agentInfo } from '@crook/herdr/RecordFixtures'
+import { agentInfo } from '@crook/herdr/fixtures/Records.ts'
 
 const SESSION = ClaudeSessionId.make('84f3659c-7fcf-4280-8580-b82ae5fd8f91')
 const SESSION_OPTION = Option.some(SESSION)

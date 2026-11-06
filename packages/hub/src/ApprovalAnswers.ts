@@ -5,7 +5,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schedule from 'effect/Schedule'
 
-import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
+import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
 import { commandAudit } from '@crook/domain/Audit'
 import { AnswerAsk, Approve, type AskAnswer, Decline } from '@crook/domain/Command'
 import { type AskId, type GlobalPaneId, IdempotencyKey } from '@crook/domain/Ids'

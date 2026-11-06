@@ -25,7 +25,7 @@ import type {
   TranscriptSource,
   TranscriptTailBytes,
 } from '@crook/domain/Transcript'
-import { hubReconnectSchedule, RECONNECT_GRACE, stayedHealthy } from '@crook/protocol/AgentLink'
+import { hubReconnectSchedule, RECONNECT_GRACE, stayedHealthy } from '@crook/protocol/LinkTiming'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import type { HubAccount, HubStorageFailed } from '@crook/protocol/ClientApi'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'

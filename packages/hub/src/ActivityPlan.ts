@@ -10,7 +10,7 @@ import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
 import * as Schema from 'effect/Schema'
 
-import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
+import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
 import { type AgentRow, agentTitleOrPane, settledStatusOf } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import type { MachineId, PaneId } from '@crook/domain/Ids'

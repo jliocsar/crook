@@ -28,7 +28,7 @@ import { AuditLog } from '@crook/agent/AuditLog'
 import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
-import { HubConnectionStatus } from '@crook/agent/HubConnection'
+import { HubConnectionStatus } from '@crook/agent/HubConnectionStatus'
 import * as HubLink from '@crook/agent/HubLink'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { AgentRow } from '@crook/domain/AgentRow'
@@ -50,15 +50,12 @@ import type { MachineConnection } from '@crook/domain/Machine'
 import { MachineState, MachineStateVersion } from '@crook/domain/MachineState'
 import { Workspace } from '@crook/domain/Workspace'
 import type { HerdrClient } from '@crook/herdr/HerdrClient'
-import { AuditTrail } from '@crook/hub/AuditTrail'
-import { CommandRouter } from '@crook/hub/CommandRouter'
 import * as Database from '@crook/hub/Database'
 import { HarkClient } from '@crook/hub/HarkClient'
-import { Herd } from '@crook/hub/Herd'
-import { HerdStore } from '@crook/hub/HerdStore'
-import * as HttpRoutes from '@crook/hub/HttpRoutes'
+import * as HubDaemon from '@crook/hub/HubDaemon'
 import { NotificationStore } from '@crook/hub/NotificationStore'
-import { AGENT_PING_INTERVAL, AgentLink, Hello } from '@crook/protocol/AgentLink'
+import { AgentLink, Hello } from '@crook/protocol/AgentLink'
+import { LINK_PING_INTERVAL } from '@crook/protocol/LinkTiming'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
@@ -159,18 +156,12 @@ export const harkServicesUnder = <Services, Failure, Needs>(
   token: Option.Option<string>,
   database: Context.Context<SqlClient.SqlClient>,
 ) => {
-  const herdServices = Layer.provideMerge(
-    Layer.mergeAll(
-      Herd.layer,
-      HarkClient.layer,
-      NotificationStore.layer,
-      CommandRouter.layer,
-      AuditTrail.layer,
-    ),
-    HerdStore.layer,
+  const harkServices = Layer.provideMerge(
+    Layer.mergeAll(HarkClient.layer, NotificationStore.layer),
+    HubDaemon.herdServices,
   )
 
-  return Layer.provideMerge(services, herdServices).pipe(
+  return Layer.provideMerge(services, harkServices).pipe(
     Layer.provide([http, tokenConfig(token), Layer.succeedContext(database)]),
   )
 }
@@ -188,13 +179,13 @@ const testServer = BunHttpServer.layer({
   hostname: '127.0.0.1',
   port: 0,
   gracefulShutdownTimeout: Duration.zero,
-  websocket: HttpRoutes.socketOptions,
+  websocket: HubDaemon.socketOptions,
 })
 
 const testClient = HttpServer.layerTestClient.pipe(Layer.provide(FetchHttpClient.layer))
 
 const servedHub = Layer.mergeAll(
-  HttpRouter.serve(HttpRoutes.layer, { disableLogger: true }),
+  HttpRouter.serve(HubDaemon.routes, { disableLogger: true }),
   testClient,
 ).pipe(Layer.provideMerge(testServer))
 
@@ -217,7 +208,7 @@ export const connect = Effect.fn('connect')(function* <Rpcs extends Rpc.Any>(
   group: RpcGroup.RpcGroup<Rpcs>,
   path: string,
   headers: Record<string, string>,
-  pingInterval: Duration.Duration = AGENT_PING_INTERVAL,
+  pingInterval: Duration.Duration = LINK_PING_INTERVAL,
 ) {
   const url = yield* socketUrl(path)
   const protocol = yield* Layer.build(

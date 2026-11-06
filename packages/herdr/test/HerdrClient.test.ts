@@ -48,7 +48,7 @@ import {
   SessionSnapshotMethod,
   WorktreeCreateMethod,
 } from '@crook/herdr/Methods'
-import { sessionSnapshot } from '@crook/herdr/RecordFixtures'
+import { sessionSnapshot } from '@crook/herdr/fixtures/Records.ts'
 import { SessionSnapshot } from '@crook/herdr/Records'
 
 interface ConnectionScript {

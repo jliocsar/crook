@@ -46,8 +46,9 @@ import {
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { AgentPromptMethod } from '@crook/herdr/Methods'
-import * as HttpRoutes from '@crook/hub/HttpRoutes'
-import { AGENT_PING_INTERVAL, AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { SOCKET_SILENCE_TIMEOUT } from '@crook/hub/HubDaemon'
+import { AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { LINK_PING_INTERVAL } from '@crook/protocol/LinkTiming'
 import { ClientApi, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import {
@@ -95,7 +96,7 @@ const auditedOn = Effect.fn('auditedOn')(function* (machine: MachineId) {
 
 const attachAs = Effect.fn('attachAs')(function* (
   machine: MachineId,
-  pingInterval: Duration.Duration = AGENT_PING_INTERVAL,
+  pingInterval: Duration.Duration = LINK_PING_INTERVAL,
 ) {
   const agent = yield* connect(AgentLink, AGENT_PATH, agentToken(machine), pingInterval)
 
@@ -260,7 +261,7 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
         expect(
           Duration.isGreaterThanOrEqualTo(
             silentFor,
-            Duration.subtract(HttpRoutes.SOCKET_SILENCE_TIMEOUT, BUN_IDLE_TIMEOUT_TICK),
+            Duration.subtract(SOCKET_SILENCE_TIMEOUT, BUN_IDLE_TIMEOUT_TICK),
           ),
         ).toBe(true)
         expect(
@@ -270,7 +271,7 @@ layer(testHub, { excludeTestServices: true })('HttpRoutes', (live) => {
           ),
         ).toEqual(Option.some('online'))
       }),
-    { timeout: Duration.toMillis(Duration.times(HttpRoutes.SOCKET_SILENCE_TIMEOUT, 2)) },
+    { timeout: Duration.toMillis(Duration.times(SOCKET_SILENCE_TIMEOUT, 2)) },
   )
 })
 

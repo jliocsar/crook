@@ -19,7 +19,8 @@ import { MachineState } from '@crook/domain/MachineState'
 import * as Database from '@crook/hub/Database'
 import { Herd, hubVersion } from '@crook/hub/Herd'
 import { HerdStore } from '@crook/hub/HerdStore'
-import { Hello, MachineIdMismatch, RECONNECT_GRACE } from '@crook/protocol/AgentLink'
+import { Hello, MachineIdMismatch } from '@crook/protocol/AgentLink'
+import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
 import { MachineNotInHerd, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
 
 import packageJson from '../package.json' with { type: 'json' }

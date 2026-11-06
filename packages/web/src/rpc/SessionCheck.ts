@@ -7,7 +7,7 @@ import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpClient from 'effect/http/HttpClient'
 import * as HttpClientResponse from 'effect/http/HttpClientResponse'
 
-import { AGENT_SOCKET_OPEN_TIMEOUT } from '@crook/protocol/AgentLink'
+import { LINK_OPEN_TIMEOUT } from '@crook/protocol/LinkTiming'
 import { HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import { EXE_DEV_LOGOUT_PATH } from '@crook/web/connection/ExeDevPaths'
 
@@ -16,7 +16,7 @@ export type LogOutFailed = LogOutRefused | LogOutUnreachable
 const OPAQUE_REDIRECT_STATUS = 0
 const PROXY_REQUEST_INIT: RequestInit = { redirect: 'manual', cache: 'no-store' }
 
-export const SESSION_CHECK_TIMEOUT = AGENT_SOCKET_OPEN_TIMEOUT
+export const SESSION_CHECK_TIMEOUT = LINK_OPEN_TIMEOUT
 
 export class LogOutRefused extends Schema.TaggedError<LogOutRefused>()('LogOutRefused', {
   status: Schema.Int,

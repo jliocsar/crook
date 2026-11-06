@@ -2,7 +2,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 
-import { reconnectBackoff } from '@crook/protocol/AgentLink'
+import { reconnectBackoff } from '@crook/protocol/LinkTiming'
 
 const WATCH_RETRY_BASE = Duration.millis(100)
 

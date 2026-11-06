@@ -13,7 +13,7 @@ import * as TestClock from 'effect/testing/TestClock'
 import { CommandExecutor, HERDR_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
 import { deriveAsk } from '@crook/claude/AskDerivation'
 import { dialogFingerprint, parseDialog } from '@crook/claude/ScreenDialog'
-import { spikeScreen } from '@crook/claude/SpikeScreens'
+import { spikeScreen } from '@crook/claude/fixtures/SpikeScreens.ts'
 import {
   type Ask,
   AskQuestion,

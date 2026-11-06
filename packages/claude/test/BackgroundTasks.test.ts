@@ -15,22 +15,18 @@ import {
   outputFileOf,
   withBackgroundLines,
 } from '@crook/claude/BackgroundTasks'
-import { TranscriptTail } from '@crook/claude/TranscriptTail'
 import type { BackgroundTask } from '@crook/domain/Background'
 import { TranscriptOffset } from '@crook/domain/Ids'
 
-import { START, fixtureFile, services } from './Fixtures'
+import { START, fixtureFile, readToEnd, services } from './Fixtures'
 
-const ledgerOf = Effect.fn('ledgerOf')(function* (name: string) {
-  const tail = yield* TranscriptTail
-
-  return yield* tail.drainWith(fixtureFile(name), START, backgroundLines).pipe(
+const ledgerOf = (name: string) =>
+  readToEnd(fixtureFile(name), START, backgroundLines).pipe(
     Stream.runFold(
       () => EMPTY_LEDGER,
       (ledger, chunk) => withBackgroundLines(ledger, chunk.messages),
     ),
   )
-})
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Json))
 

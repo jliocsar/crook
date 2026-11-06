@@ -181,6 +181,8 @@ writes `@crook/domain/Ids`, the same leaf-only rule the `effect` imports follow.
 tests import it through that specifier too; the package resolves itself through its `exports`
 (measured).
 
+A helper only tests import is a fixture of the member that owns it, not a module under `src`. A test reads a transcript through the follow the agent runs, up to its caught-up mark, so a read the app never made did not have to stay on the service for them.
+
 A fixture that another member's tests read stays in the member that owns it, exported as
 `"./fixtures/*": "./test/fixtures/*"`, and the reader turns it into a path with
 `new URL(import.meta.resolve('@crook/<member>/fixtures/…')).pathname`, which resolves under
@@ -198,6 +200,11 @@ the tests that needed a fake. A dependency provided inside a layer stays the one
 a test provides another around it (measured), so every service a test wanted to fake grew a twin,
 and one nobody had faked yet could only be tested over the real thing. Effect's own janitor app
 keeps every layer open and wires once at the edge, and the twins went with that.
+
+An app's entry runs the moment it is imported, so its stages live in a module beside it and the
+entry only launches the result, which is what lets a test import them. The routes are a service
+like any other and leave what they read open: the hub had its graph half in the routes and half in
+its entry, and its fixtures declared a stage of their own.
 :::
 
 ## Rules
@@ -400,6 +407,8 @@ the server answers once it has read it.
 :::warning
 A `Stream` piped through `Socket.toChannel`/`toChannelString` closes the socket's write side when the stream ends. A server that treats a half-closed client as gone (herdr does) drops the request before answering, so a request-reply over a socket sends its line with `Stream.concat(Stream.make(line), Stream.never)` and stops at the first reply (measured). The tail belongs inside the one function that opens the connection, never at each call site, where the next caller forgets it.
 :::
+
+The ping, the open timeout and the reconnect policy belong to a link, the agent's and the phone's alike, so they sit apart from the agent's RPC group under names that say so. None of them travels.
 
 :::tip
 A member that runs on Bun and touches Bun-only APIs in tests (`BunHttpServer` reads the global
@@ -733,6 +742,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   Seeding a derived atom such as the connection or the needs-you count does not stand in for
   it: the registry still builds the atom, keeping the seeded value, so its reads reach the
   runtime and dial all the same (measured). Seed the runtime's layer.
+- The chat's views are a function its atom runs, not a service. They hold no state between keys, one atom calls them, and no test replaces them: a test fakes what they talk to by seeding the runtime's layer, and a service would be one more thing every seed has to build. Their inputs stay atoms because they subscribe before forking anything and read the latest value at given moments, so streams as inputs would only move that work into an adapter that still holds the registry.
 - An effect atom re-runs whenever anything it reads changes, and the re-run interrupts the effect
   still in flight. One that reads the whole herd re-ran its hub call on every herd change from
   any machine (measured: five calls where one was due). It reads a derived atom that holds only
@@ -1021,6 +1031,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   (reasoned, not measured). The agent calls a shell gone only once its first miss is a full
   recheck old, so a shell that exits normally is not flagged in the moment before Claude's
   notice lands, however often its other work changes.
+- Which process runs a session is read from the pid files the agent already follows, only the ones naming that session, rather than from the whole folder at every look. A pane's process is the exception: its environment names its root, which nothing may be following, so its one pid file is read directly. Decoding a pid file and holding its start time against the process sit together for both. A look that lands before the watch has read a new file reads as not knowing, which the shell check already answers for a process it cannot name, and its next look settles it (reasoned, not measured).
 - The agent counts the running subagents of every Claude pane all the time, not only while a chat
   is open: it follows each session's subagent roster, settled by its notices the same way the
   chat's roster is, and puts the count on the agent's row only when it changes, so a roster change

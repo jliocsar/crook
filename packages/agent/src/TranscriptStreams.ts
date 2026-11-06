@@ -261,7 +261,7 @@ const backgroundWork = (
     Stream.mapEffect((snapshot) =>
       Effect.zipWith(
         Clock.currentTimeMillis,
-        hasRunningShell(snapshot) ? liveness.openTasks(file) : Effect.succeedNone,
+        hasRunningShell(snapshot) ? liveness.openTasks(file.session) : Effect.succeedNone,
         (checkedAt, open) => [snapshot, open, checkedAt] as const,
       ),
     ),

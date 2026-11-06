@@ -11,7 +11,7 @@ import * as Result from 'effect/Result'
 import * as Stream from 'effect/Stream'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
+import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { AnswerAsk, Approve, Decline } from '@crook/domain/Command'

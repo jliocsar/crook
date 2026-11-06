@@ -5,7 +5,7 @@ import * as Equal from 'effect/Equal'
 import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 
-import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
+import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
 import {
   answered,
   SETTLED,

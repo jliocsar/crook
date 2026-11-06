@@ -27,7 +27,7 @@ import { RecentPlaces } from '@crook/agent/RecentPlaces'
 import { RunningSubagents } from '@crook/agent/RunningSubagents'
 import { emptyHookLedger } from '@crook/claude/HookLedger'
 import { LastTurn } from '@crook/claude/LastTurn'
-import { spikeScreen } from '@crook/claude/SpikeScreens'
+import { spikeScreen } from '@crook/claude/fixtures/SpikeScreens.ts'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
@@ -51,7 +51,7 @@ import {
   PaneReadMethod,
   SessionSnapshotMethod,
 } from '@crook/herdr/Methods'
-import { agentInfo, paneInfo, sessionSnapshot } from '@crook/herdr/RecordFixtures'
+import { agentInfo, paneInfo, sessionSnapshot } from '@crook/herdr/fixtures/Records.ts'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import { CLIENT_PATH } from '@crook/protocol/HubRoutes'
 

@@ -1,11 +1,8 @@
 import type * as Context from 'effect/Context'
-import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Match from 'effect/Match'
 import * as Stream from 'effect/Stream'
-import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpRouter from 'effect/http/HttpRouter'
 import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 import type * as Rpc from 'effect/rpc/Rpc'
@@ -21,25 +18,13 @@ import { AuditTrail } from '@crook/hub/AuditTrail'
 import type { TranscriptSource } from '@crook/domain/Transcript'
 import { CommandRouter } from '@crook/hub/CommandRouter'
 import { ExeDevIdentity } from '@crook/hub/ExeDevIdentity'
-import { HarkClient } from '@crook/hub/HarkClient'
 import { HarkNotifier } from '@crook/hub/HarkNotifier'
-import * as HerdActivity from '@crook/hub/HerdActivity'
-import { HerdStore } from '@crook/hub/HerdStore'
-import { NotificationStore } from '@crook/hub/NotificationStore'
 import * as StaticWeb from '@crook/hub/StaticWeb'
 import { Herd } from '@crook/hub/Herd'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
-import { AGENT_PING_INTERVAL, AgentLink } from '@crook/protocol/AgentLink'
+import { AgentLink } from '@crook/protocol/AgentLink'
 import { ClientApi, HubAccount, HubStorageFailed } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
-import { protocolSerialization } from '@crook/protocol/Serialization'
-
-export const SOCKET_SILENCE_TIMEOUT = Duration.times(AGENT_PING_INTERVAL, 2)
-
-export const socketOptions = {
-  sendPings: false,
-  idleTimeout: Duration.toSeconds(SOCKET_SILENCE_TIMEOUT),
-}
 
 const storageFailureToWire = (error: SqlError) =>
   Effect.fail(new HubStorageFailed({ detail: error.message }))
@@ -160,22 +145,4 @@ const routes = Effect.gen(function* () {
   ]
 })
 
-const harkClient = Layer.provide(HarkClient.layer, FetchHttpClient.layer)
-
-const notifications = Layer.provideMerge(HerdActivity.layer, HarkNotifier.layer).pipe(
-  Layer.provide([harkClient, NotificationStore.layer, HerdStore.layer]),
-)
-
-const herdServices = Layer.provideMerge(
-  Layer.mergeAll(Herd.layer, CommandRouter.layer, AuditTrail.layer),
-  HerdStore.layer,
-)
-
-export const layer = HttpRouter.addAll(routes).pipe(
-  Layer.provide([
-    Layer.provideMerge(notifications, herdServices),
-    TranscriptRelay.layer,
-    ExeDevIdentity.layer,
-    protocolSerialization,
-  ]),
-)
+export const layer = HttpRouter.addAll(routes)
