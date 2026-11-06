@@ -149,7 +149,7 @@ export const MACHINE_STORIES: readonly StoryMaker[] = [
     title: 'Machine, offline with Hold to forget',
     path: DESK_PATH,
     link: liveWith(viewOf([laptop, desk])),
-    shows: { text: HOLD_TO_FORGET },
+    shows: { all: [{ text: HOLD_TO_FORGET }, { absent: 'Agents ·' }] },
   }),
   linkStory({
     slug: 'forget-pending',

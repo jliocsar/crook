@@ -143,7 +143,7 @@ describe('machine detail', () => {
       )
 
     expect(heading(laptop)).toEqual(Option.some('Agents · 3'))
-    expect(heading(desk)).toEqual(Option.some('Agents · –'))
+    expect(heading(desk)).toEqual(Option.some('Agents'))
     expect(heading(machine(LAPTOP, []))).toEqual(Option.some('Agents · 0'))
     expect(machineDetail(viewOf([laptop]), DESK)).toEqual(Option.none())
   })

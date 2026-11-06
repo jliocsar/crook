@@ -93,7 +93,7 @@ export const agentsHeading = (body: SectionBody): string =>
   SectionBody.$match(body, {
     Agents: ({ agents }) => `Agents · ${agents.length}`,
     NoAgents: () => 'Agents · 0',
-    Offline: () => 'Agents · –',
+    Offline: () => 'Agents',
   })
 
 export const agentCountLabel = (count: number): string =>
