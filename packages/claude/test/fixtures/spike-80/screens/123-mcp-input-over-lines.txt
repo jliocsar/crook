@@ -1,0 +1,40 @@
+
+❯ Use the note tool of the probe MCP server with title "Stand up" and body "short". Then say done.
+
+  Called probe
+  ⎿  Interrupted · What should Claude do instead?
+
+✻ Worked for 2s · done 4:47 PM
+
+❯ Use the note tool of the probe MCP server with title "He said \"hi\"" and a body of three lines: line one; line two;
+  line three, separated by real newlines, then a fourth line that repeats the word lorem one hundred times. Then say
+  done.
+
+● Calling probe…
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Tool use
+ probe — Note Tool: (MCP)
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ title: "He said \"hi\""
+ body:
+   │ line one
+   │ line two
+   │ line three
+   │ lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem
+   │ lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem
+   │ lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem
+   │ lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem
+   │ lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem
+   │ lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem lorem
+   │ lorem
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ About the probe — Note Tool:
+ │ Stores a note.
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for probe — Note commands in /home/jliocsar/Projects/crook/tmp/spikes/cwd
+   3. No
+
+ Esc to cancel · Tab to amend

@@ -88,7 +88,7 @@ const withPendingIfChanged = (
     ? ledger
     : withPending(ledger, session, permissions)
 
-const isSameCall = (left: ToolCall) => (right: ToolCall) =>
+export const isSameCall = (left: ToolCall) => (right: ToolCall) =>
   left.toolName === right.toolName && Equal.equals(left.toolInput, right.toolInput)
 
 const isUnpaired = (permission: PendingPermission) => Option.isNone(permission.toolUseId)

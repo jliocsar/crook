@@ -356,6 +356,37 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
     }),
   )
 
+  it.effect('answers a new dialog on a pane though the ask it names kept its id', () =>
+    Effect.gen(function* () {
+      const answeredScreen = yield* spikeScreen('40-parallel-blocked-1')
+      const nextScreen = yield* spikeScreen('42-parallel-blocked-2')
+      const answered = bashAsk(answeredScreen, 'echo par-a > par-a.txt')
+      const next = bashAsk(nextScreen, 'echo par-b > par-b.txt')
+      const { executor, sent, state, showNext } = yield* startOverQueuedScreens(
+        answered,
+        answeredScreen,
+        nextScreen,
+      )
+
+      yield* executor.execute(ACTION, answer(answered, new Approve({})))
+      yield* showNext
+      yield* SubscriptionRef.set(
+        state,
+        machineStateWith([agentRow({ status: 'blocked', ask: Option.some(next) })]),
+      )
+      const receipt = yield* executor.execute(OTHER_DEVICE_ACTION, answer(next, new Approve({})))
+
+      expect(next.id).toBe(answered.id)
+      expect(receipt).toEqual(delivered)
+      expect(yield* sentAfter(sent)).toEqual([
+        READ_REQUEST,
+        keysRequest(['enter']),
+        READ_REQUEST,
+        keysRequest(['enter']),
+      ])
+    }),
+  )
+
   it.effect('re-reads the herd when the agent stays blocked after an answer', () =>
     Effect.gen(function* () {
       const screen = yield* spikeScreen('112-codemode6-zombie')

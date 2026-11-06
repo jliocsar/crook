@@ -2,11 +2,13 @@ import * as Arr from 'effect/Array'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
 import * as Schema from 'effect/Schema'
+import * as Str from 'effect/String'
 import * as Struct from 'effect/Struct'
 
 import { editPatch } from '@crook/claude/EditPatch'
-import type { PendingPermission } from '@crook/claude/HookLedger'
+import { type PendingPermission, isSameCall } from '@crook/claude/HookLedger'
 import { type DialogQueue, type ScreenDialog, dialogFingerprint } from '@crook/claude/ScreenDialog'
 import {
   type Ask,
@@ -61,6 +63,7 @@ const LINE_BREAK = '\n'
 const WRAPPED_LINE_JOIN = ' '
 const PATH_SEPARATOR = '/'
 const WHITESPACE = /\s+/gu
+const INPUT_LAYOUT = /[\s│\\]+/gu
 const QUESTION_TOOL = 'AskUserQuestion'
 
 const ALWAYS_PREFIXES = [
@@ -80,6 +83,8 @@ const HEADER_TOOLS = new Map([
   ['Bash command', 'Bash'],
   ['Edit file', 'Edit'],
   ['Create file', 'Write'],
+  ['Read file', 'Read'],
+  ['Read outside the working directories', 'Read'],
 ])
 
 const BashInput = Schema.Struct({ command: Schema.String })
@@ -105,6 +110,10 @@ const QuestionInput = Schema.Struct({
     }),
   ),
 })
+
+const isJsonList = Schema.is(Schema.Array(Schema.Json))
+
+const isJsonRecord = Schema.is(Schema.Record(Schema.String, Schema.Json))
 
 const decodeInput = <Decoded>(schema: Schema.Decoder<Decoded>) => Schema.decodeUnknownOption(schema)
 
@@ -230,6 +239,25 @@ const namesFile = (dialog: ScreenDialog, filePath: string) =>
     (subject) => filePath === subject || filePath.endsWith(`${PATH_SEPARATOR}${subject}`),
   )
 
+const stringsIn = (value: Schema.Json): readonly string[] =>
+  Match.value(value).pipe(
+    Match.when(Predicate.isString, (text) => [text]),
+    Match.when(isJsonList, (list) => Arr.flatMap(list, stringsIn)),
+    Match.when(isJsonRecord, (record) => Arr.flatMap(Object.values(record), stringsIn)),
+    Match.orElse(() => []),
+  )
+
+const withoutInputLayout = (text: string) => text.replace(INPUT_LAYOUT, '')
+
+const showsInput = (dialog: ScreenDialog, input: Schema.Json) => {
+  const shown = withoutInputLayout(
+    [...Option.toArray(dialog.subject), ...dialog.body, ...dialog.prompt].join(''),
+  )
+  const asked = pipe(stringsIn(input), Arr.map(withoutInputLayout), Arr.filter(Str.isNonEmpty))
+
+  return Arr.isReadonlyArrayNonEmpty(asked) && Arr.every(asked, (text) => shown.includes(text))
+}
+
 const showsAction = (dialog: ScreenDialog, call: ToolCall) =>
   Match.value(actionOf(call.toolName, call.toolInput)).pipe(
     Match.tagsExhaustive({
@@ -237,8 +265,8 @@ const showsAction = (dialog: ScreenDialog, call: ToolCall) =>
         withoutWhitespace(dialog.body.join(LINE_BREAK)) === withoutWhitespace(run.command),
       EditFile: (edit) => namesFile(dialog, edit.filePath),
       WriteFile: (write) => namesFile(dialog, write.filePath),
-      UseTool: () => true,
-      ScreenDetail: () => true,
+      UseTool: (use) => showsInput(dialog, use.input),
+      ScreenDetail: () => false,
     }),
   )
 
@@ -253,8 +281,9 @@ const showsPermission = (dialog: ScreenDialog, call: ToolCall) =>
   call.toolName !== QUESTION_TOOL &&
   Option.match(toolOfHeader(dialog.header), {
     onNone: () => true,
-    onSome: (tool) => tool === call.toolName && showsAction(dialog, call),
-  })
+    onSome: (tool) => tool === call.toolName,
+  }) &&
+  showsAction(dialog, call)
 
 const isConsistent = (dialog: Option.Option<ScreenDialog>) => (call: ToolCall) =>
   Option.match(dialog, {
@@ -282,12 +311,46 @@ const hookCall = (pending: PendingPermission): ToolCall => ({
   toolInput: pending.toolInput,
 })
 
+const pendingOnScreen = (
+  pending: readonly PendingPermission[],
+  dialog: Option.Option<ScreenDialog>,
+): Option.Option<PendingPermission> => {
+  const shown = Arr.filter(pending, (permission) => isConsistent(dialog)(hookCall(permission)))
+
+  return pipe(
+    Arr.head(shown),
+    Option.filter((oldest) => Arr.every(shown, isSameCall(oldest))),
+    Option.map((oldest) =>
+      pipe(
+        queuedPending(pending, dialog),
+        Option.filter(isSameCall(oldest)),
+        Option.getOrElse(() => oldest),
+      ),
+    ),
+  )
+}
+
 const transcriptCall = (toolUse: ToolUseBlock): ToolCall => ({
   source: 'transcript',
   id: AskId.make(toolUse.id),
   toolName: toolUse.name,
   toolInput: toolUse.input,
 })
+
+const transcriptOnScreen = (
+  toolUse: Option.Option<ToolUseBlock>,
+  dialog: Option.Option<ScreenDialog>,
+): Option.Option<ToolCall> => {
+  const firstInQueue = !Option.exists(
+    Option.flatMap(dialog, (found) => found.queue),
+    (queue) => queue.position > 1,
+  )
+
+  return Option.filter(
+    Option.map(toolUse, transcriptCall),
+    (call) => firstInQueue && isConsistent(dialog)(call),
+  )
+}
 
 const screenAskId = (dialog: ScreenDialog) => AskId.make(`screen-${dialogFingerprint(dialog)}`)
 
@@ -349,10 +412,9 @@ const unknownAsk = (evidence: AskEvidence): Ask =>
 export const deriveAsk = (evidence: AskEvidence): Ask =>
   pipe(
     Option.firstSomeOf([
-      Option.map(queuedPending(evidence.pending, evidence.dialog), hookCall),
-      Option.map(evidence.toolUse, transcriptCall),
+      Option.map(pendingOnScreen(evidence.pending, evidence.dialog), hookCall),
+      transcriptOnScreen(evidence.toolUse, evidence.dialog),
     ]),
-    Option.filter(isConsistent(evidence.dialog)),
     Option.map((call) => askOfCall(call, evidence.dialog)),
     Option.orElse(() => Option.map(evidence.dialog, askFromDialog)),
     Option.getOrElse(() => unknownAsk(evidence)),

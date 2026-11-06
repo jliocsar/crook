@@ -19,7 +19,11 @@ import {
   pendingPermissions,
   recordHook,
 } from '@crook/claude/HookLedger'
-import { PermissionRequestPayload, PreToolUsePayload } from '@crook/claude/HookPayload'
+import {
+  PermissionRequestPayload,
+  PostToolUsePayload,
+  PreToolUsePayload,
+} from '@crook/claude/HookPayload'
 import { LastTurn } from '@crook/claude/LastTurn'
 import { dialogFingerprint, parseDialog } from '@crook/claude/ScreenDialog'
 import { spikeScreen } from '@crook/claude/fixtures/SpikeScreens.ts'
@@ -66,6 +70,23 @@ const editCall = (filePath: string) => [
     tool_input: { file_path: filePath, old_string: 'hello', new_string: 'goodbye' },
   }),
 ]
+
+const readStarted = (filePath: string, toolUseId: string) =>
+  new PreToolUsePayload({
+    hook_event_name: 'PreToolUse',
+    session_id: SESSION,
+    tool_name: 'Read',
+    tool_input: { file_path: filePath },
+    tool_use_id: toolUseId,
+  })
+
+const readAsked = (filePath: string) =>
+  new PermissionRequestPayload({
+    hook_event_name: 'PermissionRequest',
+    session_id: SESSION,
+    tool_name: 'Read',
+    tool_input: { file_path: filePath },
+  })
 
 const ledgerOf = (payloads: readonly (PreToolUsePayload | PermissionRequestPayload)[]) =>
   payloads.reduce<HookLedger>(recordHook, emptyHookLedger)
@@ -184,6 +205,40 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) =>
       expect(Option.flatMap(after, askDialog)).toEqual(
         Option.map(parseDialog(next), dialogFingerprint),
       )
+    }),
+  )
+
+  it.effect('keeps naming each dialog of a batch whose requests landed out of order', () =>
+    Effect.gen(function* () {
+      const first = yield* spikeScreen('120-parallel-read-1-of-2')
+      const second = yield* spikeScreen('121-parallel-read-2-of-2')
+      const { asks, ledger } = yield* startAsks(
+        [
+          readStarted('/etc/hostname', 'toolu_hostname'),
+          readStarted('/etc/os-release', 'toolu_os_release'),
+          readAsked('/etc/os-release'),
+          readAsked('/etc/hostname'),
+        ],
+        [Option.some(first), Option.some(second)],
+      )
+      const before = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+
+      yield* SubscriptionRef.update(ledger, (current) =>
+        recordHook(
+          current,
+          new PostToolUsePayload({
+            hook_event_name: 'PostToolUse',
+            session_id: SESSION,
+            tool_name: 'Read',
+            tool_input: { file_path: '/etc/hostname' },
+            tool_use_id: 'toolu_hostname',
+          }),
+        ),
+      )
+      const after = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+
+      expect(Option.map(before, (ask) => ask.id)).toEqual(Option.some('toolu_hostname'))
+      expect(Option.map(after, (ask) => ask.id)).toEqual(Option.some('toolu_os_release'))
     }),
   )
 
