@@ -312,6 +312,13 @@ A bump writes the version into every `package.json`, the root's and the workspac
 lockfile included, and into the herdr plugin's manifest, which a test holds to the agent's
 version. Run the gate on the bump commit before pushing its tag: `check-version` reads only the
 two apps, so a tag pushed after it alone failed the release gate on the manifest (measured).
+
+A new Effect doesn't have to reach both ends at once. The compiled binaries of an agent on
+`effect@4.0.5` and a hub on `effect@4.1.2` attached, published and served `WatchHerd` in both pairings
+over NDJSON, and a hub on either version opened a database the other had written (measured, with no
+panes, so no command or transcript crossed). Effect's `Persistence` key layout changed in 4.1, and
+nothing here reaches it: a store is SQLite on the hub, JSON files on the agent and `idb-keyval` on the
+phone.
 :::
 
 :::caution
