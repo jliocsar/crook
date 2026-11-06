@@ -192,6 +192,9 @@ const showsContent = (stage: Element, covers: readonly Element[]): boolean => {
   return false
 }
 
+const topsOf = (rows: readonly { readonly key: string; readonly box: DOMRect }[]) =>
+  rows.map((row) => ({ key: row.key, top: row.box.top }))
+
 const readThread = (
   covers: readonly Element[],
   previousTops: ReadonlyMap<string, number>,
@@ -219,20 +222,15 @@ const readThread = (
           top: round(bands.top),
           middle: round(bands.middle),
           bottom: round(bands.bottom),
-          moved: round(
-            movedSince(
-              previousTops,
-              rows.map((row) => ({ key: row.key, top: row.box.top })),
-            ),
-          ),
+          moved: round(movedSince(previousTops, topsOf(rows))),
           leastMoved: round(
             leastMovedSince(
               previousTops,
-              rows
-                .filter(
+              topsOf(
+                rows.filter(
                   (row) => row.box.bottom > viewportBox.top && row.box.top < viewportBox.bottom,
-                )
-                .map((row) => ({ key: row.key, top: row.box.top })),
+                ),
+              ),
             ),
           ),
           held,

@@ -8,13 +8,14 @@ import { detect } from '@crook/frames/Detect'
 import type { Finding } from '@crook/frames/Detect'
 import { expectationOf, fromTable, inSequence } from '@crook/frames/Expectations'
 import {
-  BACKTRACK_PIXELS,
+  ROW_MOVE_PIXELS,
   FrameLog,
   isStarved,
   leastMovedAt,
   liftAt,
   movedAt,
 } from '@crook/frames/FrameLog'
+import type { RecordedFrame } from '@crook/frames/FrameLog'
 
 import backtrackSmallFixture from './fixtures/backtrack-small.json' with { type: 'json' }
 import backtrackFixture from './fixtures/backtrack.json' with { type: 'json' }
@@ -38,6 +39,15 @@ import swapFixture from './fixtures/swap.json' with { type: 'json' }
 const decodeLog = Schema.decodeUnknownSync(FrameLog)
 
 const MACHINE_REDIAL = 'transition/machine-redial'
+
+const framesWhereTheLiftRises = (log: FrameLog): readonly RecordedFrame[] =>
+  pipe(
+    log.frames,
+    Arr.drop(1),
+    Arr.zip(log.frames),
+    Arr.filter(([next, frame]) => liftAt(next) - liftAt(frame) >= ROW_MOVE_PIXELS),
+    Arr.map(([next]) => next),
+  )
 
 const keysOf = (findings: readonly Finding[]): readonly string[] =>
   Arr.map(findings, (finding) => finding.key)
@@ -155,7 +165,7 @@ describe('detect, over logs recorded from real runs', () => {
     const story = 'transition/slash-send-following'
     const log = decodeLog(liftGlideFixture)
 
-    expect(Arr.some(log.frames, (frame) => movedAt(frame) <= -BACKTRACK_PIXELS)).toBe(true)
+    expect(Arr.some(log.frames, (frame) => movedAt(frame) <= -ROW_MOVE_PIXELS)).toBe(true)
     expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
   })
 
@@ -167,7 +177,7 @@ describe('detect, over logs recorded from real runs', () => {
       Arr.drop(1),
       Arr.zip(log.frames),
       Arr.some(
-        ([next, frame]) => movedAt(frame) <= -BACKTRACK_PIXELS && movedAt(next) >= BACKTRACK_PIXELS,
+        ([next, frame]) => movedAt(frame) <= -ROW_MOVE_PIXELS && movedAt(next) >= ROW_MOVE_PIXELS,
       ),
     )
 
@@ -198,32 +208,22 @@ describe('detect, over logs recorded from real runs', () => {
   it('reports no overshoot over a lift that takes what the row measured', () => {
     const story = 'transition/slash-send-following'
     const log = decodeLog(liftMeasuredFixture)
-    const rose = pipe(
-      log.frames,
-      Arr.drop(1),
-      Arr.zip(log.frames),
-      Arr.some(([next, frame]) => liftAt(next) - liftAt(frame) >= BACKTRACK_PIXELS),
-    )
 
-    expect(rose).toBe(true)
+    expect(framesWhereTheLiftRises(log).length).toBeGreaterThan(0)
     expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
   })
 
   it('reports no overshoot where a finger moves every row down as a lift rises', () => {
     const story = 'transition/slash-send-following'
     const log = decodeLog(fingerDuringLiftFixture)
-    const fingerMovesThemDown = pipe(
-      log.frames,
-      Arr.drop(1),
-      Arr.zip(log.frames),
-      Arr.some(
-        ([next, frame]) =>
-          liftAt(next) - liftAt(frame) >= BACKTRACK_PIXELS &&
-          leastMovedAt(next) >= BACKTRACK_PIXELS,
-      ),
+
+    const movedByTheFinger = Arr.filter(
+      framesWhereTheLiftRises(log),
+      (frame) => leastMovedAt(frame) >= ROW_MOVE_PIXELS,
     )
 
-    expect(fingerMovesThemDown).toBe(true)
+    expect(movedByTheFinger.length).toBeGreaterThan(0)
+    expect(Arr.every(movedByTheFinger, (frame) => frame.thread?.held === true)).toBe(true)
     expect(keysOf(detect(story, log, expectationOf(story)))).not.toContain('overshoot')
   })
 

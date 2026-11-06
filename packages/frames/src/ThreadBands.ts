@@ -46,15 +46,21 @@ export const bandsOf = (
   }
 }
 
-export const leastMovedSince = (
+const movesSince = (
   previous: ReadonlyMap<string, number>,
   rows: readonly RowTop[],
-): number => {
-  const moves = rows.flatMap((row) => {
+): readonly number[] =>
+  rows.flatMap((row) => {
     const before = previous.get(row.key)
 
     return before === undefined ? [] : [row.top - before]
   })
+
+export const leastMovedSince = (
+  previous: ReadonlyMap<string, number>,
+  rows: readonly RowTop[],
+): number => {
+  const moves = movesSince(previous, rows)
 
   return moves.length === 0 ? 0 : Math.min(...moves)
 }
@@ -62,11 +68,4 @@ export const leastMovedSince = (
 export const movedSince = (
   previous: ReadonlyMap<string, number>,
   rows: readonly RowTop[],
-): number =>
-  rows
-    .flatMap((row) => {
-      const before = previous.get(row.key)
-
-      return before === undefined ? [] : [row.top - before]
-    })
-    .at(-1) ?? 0
+): number => movesSince(previous, rows).at(-1) ?? 0

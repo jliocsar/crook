@@ -1738,8 +1738,7 @@ happy-dom, measured:
   `clientHeight`, which is where a browser clamps.
 - Its `ResizeObserver` never reports, and TanStack Virtual measures a row through its ref only
   while it is not scrolling, so a row mounted by a scroll while the thread is not following keeps
-  its estimate for good. A test of
-  the virtualizer's own corrections stubs `ResizeObserver` with one that reports when told, and
+  its estimate for good. A test of the virtualizer's own corrections stubs `ResizeObserver` with one that reports when told, and
   waits a moment after: the correction landed after the call that reported the size (measured).
 :::
 
