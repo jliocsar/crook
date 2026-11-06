@@ -233,7 +233,7 @@ export const NEW_AGENT_STORIES: readonly StoryMaker[] = [
     link: liveWith(herd([laptop, desk])),
     arrange: ({ link }) => Ref.set(link.commandAnswer, timedOut),
     settle: () => Effect.andThen(types(TASK_FIELD, TASK), clicks(START_CLAUDE)),
-    shows: { selector: '[role="alert"]' },
+    shows: { text: 'the command may still run' },
   }),
   story({
     slug: 'start-to-chat',

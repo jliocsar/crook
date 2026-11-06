@@ -34,6 +34,7 @@ export interface DockRun {
   readonly model: Option.Option<string>
   readonly background: boolean
   readonly status: 'running' | 'done' | 'failed'
+  readonly unconfirmed: boolean
   readonly startedAt: Option.Option<DateTime.Utc>
   readonly finishedAt: Option.Option<DateTime.Utc>
 }
@@ -297,7 +298,7 @@ const runJob = (
 ): BackgroundJob => {
   const activity = Option.flatMap(run.subagent, (id) => HashMap.get(activities, id))
   const doing = Option.flatMap(activity, activityText)
-  const state: JobState = run.status
+  const state: JobState = run.unconfirmed ? 'unconfirmed' : run.status
   const doingEvent = pipe(
     Option.all({ at: Option.flatMap(activity, (found) => found.at), text: doing }),
     Option.map(({ at, text }) => new JobEvent({ at, text, tone: 'plain' })),

@@ -4,6 +4,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Logger from 'effect/Logger'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
@@ -49,7 +50,12 @@ import { AgentPromptMethod } from '@crook/herdr/Methods'
 import { SOCKET_SILENCE_TIMEOUT } from '@crook/hub/HubDaemon'
 import { AgentLink, MachineIdMismatch } from '@crook/protocol/AgentLink'
 import { LINK_PING_INTERVAL } from '@crook/protocol/LinkTiming'
-import { ClientApi, MachineStillConnected, PaneNotInHerd } from '@crook/protocol/ClientApi'
+import {
+  ClientApi,
+  HubStorageFailed,
+  MachineStillConnected,
+  PaneNotInHerd,
+} from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH, HEALTH_PATH } from '@crook/protocol/HubRoutes'
 import {
   AskNotPending,
@@ -514,6 +520,37 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
     }),
   )
 })
+
+const hubLogLines: string[] = []
+
+const remembersHubLog = Logger.layer([
+  Logger.make(({ message }) => {
+    hubLogLines.push(String(message))
+  }),
+])
+
+layer(Layer.provide(testHub, remembersHubLog), { excludeTestServices: true })(
+  'HttpRoutes over a database that refuses a write',
+  (live) => {
+    live.effect('tells the phone in plain words and logs the cause for the operator', () =>
+      Effect.gen(function* () {
+        const laptop = MachineId.make('full-disk-laptop')
+        const sql = yield* SqlClient.SqlClient
+
+        yield* attachAs(laptop)
+        yield* sql`DROP TABLE pins`
+        const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
+        const refused = yield* phone
+          .SetPinned({ machine: laptop, pane: PANE, pinned: true })
+          .pipe(Effect.flip)
+
+        expect(refused).toBeInstanceOf(HubStorageFailed)
+        expect(refused.message).not.toContain('CROOK_HUB_DATABASE_PATH')
+        expect(hubLogLines.join('\n')).toContain('CROOK_HUB_DATABASE_PATH')
+      }),
+    )
+  },
+)
 
 layer(Layer.empty)('ExeDevIdentity', (it) => {
   it.effect('refuses to start with a CROOK_HUB_ORIGIN that is not an https address', () =>

@@ -26,6 +26,8 @@ export type ChatStatus = Data.TaggedEnum<{
   Quiet: Record<never, never>
 }>
 
+const UNTITLED_CHAT = 'Chat'
+
 export const ChatStatus = Data.taggedEnum<ChatStatus>()
 
 export class ChatScreenModel extends Data.Class<{
@@ -112,8 +114,8 @@ export const chatStatus = (model: ChatScreenModel, activity: ActivityState): Cha
 export const cwdOf = (model: ChatScreenModel): string =>
   Option.match(model.row, { onNone: () => '', onSome: (row) => row.cwd })
 
-export const titleOf = (model: ChatScreenModel, pane: PaneId): string =>
-  Option.match(model.row, { onNone: () => pane, onSome: agentTitleOrPane })
+export const titleOf = (model: ChatScreenModel): string =>
+  Option.match(model.row, { onNone: () => UNTITLED_CHAT, onSome: agentTitleOrPane })
 
 export const edgeKindOf = (model: ChatScreenModel): Option.Option<EdgeKind> =>
   PresenceState.match<Option.Option<EdgeKind>>(model.presence, {

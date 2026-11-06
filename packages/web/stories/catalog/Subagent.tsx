@@ -172,7 +172,13 @@ export const SUBAGENT_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'pane-closed',
     title: 'Subagent, the pane it ran in closed',
-    shows: { selector: '[data-slot="hollow-dot"]' },
+    shows: {
+      all: [
+        { text: 'pane closed' },
+        { absent: 'failed' },
+        { selector: '[data-run][data-status="pane closed"]' },
+      ],
+    },
     own: REVIEW_LINES,
     settle: ({ link }) =>
       Effect.andThen(

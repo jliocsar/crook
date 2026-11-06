@@ -59,6 +59,7 @@ const reviewer: DockRun = {
   model: Option.none(),
   background: true,
   status: 'running',
+  unconfirmed: false,
   startedAt: Option.some(ago(40)),
   finishedAt: Option.none(),
 }

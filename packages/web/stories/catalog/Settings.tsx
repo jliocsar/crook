@@ -66,7 +66,9 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
   story({
     slug: 'failed',
     title: 'Settings, toggles and account failed',
-    shows: { text: 'A call to the hub died instead of failing' },
+    shows: {
+      all: [{ text: 'A call to the hub failed' }, { text: 'Could not load' }],
+    },
     arrange: failSettings,
   }),
   story({
@@ -92,7 +94,7 @@ export const SETTINGS_STORIES: readonly StoryMaker[] = [
     arrange: ({ link }) =>
       Ref.set(link.prefRefusal, Option.some(new HubStorageFailed({ detail: 'disk full' }))),
     settle: toggle,
-    shows: { text: 'disk full' },
+    shows: { text: 'could not save that' },
   }),
   story({
     slug: 'test-sending',

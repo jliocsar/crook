@@ -103,7 +103,7 @@ describe('MachineScreen', () => {
         expect(router.state.location.pathname).toBe('/machines/desk')
       })
 
-      expect((yield* findByRole('heading', 'Agents · –')).tagName).toBe('H2')
+      expect((yield* findByRole('heading', 'Agents')).tagName).toBe('H2')
       expect(
         screen.getByText('Offline, so its agents are unknown until it reconnects.'),
       ).toBeDefined()

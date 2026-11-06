@@ -118,7 +118,7 @@ export const MACHINES_STORIES: readonly StoryMaker[] = [
     link: liveWith(viewOf([desk])),
     arrange: refuseForget,
     settle: () => Effect.andThen(seesText(OFFLINE_HINT), pressesEvenIfHidden('Forget')),
-    shows: { text: 'disk full' },
+    shows: { text: 'could not save that' },
   }),
 ]
 
@@ -149,7 +149,7 @@ export const MACHINE_STORIES: readonly StoryMaker[] = [
     title: 'Machine, offline with Hold to forget',
     path: DESK_PATH,
     link: liveWith(viewOf([laptop, desk])),
-    shows: { text: HOLD_TO_FORGET },
+    shows: { all: [{ text: HOLD_TO_FORGET }, { absent: 'Agents ·' }] },
   }),
   linkStory({
     slug: 'forget-pending',
@@ -180,7 +180,7 @@ export const MACHINE_STORIES: readonly StoryMaker[] = [
     link: liveWith(viewOf([laptop, desk])),
     arrange: refuseForget,
     settle: () => pressesInstantly(HOLD_TO_FORGET),
-    shows: { text: 'disk full' },
+    shows: { text: 'could not save that' },
   }),
   linkStory({
     slug: 'forgotten-while-open',

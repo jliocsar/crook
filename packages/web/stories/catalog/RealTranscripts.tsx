@@ -1,15 +1,16 @@
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
 
 import { caughtUp, chunk, NEXT_SESSION, opened } from '../../test/TranscriptFixtures.ts'
 import { chatStory } from '../ChatFixtures.ts'
 import { feed } from '../Fixtures.ts'
 import { messagesOf } from '../RealTranscriptFixtures.ts'
-import type { StoryMaker } from '../Story.tsx'
+import type { StoryMaker, Witness } from '../Story.tsx'
 
 const REAL_LENGTH = 1_000_000
 const ANY_ROW = '[data-row]'
-const THREAD = '[data-slot="chat-dock"]'
+const NOTHING_TO_SHOW = 'Nothing crook can show yet'
 
 const REAL_FIXTURES: readonly (readonly [string, string, () => Promise<{ default: string }>])[] = [
   ['plain-turn', 'A plain turn', () => import('@crook/claude/fixtures/plain-turn.jsonl?raw')],
@@ -86,6 +87,18 @@ const REAL_FIXTURES: readonly (readonly [string, string, () => Promise<{ default
 
 const WITHOUT_ROWS: readonly string[] = ['thinking', 'unknown-future-entry', 'stuck-runs']
 
+const witnessOf = (slug: string): Witness =>
+  Match.value(slug).pipe(
+    Match.when(
+      (found) => WITHOUT_ROWS.includes(found),
+      () => ({ text: NOTHING_TO_SHOW }),
+    ),
+    Match.when('tool-result-variants', () => ({
+      all: [{ selector: ANY_ROW }, { absent: '1 running' }],
+    })),
+    Match.orElse(() => ({ selector: ANY_ROW })),
+  )
+
 const realStory = ([slug, title, load]: (typeof REAL_FIXTURES)[number]) =>
   chatStory({
     slug,
@@ -94,7 +107,7 @@ const realStory = ([slug, title, load]: (typeof REAL_FIXTURES)[number]) =>
       Effect.flatMap(Effect.promise(load), ({ default: jsonl }) =>
         feed(link, [opened(), chunk(0, REAL_LENGTH, messagesOf(jsonl)), caughtUp(REAL_LENGTH)]),
       ),
-    shows: { selector: WITHOUT_ROWS.includes(slug) ? THREAD : ANY_ROW },
+    shows: witnessOf(slug),
   })
 
 export const REAL_TRANSCRIPT_STORIES: readonly StoryMaker[] = [

@@ -53,6 +53,7 @@ const WITH_TEAM = Option.some(TEAM)
 const NO_HERD = Option.none()
 const LOGGED_OUT_WITNESS: Witness = { text: 'Log in' }
 const SHELL_WITNESS: Witness = { selector: 'nav[aria-label="Sections"]' }
+const NO_PANE_ID: Witness = { absent: 'w1:p1' }
 
 export const LINK_SCREENS: readonly LinkScreen[] = [
   { slug: 'agents', title: 'Agents', path: AGENTS_PATH, arrange: () => Effect.void },
@@ -181,7 +182,7 @@ export const LINK_STORIES: readonly StoryMaker[] = Arr.flatMap(LINK_MOMENTS, (mo
       title: `${moment.title}, ${screen.title}`,
       path: screen.path,
       link: moment.seed,
-      shows: moment.shows,
+      shows: screen.slug === 'chat' ? { all: [moment.shows, NO_PANE_ID] } : moment.shows,
       arrange: screen.arrange,
     }),
   ),

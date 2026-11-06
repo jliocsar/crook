@@ -1,3 +1,4 @@
+import { useAtomValue } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
 import { cn } from 'cn'
 import * as Arr from 'effect/Array'
@@ -9,6 +10,7 @@ import * as React from 'react'
 import type { ClaudeSessionId, MachineId, PaneId } from '@crook/domain/Ids'
 import type { SkillListing } from '@crook/domain/Skill'
 import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
+import { linkAnsweredAtom } from '@crook/web/atoms/Connection'
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { askAnswerNotice, AskDock } from '@crook/web/chat/AskDock'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
@@ -291,7 +293,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS
   const openActions = useOpenAgentActions()
   const closedHere = useClosedFromChat(machine, pane)
-  const title = titleOf(model, pane)
+  const title = titleOf(model)
+  const linkAnswered = useAtomValue(linkAnsweredAtom)
 
   React.useLayoutEffect(() => {
     if (!covered) {
@@ -380,7 +383,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   return (
     <>
       <PushedHeader
-        title={title}
+        title={linkAnswered ? title : <span className="invisible">{title}</span>}
         subtitle={
           <span
             {...stateMark(activityMachine, activity)}

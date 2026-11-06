@@ -1,3 +1,4 @@
+import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 
 import { isWatching, machineLabelOf } from '@crook/web/chat/ChatModel'
@@ -6,12 +7,20 @@ import { PresenceState } from '@crook/web/chat/PresenceMachine'
 import { useSkeletonHold } from '@crook/web/chat/SkeletonHold'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import { ThreadSkeleton } from '@crook/web/chat/ThreadSkeleton'
-import { knowsNothing, TranscriptViewState } from '@crook/web/chat/TranscriptMachine'
+import { knowsNothing, shownOf, TranscriptViewState } from '@crook/web/chat/TranscriptMachine'
+import { linesOf } from '@crook/web/chat/TranscriptState'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
 
-type EmptyThread = 'not-claude' | 'skeleton' | 'machine-away' | 'nothing-cached' | 'no-messages'
+type EmptyThread =
+  | 'not-claude'
+  | 'skeleton'
+  | 'machine-away'
+  | 'nothing-cached'
+  | 'nothing-to-show'
+  | 'no-messages'
 
 const NO_MESSAGES = 'No messages yet'
+const NOTHING_TO_SHOW = 'Nothing crook can show yet'
 const NOT_CLAUDE = 'Not a Claude pane'
 const NOTHING_CACHED = 'No messages on this phone yet'
 const NO_ROWS: readonly ThreadRow[] = []
@@ -37,7 +46,11 @@ const emptyThreadOf = (
     return 'nothing-cached'
   }
 
-  return TranscriptViewState.guards.NoView(state) ? 'skeleton' : 'no-messages'
+  if (TranscriptViewState.guards.NoView(state)) {
+    return 'skeleton'
+  }
+
+  return Arr.isReadonlyArrayNonEmpty(linesOf(shownOf(state))) ? 'nothing-to-show' : 'no-messages'
 }
 
 export const useThreadContent = (
@@ -55,6 +68,14 @@ export const useThreadContent = (
   }
 }
 
+function QuietLine({ text }: { text: string }) {
+  return (
+    <p data-slot="empty-state" className="text-muted-foreground py-10 text-center text-sm">
+      {text}
+    </p>
+  )
+}
+
 function ThreadEmpty({ shown, model }: { shown: EmptyThread; model: ChatScreenModel }) {
   return Match.value(shown).pipe(
     Match.when('not-claude', () => <EmptyState title={NOT_CLAUDE} />),
@@ -66,11 +87,8 @@ function ThreadEmpty({ shown, model }: { shown: EmptyThread; model: ChatScreenMo
       />
     )),
     Match.when('nothing-cached', () => <EmptyState title={NOTHING_CACHED} />),
-    Match.when('no-messages', () => (
-      <p data-slot="empty-state" className="text-muted-foreground py-10 text-center text-sm">
-        {NO_MESSAGES}
-      </p>
-    )),
+    Match.when('nothing-to-show', () => <QuietLine text={NOTHING_TO_SHOW} />),
+    Match.when('no-messages', () => <QuietLine text={NO_MESSAGES} />),
     Match.exhaustive,
   )
 }

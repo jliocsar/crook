@@ -259,7 +259,7 @@ export const HERD_STORIES: readonly StoryMaker[] = [
   herdStory({
     slug: 'pin-failure',
     title: 'Agent card, the hub refused a pin',
-    shows: { text: 'disk full' },
+    shows: { text: 'could not save that' },
     link: liveWith(TEAM),
     arrange: ({ link }) =>
       Ref.set(link.pinRefusal, Option.some(new HubStorageFailed({ detail: 'disk full' }))),
@@ -267,7 +267,7 @@ export const HERD_STORIES: readonly StoryMaker[] = [
       Effect.gen(function* () {
         yield* swipes(FIRST_SWIPE_CARD, SWIPE_LEFT)
         yield* pressesEvenIfHidden('Pin')
-        yield* seesText('disk full')
+        yield* seesText('could not save that')
       }),
   }),
   herdStory({

@@ -103,7 +103,7 @@ export class HubCallDefected extends Schema.TaggedError<HubCallDefected>()('HubC
   cause: Schema.Defect(),
 }) {
   override get message(): string {
-    return 'A call to the hub died instead of failing: the hub sent something this build of crook cannot read, or a hub handler crashed. crook keeps retrying; if it keeps happening, reload crook to pick up the build the hub serves, and read the hub logs.'
+    return 'A call to the hub failed in a way crook could not read. crook keeps retrying; if it keeps happening, reload crook to pick up the latest build.'
   }
 }
 

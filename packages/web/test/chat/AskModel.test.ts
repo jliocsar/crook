@@ -32,6 +32,7 @@ import {
   askTitle,
   isAnswerUnderway,
   permissionButtons,
+  toolName,
   withAlwaysNotes,
   withoutAskedCall,
 } from '@crook/web/chat/AskModel'
@@ -78,6 +79,29 @@ describe('askTitle', () => {
     expect(
       askTitle(permission(new ScreenDetail({ subject: Option.some('src/Herd.ts'), text: '' }))),
     ).toBe('Edit Herd.ts?')
+  })
+})
+
+describe('toolName', () => {
+  it('reads an MCP tool as its name and its server, and leaves any other tool alone', () => {
+    expect(toolName('mcp__plannotator__send_message')).toBe('send message from plannotator')
+    expect(toolName('mcp__claude_ai_Claude_Docs__batch')).toBe('batch from claude ai Claude Docs')
+    expect(toolName('mcp__plugin_paper-desktop_paper__get_guide')).toBe('get guide from paper')
+    expect(toolName('WebFetch')).toBe('WebFetch')
+  })
+
+  it('titles an ask with it', () => {
+    const ask = new PermissionAsk({
+      id: ASK,
+      source: 'hook',
+      tool: 'mcp__plannotator__send_message',
+      plugin: Option.none(),
+      action: new UseTool({ input: {} }),
+      options: [],
+      dialog: Option.none(),
+    })
+
+    expect(askTitle(ask)).toBe('Use send message from plannotator?')
   })
 })
 

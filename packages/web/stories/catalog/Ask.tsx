@@ -179,7 +179,13 @@ export const ASK_STORIES: readonly StoryMaker[] = [
   askStory('permission-long-command', 'Ask, a long command', bashAsk(LONG_COMMAND)),
   askStory('permission-edit', 'Ask, an edit as its diff', editAsk),
   askStory('permission-write', 'Ask, write a file', writeAsk),
-  askStory('permission-tool', 'Ask, a plugin tool', toolAsk),
+  chatStory({
+    slug: 'permission-tool',
+    title: 'Ask, a plugin tool',
+    link: blocked(toolAsk),
+    events: LEAD_IN,
+    shows: { text: 'Use send message from plannotator?' },
+  }),
   askStory('permission-screen', 'Ask, read off the screen', screenAsk),
   askStory(
     'permission-yes-no-only',
@@ -269,7 +275,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
     arrange: ({ link }) =>
       Ref.set(link.commandAnswer, Exit.fail(new AskDialogUnreadable({ pane: PANE }))),
     settle: () => clicks('Yes'),
-    shows: { selector: '[role="alert"]' },
+    shows: { text: 'could not read the dialog' },
   }),
   chatStory({
     slug: 'decline-composer',

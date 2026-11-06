@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Option from 'effect/Option'
+import * as Struct from 'effect/Struct'
 
 import { SubagentRun } from '@crook/web/chat/ChatItems'
 import { treeRun, withoutLineNumbers } from '@crook/web/chat/ToolView'
@@ -18,6 +19,7 @@ const REVIEW = new SubagentRun({
   background: false,
   status: 'done',
   sessionIdle: false,
+  unconfirmed: false,
   startedAt: Option.none(),
   finishedAt: Option.none(),
 })
@@ -36,6 +38,15 @@ describe('withoutLineNumbers', () => {
 })
 
 describe('treeRun', () => {
+  it('reads a run still going when its pane closed as cut off, not as failed', () => {
+    const running = new SubagentRun(Struct.evolve(REVIEW, { status: () => 'running' as const }))
+    const closed = treeRun(running, { now: START, paneClosed: true, opensRuns: true })
+
+    expect(closed.status).toBe('pane closed')
+    expect(closed.meta).toBe('Pane closed')
+    expect(treeRun(REVIEW, { now: START, paneClosed: true, opensRuns: true }).status).toBe('done')
+  })
+
   it('offers a run with a transcript only where the screen can open it', () => {
     expect(treeRun(REVIEW, { now: START, paneClosed: false, opensRuns: true }).selectable).toBe(
       true,

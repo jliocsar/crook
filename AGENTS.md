@@ -697,6 +697,23 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   source).
 - A live batch lands without a fade of its own: the lift that carries it into view is the one
   animation, and the Working row it replaces leaves as a ghost on the exit token.
+- What a failure says to the phone and what an operator needs are two texts. A failure's message is
+  what happened and what to do, in words, with no pane id, ask id, idempotency key, env var or
+  database text, and its fields stay on the wire as they were, since older phones and agents decode
+  them. A disk failing under the hub reads "could not save that" on the phone, and the database's own
+  words and the setting to check go to the hub's log as it refuses the call.
+- A session can hold lines and no rows: of the real transcripts in the catalog, three hold only
+  redacted thinking, entries a newer Claude wrote, or notices for runs outside the slice. Those read
+  as nothing crook can show, not as no messages, because the second says something untrue about the
+  session. Thinking itself draws nothing, on purpose.
+- A subagent run that started, with its session gone idle and no roster to say otherwise, has
+  nothing vouching for it: the dock read "1 running 15d" on a real transcript. It reads as
+  unconfirmed there, the word that work nothing said ended already has, and it leaves the count.
+- A pane closing says nothing about whether a run failed, so a run cut off that way reads "pane
+  closed" with a neutral dot rather than red.
+- A chat's title holds its room before the link's first value, invisible rather than absent, so
+  nothing moves when the name lands, and after that value a pane the herd has no name for reads
+  "Chat". It used to read the raw pane id in both.
 - A blocked agent reads "needs you" wherever its status is put in words, the same words the tab
   badge and the machine counts use; "blocked" is herdr's word, not the user's.
 - A one-shot Bun script keeps `Effect.provide` at its entry and disables

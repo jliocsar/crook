@@ -31,6 +31,8 @@ export const linkMarkAtom = Atom.make((get) =>
   ),
 ).pipe(Atom.withEquality(Equal.equals))
 
+export const linkAnsweredAtom = Atom.make((get) => Option.isSome(get(linkValueAtom)))
+
 export const canActAtom = Atom.make((get) => allowsActions(get(connectionAtom)))
 
 export const dimsContentAtom = Atom.make((get) => dimsContent(get(connectionAtom)))

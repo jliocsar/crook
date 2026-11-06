@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
 import { screen, within } from '@testing-library/react'
+import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
@@ -11,6 +12,7 @@ import { HerdView } from '@crook/domain/HerdView'
 import { defaultNotificationPrefs, NotificationSettings } from '@crook/domain/Notifications'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import { HarkNotConfigured, HarkReachedNoDevice } from '@crook/protocol/Hark'
+import { HubCallDefected } from '@crook/web/rpc/HubConnection'
 import { UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 import { LogOutRefused } from '@crook/web/rpc/SessionCheck'
 
@@ -83,6 +85,22 @@ describe('SettingsScreen', () => {
 
       expect(screen.queryByText('Loading your notification settings')).toBeNull()
       expect(valueOf('Account', 'Logged in as')).toBe(OWNER_EMAIL)
+    }),
+  )
+
+  it.effect('says a failed read once, and only that it could not load in the account row', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp('/', liveWith(view))
+      const defect = new HubCallDefected({ cause: Cause.die('hub') })
+
+      yield* Ref.set(link.settingsFailure, Option.some(defect))
+      yield* Effect.promise(() => router.navigate({ to: '/settings' }))
+      yield* Effect.promise(() => screen.findByText(defect.message))
+      yield* eventually(() => {
+        expect(valueOf('Account', 'Logged in as')).toBe('Could not load')
+      })
+
+      expect(screen.getAllByText(defect.message)).toHaveLength(1)
     }),
   )
 

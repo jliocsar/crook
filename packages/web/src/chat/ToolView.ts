@@ -10,7 +10,7 @@ import { stringField } from '@crook/web/chat/ToolSummary'
 import type { SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
 import type { Picture } from '@crook/web/chat/Images'
 import type { DiffHunk } from '@crook/web/components/ui/diff-view'
-import type { AgentRun } from '@crook/web/components/ui/subagent-tree'
+import type { AgentRun, AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
 import { LINE_BREAK } from '@crook/web/text/Lines'
 import { runningSpan } from '@crook/web/time/Elapsed'
 
@@ -93,8 +93,8 @@ const runMeta = (run: SubagentRun): string =>
     Arr.join(' · '),
   )
 
-export const runStatusShown = (run: SubagentRun, paneClosed: boolean): SubagentRun['status'] =>
-  paneClosed && run.status === 'running' ? 'failed' : run.status
+export const runStatusShown = (run: SubagentRun, paneClosed: boolean): AgentRunStatus =>
+  paneClosed && run.status === 'running' ? 'pane closed' : run.status
 
 export const runTicks = (run: SubagentRun, paneClosed: boolean): boolean =>
   runStatusShown(run, paneClosed) === 'running' && !run.sessionIdle
@@ -106,7 +106,7 @@ export const treeRun = (run: SubagentRun, view: RunView): AgentRun => {
     id: run.toolUseId,
     label: run.description,
     status,
-    meta: view.paneClosed && run.status === 'running' ? PANE_CLOSED_NOTE : runMeta(run),
+    meta: status === 'pane closed' ? PANE_CLOSED_NOTE : runMeta(run),
     duration: Option.getOrUndefined(
       runningSpan(run.startedAt, run.finishedAt, runTicks(run, view.paneClosed), view.now),
     ),

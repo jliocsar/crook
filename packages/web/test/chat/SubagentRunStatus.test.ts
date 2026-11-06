@@ -117,6 +117,21 @@ describe('a background subagent run', () => {
     expect(Option.map(Option.fromUndefinedOr(idle), durationOf)).toEqual(Option.some(undefined))
   })
 
+  it('is unconfirmed once its session is idle and no roster names it', () => {
+    const unnamed = fold([opened(), launched])
+    const named = fold([
+      opened(),
+      launched,
+      rosterOf(SESSION, [subagent({ toolUseId: 'toolu_1' })]),
+    ])
+    const unconfirmedIn = (view: typeof unnamed, activity: Parameters<typeof itemsOf>[1]) =>
+      runsIn(itemsOf(view, activity)).map((run) => [run.status, run.unconfirmed])
+
+    expect(unconfirmedIn(unnamed, 'still')).toEqual([['running', true]])
+    expect(unconfirmedIn(unnamed, 'working')).toEqual([['running', false]])
+    expect(unconfirmedIn(named, 'still')).toEqual([['running', false]])
+  })
+
   it('counts no run of a session the pane has left', () => {
     const before = fold([
       opened(),
