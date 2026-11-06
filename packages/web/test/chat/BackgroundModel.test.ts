@@ -8,6 +8,7 @@ import { MonitorEvent, MonitorTask, ShellTask, SubagentActivity } from '@crook/d
 import type { SubagentStatus } from '@crook/domain/Subagent'
 import { BackgroundChanged } from '@crook/domain/Transcript'
 import {
+  activityText,
   backgroundJobs,
   type BackgroundJob,
   commandLabel,
@@ -98,6 +99,27 @@ const stateOf = (jobs: readonly BackgroundJob[], key: string) =>
     Arr.findFirst(jobs, (job) => job.key === key),
     (job) => job.state,
   )
+
+describe('activityText', () => {
+  const activity = (tool: string, subject: Option.Option<string>) =>
+    new SubagentActivity({
+      subagent: REVIEWER,
+      tool: Option.some(tool),
+      subject,
+      text: Option.none(),
+      at: Option.none(),
+    })
+
+  it('reads a tool in words, as the rows of the thread do', () => {
+    expect(activityText(activity('mcp__codemode__run', Option.some('Bash')))).toEqual(
+      Option.some('code mode(Bash)'),
+    )
+    expect(activityText(activity('mcp__linear__get_issue', Option.none()))).toEqual(
+      Option.some('get issue from linear'),
+    )
+    expect(activityText(activity('Read', Option.some('a.ts')))).toEqual(Option.some('Read(a.ts)'))
+  })
+})
 
 describe('backgroundJobs', () => {
   it('cannot confirm a shell whose process is gone though nothing said it ended', () => {

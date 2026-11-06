@@ -578,4 +578,26 @@ describe('toolSummary', () => {
     )
     expect(toolSummary('ExitPlanMode', {}, CWD)).toEqual(Option.none())
   })
+
+  it('names what a code mode call reached rather than its first line', () => {
+    expect(
+      toolSummary(
+        'mcp__codemode__run',
+        { code: "const a = 1\nawait tools.call('Bash', {})\nawait tools.call('Read', {})" },
+        CWD,
+      ),
+    ).toEqual(Option.some('Bash, Read'))
+  })
+})
+
+describe('toolTitle', () => {
+  it('reads a tool in words, with or without a subject', () => {
+    expect(toolTitle({ name: 'mcp__codemode__run', summary: Option.some('Bash') })).toBe(
+      'code mode(Bash)',
+    )
+    expect(toolTitle({ name: 'mcp__linear__get_issue', summary: Option.none() })).toBe(
+      'get issue from linear',
+    )
+    expect(toolTitle({ name: 'Read', summary: Option.some('a.ts') })).toBe('Read(a.ts)')
+  })
 })

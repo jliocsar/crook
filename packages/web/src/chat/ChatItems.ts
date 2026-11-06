@@ -29,6 +29,7 @@ import type {
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import { imagesIn, wordsIn } from '@crook/web/chat/Blocks'
+import { resultStatus } from '@crook/web/chat/ToolResultView'
 import {
   decodeAgentInput,
   decodePlan,
@@ -42,8 +43,6 @@ import {
 } from '@crook/web/chat/TranscriptState'
 import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
-
-type ToolStatus = ToolCallStatus
 
 type RunStatus = Exclude<AgentRunStatus, 'pane closed'>
 
@@ -174,7 +173,7 @@ export class ToolCallModel extends Data.Class<{
   readonly name: string
   readonly summary: Option.Option<string>
   readonly input: Schema.Json
-  readonly status: ToolStatus
+  readonly status: ToolCallStatus
   readonly result: Option.Option<ToolResultBlock>
   readonly startedAt: Option.Option<DateTime.Utc>
   readonly finishedAt: Option.Option<DateTime.Utc>
@@ -391,13 +390,14 @@ const turnOver = (turn: number, evidence: Evidence): boolean =>
   turn < evidence.lastTurn || evidence.context.activity === 'still'
 
 const toolStatus = (
+  name: string,
   result: Option.Option<ToolResultBlock>,
   turn: number,
   evidence: Evidence,
-): ToolStatus =>
+): ToolCallStatus =>
   Option.match(result, {
-    onSome: (found): ToolStatus => (found.isError ? 'error' : 'success'),
-    onNone: (): ToolStatus => {
+    onSome: (found): ToolCallStatus => resultStatus(name, found),
+    onNone: (): ToolCallStatus => {
       if (turnOver(turn, evidence)) {
         return 'stopped'
       }
@@ -535,7 +535,7 @@ const callItem = (call: Call, evidence: Evidence): ChatItem => {
       name: call.use.name,
       summary: toolSummary(call.use.name, call.use.input, evidence.context.cwd),
       input: call.use.input,
-      status: toolStatus(result, call.turn, evidence),
+      status: toolStatus(call.use.name, result, call.turn, evidence),
       result,
       startedAt: call.at,
       finishedAt: stampedAt(stamped),
