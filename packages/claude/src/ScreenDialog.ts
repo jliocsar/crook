@@ -43,11 +43,14 @@ interface DialogSections {
 }
 
 const FOOTER_MARK = 'Esc to cancel'
+const OPTION_TEXT_JOIN = ' '
 const QUESTION_MARK = '☐'
 const TIP_PREFIX = 'Tip:'
 const RULE = /^─+$/u
 const DASHED_RULE = /^╌+$/u
 const OPTION_LINE = /^\s*(?<cursor>❯\s+)?(?<number>\d+)\.\s+(?<label>.*)$/u
+const ESC_OPTION_END = /\(esc\)\s*$/u
+const PLAN_FOOTER = /^\s*ctrl\+g to edit in /u
 
 const HEADER =
   /^(?<title>.*?)(?:\s+·\s+from the (?<plugin>.+?) plugin)?(?:\s+(?<position>\d+) of (?<total>\d+))?$/u
@@ -65,6 +68,8 @@ const isOptionLine = (line: string) => OPTION_LINE.test(line)
 
 const isBlank = (line: string) => line.trim().length === 0
 
+export const saysEsc = (text: string): boolean => ESC_OPTION_END.test(text)
+
 const withoutIndent = (line: string) => (line.startsWith(' ') ? line.slice(1) : line).trimEnd()
 
 const nextContent = (lines: readonly string[], from: number) =>
@@ -72,6 +77,23 @@ const nextContent = (lines: readonly string[], from: number) =>
 
 const footerIndex = (lines: readonly string[]) =>
   Arr.findLastIndex(lines, (line) => line.includes(FOOTER_MARK))
+
+const endOnLastLine = (lines: readonly string[], last: number): Option.Option<number> => {
+  const line = lines[last] ?? ''
+
+  if (saysEsc(line)) {
+    return Option.some(last + 1)
+  }
+
+  return PLAN_FOOTER.test(line) ? Option.some(last) : Option.none()
+}
+
+const dialogEnd = (lines: readonly string[]) =>
+  pipe(
+    Arr.findLastIndex(lines, (line) => !isBlank(line)),
+    Option.flatMap((last) => endOnLastLine(lines, last)),
+    Option.orElse(() => footerIndex(lines)),
+  )
 
 const startsDialog = (lines: readonly string[]) => (index: number) =>
   isRule(lines[index] ?? '') &&
@@ -202,13 +224,16 @@ const buildDialog = (lines: readonly string[]): Option.Option<ScreenDialog> =>
     Option.filter((dialog) => Arr.isReadonlyArrayNonEmpty(dialog.options)),
   )
 
+export const optionText = (option: DialogOption): string =>
+  [option.label, ...option.details].join(OPTION_TEXT_JOIN)
+
 export const parseDialog = (screen: string): Option.Option<ScreenDialog> => {
   const lines = Str.split(screen, '\n')
 
   return pipe(
-    footerIndex(lines),
-    Option.flatMap((index) =>
-      Option.map(dialogStart(lines, index), (start) => lines.slice(start + 1, index)),
+    dialogEnd(lines),
+    Option.flatMap((end) =>
+      Option.map(dialogStart(lines, end), (start) => lines.slice(start + 1, end)),
     ),
     Option.flatMap(buildDialog),
   )

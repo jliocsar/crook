@@ -143,6 +143,19 @@ export const permissionButtons = (ask: PermissionAsk): readonly AskButton[] => [
   NO_BUTTON,
 ]
 
+export const laptopOnlyOptions = (ask: PermissionAsk): readonly string[] => {
+  const drawn = pipe(
+    Arr.getSomes([askOption(ask, 'yes'), askOption(ask, 'always')]),
+    Arr.map((option) => option.number),
+  )
+
+  return pipe(
+    ask.options,
+    Arr.filter((option) => option.choice !== 'no' && !Arr.contains(drawn, option.number)),
+    Arr.map((option) => option.label.replace(KEY_HINT, '')),
+  )
+}
+
 const withoutAnswerPrefix = (label: string): string =>
   pipe(
     Arr.findFirst(ANSWER_PREFIXES, (prefix) => label.startsWith(prefix)),

@@ -9,7 +9,13 @@ import * as Struct from 'effect/Struct'
 
 import { editPatch } from '@crook/claude/EditPatch'
 import { type PendingPermission, isSameCall } from '@crook/claude/HookLedger'
-import { type DialogQueue, type ScreenDialog, dialogFingerprint } from '@crook/claude/ScreenDialog'
+import {
+  type DialogQueue,
+  type ScreenDialog,
+  dialogFingerprint,
+  optionText,
+  saysEsc,
+} from '@crook/claude/ScreenDialog'
 import {
   type Ask,
   type AskChoice,
@@ -60,11 +66,13 @@ const NO_LABEL = 'No'
 const ALWAYS_DESCRIPTION = 'always allow'
 const OTHER_DESCRIPTION = 'other'
 const LINE_BREAK = '\n'
-const WRAPPED_LINE_JOIN = ' '
 const PATH_SEPARATOR = '/'
 const WHITESPACE = /\s+/gu
 const INPUT_LAYOUT = /[\s│\\]+/gu
 const QUESTION_TOOL = 'AskUserQuestion'
+const PLAN_TOOL = 'ExitPlanMode'
+const ONE_TIME_YES_LABELS = [YES_LABEL, 'Allow', 'Yes, but ask again next time']
+const ONE_TIME_NO_LABELS = [NO_LABEL, 'No, and ask again next time']
 
 const ALWAYS_PREFIXES = [
   'Yes, and always allow',
@@ -85,6 +93,8 @@ const HEADER_TOOLS = new Map([
   ['Create file', 'Write'],
   ['Read file', 'Read'],
   ['Read outside the working directories', 'Read'],
+  ['Fetch', 'WebFetch'],
+  ['Claude has written up a plan and is ready to execute. Would you like to proceed?', PLAN_TOOL],
 ])
 
 const BashInput = Schema.Struct({ command: Schema.String })
@@ -127,11 +137,11 @@ export const choiceLabel = (choice: AskChoice): string =>
   )
 
 export const optionChoice = (label: string): AskChoice => {
-  if (label === YES_LABEL) {
+  if (Arr.contains(ONE_TIME_YES_LABELS, label)) {
     return 'yes'
   }
 
-  if (label === NO_LABEL) {
+  if (Arr.contains(ONE_TIME_NO_LABELS, label) || saysEsc(label)) {
     return 'no'
   }
 
@@ -144,7 +154,7 @@ const askOptionsOf = (dialog: Option.Option<ScreenDialog>): readonly AskOption[]
     onSome: (found) =>
       found.kind === 'permission'
         ? found.options.map((option) => {
-            const label = [option.label, ...option.details].join(WRAPPED_LINE_JOIN)
+            const label = optionText(option)
 
             return new AskOption({ number: option.number, label, choice: optionChoice(label) })
           })
@@ -280,10 +290,9 @@ const showsQuestion = (dialog: ScreenDialog, call: ToolCall) =>
 const showsPermission = (dialog: ScreenDialog, call: ToolCall) =>
   call.toolName !== QUESTION_TOOL &&
   Option.match(toolOfHeader(dialog.header), {
-    onNone: () => true,
-    onSome: (tool) => tool === call.toolName,
-  }) &&
-  showsAction(dialog, call)
+    onNone: () => showsAction(dialog, call),
+    onSome: (tool) => tool === call.toolName && (tool === PLAN_TOOL || showsAction(dialog, call)),
+  })
 
 const isConsistent = (dialog: Option.Option<ScreenDialog>) => (call: ToolCall) =>
   Option.match(dialog, {
