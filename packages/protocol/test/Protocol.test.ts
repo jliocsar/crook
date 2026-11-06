@@ -55,18 +55,22 @@ import {
   AskDialogUnreadable,
   AskNotPending,
   AskOptionUnavailable,
+  CLAUDE_WAITING_NOTE,
   CommandDeliveryUnknown,
+  CommandFailure,
   CommandId,
   DeclineMessageUndelivered,
   QuestionnaireUnsupported,
   CommandResult,
   FolderNotFound,
   HerdrAnswerUnreadable,
+  HerdrRefusedCommand,
   MachineOffline,
   PaneNotAgent,
   PaneNotCreatedByCrook,
   RoutedCommand,
   TaskNotDelivered,
+  claudeWaitingRefusal,
 } from '@crook/protocol/Commands'
 import {
   HarkNotConfigured,
@@ -325,6 +329,22 @@ layer(clientApiHandlers)('ClientApi', (rpc) => {
       expect(failure).toEqual(new TranscriptReadFailed({ detail: 'EACCES' }))
     }),
   )
+})
+
+describe('The refusal of a prompt while Claude waits', () => {
+  it('stays a refusal an older phone or hub already decodes', () => {
+    const encoded = Schema.encodeSync(HerdrRefusedCommand)(claudeWaitingRefusal())
+
+    expect(Object.keys(encoded).toSorted()).toEqual(['_tag', 'code', 'detail'])
+    expect(Schema.decodeSync(CommandFailure)(encoded)).toEqual(claudeWaitingRefusal())
+  })
+
+  it('reads as the note, and leaves every other refusal as it was', () => {
+    const elsewhere = new HerdrRefusedCommand({ code: 'agent_blocked', detail: 'at an approval' })
+
+    expect(claudeWaitingRefusal().message).toBe(CLAUDE_WAITING_NOTE)
+    expect(elsewhere.message).toContain('Herdr refused the command with agent_blocked')
+  })
 })
 
 describe('Account wire shape', () => {

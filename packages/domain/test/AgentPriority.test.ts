@@ -45,6 +45,7 @@ const agent = (pane: string, status: AgentStatus, minutesIn: number) =>
     beforeHandoff: Option.none(),
     ask: Option.none(),
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
   })
 
 const machineWith = (

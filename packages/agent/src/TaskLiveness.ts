@@ -10,7 +10,7 @@ import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
 
 import { SessionFile } from '@crook/agent/ClaudeSessionFiles'
-import { PROC_ROOT, startTime } from '@crook/agent/ClaudeSessions'
+import { PROC_ROOT, startTime } from '@crook/agent/ClaudeSessionFiles'
 import { taskIdOfOutput } from '@crook/claude/BackgroundTasks'
 import type { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import type { ClaudeSessionId } from '@crook/domain/Ids'

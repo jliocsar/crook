@@ -55,6 +55,7 @@ const agentRow = (status: AgentStatus) =>
     beforeHandoff: Option.none(),
     ask: Option.none(),
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
   })
 
 const entry = (machine: MachineId, status: AgentStatus) =>

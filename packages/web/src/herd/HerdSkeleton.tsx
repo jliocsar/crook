@@ -42,6 +42,7 @@ const sampleCard = (
     beforeHandoff: Option.none(),
     ask: Option.none(),
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
   }),
   needsYou: false,
   pinned: false,

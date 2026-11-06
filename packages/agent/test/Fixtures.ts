@@ -4,10 +4,12 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
+import * as Stream from 'effect/Stream'
 import type * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
 import { AuditLog } from '@crook/agent/AuditLog'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
 import { GitBranches } from '@crook/agent/GitBranches'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
@@ -29,6 +31,7 @@ export interface ExecutorOptions {
   readonly created?: Iterable<PaneId>
   readonly invalidate?: Effect.Effect<void>
   readonly audit?: Layer.Layer<AuditLog>
+  readonly claudeWaiting?: Effect.Effect<Option.Option<boolean>>
 }
 
 export const LAPTOP = MachineId.make('laptop')
@@ -57,6 +60,7 @@ export const agentRow = (fields: Partial<ConstructorParameters<typeof AgentRow>[
     beforeHandoff: Option.none(),
     ask: Option.none(),
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
     ...fields,
   })
 
@@ -89,6 +93,7 @@ export const executorWith = (
 ) =>
   Layer.provideMerge(AgentDaemon.commandExecution, [
     MachineStateSync.layerTest(state, options.invalidate),
+    ClaudeSessionFiles.layerTest([], Stream.never, options.claudeWaiting),
     CreatedPanes.layerTest(options.created),
     options.audit ?? discardingAudit,
     herdr,
@@ -106,6 +111,7 @@ export const linkedAgentWith = (
     Layer.mergeAll(AgentDaemon.commandExecution, AgentDaemon.transcriptStreamingAt([])),
     [
       MachineStateSync.layerTest(state, options.invalidate),
+      ClaudeSessionFiles.layerTest([], Stream.never, options.claudeWaiting),
       CreatedPanes.layerTest(options.created),
       options.audit ?? discardingAudit,
       herdr,

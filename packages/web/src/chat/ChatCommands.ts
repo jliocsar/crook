@@ -9,6 +9,7 @@ import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as React from 'react'
 
+import type { AgentRow } from '@crook/domain/AgentRow'
 import type { Ask } from '@crook/domain/Ask'
 import {
   AnswerAsk,
@@ -21,6 +22,7 @@ import {
 import type { AskAnswer, Command, CommandReceipt } from '@crook/domain/Command'
 import type { ClaudeSessionId, MachineId, PaneId } from '@crook/domain/Ids'
 import type { SkillListing } from '@crook/domain/Skill'
+import { CLAUDE_WAITING_NOTE } from '@crook/protocol/Commands'
 import {
   failureMessageOf,
   isDone,
@@ -311,6 +313,9 @@ const placeholderOf = (canAct: boolean, mode: ComposerMode, blocked: boolean): s
   return blocked ? "Waiting for Claude's question" : 'Message Claude'
 }
 
+const isClaudeWaiting = (row: Option.Option<AgentRow>): boolean =>
+  Option.exists(row, (shown) => Option.contains(shown.claudeWaiting, true))
+
 const useRestoreUndeliveredDraft = (
   action: CommandAction,
   draft: string,
@@ -546,24 +551,28 @@ export const useChatCommands = ({
   const working = Option.isSome(activityView(activity).workingSince)
   const promptInFlight = isPromptInFlight(prompt)
   const prompted = usePromptWait(items, threadEpoch, promptInFlight, working)
+  const blocked = ActivityState.guards.Blocked(activity)
+  const openAsk = Option.flatMap(
+    Option.filter(model.row, () => blocked && isPresent(model.presence)),
+    (row) => row.ask,
+  )
   const [refused, setRefused] = React.useState('')
+  const refusalOf = (text: string) =>
+    Option.orElse(laptopOnlyNote(text, skills), () =>
+      Option.liftPredicate(CLAUDE_WAITING_NOTE, () => isClaudeWaiting(model.row)),
+    )
   const refusal = Option.filter(
-    laptopOnlyNote(draft.trim(), skills),
-    () => refused === draft.trim(),
+    refusalOf(draft.trim()),
+    () => refused !== '' && refused === draft.trim() && Option.isNone(openAsk),
   )
 
   if (refused !== '' && refused !== draft.trim()) {
     setRefused('')
   }
 
-  const blocked = ActivityState.guards.Blocked(activity)
   const composerFailure = useComposerFailure(prompt, stop, draft, working)
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(opened, answer, session)
-  const openAsk = Option.flatMap(
-    Option.filter(model.row, () => blocked && isPresent(model.presence)),
-    (row) => row.ask,
-  )
   const mode: ComposerMode = Option.isSome(openAsk) ? 'decline' : 'prompt'
   const answering = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(answer, ask.id)))
   const declining = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(prompt, ask.id)))
@@ -585,7 +594,8 @@ export const useChatCommands = ({
   const send = (text: string) => {
     Option.match(openAsk, {
       onNone: () => {
-        if (Option.isSome(laptopOnlyNote(text, skills))) {
+        if (Option.isSome(refusalOf(text))) {
+          composerFailure.onPromptSent()
           setRefused(text)
 
           return

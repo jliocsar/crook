@@ -34,6 +34,7 @@ export interface ResolvedAgent {
   readonly claudeSession: Option.Option<ClaudeSessionId>
   readonly branch: Option.Option<string>
   readonly ask: Option.Option<Ask>
+  readonly claudeWaiting: Option.Option<boolean>
 }
 
 export interface HerdReading {
@@ -190,6 +191,7 @@ const toAgentRow =
       beforeHandoff: keptBeforeHandoff(carried, status),
       ask: Option.filter(resolved.ask, () => status === 'blocked'),
       runningSubagents: runningIn(reading.runningSubagents, claudeSession),
+      claudeWaiting: resolved.claudeWaiting,
     })
   }
 

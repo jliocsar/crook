@@ -6,7 +6,11 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { SkillListing } from '@crook/domain/Skill'
 import { SkillsChanged } from '@crook/domain/Transcript'
-import { HerdrUnavailable } from '@crook/protocol/Commands'
+import {
+  CLAUDE_WAITING_NOTE,
+  HerdrUnavailable,
+  claudeWaitingRefusal,
+} from '@crook/protocol/Commands'
 import { REDIALING, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
@@ -21,7 +25,7 @@ import {
 } from '../../test/TranscriptFixtures.ts'
 import { TextBlock } from '@crook/domain/TranscriptMessage'
 import { chatHerd, chatStory, delivered, opensWith, SEND_READY } from '../ChatFixtures.ts'
-import { chatAgent, CONVERSATION } from '../Fixtures.ts'
+import { chatAgent, chatAgentSaying, CONVERSATION } from '../Fixtures.ts'
 import { clicks, seesText, types } from '../StageDom.ts'
 import { step } from '../Story.tsx'
 import type { LinkStage, StoryMaker } from '../Story.tsx'
@@ -272,6 +276,38 @@ export const COMPOSER_STORIES: readonly StoryMaker[] = [
     shows: { all: [{ text: 'Name a session instead' }, { field: '/resume' }] },
     events: CONVERSATION,
     settle: () => Effect.andThen(typesDraft('/resume'), clicks(SEND)),
+  }),
+  chatStory({
+    slug: 'claude-waiting',
+    title: 'Composer, a send refused while Claude waits on the laptop, its draft kept',
+    shows: { all: [{ text: CLAUDE_WAITING_NOTE }, { field: DRAFT }] },
+    row: chatAgentSaying(true),
+    events: CONVERSATION,
+    settle: () => Effect.andThen(typesDraft(DRAFT), clicks(SEND)),
+  }),
+  chatStory({
+    slug: 'claude-waiting-ends',
+    title: 'Composer, a refused send that goes once the dialog closes on the laptop',
+    shows: { all: [{ text: CLAUDE_WAITING_NOTE }, { field: DRAFT }] },
+    ends: { all: [{ absent: CLAUDE_WAITING_NOTE }, { text: 'Sent' }] },
+    row: chatAgentSaying(true),
+    events: CONVERSATION,
+    arrange: (stage) => delivered(stage, DRAFT),
+    settle: () => Effect.andThen(typesDraft(DRAFT), clicks(SEND)),
+    timeline: [
+      step<LinkStage>(800, 'The dialog closes on the laptop', ({ link }) =>
+        SubscriptionRef.set(link.state, liveWith(chatHerd(chatAgentSaying(false)))),
+      ),
+      step<LinkStage>(800, 'The user sends again', () => clicks(SEND)),
+    ],
+  }),
+  chatStory({
+    slug: 'claude-waiting-refused-by-agent',
+    title: 'Composer, the agent refuses a send the phone had not yet heard it should hold',
+    shows: { all: [{ selector: '[role="alert"]' }, { text: CLAUDE_WAITING_NOTE }] },
+    events: CONVERSATION,
+    arrange: ({ link }) => Ref.set(link.commandAnswer, Exit.fail(claudeWaitingRefusal())),
+    settle: () => Effect.andThen(typesDraft(DRAFT), clicks(SEND)),
   }),
   chatStory({
     slug: 'prompts-sent-and-queued',

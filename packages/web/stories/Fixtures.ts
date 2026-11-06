@@ -1,7 +1,9 @@
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as Struct from 'effect/Struct'
 
-import type { AgentRow } from '@crook/domain/AgentRow'
+import { AgentRow } from '@crook/domain/AgentRow'
 import { PaneId } from '@crook/domain/Ids'
 import { PaneTranscript, SubagentsChanged, SubagentTranscript } from '@crook/domain/Transcript'
 import type { TranscriptEvent, TranscriptSource } from '@crook/domain/Transcript'
@@ -43,6 +45,9 @@ export const chatAgent = (status: AgentRow['status'] = 'idle', secondsAgo = 42) 
     branch: 'fix/reconnect-banner',
     claudeSession: SESSION,
   })
+
+export const chatAgentSaying = (claudeWaiting: boolean) =>
+  new AgentRow(Struct.evolve(chatAgent(), { claudeWaiting: () => Option.some(claudeWaiting) }))
 
 export const LAPTOP_MACHINE = machine(
   LAPTOP,

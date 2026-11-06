@@ -40,6 +40,7 @@ export class AgentRow extends Schema.Class<AgentRow>('AgentRow')({
   beforeHandoff: Schema.OptionFromNullOr(StatusBeforeHandoff),
   ask: Schema.OptionFromNullOr(Ask),
   runningSubagents: Schema.OptionFromOptionalKey(SubagentCount),
+  claudeWaiting: Schema.OptionFromOptionalKey(Schema.Boolean),
 }) {}
 
 export const seenMarkOf = (row: AgentRow): SeenMark =>

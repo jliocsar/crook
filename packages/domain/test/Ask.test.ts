@@ -72,6 +72,7 @@ const rowAsking = (status: AgentStatus, ask: Option.Option<Ask>) =>
     beforeHandoff: Option.none(),
     ask,
     runningSubagents: Option.none(),
+    claudeWaiting: Option.none(),
   })
 
 describe('askSummary', () => {

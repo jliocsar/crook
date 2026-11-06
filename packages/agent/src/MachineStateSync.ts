@@ -114,6 +114,17 @@ const logHerdrFailure = (error: HerdrSubscriptionError) =>
     Match.orElse((failure) => Effect.logWarning(failure.message)),
   )
 
+const sessionOf = (claudeSessions: ClaudeSessions['Service'], info: AgentInfo) =>
+  claudeSessions.resolve(info).pipe(
+    Effect.catchTags({
+      ClaudeSessionFileUnreadable: (error) =>
+        Effect.as(Effect.logWarning(error.message), Option.none()),
+      HerdrRequestRejected: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
+      HerdrAgentNotFound: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
+      HerdrResponseInvalid: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
+    }),
+  )
+
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
   const claudeSessions = yield* ClaudeSessions
@@ -125,17 +136,6 @@ const make = Effect.gen(function* () {
   const recentPlaces = yield* RecentPlaces
   const runningSubagents = yield* RunningSubagents
   const machine = yield* CrookMachineId
-
-  const sessionOf = (info: AgentInfo) =>
-    claudeSessions.resolve(info).pipe(
-      Effect.catchTags({
-        ClaudeSessionFileUnreadable: (error) =>
-          Effect.as(Effect.logWarning(error.message), Option.none()),
-        HerdrRequestRejected: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
-        HerdrAgentNotFound: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
-        HerdrResponseInvalid: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
-      }),
-    )
 
   const branchOf = (info: AgentInfo) =>
     Option.match(workingDirectoryOf(info), {
@@ -149,16 +149,23 @@ const make = Effect.gen(function* () {
         ),
     })
 
-  const sessionAndAskOf = (info: AgentInfo, mark: number) =>
-    Effect.flatMap(sessionOf(info), (claudeSession) =>
-      Effect.map(asks.askOf(info, claudeSession, mark), (ask) => ({ claudeSession, ask })),
+  const claudeFactsOf = (info: AgentInfo, mark: number) =>
+    Effect.flatMap(sessionOf(claudeSessions, info), (claudeSession) =>
+      Effect.zipWith(
+        asks.askOf(info, claudeSession, mark),
+        Option.match(claudeSession, {
+          onNone: () => Effect.succeedNone,
+          onSome: sessionFiles.waiting,
+        }),
+        (ask, claudeWaiting) => ({ claudeSession, ask, claudeWaiting }),
+      ),
     )
 
   const resolveAgent = (mark: number) => (info: AgentInfo) =>
     Effect.zipWith(
-      sessionAndAskOf(info, mark),
+      claudeFactsOf(info, mark),
       branchOf(info),
-      ({ claudeSession, ask }, branch): ResolvedAgent => ({ info, claudeSession, branch, ask }),
+      (facts, branch): ResolvedAgent => ({ info, branch, ...facts }),
       { concurrent: true },
     ).pipe(Effect.annotateLogs('pane', info.pane_id))
 

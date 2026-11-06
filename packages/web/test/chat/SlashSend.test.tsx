@@ -3,16 +3,19 @@ import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { fireEvent, screen } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 
-import { Prompt } from '@crook/domain/Command'
-import { PaneId } from '@crook/domain/Ids'
+import { UnknownAsk } from '@crook/domain/Ask'
+import { AnswerAsk, Decline, Prompt } from '@crook/domain/Command'
+import { AskId, PaneId } from '@crook/domain/Ids'
 import { PaneTranscript } from '@crook/domain/Transcript'
 import type { AgentRow } from '@crook/domain/AgentRow'
+import { CLAUDE_WAITING_NOTE, claudeWaitingRefusal } from '@crook/protocol/Commands'
 import { COMMAND_SILENCE } from '@crook/web/chat/ChatCommands'
 
 import { liveWith, renderApp } from '../AppRender.tsx'
@@ -64,6 +67,167 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
+})
+
+describe('a prompt while Claude waits on the laptop', () => {
+  const waitingRow = agent('w1:p1', 'idle', { claudeWaiting: true })
+  const openChat = Effect.fn('openChat')(function* (row: AgentRow) {
+    const rendered = yield* renderApp(CHAT, live([row]))
+    const transcript = yield* rendered.link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+    yield* Queue.offerAll(transcript, [opened(), caughtUp(0)])
+    yield* Effect.promise(() => screen.findByText('No messages yet'))
+
+    return rendered
+  })
+
+  it.effect('refuses it with a line, keeps the draft, and sends nothing', () =>
+    Effect.gen(function* () {
+      const { link } = yield* openChat(waitingRow)
+
+      fireEvent.change(field(), { target: { value: 'carry on' } })
+
+      expect(screen.queryByText(CLAUDE_WAITING_NOTE)).toBeNull()
+
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* Effect.promise(() => screen.findByText(CLAUDE_WAITING_NOTE))
+
+      expect(field()).toHaveProperty('value', 'carry on')
+      expect(Ref.getUnsafe(link.sent)).toEqual([])
+    }),
+  )
+
+  it.effect('lets go when the dialog closes, and the same draft then sends', () =>
+    Effect.gen(function* () {
+      const { link } = yield* openChat(waitingRow)
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'carry on' }))),
+      )
+      fireEvent.change(field(), { target: { value: 'carry on' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* Effect.promise(() => screen.findByText(CLAUDE_WAITING_NOTE))
+      yield* SubscriptionRef.set(
+        link.state,
+        live([agent('w1:p1', 'idle', { claudeWaiting: false })]),
+      )
+      yield* eventually(() => {
+        expect(screen.queryByText(CLAUDE_WAITING_NOTE)).toBeNull()
+      })
+
+      expect(field()).toHaveProperty('value', 'carry on')
+
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent).map((sent) => sent.command)).toEqual([
+          new Prompt({ pane: PANE, text: 'carry on' }),
+        ])
+      })
+    }),
+  )
+
+  it.effect('drops the line once the draft moves on', () =>
+    Effect.gen(function* () {
+      yield* openChat(waitingRow)
+
+      fireEvent.change(field(), { target: { value: 'carry on' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* Effect.promise(() => screen.findByText(CLAUDE_WAITING_NOTE))
+      fireEvent.change(field(), { target: { value: 'carry on, then stop' } })
+      yield* eventually(() => {
+        expect(screen.queryByText(CLAUDE_WAITING_NOTE)).toBeNull()
+      })
+    }),
+  )
+
+  it.effect('sends as today for an agent too old to say', () =>
+    Effect.gen(function* () {
+      const { link } = yield* openChat(agent('w1:p1', 'idle'))
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'carry on' }))),
+      )
+      fireEvent.change(field(), { target: { value: 'carry on' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent)).toHaveLength(1)
+      })
+
+      expect(screen.queryByText(CLAUDE_WAITING_NOTE)).toBeNull()
+    }),
+  )
+
+  it.effect('keeps the draft and says why when the agent refuses it first', () =>
+    Effect.gen(function* () {
+      const { link } = yield* openChat(agent('w1:p1', 'idle', { claudeWaiting: false }))
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(claudeWaitingRefusal()))
+      fireEvent.change(field(), { target: { value: 'carry on' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* Effect.promise(() => screen.findByText(CLAUDE_WAITING_NOTE))
+
+      expect(field()).toHaveProperty('value', 'carry on')
+    }),
+  )
+
+  it.effect('says it once when the phone hears of the dialog after the agent refused', () =>
+    Effect.gen(function* () {
+      const { link } = yield* openChat(agent('w1:p1', 'idle', { claudeWaiting: false }))
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(claudeWaitingRefusal()))
+      fireEvent.change(field(), { target: { value: 'carry on' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* Effect.promise(() => screen.findByText(CLAUDE_WAITING_NOTE))
+      yield* SubscriptionRef.set(link.state, live([waitingRow]))
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* eventually(() => {
+        expect(document.querySelector('[data-slot="composer-note"]')).not.toBeNull()
+        expect(screen.getAllByText(CLAUDE_WAITING_NOTE)).toHaveLength(1)
+      })
+
+      expect(Ref.getUnsafe(link.sent)).toHaveLength(1)
+    }),
+  )
+
+  it.effect('stands aside for an ask the phone can answer, whose answer still goes', () =>
+    Effect.gen(function* () {
+      const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: 'Do you want to?' })
+      const { link } = yield* openChat(agent('w1:p1', 'blocked', { ask, claudeWaiting: true }))
+      const decline = new AnswerAsk({
+        pane: PANE,
+        ask: ask.id,
+        answer: new Decline({ message: Option.none() }),
+      })
+
+      yield* Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(decline)))
+      yield* click(yield* findByRole('button', 'Decline'))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent).map((sent) => sent.command)).toEqual([decline])
+      })
+
+      expect(screen.queryByText(CLAUDE_WAITING_NOTE)).toBeNull()
+    }),
+  )
+
+  it.effect('drops the line when the dialog turns out to be an ask', () =>
+    Effect.gen(function* () {
+      const { link } = yield* openChat(waitingRow)
+      const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: 'Do you want to?' })
+
+      fireEvent.change(field(), { target: { value: 'carry on' } })
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* Effect.promise(() => screen.findByText(CLAUDE_WAITING_NOTE))
+      yield* SubscriptionRef.set(
+        link.state,
+        live([agent('w1:p1', 'blocked', { ask, claudeWaiting: true })]),
+      )
+      yield* eventually(() => {
+        expect(screen.queryByText(CLAUDE_WAITING_NOTE)).toBeNull()
+      })
+    }),
+  )
 })
 
 describe('a slash send', () => {

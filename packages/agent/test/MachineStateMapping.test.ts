@@ -103,6 +103,7 @@ const handoffReading = (
       claudeSession,
       branch: Option.none(),
       ask: Option.none(),
+      claudeWaiting: Option.none(),
     },
   ]),
   tabs: [tabViewedIf(FRONT_TAB, viewedTab), tabViewedIf(BACKGROUND_TAB, viewedTab)],
@@ -177,6 +178,7 @@ describe('MachineStateMapping', () => {
           claudeSession: Option.some(SESSION),
           branch: Option.some('main'),
           ask: Option.none(),
+          claudeWaiting: Option.none(),
         },
       ]),
       STARTED,
@@ -208,6 +210,7 @@ describe('MachineStateMapping', () => {
         beforeHandoff: Option.none(),
         ask: Option.none(),
         runningSubagents: Option.none(),
+        claudeWaiting: Option.none(),
       }),
     ])
   })
@@ -225,6 +228,7 @@ describe('MachineStateMapping', () => {
           claudeSession: Option.none(),
           branch: Option.none(),
           ask: Option.none(),
+          claudeWaiting: Option.none(),
         },
       ]),
       STARTED,
@@ -242,24 +246,28 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p2' }),
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p3' }),
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p4' }),
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const state = initialState(
@@ -290,12 +298,14 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p2' }),
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const created = HashSet.make(PaneId.make('w1:p2'))
@@ -315,12 +325,14 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.some(SESSION),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
       {
         info: agentInfo({ pane_id: 'w1:p2', terminal_id: 'term_2' }),
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const counted = HashMap.make([SESSION, 2])
@@ -340,6 +352,26 @@ describe('MachineStateMapping', () => {
     ])
   })
 
+  it('publishes whether Claude waits, and a flip of it as a new version', () => {
+    const resolved = (claudeWaiting: Option.Option<boolean>) => [
+      {
+        info: agentInfo(),
+        claudeSession: Option.some(SESSION),
+        branch: Option.none(),
+        ask: Option.none(),
+        claudeWaiting,
+      },
+    ]
+    const state = initialState(CONNECTION, reading(resolved(Option.some(true))), STARTED)
+    const flipped = nextState(state, CONNECTION, reading(resolved(Option.some(false))), STARTED)
+
+    expect(state.agents.map((row) => row.claudeWaiting)).toEqual([Option.some(true)])
+    expect(flipped.pipe(Option.map((next) => next.agents[0]?.claudeWaiting))).toEqual(
+      Option.some(Option.some(false)),
+    )
+    expect(flipped.pipe(Option.map((next) => next.version))).toEqual(Option.some(1))
+  })
+
   it('publishes an ask only while the agent it belongs to is blocked', () => {
     const ask = new UnknownAsk({ id: AskId.make('blocked-term-4'), screen: '' })
     const blocked = {
@@ -347,6 +379,7 @@ describe('MachineStateMapping', () => {
       claudeSession: Option.none(),
       branch: Option.none(),
       ask: Option.some(ask),
+      claudeWaiting: Option.none(),
     }
     const working = { ...blocked, info: agentInfo({ agent_status: 'working' }) }
     const undetected = {
@@ -368,6 +401,7 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const previous = initialState(CONNECTION, reading(agents), STARTED)
@@ -384,12 +418,14 @@ describe('MachineStateMapping', () => {
           claudeSession: Option.none(),
           branch: Option.none(),
           ask: Option.none(),
+          claudeWaiting: Option.none(),
         },
         {
           info: agentInfo({ pane_id: 'w1:p2' }),
           claudeSession: Option.none(),
           branch: Option.none(),
           ask: Option.none(),
+          claudeWaiting: Option.none(),
         },
       ]),
       STARTED,
@@ -404,12 +440,14 @@ describe('MachineStateMapping', () => {
             claudeSession: Option.none(),
             branch: Option.none(),
             ask: Option.none(),
+            claudeWaiting: Option.none(),
           },
           {
             info: agentInfo({ pane_id: 'w1:p2' }),
             claudeSession: Option.none(),
             branch: Option.none(),
             ask: Option.none(),
+            claudeWaiting: Option.none(),
           },
         ]),
         LATER,
@@ -432,6 +470,7 @@ describe('MachineStateMapping', () => {
           claudeSession: Option.none(),
           branch: Option.none(),
           ask: Option.none(),
+          claudeWaiting: Option.none(),
         },
       ]),
       STARTED,
@@ -446,6 +485,7 @@ describe('MachineStateMapping', () => {
             claudeSession: Option.none(),
             branch: Option.none(),
             ask: Option.none(),
+            claudeWaiting: Option.none(),
           },
         ]),
         LATER,
@@ -463,6 +503,7 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const previous = initialState(CONNECTION, reading(agents), STARTED)
@@ -497,6 +538,7 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const previous = initialState(CONNECTION, reading(agents), STARTED)
@@ -513,6 +555,7 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const previous = initialState(CONNECTION, reading(agents), STARTED)
@@ -541,6 +584,7 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const after = [
@@ -554,6 +598,7 @@ describe('MachineStateMapping', () => {
         claudeSession: Option.none(),
         branch: Option.none(),
         ask: Option.none(),
+        claudeWaiting: Option.none(),
       },
     ]
     const previous = initialState(CONNECTION, reading(before), STARTED)
