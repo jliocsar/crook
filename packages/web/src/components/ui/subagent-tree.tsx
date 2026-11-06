@@ -2,7 +2,7 @@ import { cn } from 'cn'
 import { ChevronRight } from 'lucide-react'
 import type * as React from 'react'
 
-export type AgentRunStatus = 'running' | 'done' | 'failed'
+export type AgentRunStatus = 'running' | 'done' | 'failed' | 'pane closed'
 
 export type AgentRun = {
   id: string
@@ -41,7 +41,7 @@ export function RunDot({ status }: { status: AgentRunStatus }) {
       className={cn(
         'size-[9px] shrink-0 rounded-full',
         status === 'running' && 'bg-primary animate-pulse motion-reduce:animate-none',
-        status === 'done' && 'bg-muted-foreground/40',
+        (status === 'done' || status === 'pane closed') && 'bg-muted-foreground/40',
         status === 'failed' && 'bg-destructive',
       )}
     />

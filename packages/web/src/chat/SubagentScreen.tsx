@@ -43,6 +43,7 @@ import { linesOf, NO_ROSTERS, rostersOf } from '@crook/web/chat/TranscriptState'
 import { stateMark } from '@crook/web/machine/Machine'
 import { Response } from '@crook/web/components/ui/response'
 import { RunDot } from '@crook/web/components/ui/subagent-tree'
+import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
 import { runningSpan, spanDuration } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
@@ -62,7 +63,7 @@ const findRun = (runs: readonly SubagentRun[], subagent: SubagentId): Option.Opt
 
 const runLine = (
   run: SubagentRun,
-  status: SubagentRun['status'],
+  status: AgentRunStatus,
   ticks: boolean,
   now: DateTime.Utc,
 ): string =>

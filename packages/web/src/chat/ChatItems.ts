@@ -39,7 +39,7 @@ import { PARAGRAPH_BREAK } from '@crook/web/text/Lines'
 
 type ToolStatus = ToolCallStatus
 
-type RunStatus = AgentRunStatus
+type RunStatus = Exclude<AgentRunStatus, 'pane closed'>
 
 export type AgentActivity = 'working' | 'blocked' | 'still'
 
