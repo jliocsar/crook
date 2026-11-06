@@ -1156,11 +1156,35 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   holds that, and none of the 57 stories reached it (measured). The transform written by hand stays
   beside the motion value: Motion only writes in a microtask or a frame, and a pin in the commit
   flushed right after, before either, reads the scroll height through it.
-- A row can still jump down in a following thread as a batch lands, then glide up. A pin raises the
-  lift by the rows' estimated height and only moves the scroll back when they measure shorter, so
-  the difference stays in the lift: 12 px on a send at the end of 120 lines and 98 px on a short
-  catch-up, in the log and after the frame's animation callbacks alike (measured). It is the
-  landing of what is new, not a row going back and forth, so nothing fails on it.
+- A pin waits for the commit that holds what its rows measured, so a lift takes what landed and no
+  row drops first. A pin used to raise the lift by the rows' estimates in the commit they mounted,
+  and the next commit moved only the scroll back, so the difference stayed in the lift and every row
+  dropped by it in the frame they landed, then glided up. It reached pictures. Following a band of
+  the thread through the screencast, the first picture after the landing read 12 px on a send at
+  the end of 120 lines and 92 to 94 px on a short catch-up, 20 of 20 runs each. That catch-up's rows
+  fit the screen once measured, so it glided 98 px for nothing. Now the send lifts 84 px rather than
+  96 and that catch-up not at all, and the first picture reads 0 px, 20 of 20 each (measured in
+  Chromium at 390x844 and 4x CPU throttling).
+- Lowering the lift when the scroll moves back cannot replace the wait. Of the 64 px that send's
+  scroll came back, 52 belonged to a row above the screen, mounted for the lift and measuring short:
+  the rows under it hold their place with the lift untouched, so taking it from the lift would throw
+  them up. Writing the measured height into the content before the pin does not do it either. A
+  commit places its rows at their estimated starts, and they overflow a shorter content: that
+  catch-up measured 576 px and still scrolled 30 px (all measured).
+- A landing that would reach past a screen pins without waiting, since it lifts a screen whatever
+  it measures. Waiting there put a commit between the pin and the rows the lift shows, and the
+  worst frame of a long catch-up went from 145 to 163 ms to 221 to 251, and of one over a big gap
+  from 142 to 172 ms to 210 to 248. Without it they read 143 to 171 and 139 to 163, and over tall
+  rows and over turns they stay where they were, 159 to 176 against 159 to 181 and 77 to 97 against
+  82 to 99 (eight runs each, measured as above). Layout shift read 0 throughout.
+- A following thread measures a row itself as it mounts. TanStack Virtual's ref skips that while it
+  reads a scroll, for 150 ms after the last one (read in its source), and leaves it to a
+  `ResizeObserver` report that renders a frame later, so a batch landing that soon pinned at the
+  estimate and came back in the next frame. At four times a story's speed that read as a row 96 px
+  up and then 12 px down, 6 of 6 runs of a send landing before the thread had landed, so with no
+  lift to hide it; now 84 px up, 6 of 6 (measured as above). Under a lift it would have been the same
+  drop a frame late (reasoned, not measured). A row that changes height after it mounted is not
+  covered: the lift takes growth and not a shrink, so its rows still drop by it.
 - TanStack Virtual corrects `scrollTop` itself when a row above the top first measures away
   from its estimate, and writes the correction before React commits the new heights. A thread
   that read every upward move as the user leaving lost the end on open: 299 rows of 20 px (every
@@ -1659,7 +1683,7 @@ A `!cmd` typed in Claude writes `<bash-input>…</bash-input>`, then `<bash-stdo
 
 All of it reuses the local command blocks on the wire, with one optional key saying the line opens a turn. A new block class would decode as unknown on every older phone, where a key it does not know is dropped and `! kill 1` reads as the note it always was. An agent too old to send the key still gets a command's bubble and output, with no turn start, and a plain `/compact` and raw bash lines stay as they were until it updates, since only the agent reads the file.
 
-A command's bubble holds its size and place as its output lands, read per frame in Chromium at 390x844 and 4x CPU throttling: 44 px tall and 4 px below its row's top through Sent, the command and the output, at speeds 1, 2 and 4. In a thread too short to scroll it stays at one position throughout. In a following thread at the end of 120 lines, output landing in a later batch grows the row from 52 to 89 px and glides the bubble up those 37 px over about 500 ms. Giving way to a row with no Sent line drops a bubble 32 px in one frame in a following thread, the same for a plain prompt, 2 of 2 each; with its output in the same batch a command moves 0 to 5 px. A real command and its output arrived in the same write, 5 of 5 pairs the probes logged, so that batch is the usual one.
+A command's bubble holds its size and place as its output lands, read per frame in Chromium at 390x844 and 4x CPU throttling: 44 px tall and 4 px below its row's top through Sent, the command and the output, at speeds 1, 2 and 4. In a thread too short to scroll it stays at one position throughout. In a following thread at the end of 120 lines, output landing in a later batch grows the row from 52 to 89 px and glides the bubble up those 37 px over about 500 ms. Giving way to a row with no Sent line drops a bubble in one frame in a following thread, since the row truly gets shorter: 20 px on a command at the end of 120 lines, 20 of 20 runs in the log and in pictures, and it stays there; with its output in the same batch a command moves 0 to 5 px. A real command and its output arrived in the same write, 5 of 5 pairs the probes logged, so that batch is the usual one.
 :::
 
 :::tip
@@ -1741,8 +1765,8 @@ happy-dom, measured:
   `scrollTop` of 100000 when set to it (measured). A test reads the bottom as `scrollHeight` minus
   `clientHeight`, which is where a browser clamps.
 - Its `ResizeObserver` never reports, and TanStack Virtual measures a row through its ref only
-  while it is not scrolling, so a row mounted by a scroll keeps its estimate for good. A test of
-  the virtualizer's own corrections stubs `ResizeObserver` with one that reports when told, and
+  while it is not scrolling, so a row mounted by a scroll while the thread is not following keeps
+  its estimate for good. A test of the virtualizer's own corrections stubs `ResizeObserver` with one that reports when told, and
   waits a moment after: the correction landed after the call that reported the size (measured).
 :::
 
@@ -2034,6 +2058,15 @@ the screen once per animation frame and fails on what a settled screenshot canno
   before a story's first step, where nothing judges it, and once failing a story that scrolls up at
   its start with a flash and a blank (measured; that the read comes before the scroll event is
   reasoned). Run such a failure again before reading it as a bug.
+- A lift that takes more than what landed fails a story as `overshoot`: every row on screen moves
+  down at least 2 px in a frame where the lift rises at least 2 px. Over the 57 timeline stories, one
+  run each, it found 5 such frames in 4 stories before the fix (2, 12, 12, 32 and 98 px) and none
+  after it, the 2 px being the smallest there is to find (measured). The read takes every row on
+  screen, since a row pushed down by one landing above it moves with the lift rising and the rows
+  above stay (reasoned, no story reaches it). A finger does the same as a batch lands: 16.4 px down
+  in a frame the lift rose 82.4 px, driven through CDP at 4x (measured), so a frame with a finger down
+  is skipped. A flick's momentum is not marked, but a thread scrolling up stops following and
+  raises no lift (read in the code).
 - A baseline entry lists what a story always shows and what it only sometimes shows. A new key
   fails the story, an always key that did not happen fails it too and says to remove it, and a
   sometimes key does neither.

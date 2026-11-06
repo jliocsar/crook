@@ -2,7 +2,14 @@ import * as Arr from 'effect/Array'
 import * as Option from 'effect/Option'
 import { describe, expect, it } from 'vitest'
 
-import { departedKeys, heldFrom, liftFor, reachOf, withTheEnd } from '@crook/web/chat/Reveal'
+import {
+  departedKeys,
+  heldFrom,
+  liftFor,
+  pinWaitsForMeasures,
+  reachOf,
+  withTheEnd,
+} from '@crook/web/chat/Reveal'
 import type { RevealRow } from '@crook/web/chat/Reveal'
 
 const rows = (...keys: readonly string[]): readonly RevealRow[] => keys.map((key) => ({ key }))
@@ -18,6 +25,28 @@ describe('departedKeys', () => {
 
   it('has nothing to let go while no placeholder was shown', () => {
     expect(departedKeys([], rows('prompt', 'text'))).toStrictEqual([])
+  })
+})
+
+describe('pinWaitsForMeasures', () => {
+  const SCREEN = 660
+
+  it('pins what is rendered once the measures agree with it', () => {
+    expect(
+      pinWaitsForMeasures({ rendered: 9180, measured: 9180, scrolled: 8488, screen: SCREEN }),
+    ).toBe(false)
+  })
+
+  it('waits for the next commit when a row landing under a screen measured otherwise', () => {
+    expect(
+      pinWaitsForMeasures({ rendered: 9244, measured: 9232, scrolled: 8488, screen: SCREEN }),
+    ).toBe(true)
+  })
+
+  it('pins at once a landing longer than the screen, which lifts a screen whatever it measures', () => {
+    expect(
+      pinWaitsForMeasures({ rendered: 11540, measured: 11000, scrolled: 500, screen: SCREEN }),
+    ).toBe(false)
   })
 })
 

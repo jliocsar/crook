@@ -267,6 +267,9 @@ export const catchUpLands = Effect.fn('catchUpLands')(function* (
 
   return {
     ...reading(),
+    scrollHeard: () => {
+      fireEvent.scroll(scrolling)
+    },
     landsAgain: () => {
       rerender(
         thread(
@@ -392,10 +395,11 @@ export const rowsShrinkAfterOpen = (
   measuredHeight: number,
 ) => {
   const measurements = heldMeasurements(measuredHeight)
+  let laidOutHeight = renderedHeight
 
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
     function rendered(this: HTMLElement) {
-      return this.hasAttribute('data-index') ? renderedHeight : 0
+      return this.hasAttribute('data-index') ? laidOutHeight : 0
     },
   )
 
@@ -427,6 +431,7 @@ export const rowsShrinkAfterOpen = (
 
   return {
     measured: (height = measuredHeight) => {
+      laidOutHeight = height
       act(() => {
         measurements.deliver(height)
       })

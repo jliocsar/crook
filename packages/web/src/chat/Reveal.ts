@@ -31,6 +31,14 @@ export const departedKeys = (
 export const liftFor = (grown: number, current: number, ceiling: number): number =>
   Math.max(0, Math.min(current + grown, ceiling))
 
+export const pinWaitsForMeasures = (sizes: {
+  readonly rendered: number
+  readonly measured: number
+  readonly scrolled: number
+  readonly screen: number
+}): boolean =>
+  sizes.measured !== sizes.rendered && sizes.measured - sizes.screen - sizes.scrolled < sizes.screen
+
 export const withTheEnd = (
   indexes: readonly number[],
   range: RenderedRange,
