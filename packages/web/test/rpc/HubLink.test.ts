@@ -19,7 +19,7 @@ import { IdempotencyKey, PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import { defaultNotificationPrefs, NotificationSettings } from '@crook/domain/Notifications'
 import { PaneTranscript, positionAfter, TranscriptPosition } from '@crook/domain/Transcript'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
-import { AGENT_PING_INTERVAL, HUB_RECONNECT_BASE, RECONNECT_CAP } from '@crook/protocol/AgentLink'
+import { LINK_PING_INTERVAL, HUB_RECONNECT_BASE, RECONNECT_CAP } from '@crook/protocol/LinkTiming'
 import { HubAccount } from '@crook/protocol/ClientApi'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { connectionView, dimsContent } from '@crook/web/connection/ConnectionView'
@@ -276,7 +276,7 @@ describe('HubLink', () => {
 
       yield* Queue.offer(first.views, liveView)
       yield* current
-      yield* TestClock.adjust(AGENT_PING_INTERVAL)
+      yield* TestClock.adjust(LINK_PING_INTERVAL)
       yield* dropSession(first, refused)
       yield* nextSession
 
@@ -295,7 +295,7 @@ describe('HubLink', () => {
 
       expect((yield* current).status).toEqual(EXPIRED)
 
-      yield* TestClock.adjust(AGENT_PING_INTERVAL)
+      yield* TestClock.adjust(LINK_PING_INTERVAL)
 
       expect(yield* Ref.get(browser.opened)).toBe(1)
 
@@ -674,7 +674,7 @@ describe('HubLink', () => {
 
       yield* SubscriptionRef.set(browser.visible, false)
       yield* SubscriptionRef.set(browser.visible, true)
-      yield* TestClock.adjust(AGENT_PING_INTERVAL)
+      yield* TestClock.adjust(LINK_PING_INTERVAL)
       yield* settle
 
       expect(yield* Ref.get(browser.opened)).toBe(1)
@@ -801,7 +801,7 @@ describe('HubLink', () => {
 
       yield* Queue.offer(first.views, liveView)
       yield* current
-      yield* TestClock.adjust(AGENT_PING_INTERVAL)
+      yield* TestClock.adjust(LINK_PING_INTERVAL)
       yield* link
         .watchTranscript(
           LAPTOP,

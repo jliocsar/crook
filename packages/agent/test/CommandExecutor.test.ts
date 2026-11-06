@@ -43,7 +43,8 @@ import {
   PaneRenameMethod,
 } from '@crook/herdr/Methods'
 import { paneInfo } from '@crook/herdr/RecordFixtures'
-import { COMMAND_TIMEOUT, HUB_RECONNECT_BASE } from '@crook/protocol/AgentLink'
+import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
+import { HUB_RECONNECT_BASE } from '@crook/protocol/LinkTiming'
 import {
   CommandDeliveryUnknown,
   HerdrRefusedCommand,

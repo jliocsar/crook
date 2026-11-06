@@ -54,7 +54,8 @@ import * as Database from '@crook/hub/Database'
 import { HarkClient } from '@crook/hub/HarkClient'
 import * as HubDaemon from '@crook/hub/HubDaemon'
 import { NotificationStore } from '@crook/hub/NotificationStore'
-import { AGENT_PING_INTERVAL, AgentLink, Hello } from '@crook/protocol/AgentLink'
+import { AgentLink, Hello } from '@crook/protocol/AgentLink'
+import { LINK_PING_INTERVAL } from '@crook/protocol/LinkTiming'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import { AGENT_PATH, CLIENT_PATH } from '@crook/protocol/HubRoutes'
 import { protocolSerialization } from '@crook/protocol/Serialization'
@@ -207,7 +208,7 @@ export const connect = Effect.fn('connect')(function* <Rpcs extends Rpc.Any>(
   group: RpcGroup.RpcGroup<Rpcs>,
   path: string,
   headers: Record<string, string>,
-  pingInterval: Duration.Duration = AGENT_PING_INTERVAL,
+  pingInterval: Duration.Duration = LINK_PING_INTERVAL,
 ) {
   const url = yield* socketUrl(path)
   const protocol = yield* Layer.build(

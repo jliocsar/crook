@@ -10,7 +10,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { RECONNECT_GRACE } from '@crook/protocol/AgentLink'
+import { RECONNECT_GRACE } from '@crook/protocol/LinkTiming'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import {

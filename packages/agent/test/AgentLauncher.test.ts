@@ -68,11 +68,11 @@ import {
 } from '@crook/herdr/Records'
 import {
   AGENT_READY_TIMEOUT,
-  HUB_RECONNECT_BASE,
   LAUNCH_COMMAND_TIMEOUT,
   PANE_BUSY_RETRY_LIMIT,
   SHELL_READY_TIMEOUT,
 } from '@crook/protocol/AgentLink'
+import { HUB_RECONNECT_BASE } from '@crook/protocol/LinkTiming'
 import {
   AgentNotStarted,
   CommandDeliveryUnknown,

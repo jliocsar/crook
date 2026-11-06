@@ -21,7 +21,7 @@ import type {
   TranscriptSource,
   TranscriptTailBytes,
 } from '@crook/domain/Transcript'
-import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
+import { LINK_PING_INTERVAL } from '@crook/protocol/LinkTiming'
 import { ClientApi } from '@crook/protocol/ClientApi'
 import type {
   HubAccount,
@@ -153,7 +153,7 @@ export const connectTo = (url: URL): Effect.Effect<HubCalls, never, Scope.Scope>
   Layer.build(
     Layer.provide(
       RpcClient.layerProtocolSocket({
-        pingInterval: AGENT_PING_INTERVAL,
+        pingInterval: LINK_PING_INTERVAL,
         retryPolicy: Schedule.recurs(0),
       }),
       [

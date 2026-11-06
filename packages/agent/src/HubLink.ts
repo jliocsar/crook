@@ -17,13 +17,12 @@ import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'
 import { LaunchCommand } from '@crook/domain/Command'
+import { AgentLink, Hello } from '@crook/protocol/AgentLink'
 import {
-  AGENT_PING_INTERVAL,
-  AGENT_SOCKET_OPEN_TIMEOUT,
-  AgentLink,
-  Hello,
+  LINK_PING_INTERVAL,
+  LINK_OPEN_TIMEOUT,
   hubReconnectSchedule,
-} from '@crook/protocol/AgentLink'
+} from '@crook/protocol/LinkTiming'
 import type { RoutedCommand } from '@crook/protocol/Commands'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
@@ -60,12 +59,12 @@ export class HubCallDefected extends Schema.TaggedError<HubCallDefected>()('HubC
 export const connectTo = (url: URL, token: Redacted.Redacted) =>
   Layer.build(
     RpcClient.layerProtocolSocket({
-      pingInterval: AGENT_PING_INTERVAL,
+      pingInterval: LINK_PING_INTERVAL,
       retryPolicy: Schedule.recurs(0),
     }).pipe(
       Layer.provide([
         BunSocket.layerWebSocket(url.href, {
-          openTimeout: AGENT_SOCKET_OPEN_TIMEOUT,
+          openTimeout: LINK_OPEN_TIMEOUT,
           headers: { [HUB_AUTHORIZATION_HEADER]: `Bearer ${Redacted.value(token)}` },
         }),
         protocolSerialization,

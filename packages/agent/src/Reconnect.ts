@@ -3,7 +3,7 @@ import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 
-import { stayedHealthy } from '@crook/protocol/AgentLink'
+import { stayedHealthy } from '@crook/protocol/LinkTiming'
 
 export const trackConnectionHealth = Effect.gen(function* () {
   const healthySince = yield* Ref.make(Option.none<number>())

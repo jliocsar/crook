@@ -49,7 +49,7 @@ import {
   type HerdrTimedOut,
 } from '@crook/herdr/HerdrClient'
 import type { AgentInfo } from '@crook/herdr/Records'
-import { reconnectBackoff } from '@crook/protocol/AgentLink'
+import { reconnectBackoff } from '@crook/protocol/LinkTiming'
 
 const STATE_EVENT_KINDS: NonEmptyArray.NonEmptyReadonlyArray<LifecycleEventKind> = [
   'workspace.created',

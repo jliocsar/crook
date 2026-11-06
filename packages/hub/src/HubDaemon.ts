@@ -17,10 +17,10 @@ import { HerdStore } from '@crook/hub/HerdStore'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
-import { AGENT_PING_INTERVAL } from '@crook/protocol/AgentLink'
+import { LINK_PING_INTERVAL } from '@crook/protocol/LinkTiming'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
-export const SOCKET_SILENCE_TIMEOUT = Duration.times(AGENT_PING_INTERVAL, 2)
+export const SOCKET_SILENCE_TIMEOUT = Duration.times(LINK_PING_INTERVAL, 2)
 
 export const socketOptions = {
   sendPings: false,

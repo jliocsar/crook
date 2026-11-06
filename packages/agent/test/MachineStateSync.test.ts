@@ -47,7 +47,7 @@ import {
 import { EventsSubscribeMethod, SessionSnapshotMethod } from '@crook/herdr/Methods'
 import { agentInfo, paneInfo, sessionSnapshot, tabInfo } from '@crook/herdr/RecordFixtures'
 import { type AgentInfo, type SessionSnapshot, TabInfo } from '@crook/herdr/Records'
-import { RECONNECT_CAP } from '@crook/protocol/AgentLink'
+import { RECONNECT_CAP } from '@crook/protocol/LinkTiming'
 
 type AnsweredMethods = (method: string) => boolean
 
