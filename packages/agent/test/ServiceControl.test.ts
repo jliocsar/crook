@@ -378,6 +378,16 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceControl', (onDis
     }),
   )
 
+  it('says an agent that has not answered may still be coming up', () => {
+    const report = restartReport(
+      Result.fail(new StatusSocket.NoAgentAnswered({ path: '/status.sock', detail: 'ENOENT' })),
+    )
+
+    expect(report).toContain('it may still be coming up')
+    expect(report).toContain('run "crook-agent status" in a moment')
+    expect(report).toContain('its logs say why')
+  })
+
   onDisk.effect('restarts a launchd agent by booting it out and loading it again', () =>
     Effect.gen(function* () {
       const target: ServiceTarget = new Launchd({ userId: MAC_USER })

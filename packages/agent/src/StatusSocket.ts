@@ -19,7 +19,7 @@ const SLOWEST_MEASURED_ANSWER_STARVED = Duration.millis(376.6)
 const STATUS_REQUEST = 'status\n'
 
 export const STATUS_ANSWER_TIMEOUT = Duration.times(SLOWEST_MEASURED_ANSWER_STARVED, 10)
-export const SLOWEST_MEASURED_STARTUP = Duration.millis(249.5)
+export const SLOWEST_MEASURED_STARTUP = Duration.millis(294.3)
 export const AGENT_STARTUP_TIMEOUT = Duration.times(SLOWEST_MEASURED_STARTUP, 10)
 
 export const CrookStatusSocketPath = stateFile('CROOK_STATUS_SOCKET_PATH', 'status.sock')

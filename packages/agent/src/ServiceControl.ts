@@ -374,7 +374,7 @@ export const restartReport = (answer: AgentAnswer) =>
       Match.value(failure).pipe(
         Match.tagsExhaustive({
           NoAgentAnswered: (silent) =>
-            `Restarted the crook-agent service, but no new agent answered within ${Duration.format(AGENT_STARTUP_TIMEOUT)}. ${silent.message} Its logs say why.`,
+            `Restarted the crook-agent service, but no new agent answered within ${Duration.format(AGENT_STARTUP_TIMEOUT)}. ${silent.message} On a busy machine it may still be coming up, so run "crook-agent status" in a moment; if it still does not answer, its logs say why.`,
           AgentAnswerUnreadable: (unreadable) =>
             `Restarted the crook-agent service. ${unreadable.message}`,
         }),
