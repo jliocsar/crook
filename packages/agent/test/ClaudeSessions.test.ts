@@ -8,12 +8,13 @@ import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Schema from 'effect/Schema'
 
-import { ClaudeSessionFileUnreadable, ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 import type { HerdrEvent } from '@crook/herdr/Events'
 import {
   HerdrClient,
+  HerdrConnectionClosed,
   type HerdrSubscriptionError,
   type ScriptedResponse,
   scriptedRejection,
@@ -40,6 +41,8 @@ const LIVE_CLAUDE_PID = 2224797
 const SESSION_ID = '270d2fc3-129e-4a0d-aef3-78f495af98c9'
 const REPORTED_SESSION = ClaudeSessionId.make('cc70b540-d22a-4ea4-aaf9-a0db3ce151aa')
 const LAST_KNOWN_SESSION = ClaudeSessionId.make('5f0c2a8e-91d4-4b6e-a3c7-2e8d6b1f4a90')
+const LEFT_BEHIND_BY_A_LONGER_RECORD = 'r":"dialog open"}'
+const UNREADABLE_REPLY = '{"id":"pane.process_info","result":{"type":"an_unknown_reply"}}'
 
 const PidFile = Schema.fromJsonString(
   Schema.Struct({ pid: Schema.Int, sessionId: Schema.String, procStart: Schema.String }),
@@ -62,6 +65,17 @@ const noForegroundJob: ScriptedResponse = {
   line: NO_FOREGROUND_JOB_REPLY,
 }
 
+const refusedWhileStopping = scriptedRejection(
+  PaneProcessInfoMethod,
+  'server_unavailable',
+  'server is shutting down',
+)
+
+const unreadableReply: ScriptedResponse = {
+  method: PaneProcessInfoMethod.name,
+  line: UNREADABLE_REPLY,
+}
+
 const claudeInPane = processInfo([
   new PaneProcess({ pid: LIVE_CLAUDE_PID, name: 'claude' }),
   new PaneProcess({ pid: 1232679, name: 'lx' }),
@@ -71,6 +85,11 @@ const workConfigDir: ProcessFixture = {
   environ: (root) => `HOME=${root}/home\0CLAUDE_CONFIG_DIR=${root}/claude-work\0`,
   sessionRoot: (root) => `${root}/claude-work`,
   pidFile: Option.some(pidFile(LIVE_CLAUDE_PROC_START)),
+}
+
+const tornPidFile: ProcessFixture = {
+  ...workConfigDir,
+  pidFile: Option.some(`${pidFile(LIVE_CLAUDE_PROC_START)}${LEFT_BEHIND_BY_A_LONGER_RECORD}`),
 }
 
 const sessions = Effect.fn('sessions')(function* (
@@ -221,15 +240,114 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('ClaudeSessions', (it)
     }),
   )
 
-  it.effect('fails with ClaudeSessionFileUnreadable when the pid file changed shape', () =>
+  it.effect('finds nothing without failing when the pid file changed shape', () =>
     Effect.gen(function* () {
       const claudeSessions = yield* sessions([claudeInPane], {
         ...workConfigDir,
         pidFile: Option.some('{}'),
       })
-      const error = yield* claudeSessions.resolve(agentInfo(), Option.none()).pipe(Effect.flip)
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.none())
 
-      expect(error).toBeInstanceOf(ClaudeSessionFileUnreadable)
+      expect(session).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('keeps the session it last knew when the pid file is caught mid-rewrite', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([claudeInPane], tornPidFile, [LAST_KNOWN_SESSION])
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+
+      expect(session).toEqual(Option.some(LAST_KNOWN_SESSION))
+    }),
+  )
+
+  it.effect('lets go of the session it last knew when no pid file names it and a read failed', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([claudeInPane], tornPidFile)
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+
+      expect(session).toEqual(Option.none())
+    }),
+  )
+
+  it.effect(
+    'keeps what herdr reports when the pid file cannot be read and it knew no session',
+    () =>
+      Effect.gen(function* () {
+        const claudeSessions = yield* sessions([claudeInPane], tornPidFile)
+        const session = yield* claudeSessions.resolve(
+          reportedSession('id', REPORTED_SESSION),
+          Option.none(),
+        )
+
+        expect(session).toEqual(Option.some(REPORTED_SESSION))
+      }),
+  )
+
+  it.effect('keeps the session it last knew when herdr refuses the read', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([refusedWhileStopping], workConfigDir, [
+        LAST_KNOWN_SESSION,
+      ])
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+
+      expect(session).toEqual(Option.some(LAST_KNOWN_SESSION))
+    }),
+  )
+
+  it.effect('lets go of the session it last knew when herdr refuses and no pid file names it', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([refusedWhileStopping])
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+
+      expect(session).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('prefers the session it last knew over a stale report when a read failed', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([refusedWhileStopping], workConfigDir, [
+        LAST_KNOWN_SESSION,
+      ])
+      const session = yield* claudeSessions.resolve(
+        reportedSession('id', REPORTED_SESSION),
+        Option.some(LAST_KNOWN_SESSION),
+      )
+
+      expect(session).toEqual(Option.some(LAST_KNOWN_SESSION))
+    }),
+  )
+
+  it.effect('lets go of the session it last knew when herdr says the agent is gone', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions(
+        [scriptedRejection(PaneProcessInfoMethod, 'agent_not_found', 'agent not found')],
+        workConfigDir,
+        [LAST_KNOWN_SESSION],
+      )
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+
+      expect(session).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('still fails when the connection to herdr is what broke', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([], workConfigDir, [LAST_KNOWN_SESSION])
+      const error = yield* claudeSessions
+        .resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(HerdrConnectionClosed)
+    }),
+  )
+
+  it.effect('keeps the session it last knew when herdr answers what crook cannot read', () =>
+    Effect.gen(function* () {
+      const claudeSessions = yield* sessions([unreadableReply], workConfigDir, [LAST_KNOWN_SESSION])
+      const session = yield* claudeSessions.resolve(agentInfo(), Option.some(LAST_KNOWN_SESSION))
+
+      expect(session).toEqual(Option.some(LAST_KNOWN_SESSION))
     }),
   )
 
