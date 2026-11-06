@@ -750,7 +750,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   dimmed, since the dim already says the hub or the machine is away, and once the pane no longer
   runs Claude, whose transcript never catches up. A failed watch is not catching up, and pressing
   Try again is a tag of its own.
-- A read that ends within a second says nothing. The cue used to show as soon as a watch
+- A read that ends within a second says nothing. The cue, a pill in the header when these were measured, used to show as soon as a watch
   resumed, and on a reconnect and a foreground return it held 17 frames (317 ms) and 14 frames
   (238 ms), each with its spinner, and read as a flash every run. Waiting the second a link's
   notice waits, neither shows at all. Once shown it stays until it has held 400 ms, the frame
@@ -762,6 +762,24 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   1.1 s after the tap went from held rows to landed rows with the state that says catching up never
   committed, so the cue first showed in the frame the rows landed, and held its 400 ms over a read
   already done, 37 frames with its fades (measured as above). The atom cannot know what committed.
+- "Catching up" floats over the top of the thread because a pill in the header took its room from
+  the title: at 390 wide the title went from 286 px to 168 with it, or to 186 with a running count,
+  and with both up at 375 wide it had 53, moving whenever one came or went. Over the thread it takes
+  nothing: the title held 271, 286 and 326 px at 375, 390 and 430 wide in every frame of a slow
+  catch-up, the capsule up for 57 to 58 frames as the pill was. Layout shift read 0 before and after
+  (all measured in Chromium), so the score never saw that reflow: a title narrowing moves no box's
+  start (reasoned). The capsule's blur costs nothing the frame tool can read: a p90 frame of 18.0 ms
+  under the pill and 17.3 under the capsule, at 4x CPU throttling (measured, one run each).
+  It covers the row beneath it and takes no touch: in Chromium with touch emulated, a tap at its
+  centre opened the tool call under it, a finger scroll starting on it moved the thread 286 px and
+  let go of the end, and a swipe from the screen's edge at its height went back. With the keyboard
+  emulated it stayed 8 px under the header over a thread 324 px tall (each measured once).
+- A chat counts its running subagents only in its dock. The dock counts every running subagent of
+  the session, a foreground one included and marked "Claude waits on it", and its chip opens that
+  run's screen in one tap, as a tree row does. So the header's count added only a scroll to the
+  tree, and it went with the scroll. A run launched inside a hole shows in neither, and a run no
+  roster has named yet opens from neither, as before (read in their source). The count on a
+  machine's card comes from the agent, and never read what the chat counts.
 - A catch-up that lands before the cached rows ever committed gets its divider like any other. What
   is new is what the cache did not hold, whichever rows the chat got to show: the fold keeps the
   lines the cache held when the read ends, and the screen turns those into row keys. A chat kept on

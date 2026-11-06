@@ -16,7 +16,7 @@ import { COLD_START, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import { agent, herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
 import { keepOnThisDevice, STARTED_PANE } from '../../test/HubFakes.ts'
-import { manyLinesChunk } from '../ManyLines.ts'
+import { manyLinesChunk, manyTurnsChunk, MANY_TURNS_END } from '../ManyLines.ts'
 import {
   answered,
   caughtUp,
@@ -227,6 +227,13 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     title: 'Chat, Catching up capsule on a reopen that runs past the delay',
     events: CONVERSATION,
     settle: (stage) => Effect.andThen(seesText('The quiet redial'), leaveAndReopen(stage)),
+    shows: { selector: '[data-slot="catching-up-capsule"]' },
+  }),
+  chatStory({
+    slug: 'catching-up-long-thread',
+    title: 'Chat, Catching up capsule over a thread long enough to scroll',
+    events: [opened(), manyTurnsChunk(0), caughtUp(MANY_TURNS_END)],
+    settle: (stage) => Effect.andThen(seesText('Answer 15'), leaveAndReopen(stage)),
     shows: { selector: '[data-slot="catching-up-capsule"]' },
   }),
   chatStory({
