@@ -14,7 +14,7 @@ import * as Schema from 'effect/Schema'
 import * as Scope from 'effect/Scope'
 import * as Socket from 'effect/socket/Socket'
 
-import { HubConnectionStatus, HubOffline } from '@crook/agent/HubConnection'
+import { HubConnectionStatus, HubOffline } from '@crook/agent/HubConnectionStatus'
 import { agentVersion } from '@crook/agent/HubLink'
 import { serveLocalSocket } from '@crook/agent/LocalSocket'
 import {

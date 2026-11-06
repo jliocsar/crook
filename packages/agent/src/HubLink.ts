@@ -12,7 +12,7 @@ import * as RpcClient from 'effect/rpc/RpcClient'
 import type { RpcClientError } from 'effect/rpc/RpcClientError'
 
 import { CommandExecutor } from '@crook/agent/CommandExecutor'
-import { HubConnectionStatus } from '@crook/agent/HubConnection'
+import { HubConnectionStatus } from '@crook/agent/HubConnectionStatus'
 import { MachineStateSync } from '@crook/agent/MachineStateSync'
 import { trackConnectionHealth } from '@crook/agent/Reconnect'
 import { type TranscriptLink, TranscriptStreams } from '@crook/agent/TranscriptStreams'

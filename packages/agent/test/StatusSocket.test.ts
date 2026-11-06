@@ -14,7 +14,7 @@ import {
   askRunningAgent,
   layer as statusLayer,
 } from '@crook/agent/StatusSocket'
-import { HubConnectionStatus, HubOnline } from '@crook/agent/HubConnection'
+import { HubConnectionStatus, HubOnline } from '@crook/agent/HubConnectionStatus'
 import { agentVersion } from '@crook/agent/HubLink'
 
 const scratchSocket = Effect.fn('scratchSocket')(function* () {

@@ -16,22 +16,22 @@ export class HubOffline extends Schema.TaggedClass<HubOffline>()('HubOffline', {
   lastFailure: Schema.OptionFromNullOr(Schema.String),
 }) {}
 
-export const HubConnection = Schema.Union([HubOnline, HubOffline])
+export const HubConnectionState = Schema.Union([HubOnline, HubOffline])
 
-export type HubConnection = typeof HubConnection.Type
+export type HubConnectionState = typeof HubConnectionState.Type
 
-const wentOnline = (now: DateTime.Utc) => (current: HubConnection) =>
+const wentOnline = (now: DateTime.Utc) => (current: HubConnectionState) =>
   Match.value(current).pipe(
     Match.tagsExhaustive({
-      HubOnline: (online): HubConnection => online,
+      HubOnline: (online): HubConnectionState => online,
       HubOffline: () => new HubOnline({ since: now }),
     }),
   )
 
-const wentOffline = (now: DateTime.Utc, failure: string) => (current: HubConnection) =>
+const wentOffline = (now: DateTime.Utc, failure: string) => (current: HubConnectionState) =>
   Match.value(current).pipe(
     Match.tagsExhaustive({
-      HubOnline: (): HubConnection =>
+      HubOnline: (): HubConnectionState =>
         new HubOffline({ since: now, lastFailure: Option.some(failure) }),
       HubOffline: (offline) =>
         new HubOffline({ since: offline.since, lastFailure: Option.some(failure) }),
@@ -40,7 +40,7 @@ const wentOffline = (now: DateTime.Utc, failure: string) => (current: HubConnect
 
 const make = Effect.gen(function* () {
   const startedAt = yield* DateTime.now
-  const connection = yield* Ref.make<HubConnection>(
+  const connection = yield* Ref.make<HubConnectionState>(
     new HubOffline({ since: startedAt, lastFailure: Option.none() }),
   )
 
@@ -57,7 +57,7 @@ export class HubConnectionStatus extends Context.Service<
   {
     readonly online: Effect.Effect<void>
     readonly offline: (failure: string) => Effect.Effect<void>
-    readonly current: Effect.Effect<HubConnection>
+    readonly current: Effect.Effect<HubConnectionState>
   }
 >()('@crook/agent/HubConnectionStatus') {
   static readonly layer = Layer.effect(this, make)

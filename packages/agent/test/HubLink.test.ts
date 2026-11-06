@@ -25,7 +25,7 @@ import * as RpcServer from 'effect/rpc/RpcServer'
 import * as RpcTest from 'effect/rpc/RpcTest'
 import * as TestClock from 'effect/testing/TestClock'
 
-import { HubConnectionStatus, HubOffline, HubOnline } from '@crook/agent/HubConnection'
+import { HubConnectionStatus, HubOffline, HubOnline } from '@crook/agent/HubConnectionStatus'
 import * as HubLink from '@crook/agent/HubLink'
 import { InputDelivered, Prompt, SendKeys, StartAgent } from '@crook/domain/Command'
 import { IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'

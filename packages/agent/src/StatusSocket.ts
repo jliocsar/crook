@@ -9,7 +9,7 @@ import * as Schedule from 'effect/Schedule'
 import * as Schema from 'effect/Schema'
 import * as Socket from 'effect/socket/Socket'
 
-import { HubConnection, HubConnectionStatus } from '@crook/agent/HubConnection'
+import { HubConnectionState, HubConnectionStatus } from '@crook/agent/HubConnectionStatus'
 import { agentVersion } from '@crook/agent/HubLink'
 import { readAllText, serveLocalSocket } from '@crook/agent/LocalSocket'
 import { stateFile } from '@crook/agent/StateDirectory'
@@ -27,7 +27,7 @@ export class RunningAgent extends Schema.Class<RunningAgent>('RunningAgent')({
   agentVersion: Schema.String,
   processId: Schema.Int,
   startedAt: Schema.DateTimeUtcFromString,
-  hub: HubConnection,
+  hub: HubConnectionState,
 }) {}
 
 export const RunningAgentJson = Schema.fromJsonString(RunningAgent)

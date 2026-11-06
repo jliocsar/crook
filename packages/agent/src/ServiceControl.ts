@@ -10,7 +10,7 @@ import * as Record from 'effect/Record'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
-import type { HubConnection } from '@crook/agent/HubConnection'
+import type { HubConnectionState } from '@crook/agent/HubConnectionStatus'
 import { agentVersion } from '@crook/agent/HubLink'
 import { SYSTEMD_UNIT_NAME } from '@crook/agent/ServiceDefinition'
 import {
@@ -317,7 +317,7 @@ const serviceLine = (service: ServiceState) =>
     }),
   )
 
-const hubLine = (hub: HubConnection) =>
+const hubLine = (hub: HubConnectionState) =>
   Match.value(hub).pipe(
     Match.tagsExhaustive({
       HubOnline: (online) => `connected since ${DateTime.formatIso(online.since)}.`,
