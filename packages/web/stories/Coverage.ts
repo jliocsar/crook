@@ -182,6 +182,18 @@ export const STATE_COVERAGE = {
     PromptFailed: ['composer/send-failed', 'composer/send-failed-then-edited'],
     StopFailed: ['composer/stop-failed', 'composer/stop-failed-then-turn-ends'],
   } satisfies Record<ComposerFailureState['_tag'], readonly string[]>,
+  herdrLink: {
+    connected: ['machine/detail', 'machines/list'],
+    lost: [
+      'machines/herdr-lost',
+      'machines/herdr-lost-update',
+      'machine/herdr-lost',
+      'machine/herdr-lost-update-long-name',
+      'machine/herdr-lost-since-start',
+    ],
+    lostButOffline: ['machines/herdr-lost-offline'],
+    lostThenBack: ['machines/herdr-lost-and-back', 'machine/herdr-lost-and-back'],
+  },
 }
 
 export const REQUIRED_TRANSITIONS: readonly string[] = [

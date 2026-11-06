@@ -1,3 +1,5 @@
+import * as DateTime from 'effect/DateTime'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
@@ -10,17 +12,25 @@ import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import { ANNOUNCED } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
-import { agent, DESK, LAPTOP, machine } from '../../test/HerdFixtures.ts'
+import { agent, DESK, LAPTOP, machine, START } from '../../test/HerdFixtures.ts'
 import { MACHINE_PATH, MACHINES_PATH } from '../Fixtures.ts'
 import { pressesEvenIfHidden, pressesInstantly, seesText, swipes } from '../StageDom.ts'
 import { linkStory, step } from '../Story.tsx'
 import type { LinkStage, StoryMaker } from '../Story.tsx'
+import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 
 const OFFLINE_HINT = 'Swipe to forget, or wait for it to reconnect'
 const DESK_PATH = '/machines/desk'
 const HOLD_TO_FORGET = 'Hold to forget desk'
 const SWIPE_LEFT = [200, 190, 180, 170, 160, 150]
 const DESK_CARD = '[data-slot="swipe-card"]'
+const HERDR_LOST = 'herdr lost'
+const LOST_FOR = 'lost for'
+const UPDATE_AGENT = 'update agent'
+const LONG_MACHINE_NAME = 'build-server-in-the-basement-rack-two-west'
+const HERDR_ROW_VERSION = '0.9.5'
+const CURRENT_AGENT_VERSION = '0.1.0'
+const BEHIND_AGENT_VERSION = '0.0.9'
 
 const viewOf = (machines: readonly HerdMachine[]) =>
   new HerdView({ machines, hubVersion: CrookVersion.make('0.1.0') })
@@ -48,6 +58,73 @@ const reconnecting = machine(DESK, [agent('w2:p1', 'working', { title: 'Dimmed f
   connection: 'reconnecting',
   agentVersion: '0.1.0',
 })
+
+const justNow = DateTime.addDuration(START, Duration.seconds(CLOCK_AFTER_START_SECONDS))
+
+const agentsBeforeHerdrWent = [
+  agent('w1:p1', 'working', { title: 'Port the herd screen' }),
+  agent('w1:p2', 'idle', { title: 'Wire the hub link' }),
+]
+
+const herdrLost = machine(LAPTOP, agentsBeforeHerdrWent, {
+  agentVersion: CURRENT_AGENT_VERSION,
+  herdrVersion: HERDR_ROW_VERSION,
+  herdrLostAt: START,
+})
+
+const herdrLostBehindHub = machine(LAPTOP, agentsBeforeHerdrWent, {
+  agentVersion: BEHIND_AGENT_VERSION,
+  herdrVersion: HERDR_ROW_VERSION,
+  herdrLostAt: START,
+})
+
+const herdrLostLongName = machine(LAPTOP, agentsBeforeHerdrWent, {
+  label: LONG_MACHINE_NAME,
+  agentVersion: BEHIND_AGENT_VERSION,
+  herdrVersion: HERDR_ROW_VERSION,
+  herdrLostAt: START,
+})
+
+const startedWithHerdrDown = machine(LAPTOP, [], {
+  agentVersion: CURRENT_AGENT_VERSION,
+  herdrLostAt: START,
+})
+
+const herdrLostThenOffline = machine(DESK, [], {
+  connection: 'offline',
+  agentVersion: CURRENT_AGENT_VERSION,
+  herdrVersion: HERDR_ROW_VERSION,
+  herdrLostAt: START,
+})
+
+const beforeHerdrGoes = machine(LAPTOP, agentsBeforeHerdrWent, {
+  agentVersion: BEHIND_AGENT_VERSION,
+  herdrVersion: HERDR_ROW_VERSION,
+})
+
+const herdrGoneJustNow = machine(LAPTOP, agentsBeforeHerdrWent, {
+  agentVersion: BEHIND_AGENT_VERSION,
+  herdrVersion: HERDR_ROW_VERSION,
+  herdrLostAt: justNow,
+})
+
+const herdrBackOnNewConnection = machine(LAPTOP, agentsBeforeHerdrWent, {
+  agentVersion: BEHIND_AGENT_VERSION,
+  herdrVersion: HERDR_ROW_VERSION,
+  herdrConnection: 2,
+})
+
+const herdrGoesAndComesBack = [
+  step<LinkStage>(800, 'Herdr stops answering the agent', ({ link }) =>
+    SubscriptionRef.set(link.state, liveWith(viewOf([herdrGoneJustNow]))),
+  ),
+  step<LinkStage>(1600, 'Herdr answers again, on a new connection', ({ link }) =>
+    Effect.andThen(
+      seesText(HERDR_LOST),
+      SubscriptionRef.set(link.state, liveWith(viewOf([herdrBackOnNewConnection]))),
+    ),
+  ),
+]
 
 const refusal = new HubStorageFailed({ detail: 'disk full' })
 
@@ -88,6 +165,45 @@ export const MACHINES_STORIES: readonly StoryMaker[] = [
     path: MACHINES_PATH,
     link: liveWith(viewOf([laptop, reconnecting])),
     shows: { text: 'desk' },
+  }),
+  linkStory({
+    slug: 'herdr-lost',
+    title: 'Machines, herdr lost on an online machine',
+    path: MACHINES_PATH,
+    link: liveWith(viewOf([herdrLost])),
+    shows: {
+      all: [{ text: HERDR_LOST }, { text: `herdr ${HERDR_ROW_VERSION}` }, { absent: UPDATE_AGENT }],
+    },
+  }),
+  linkStory({
+    slug: 'herdr-lost-update',
+    title: 'Machines, herdr lost beside the update pill, under a short name and a long one',
+    path: MACHINES_PATH,
+    link: liveWith(viewOf([herdrLostBehindHub, herdrLostLongName])),
+    shows: {
+      all: [
+        { text: HERDR_LOST },
+        { text: UPDATE_AGENT },
+        { text: LAPTOP },
+        { text: LONG_MACHINE_NAME },
+      ],
+    },
+  }),
+  linkStory({
+    slug: 'herdr-lost-offline',
+    title: 'Machines, offline with herdr lost in its last state, so no pill',
+    path: MACHINES_PATH,
+    link: liveWith(viewOf([herdrLostThenOffline])),
+    shows: { all: [{ text: OFFLINE_HINT }, { absent: HERDR_LOST }] },
+  }),
+  linkStory({
+    slug: 'herdr-lost-and-back',
+    title: 'Machines, herdr goes and comes back, with the update pill beside it',
+    path: MACHINES_PATH,
+    link: liveWith(viewOf([beforeHerdrGoes])),
+    shows: { all: [{ text: UPDATE_AGENT }, { absent: HERDR_LOST }] },
+    ends: { all: [{ text: UPDATE_AGENT }, { absent: HERDR_LOST }] },
+    timeline: herdrGoesAndComesBack,
   }),
   linkStory({
     slug: 'swipe-open',
@@ -136,6 +252,43 @@ export const MACHINE_STORIES: readonly StoryMaker[] = [
     path: DESK_PATH,
     link: liveWith(viewOf([laptop, reconnecting])),
     shows: { text: 'Dimmed for a moment' },
+  }),
+  linkStory({
+    slug: 'herdr-lost',
+    title: 'Machine, herdr lost with its agents kept, in the pill and the row',
+    path: MACHINE_PATH,
+    link: liveWith(viewOf([herdrLost])),
+    shows: { all: [{ text: HERDR_LOST }, { text: LOST_FOR }, { text: 'Agents · 2' }] },
+  }),
+  linkStory({
+    slug: 'herdr-lost-update-long-name',
+    title: 'Machine, herdr lost beside the update pill, under a long name',
+    path: MACHINE_PATH,
+    link: liveWith(viewOf([herdrLostLongName])),
+    shows: {
+      all: [
+        { text: HERDR_LOST },
+        { text: UPDATE_AGENT },
+        { text: LOST_FOR },
+        { text: LONG_MACHINE_NAME },
+      ],
+    },
+  }),
+  linkStory({
+    slug: 'herdr-lost-since-start',
+    title: 'Machine, its agent started with herdr already down',
+    path: MACHINE_PATH,
+    link: liveWith(viewOf([startedWithHerdrDown])),
+    shows: { all: [{ text: HERDR_LOST }, { text: LOST_FOR }, { text: 'Agents · 0' }] },
+  }),
+  linkStory({
+    slug: 'herdr-lost-and-back',
+    title: 'Machine, herdr goes and comes back, in the pill and the row',
+    path: MACHINE_PATH,
+    link: liveWith(viewOf([beforeHerdrGoes])),
+    shows: { all: [{ text: HERDR_ROW_VERSION }, { absent: LOST_FOR }] },
+    ends: { all: [{ text: HERDR_ROW_VERSION }, { absent: LOST_FOR }] },
+    timeline: herdrGoesAndComesBack,
   }),
   linkStory({
     slug: 'unknown',
