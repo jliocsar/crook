@@ -300,12 +300,13 @@ const useLift = () => {
       }
 
       resting.set(rest)
+      transform.set(translate('Y', next))
 
       if (options.content !== null) {
         options.content.style.transform = translate('Y', next)
       }
     },
-    [current, resting, trailing],
+    [current, resting, trailing, transform],
   )
 
   return {

@@ -10,6 +10,7 @@ import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import { bottomOf, present, wait } from './Dom.ts'
 
 const VIEWPORT_WIDTH = 375
+const ESTIMATED_ROW_HEIGHT = 84
 const HISTORY_HEIGHT = 1000
 
 export const VIEWPORT_HEIGHT = 812
@@ -123,6 +124,26 @@ export const liveTail = Effect.fn('liveTail')(function* (trailing: readonly Thre
     lands: (keys: readonly string[], added: number) => {
       grow(added)
       rerender(thread([row('prompt'), ...keys.map(row), ...trailing], null))
+    },
+  }
+})
+
+export const quietTail = Effect.fn('quietTail')(function* () {
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
+    function rendered(this: HTMLElement) {
+      return this.hasAttribute('data-index') ? ESTIMATED_ROW_HEIGHT : 0
+    },
+  )
+
+  const { rerender } = render(thread([row('prompt')], null))
+  const { grow } = scrollable(viewport())
+
+  yield* wait(SETTLE_MS)
+
+  return {
+    lands: (keys: readonly string[], added: number) => {
+      grow(added)
+      rerender(thread([row('prompt'), ...keys.map(row)], null))
     },
   }
 })

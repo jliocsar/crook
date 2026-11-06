@@ -45,6 +45,7 @@ know what the marks name; your eyes on the sheet are the rest of the check.
 | `pair:<a>+<b>` | Two states that must never show together did |
 | `blank` | The content area showed nothing between states |
 | `empty:<top\|middle\|bottom>` | The thread's viewport held a band with no row in it wider than the thread's own spacing, while rows were on screen. The image is the frame where the band was widest |
+| `backtrack` | A thread's row moved up in one frame and back down in the next, with no finger on the screen: the scroll and the lift that should cancel out landed apart. Words say by how much |
 | `shift:<element>` | Layout moved past the story's budget; names what moved most |
 | `order:<track>:<a>><b>` | A state gave way to one the story does not allow there |
 
@@ -112,6 +113,9 @@ stops. Use it after the above, never in place of them.
   pill on a foreground return got at most one picture in its 214 to 250 ms, on 5 of 5 runs, and the
   one opened did not show it, where the same pill on a reconnect got 7 to 13 pictures. A phone with
   a GPU is not measured.
+- Its read is the first animation-frame callback, ahead of Motion's, so it holds what the last frame
+  painted plus any commit since. A Motion value reads one frame behind what the frame paints. A
+  value that only Motion's frame corrects therefore reads wrong in the log and never in a picture.
 - Pixels do move between animation frames when the main thread is busy: compositor animations ran
   through 47 of 61 gaps over 50 ms. No DOM state can change in such a gap.
 - Layout shift misses transforms by definition, so a slide or a glide never shows as a shift. Use

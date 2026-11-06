@@ -6,6 +6,7 @@ import * as Schema from 'effect/Schema'
 
 export const STARVED_P90_FRAME_MS = 30
 export const EMPTY_BAND_PIXELS = 20
+export const BACKTRACK_PIXELS = 2
 
 export const Box = Schema.Struct({
   x: Schema.Finite,
@@ -23,6 +24,8 @@ export const ThreadReading = Schema.Struct({
   top: Schema.Finite,
   middle: Schema.Finite,
   bottom: Schema.Finite,
+  moved: Schema.Finite,
+  held: Schema.Boolean,
 })
 export type ThreadReading = typeof ThreadReading.Type
 
@@ -88,6 +91,15 @@ export const bandAt = (frame: RecordedFrame, place: BandPlace): number => frame.
 
 export const showsEmptyBand = (frame: RecordedFrame, place: BandPlace): boolean =>
   bandAt(frame, place) > EMPTY_BAND_PIXELS
+
+export const movedAt = (frame: RecordedFrame): number => frame.thread?.moved ?? 0
+
+export const backtracks = (frame: RecordedFrame, next: RecordedFrame): boolean =>
+  next.frame === frame.frame + 1 &&
+  frame.thread?.held !== true &&
+  next.thread?.held !== true &&
+  movedAt(frame) <= -BACKTRACK_PIXELS &&
+  movedAt(next) >= BACKTRACK_PIXELS
 
 export const p90FrameMs = (frames: readonly RecordedFrame[]): number => {
   const mounted = frames.filter((frame) => frame.mounted)

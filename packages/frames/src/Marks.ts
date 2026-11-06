@@ -23,7 +23,8 @@ const ACTIVITY_QUIET_STATES = ['NoAgent', 'Still', 'Blocked', 'Finished', 'Away'
 export const MACHINE_ATTRIBUTE = 'data-machine'
 export const STATE_ATTRIBUTE = 'data-state'
 export const MACHINE_SELECTOR = `[${MACHINE_ATTRIBUTE}]`
-export const ROW_SELECTOR = '[data-row]'
+export const ROW_ATTRIBUTE = 'data-row'
+export const ROW_SELECTOR = `[${ROW_ATTRIBUTE}]`
 export const STAGE_SELECTOR = '#root'
 export const COVER_SELECTOR = '[data-slot="pushed-screen"]'
 export const SCREEN_SELECTOR = `${COVER_SELECTOR}, [data-slot="tab-scroller"]`

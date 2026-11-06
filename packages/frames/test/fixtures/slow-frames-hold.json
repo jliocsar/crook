@@ -13,7 +13,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -75,7 +77,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -151,7 +155,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -227,7 +233,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -303,7 +311,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -379,7 +389,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -455,7 +467,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -531,7 +545,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -607,7 +623,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -683,7 +701,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -759,7 +779,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -835,7 +857,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -911,7 +935,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -987,7 +1013,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1063,7 +1091,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1139,7 +1169,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1215,7 +1247,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1291,7 +1325,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1367,7 +1403,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1443,7 +1481,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1519,7 +1559,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1595,7 +1637,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1671,7 +1715,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1747,7 +1793,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1823,7 +1871,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1885,7 +1935,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -1947,7 +1999,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2009,7 +2063,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2071,7 +2127,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2133,7 +2191,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2195,7 +2255,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2257,7 +2319,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2319,7 +2383,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2381,7 +2447,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2443,7 +2511,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2505,7 +2575,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2567,7 +2639,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2629,7 +2703,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2691,7 +2767,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2753,7 +2831,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2815,7 +2895,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2877,7 +2959,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -2939,7 +3023,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3001,7 +3087,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3063,7 +3151,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3125,7 +3215,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3187,7 +3279,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3249,7 +3343,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3311,7 +3407,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3373,7 +3471,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3435,7 +3535,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {
@@ -3497,7 +3599,9 @@
         "lift": 0,
         "top": 16,
         "middle": 12,
-        "bottom": 16
+        "bottom": 16,
+        "moved": 0,
+        "held": false
       },
       "marks": {
         "thread-rows": {

@@ -11,6 +11,7 @@ import {
   liftsWritten,
   liveTail,
   phoneViewport,
+  quietTail,
   VIEWPORT_HEIGHT,
 } from '../ThreadRender.tsx'
 
@@ -20,6 +21,8 @@ const SHORT_ROW_HEIGHT = 20
 const TALL_ROW_HEIGHT = 300
 const CACHED_ROWS = 4
 const LANDED_ROWS = 120
+
+const renderedMicrotasks = Effect.promise(() => Promise.resolve())
 
 beforeEach(() => {
   stubMediaQueries([])
@@ -31,6 +34,29 @@ afterEach(() => {
 })
 
 describe('Thread glide', () => {
+  it.effect('keeps the lift it wrote through what motion renders right after the commit', () =>
+    Effect.gen(function* () {
+      const tail = yield* quietTail()
+
+      tail.lands(['text'], ANSWER_HEIGHT)
+      yield* renderedMicrotasks
+
+      expect(lifted()).toBe(ANSWER_HEIGHT)
+    }),
+  )
+
+  it.effect('pins past the lift when a second batch lands before the next frame', () =>
+    Effect.gen(function* () {
+      const tail = yield* quietTail()
+
+      tail.lands(['text'], ANSWER_HEIGHT)
+      yield* renderedMicrotasks
+      tail.lands(['text', 'tool'], NEXT_BATCH_HEIGHT)
+
+      expect(lifted()).toBe(ANSWER_HEIGHT + NEXT_BATCH_HEIGHT)
+    }),
+  )
+
   it.effect('adds a batch that lands mid-glide to the glide under way, then settles once', () =>
     Effect.gen(function* () {
       const tail = yield* liveTail()

@@ -1107,6 +1107,30 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   down under the shrinking lift for 37 to 38 frames of a six-batch burst, the glide stopping short
   instead of easing out. With `clientHeight` subtracted it was 2 to 3 frames (measured in Chromium
   at 4x CPU throttling, batches 100 ms apart, two runs each).
+- A lift's first frame read as late in the log and never reached a screen. Motion renders an
+  element in a microtask after every commit that re-rendered it, from its motion values as they
+  stood (read in its source), and a transform derived from other motion values catches up only in
+  Motion's next animation frame. So the transform the pin writes by hand was overwritten with the
+  one from before the lift, and stood that way until that frame. A read in the first animation
+  callback then saw the scroll moved and the lift missing: at the end of 120 lines, a row 37 px up
+  for one frame and back in 20 of 20 runs of output landing in a later batch, and 5 px in 20 of 20
+  of command and output in one write, where a measure's second commit left only its own part behind.
+  A read after the frame's animation callbacks saw it in 0 of 20 each, and so did the bubble's place
+  in the screencast's pictures, since Motion's frame runs before the paint that follows the commit
+  (measured in Chromium at 390x844 and 4x CPU throttling). An earlier count of 2 of 7 and 1 of 2
+  is what a read in another place among those callbacks would give (reasoned, not measured). The
+  thread sets the derived value in the step that pins, so all three now read 0 of 20 each. Across
+  all 57 timeline stories no pin landed between those two reads (measured), which is where such a
+  frame would be painted (reasoned). It mattered past the log: a pin in a second commit before that
+  frame read a scroll height short of the lift and left the scroll up by the lift. A test
+  holds that, and none of the 57 stories reached it (measured). The transform written by hand stays
+  beside the motion value: Motion only writes in a microtask or a frame, and a pin in the commit
+  flushed right after, before either, reads the scroll height through it.
+- A row can still jump down in a following thread as a batch lands, then glide up. A pin raises the
+  lift by the rows' estimated height and only moves the scroll back when they measure shorter, so
+  the difference stays in the lift: 12 px on a send at the end of 120 lines and 98 px on a short
+  catch-up, in the log and after the frame's animation callbacks alike (measured). It is the
+  landing of what is new, not a row going back and forth, so nothing fails on it.
 - TanStack Virtual corrects `scrollTop` itself when a row above the top first measures away
   from its estimate, and writes the correction before React commits the new heights. A thread
   that read every upward move as the user leaving lost the end on open: 299 rows of 20 px (every
@@ -1605,7 +1629,7 @@ A `!cmd` typed in Claude writes `<bash-input>…</bash-input>`, then `<bash-stdo
 
 All of it reuses the local command blocks on the wire, with one optional key saying the line opens a turn. A new block class would decode as unknown on every older phone, where a key it does not know is dropped and `! kill 1` reads as the note it always was. An agent too old to send the key still gets a command's bubble and output, with no turn start, and a plain `/compact` and raw bash lines stay as they were until it updates, since only the agent reads the file.
 
-A command's bubble holds its size and place as its output lands, read per frame in Chromium at 390x844 and 4x CPU throttling: 44 px tall and 4 px below its row's top through Sent, the command and the output, at speeds 1, 2 and 4. In a thread too short to scroll it stays at one position throughout. In a following thread at the end of 120 lines, output landing in a later batch grows the row from 52 to 89 px and glides the bubble up those 37 px over about 500 ms. In 2 of 7 runs the bubble read at its resting place for one frame before the glide began. The same happened by 5 px in 1 of 2 runs with command and output in one batch, so it belongs to the thread's lift and not to the row (the cause is not found). Giving way to a row with no Sent line drops a bubble 32 px in one frame in a following thread, the same for a plain prompt, 2 of 2 each; with its output in the same batch a command moves 0 to 5 px. A real command and its output arrived in the same write, 5 of 5 pairs the probes logged, so that batch is the usual one.
+A command's bubble holds its size and place as its output lands, read per frame in Chromium at 390x844 and 4x CPU throttling: 44 px tall and 4 px below its row's top through Sent, the command and the output, at speeds 1, 2 and 4. In a thread too short to scroll it stays at one position throughout. In a following thread at the end of 120 lines, output landing in a later batch grows the row from 52 to 89 px and glides the bubble up those 37 px over about 500 ms. Giving way to a row with no Sent line drops a bubble 32 px in one frame in a following thread, the same for a plain prompt, 2 of 2 each; with its output in the same batch a command moves 0 to 5 px. A real command and its output arrived in the same write, 5 of 5 pairs the probes logged, so that batch is the usual one.
 :::
 
 :::tip
@@ -1958,6 +1982,21 @@ the screen once per animation frame and fails on what a settled screenshot canno
   the middle 12 px, a row's gap, outside single frames of 36 and 60 px and the catch-up stories,
   where the smallest value past those in a band's own tail was 25.5 px (all measured). The read
   took a p50 of 1.3 ms, a p90 of 2.6 and at most 21.5 over 6300 frames at 4x (measured).
+- A thread's row moving up and straight back down fails a story as `backtrack`. Each frame logs the
+  move of the last row it and the previous frame both hold, and the story fails on a move up followed
+  in the next frame by a move down, each at least 2 px, a guard below the smallest one found. Over
+  the 57 timeline stories, one run each, a move up was followed by a move down of any size twice
+  before the fix (37 and 5 px, 10785 frames) and never after it (10777 frames), so neither the lift
+  nor the glide nor a landing does it (measured). A finger does it where it turns around: 11 up then
+  9 down, 5 then 6, and 35 then 50 between two strokes, over three gestures driven through CDP at 4x
+  (measured). So the recorder marks a frame with a finger down, and the check skips it. A wheel or a
+  scrollbar turning around is not marked, since the phone has neither and no story drives one.
+- The log's read is the frame's first animation callback, ahead of Motion's in all 40 runs that
+  tell, so it holds what the last frame painted plus any commit since, and a Motion value reads a
+  frame behind what that frame paints. A `ResizeObserver` on an element whose size that first
+  callback flips runs after the frame's callbacks, and it saw Motion's write of that frame in all of
+  them (measured). That is the place to read when a finding might exist only in the log, and the
+  pictures are the check on it.
 - A story that writes `scrollTop` itself can be read before the virtualizer has heard the scroll:
   twice over 229 story runs the whole viewport held no row for one frame with the lift at 0, once
   before a story's first step, where nothing judges it, and once failing a story that scrolls up at

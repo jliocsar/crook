@@ -10,6 +10,11 @@ export interface Bands {
   readonly bottom: number
 }
 
+export interface RowTop {
+  readonly key: string
+  readonly top: number
+}
+
 export const bandsOf = (
   viewport: VerticalBox,
   content: VerticalBox,
@@ -40,3 +45,15 @@ export const bandsOf = (
     bottom: Math.max(0, to - walked.reached),
   }
 }
+
+export const movedSince = (
+  previous: ReadonlyMap<string, number>,
+  rows: readonly RowTop[],
+): number =>
+  rows
+    .flatMap((row) => {
+      const before = previous.get(row.key)
+
+      return before === undefined ? [] : [row.top - before]
+    })
+    .at(-1) ?? 0

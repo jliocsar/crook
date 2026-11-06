@@ -1,0 +1,1774 @@
+{
+  "timeOrigin": 1793950171091.3,
+  "frames": [
+    {
+      "frame": 101,
+      "at": 1983.3,
+      "vsync": 1982.3,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "held": false
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 28,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.4
+    },
+    {
+      "frame": 102,
+      "at": 1999.3,
+      "vsync": 1998.9,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "held": false
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 28,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 103,
+      "at": 2016,
+      "vsync": 2015.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "held": false
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 28,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 104,
+      "at": 2032.6,
+      "vsync": 2032.3,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "held": false
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 28,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 105,
+      "at": 2049.3,
+      "vsync": 2049,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 28,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.9
+    },
+    {
+      "frame": 106,
+      "at": 2066.4,
+      "vsync": 2065.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 28,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 107,
+      "at": 2082.7,
+      "vsync": 2082.2,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 28,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 108,
+      "at": 2106.7,
+      "vsync": 2098.9,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 14,
+        "moved": 2,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 30,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.6
+    },
+    {
+      "frame": 109,
+      "at": 2126.2,
+      "vsync": 2115.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 7,
+        "middle": 12,
+        "bottom": 5,
+        "moved": 9,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 64,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 110,
+      "at": 2146.7,
+      "vsync": 2132.2,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 7,
+        "middle": 12,
+        "bottom": 5,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 64,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": ["div"],
+      "removed": [],
+      "readMs": 3.3
+    },
+    {
+      "frame": 111,
+      "at": 2168.4,
+      "vsync": 2148.9,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 22,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 16,
+        "moved": -11,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 28,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": ["div", "div"],
+      "readMs": 1.1
+    },
+    {
+      "frame": 112,
+      "at": 2191.8,
+      "vsync": 2182.3,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 23,
+      "thread": {
+        "lift": 0,
+        "top": 5,
+        "middle": 12,
+        "bottom": 7,
+        "moved": 9,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 62,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": ["div"],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 113,
+      "at": 2211.6,
+      "vsync": 2198.9,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 5,
+        "middle": 12,
+        "bottom": 7,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 62,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": ["div"],
+      "removed": [],
+      "readMs": 1.8
+    },
+    {
+      "frame": 114,
+      "at": 2216.8,
+      "vsync": 2215.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 8,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 70,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.3
+    },
+    {
+      "frame": 115,
+      "at": 2238,
+      "vsync": 2232.2,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 70,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 116,
+      "at": 2250.9,
+      "vsync": 2249,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 9,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 10,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.2
+    },
+    {
+      "frame": 117,
+      "at": 2272.5,
+      "vsync": 2265.5,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 10,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 118,
+      "at": 2283.9,
+      "vsync": 2282.2,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 9,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 19,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 119,
+      "at": 2305,
+      "vsync": 2299,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 19,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 120,
+      "at": 2318,
+      "vsync": 2315.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 8,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 27,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2
+    },
+    {
+      "frame": 121,
+      "at": 2339.1,
+      "vsync": 2332.2,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 27,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.3
+    },
+    {
+      "frame": 122,
+      "at": 2351.6,
+      "vsync": 2348.9,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 24,
+      "thread": {
+        "lift": 0,
+        "top": 4,
+        "middle": 12,
+        "bottom": 8,
+        "moved": 9,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 61,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 123,
+      "at": 2372.5,
+      "vsync": 2365.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 4,
+        "middle": 12,
+        "bottom": 8,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 61,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": ["div"],
+      "removed": [],
+      "readMs": 5.2
+    },
+    {
+      "frame": 124,
+      "at": 2399.2,
+      "vsync": 2382.3,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 4,
+        "middle": 12,
+        "bottom": 8,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 61,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 125,
+      "at": 2423.8,
+      "vsync": 2415.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 9,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 70,
+          "width": 390,
+          "height": 32,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 126,
+      "at": 2439.1,
+      "vsync": 2432.2,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 8,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 9,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.3
+    },
+    {
+      "frame": 127,
+      "at": 2455.1,
+      "vsync": 2448.9,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 9,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.3
+    },
+    {
+      "frame": 128,
+      "at": 2467.6,
+      "vsync": 2465.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 9,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 18,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.5
+    },
+    {
+      "frame": 129,
+      "at": 2488.6,
+      "vsync": 2482.3,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 18,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    },
+    {
+      "frame": 130,
+      "at": 2500.1,
+      "vsync": 2498.9,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 9,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 27,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    },
+    {
+      "frame": 131,
+      "at": 2522.5,
+      "vsync": 2515.6,
+      "phase": "ready",
+      "mounted": true,
+      "blank": false,
+      "rows": 25,
+      "thread": {
+        "lift": 0,
+        "top": 0,
+        "middle": 12,
+        "bottom": 0,
+        "moved": 0,
+        "held": true
+      },
+      "marks": {
+        "thread-rows": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 27,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1
+    }
+  ],
+  "shifts": [],
+  "steps": []
+}
