@@ -179,7 +179,13 @@ export const ASK_STORIES: readonly StoryMaker[] = [
   askStory('permission-long-command', 'Ask, a long command', bashAsk(LONG_COMMAND)),
   askStory('permission-edit', 'Ask, an edit as its diff', editAsk),
   askStory('permission-write', 'Ask, write a file', writeAsk),
-  askStory('permission-tool', 'Ask, a plugin tool', toolAsk),
+  chatStory({
+    slug: 'permission-tool',
+    title: 'Ask, a plugin tool',
+    link: blocked(toolAsk),
+    events: LEAD_IN,
+    shows: { text: 'Use send message from plannotator?' },
+  }),
   askStory('permission-screen', 'Ask, read off the screen', screenAsk),
   askStory(
     'permission-yes-no-only',

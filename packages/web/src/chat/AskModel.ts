@@ -53,6 +53,8 @@ const ANSWER_PREFIXES = ['Yes, and always ', 'Yes, and ', 'Yes, ']
 const KEY_HINT = /\s+\([a-z+]+\)$/u
 const RUN_COMMAND_TITLE = 'Run this command?'
 const UNKNOWN_ASK_TITLE = "Claude is waiting on something crook can't read"
+const MCP_TOOL = /^mcp__(?<server>.+?)__(?<name>.+)$/u
+const PLUGIN_SERVER = /^plugin_.+_(?<server>[^_]+)$/u
 
 export const NEEDS_YOU = 'Needs you'
 export const PLAIN_DECLINE = new Decline({ message: Option.none() })
@@ -90,17 +92,31 @@ const isRefused = AskAnswerState.$is('Refused')
 export const isAnswerSettled = (state: AskAnswerState): boolean =>
   isAlreadyAnsweredState(state) || isRefused(state)
 
+const spoken = (identifier: string): string => identifier.replaceAll('_', ' ')
+
+const serverName = (server: string): string =>
+  spoken(PLUGIN_SERVER.exec(server)?.groups?.['server'] ?? server)
+
+export const toolName = (tool: string): string =>
+  pipe(
+    Option.fromNullishOr(MCP_TOOL.exec(tool)?.groups),
+    Option.match({
+      onNone: () => tool,
+      onSome: ({ server = '', name = '' }) => `${spoken(name)} from ${serverName(server)}`,
+    }),
+  )
+
 const permissionTitle = (ask: PermissionAsk): string =>
   Match.value(ask.action).pipe(
     Match.tagsExhaustive({
       RunCommand: () => RUN_COMMAND_TITLE,
       EditFile: (edit) => `Edit ${fileName(edit.filePath)}?`,
       WriteFile: (write) => `Write ${fileName(write.filePath)}?`,
-      UseTool: () => `Use ${ask.tool}?`,
+      UseTool: () => `Use ${toolName(ask.tool)}?`,
       ScreenDetail: (detail) =>
         Option.match(detail.subject, {
-          onNone: () => `Use ${ask.tool}?`,
-          onSome: (subject) => `${ask.tool} ${fileName(subject)}?`,
+          onNone: () => `Use ${toolName(ask.tool)}?`,
+          onSome: (subject) => `${toolName(ask.tool)} ${fileName(subject)}?`,
         }),
     }),
   )
@@ -195,8 +211,8 @@ const allowedSubject = (ask: PermissionAsk): string =>
       RunCommand: () => 'Commands like this one',
       EditFile: () => 'File edits like this one',
       WriteFile: () => 'File edits like this one',
-      UseTool: () => `Calls to ${ask.tool} like this one`,
-      ScreenDetail: () => `Calls to ${ask.tool} like this one`,
+      UseTool: () => `Calls to ${toolName(ask.tool)} like this one`,
+      ScreenDetail: () => `Calls to ${toolName(ask.tool)} like this one`,
     }),
   )
 
