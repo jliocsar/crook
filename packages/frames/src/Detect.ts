@@ -14,6 +14,7 @@ import {
   isStarved,
   leastMovedAt,
   liftAt,
+  liftsForNothing,
   marksOf,
   movedAt,
   overshoots,
@@ -39,6 +40,7 @@ export const Check = Schema.Literals([
   'empty',
   'backtrack',
   'overshoot',
+  'unpaid-lift',
   'order',
 ])
 export type Check = typeof Check.Type
@@ -279,6 +281,27 @@ const overshootsOf = (story: string, frames: readonly RecordedFrame[]): readonly
     })),
   )
 
+const unpaidLiftsOf = (story: string, frames: readonly RecordedFrame[]): readonly Finding[] =>
+  pipe(
+    frames,
+    Arr.drop(1),
+    Arr.zip(frames),
+    Arr.filter(([next, frame]) => liftsForNothing(frame, next)),
+    Arr.map(([next, frame]) => ({
+      check: 'unpaid-lift' as const,
+      key: 'unpaid-lift',
+      story,
+      firstFrame: next.frame,
+      lastFrame: next.frame,
+      imageFrame: next.frame,
+      fromMs: Math.round(next.at),
+      toMs: Math.round(next.at),
+      marks: marksOf(next),
+      states: statesOf(next),
+      words: `The lift rose from ${liftAt(frame)} to ${liftAt(next)} px in a frame the thread's content stayed at ${next.thread?.height ?? 0} px. Nothing landed to lift, so a pin took a move of the scroll as growth, and the rows glide up for it.`,
+    })),
+  )
+
 const impactOf = (source: ShiftSource): number =>
   Math.hypot(source.to.x - source.from.x, source.to.y - source.from.y) *
   Math.max(source.from.width * source.from.height, source.to.width * source.to.height)
@@ -447,6 +470,7 @@ export const detect = (
             ...emptiesOf(story, watched),
             ...backtracksOf(story, watched),
             ...overshootsOf(story, watched),
+            ...unpaidLiftsOf(story, watched),
             ...shiftsOf(story, log, watched, expectation),
             ...Object.entries(expectation.order).flatMap(([track, order]) =>
               brokenOrderOf(story, watched, track, order),
