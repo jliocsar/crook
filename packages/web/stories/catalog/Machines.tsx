@@ -59,26 +59,26 @@ const reconnecting = machine(DESK, [agent('w2:p1', 'working', { title: 'Dimmed f
   agentVersion: '0.1.0',
 })
 
-const JUST_NOW = DateTime.addDuration(START, Duration.seconds(CLOCK_AFTER_START_SECONDS))
+const justNow = DateTime.addDuration(START, Duration.seconds(CLOCK_AFTER_START_SECONDS))
 
-const AGENTS_BEFORE_HERDR_WENT = [
+const agentsBeforeHerdrWent = [
   agent('w1:p1', 'working', { title: 'Port the herd screen' }),
   agent('w1:p2', 'idle', { title: 'Wire the hub link' }),
 ]
 
-const herdrLost = machine(LAPTOP, AGENTS_BEFORE_HERDR_WENT, {
+const herdrLost = machine(LAPTOP, agentsBeforeHerdrWent, {
   agentVersion: CURRENT_AGENT_VERSION,
   herdrVersion: HERDR_ROW_VERSION,
   herdrLostAt: START,
 })
 
-const herdrLostBehindHub = machine(LAPTOP, AGENTS_BEFORE_HERDR_WENT, {
+const herdrLostBehindHub = machine(LAPTOP, agentsBeforeHerdrWent, {
   agentVersion: BEHIND_AGENT_VERSION,
   herdrVersion: HERDR_ROW_VERSION,
   herdrLostAt: START,
 })
 
-const herdrLostLongName = machine(LAPTOP, AGENTS_BEFORE_HERDR_WENT, {
+const herdrLostLongName = machine(LAPTOP, agentsBeforeHerdrWent, {
   label: LONG_MACHINE_NAME,
   agentVersion: BEHIND_AGENT_VERSION,
   herdrVersion: HERDR_ROW_VERSION,
@@ -97,18 +97,18 @@ const herdrLostThenOffline = machine(DESK, [], {
   herdrLostAt: START,
 })
 
-const beforeHerdrGoes = machine(LAPTOP, AGENTS_BEFORE_HERDR_WENT, {
+const beforeHerdrGoes = machine(LAPTOP, agentsBeforeHerdrWent, {
   agentVersion: BEHIND_AGENT_VERSION,
   herdrVersion: HERDR_ROW_VERSION,
 })
 
-const herdrGoneJustNow = machine(LAPTOP, AGENTS_BEFORE_HERDR_WENT, {
+const herdrGoneJustNow = machine(LAPTOP, agentsBeforeHerdrWent, {
   agentVersion: BEHIND_AGENT_VERSION,
   herdrVersion: HERDR_ROW_VERSION,
-  herdrLostAt: JUST_NOW,
+  herdrLostAt: justNow,
 })
 
-const herdrBackOnNewConnection = machine(LAPTOP, AGENTS_BEFORE_HERDR_WENT, {
+const herdrBackOnNewConnection = machine(LAPTOP, agentsBeforeHerdrWent, {
   agentVersion: BEHIND_AGENT_VERSION,
   herdrVersion: HERDR_ROW_VERSION,
   herdrConnection: 2,
@@ -124,7 +124,6 @@ const herdrGoesAndComesBack = [
       SubscriptionRef.set(link.state, liveWith(viewOf([herdrBackOnNewConnection]))),
     ),
   ),
-  step<LinkStage>(1200, 'The machine reads as it did', () => Effect.void),
 ]
 
 const refusal = new HubStorageFailed({ detail: 'disk full' })
@@ -172,14 +171,23 @@ export const MACHINES_STORIES: readonly StoryMaker[] = [
     title: 'Machines, herdr lost on an online machine',
     path: MACHINES_PATH,
     link: liveWith(viewOf([herdrLost])),
-    shows: { all: [{ text: HERDR_LOST }, { text: 'herdr 0.9.5' }, { absent: UPDATE_AGENT }] },
+    shows: {
+      all: [{ text: HERDR_LOST }, { text: `herdr ${HERDR_ROW_VERSION}` }, { absent: UPDATE_AGENT }],
+    },
   }),
   linkStory({
     slug: 'herdr-lost-update',
     title: 'Machines, herdr lost beside the update pill, under a short name and a long one',
     path: MACHINES_PATH,
     link: liveWith(viewOf([herdrLostBehindHub, herdrLostLongName])),
-    shows: { all: [{ text: HERDR_LOST }, { text: UPDATE_AGENT }, { text: LONG_MACHINE_NAME }] },
+    shows: {
+      all: [
+        { text: HERDR_LOST },
+        { text: UPDATE_AGENT },
+        { text: LAPTOP },
+        { text: LONG_MACHINE_NAME },
+      ],
+    },
   }),
   linkStory({
     slug: 'herdr-lost-offline',
