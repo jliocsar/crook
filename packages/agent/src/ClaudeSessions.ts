@@ -18,9 +18,12 @@ import {
 import { flatMapSome } from '@crook/agent/OptionEffect'
 import { ClaudeSessionId } from '@crook/domain/Ids'
 import {
+  type HerdrAgentNotFound,
   HerdrClient,
   type HerdrPaneNotFound,
   type HerdrRequestError,
+  type HerdrRequestRejected,
+  type HerdrResponseInvalid,
 } from '@crook/herdr/HerdrClient'
 import { PaneProcessInfoMethod } from '@crook/herdr/Methods'
 import type { AgentInfo, PaneProcess } from '@crook/herdr/Records'
@@ -84,17 +87,30 @@ const make = (procRoot: string) =>
         },
       )
 
-    const sessionOfPane = (paneId: string, lastKnown: Option.Option<ClaudeSessionId>) =>
-      herdr.request(PaneProcessInfoMethod, { pane_id: paneId }).pipe(
+    const sessionOfPane = (paneId: string, lastKnown: Option.Option<ClaudeSessionId>) => {
+      const lastKnownWhileOpen = Effect.map(stillOpen(lastKnown), (open) =>
+        Option.filter(lastKnown, () => open),
+      )
+      const lastKnownAfter = (
+        failure: HerdrRequestRejected | HerdrResponseInvalid | ClaudeSessionFileUnreadable,
+      ) => Effect.andThen(Effect.logWarning(failure.message), lastKnownWhileOpen)
+
+      return herdr.request(PaneProcessInfoMethod, { pane_id: paneId }).pipe(
         Effect.flatMap((result) =>
           Option.match(result.process_info.foreground_processes, {
-            onNone: () =>
-              Effect.map(stillOpen(lastKnown), (open) => Option.filter(lastKnown, () => open)),
+            onNone: () => lastKnownWhileOpen,
             onSome: sessionOfForeground,
           }),
         ),
-        Effect.catchTag('HerdrPaneNotFound', () => Effect.succeedNone),
+        Effect.catchTags({
+          HerdrPaneNotFound: () => Effect.succeedNone,
+          HerdrAgentNotFound: () => Effect.succeedNone,
+          HerdrRequestRejected: lastKnownAfter,
+          HerdrResponseInvalid: lastKnownAfter,
+          ClaudeSessionFileUnreadable: lastKnownAfter,
+        }),
       )
+    }
 
     const resolve = Effect.fn('ClaudeSessions.resolve')(function* (
       agent: AgentInfo,
@@ -125,7 +141,10 @@ export class ClaudeSessions extends Context.Service<
       lastKnown: Option.Option<ClaudeSessionId>,
     ) => Effect.Effect<
       Option.Option<ClaudeSessionId>,
-      Exclude<HerdrRequestError, HerdrPaneNotFound> | ClaudeSessionFileUnreadable
+      Exclude<
+        HerdrRequestError,
+        HerdrPaneNotFound | HerdrRequestRejected | HerdrAgentNotFound | HerdrResponseInvalid
+      >
     >
   }
 >()('@crook/agent/ClaudeSessions') {

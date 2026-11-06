@@ -120,21 +120,6 @@ const lastKnownSessionOf = (previousAgents: readonly AgentRow[], info: AgentInfo
     (row) => row.pane === info.pane_id && row.terminal === info.terminal_id,
   ).pipe(Option.flatMap((row) => row.claudeSession))
 
-const sessionOf = (
-  claudeSessions: ClaudeSessions['Service'],
-  info: AgentInfo,
-  previousAgents: readonly AgentRow[],
-) =>
-  claudeSessions.resolve(info, lastKnownSessionOf(previousAgents, info)).pipe(
-    Effect.catchTags({
-      ClaudeSessionFileUnreadable: (error) =>
-        Effect.as(Effect.logWarning(error.message), Option.none()),
-      HerdrRequestRejected: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
-      HerdrAgentNotFound: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
-      HerdrResponseInvalid: (error) => Effect.as(Effect.logWarning(error.message), Option.none()),
-    }),
-  )
-
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
   const claudeSessions = yield* ClaudeSessions
@@ -160,15 +145,17 @@ const make = Effect.gen(function* () {
     })
 
   const claudeFactsOf = (info: AgentInfo, mark: number, previousAgents: readonly AgentRow[]) =>
-    Effect.flatMap(sessionOf(claudeSessions, info, previousAgents), (claudeSession) =>
-      Effect.zipWith(
-        asks.askOf(info, claudeSession, mark),
-        Option.match(claudeSession, {
-          onNone: () => Effect.succeedNone,
-          onSome: sessionFiles.waiting,
-        }),
-        (ask, claudeWaiting) => ({ claudeSession, ask, claudeWaiting }),
-      ),
+    Effect.flatMap(
+      claudeSessions.resolve(info, lastKnownSessionOf(previousAgents, info)),
+      (claudeSession) =>
+        Effect.zipWith(
+          asks.askOf(info, claudeSession, mark),
+          Option.match(claudeSession, {
+            onNone: () => Effect.succeedNone,
+            onSome: sessionFiles.waiting,
+          }),
+          (ask, claudeWaiting) => ({ claudeSession, ask, claudeWaiting }),
+        ),
     )
 
   const resolveAgent = (mark: number, previousAgents: readonly AgentRow[]) => (info: AgentInfo) =>

@@ -24,6 +24,7 @@ import {
   HerdrClient,
   type HerdrSubscriptionError,
   type ScriptedResponse,
+  scriptedRejection,
   scriptedResult,
 } from '@crook/herdr/HerdrClient'
 import { PaneProcessInfoMethod, SessionSnapshotMethod } from '@crook/herdr/Methods'
@@ -44,6 +45,12 @@ const noForegroundJob: ScriptedResponse = {
   method: PaneProcessInfoMethod.name,
   line: NO_FOREGROUND_JOB_REPLY,
 }
+
+const refusedWhileStopping = scriptedRejection(
+  PaneProcessInfoMethod,
+  'server_unavailable',
+  'server is shutting down',
+)
 
 const foregroundWithoutClaude = scriptedResult(PaneProcessInfoMethod, {
   type: 'pane_process_info',
@@ -144,6 +151,31 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('A pane with no foregr
 
       expect(sessions).toEqual([Option.none()])
       expect(retained).toEqual([[SESSION], []])
+    }),
+  )
+})
+
+layer(BunFileSystem.layer, { excludeTestServices: true })('A pane whose read failed', (it) => {
+  it.effect('keeps the session its row held and what the hooks recorded for it', () =>
+    Effect.gen(function* () {
+      const { sessions, retained } = yield* twoReads(
+        agentInfo({ agent_status: 'idle' }),
+        refusedWhileStopping,
+      )
+
+      expect(sessions).toEqual([Option.some(SESSION)])
+      expect(retained).toEqual([[SESSION], [SESSION]])
+    }),
+  )
+
+  it.effect('keeps none for another terminal in that pane', () =>
+    Effect.gen(function* () {
+      const { sessions } = yield* twoReads(
+        agentInfo({ terminal_id: 'term_reopened' }),
+        refusedWhileStopping,
+      )
+
+      expect(sessions).toEqual([Option.none()])
     }),
   )
 })
