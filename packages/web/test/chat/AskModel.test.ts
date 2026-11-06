@@ -13,33 +13,23 @@ import {
   WriteFile,
 } from '@crook/domain/Ask'
 import type { AskedAction } from '@crook/domain/Ask'
-import { AnswerAsk, Approve, ApproveAlways, Decline, Prompt } from '@crook/domain/Command'
-import { AskId, PaneId } from '@crook/domain/Ids'
+import { Approve, ApproveAlways, Decline } from '@crook/domain/Command'
+import { AskId } from '@crook/domain/Ids'
 import { PatchHunk } from '@crook/domain/TranscriptMessage'
-import { AskDialogUnreadable, AskNotPending } from '@crook/protocol/Commands'
-import { ActionProgress, UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
-import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import {
   AlwaysNote,
   alwaysNoteFor,
-  AskAnswerState,
   AskDetail,
   answerableQuestion,
-  answerState,
   askDetail,
   alwaysCaption,
-  answerInFlight,
   askTitle,
-  isAnswerUnderway,
   permissionButtons,
   withAlwaysNotes,
   withoutAskedCall,
 } from '@crook/web/chat/AskModel'
 import { ChatItem } from '@crook/web/chat/ChatItems'
 
-import { inputDelivered } from '../HubFakes.ts'
-
-const PANE = PaneId.make('w1:p1')
 const ASK = AskId.make('toolu_1')
 const CWD = '/home/jliocsar/Projects/crook'
 
@@ -62,8 +52,6 @@ const edit = (patch: EditFile['patch'], oldString = 'a', newString = 'b') =>
     replaceAll: false,
     patch,
   })
-
-const approve = new AnswerAsk({ pane: PANE, ask: ASK, answer: new Approve() })
 
 const note = (text: string) => ChatItem.Note({ key: text, text, answersACommand: false })
 
@@ -187,81 +175,6 @@ describe('answerableQuestion', () => {
     expect(
       Option.isSome(answerableQuestion(ask(asked(Option.some(false)), asked(Option.some(false))))),
     ).toBe(false)
-  })
-})
-
-describe('answerState', () => {
-  const progress = (state: CommandProgress, refusal = Option.none<AskNotPending>()) => ({
-    state,
-    refusal,
-    last: Option.some(approve),
-  })
-
-  it('follows the answer to this ask from sending to answered', () => {
-    const receipt = inputDelivered(approve)
-
-    expect(answerState(progress(ActionProgress.Idle()), ASK)).toEqual(AskAnswerState.Open())
-    expect(answerState(progress(ActionProgress.Sending()), ASK)).toEqual(
-      AskAnswerState.Answering({ answer: new Approve() }),
-    )
-    expect(answerState(progress(ActionProgress.Sent({ receipt })), ASK)).toEqual(
-      AskAnswerState.Answered({ answer: new Approve() }),
-    )
-    expect(answerState(progress(ActionProgress.Done({ receipt })), ASK)).toEqual(
-      AskAnswerState.Answered({ answer: new Approve() }),
-    )
-  })
-
-  it('reads AskNotPending as already answered and any other refusal as refused', () => {
-    const failed = ActionProgress.Failed({ message: 'Nope.', asksConfirmation: false })
-
-    expect(
-      answerState(progress(failed, Option.some(new AskNotPending({ pane: PANE, ask: ASK }))), ASK),
-    ).toEqual(AskAnswerState.AlreadyAnswered())
-    expect(
-      answerState(
-        {
-          state: failed,
-          refusal: Option.some(new AskDialogUnreadable({ pane: PANE })),
-          last: Option.some(approve),
-        },
-        ASK,
-      ),
-    ).toEqual(AskAnswerState.Refused({ message: 'Nope.' }))
-  })
-
-  it('reads an answer the dialog never moved on from as refused, so it can be answered again', () => {
-    const receipt = inputDelivered(approve)
-
-    expect(answerState(progress(ActionProgress.Unconfirmed({ receipt })), ASK)).toEqual(
-      AskAnswerState.Refused({ message: UNCONFIRMED_NOTE }),
-    )
-  })
-
-  it('counts an answer as underway only while it is being sent', () => {
-    const answer = new Approve()
-
-    expect(isAnswerUnderway(AskAnswerState.Answering({ answer }))).toBe(true)
-    expect(answerInFlight(AskAnswerState.Answering({ answer }))).toEqual(Option.some(answer))
-    expect(isAnswerUnderway(AskAnswerState.Answered({ answer }))).toBe(false)
-    expect(answerInFlight(AskAnswerState.Answered({ answer }))).toEqual(Option.none())
-    expect(isAnswerUnderway(AskAnswerState.Open())).toBe(false)
-  })
-
-  it('ignores an answer to another ask and any other command', () => {
-    const sending = ActionProgress.Sending()
-
-    expect(answerState(progress(sending), AskId.make('toolu_2'))).toEqual(AskAnswerState.Open())
-    expect(
-      answerState(
-        {
-          state: sending,
-          refusal: Option.none(),
-          last: Option.some(new Prompt({ pane: PANE, text: 'go' })),
-        },
-        ASK,
-      ),
-    ).toEqual(AskAnswerState.Open())
   })
 })
 

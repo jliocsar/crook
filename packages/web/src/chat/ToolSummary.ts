@@ -7,6 +7,8 @@ import * as Str from 'effect/String'
 import { relativeToFolder } from '@crook/domain/Ask'
 import { LINE_BREAK } from '@crook/web/text/Lines'
 
+export type PlanStep = typeof PlanStep.Type
+
 const PATH_FIELDS = new Set(['file_path', 'notebook_path', 'path'])
 
 const SUMMARY_FIELD = new Map([
@@ -27,8 +29,26 @@ const SUMMARY_FIELD = new Map([
 
 const InputFields = Schema.Record(Schema.String, Schema.Unknown)
 
+export const PlanStep = Schema.Struct({
+  content: Schema.String,
+  status: Schema.Literals(['pending', 'in_progress', 'completed']),
+})
+
+const PlanInput = Schema.Struct({ todos: Schema.Array(PlanStep) })
+
+const AgentInput = Schema.Struct({
+  description: Schema.optionalKey(Schema.String),
+  prompt: Schema.optionalKey(Schema.String),
+  subagent_type: Schema.optionalKey(Schema.String),
+  model: Schema.optionalKey(Schema.String),
+  run_in_background: Schema.optionalKey(Schema.Boolean),
+})
+
 const decodeFields = Schema.decodeUnknownOption(InputFields)
 const decodeString = Schema.decodeUnknownOption(Schema.NonEmptyString)
+
+export const decodePlan = Schema.decodeUnknownOption(PlanInput)
+export const decodeAgentInput = Schema.decodeUnknownOption(AgentInput)
 
 const firstLine = (text: string): string =>
   pipe(

@@ -20,7 +20,7 @@ import {
   StartAgent,
 } from '@crook/domain/Command'
 import type { AskAnswer, Command, CommandReceipt } from '@crook/domain/Command'
-import type { ClaudeSessionId, MachineId, PaneId } from '@crook/domain/Ids'
+import type { ClaudeSessionId, IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
 import type { SkillListing } from '@crook/domain/Skill'
 import { CLAUDE_WAITING_NOTE } from '@crook/protocol/Commands'
 import {
@@ -36,12 +36,16 @@ import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { alwaysNotesAtom } from '@crook/web/atoms/Chat'
 import type { OpenedAgent } from '@crook/web/atoms/Herd'
 import {
-  alwaysNoteFor,
-  answerState,
-  isAnswered,
-  isAnswerSettled,
+  answerHeard,
+  answerPressed,
+  askAnswerMachine,
+  AskAnswerEvent,
+  askingOf,
+  askShown,
   isAnswerUnderway,
-} from '@crook/web/chat/AskModel'
+} from '@crook/web/chat/AskAnswerMachine'
+import type { AskAnswerState } from '@crook/web/chat/AskAnswerMachine'
+import { alwaysNoteFor } from '@crook/web/chat/AskModel'
 import type { AlwaysNote } from '@crook/web/chat/AskModel'
 import { ChatItem, isOmitted, isUserPrompt } from '@crook/web/chat/ChatItems'
 import { ActivityState, activityView } from '@crook/web/chat/ActivityMachine'
@@ -84,6 +88,11 @@ interface ArrivedSends {
 interface UnansweredCommand {
   readonly text: string
   readonly answersThen: number
+}
+
+interface AwaitedNote {
+  readonly note: AlwaysNote
+  readonly key: IdempotencyKey
 }
 
 export type AskDockCommands = Omit<AskDockProps, 'cwd'>
@@ -185,11 +194,12 @@ const holeCount = (items: readonly ChatItem[]): number =>
 
 const answersACommand = (item: ChatItem): boolean =>
   ChatItem.$match(item, {
-    Command: () => true,
+    Command: (command) => Option.isNone(command.sender),
     Cleared: () => true,
     Note: (note) => note.answersACommand,
     Compacted: (compacted) => Option.contains(compacted.trigger, MANUAL_COMPACT),
     UserPrompt: () => false,
+    ForeignPrompt: () => false,
     AssistantText: () => false,
     Tool: () => false,
     Subagents: () => false,
@@ -296,6 +306,9 @@ export const pendingPromptRows = (
 
 const isPromptInFlight = (action: CommandAction): boolean =>
   !isAcknowledged(action.state) && Option.exists(action.last, awaitsAnswer)
+
+const isDeclineOut = (action: CommandAction): boolean =>
+  isSending(action.state) && Option.exists(action.last, Schema.is(AnswerAsk))
 
 const startedPane = (receipt: CommandReceipt): Option.Option<PaneId> =>
   Match.value(receipt).pipe(
@@ -510,13 +523,16 @@ const useAlwaysNotes = (
   session: Option.Option<ClaudeSessionId>,
 ) => {
   const [notes, setNotes] = useAtom(alwaysNotesAtom(opened))
-  const [awaited, setAwaited] = React.useState(Option.none<AlwaysNote>())
-  const answered = Option.filter(awaited, (note) => isAnswered(answerState(answer, note.ask)))
-  const abandoned = Option.exists(awaited, (note) => isAnswerSettled(answerState(answer, note.ask)))
+  const [awaited, setAwaited] = React.useState(Option.none<AwaitedNote>())
+  const heard = Option.filter(answerHeard(answer), (event) =>
+    Option.exists(awaited, (note) => note.key === event.key),
+  )
+  const answered = Option.exists(heard, AskAnswerEvent.guards.Delivered)
+  const abandoned = Option.isSome(heard) && !answered
 
   React.useEffect(() => {
-    if (Option.isSome(answered)) {
-      const note = answered.value
+    if (answered && Option.isSome(awaited)) {
+      const { note } = awaited.value
 
       setNotes((current) =>
         Arr.some(current, (kept) => kept.ask === note.ask) ? current : [...current, note],
@@ -525,11 +541,36 @@ const useAlwaysNotes = (
     } else if (abandoned) {
       setAwaited(Option.none())
     }
-  }, [Option.isSome(answered), abandoned])
+  }, [answered, abandoned])
 
   return {
     notes: Arr.filter(notes, (note) => Equal.equals(note.session, session)),
-    expect: setAwaited,
+    expect: (note: Option.Option<AlwaysNote>, key: IdempotencyKey) => {
+      setAwaited(Option.map(note, (expected) => ({ note: expected, key })))
+    },
+  }
+}
+
+const askAnswerStep = (state: AskAnswerState, event: AskAnswerEvent): AskAnswerState =>
+  askAnswerMachine.transition(state, event)[0]
+
+const useAskAnswer = (asking: Option.Option<string>, answer: CommandAction) => {
+  const [held, setHeld] = React.useState<AskAnswerState>(askAnswerMachine.initial)
+  const state = pipe(
+    [Option.map(asking, askShown), answerHeard(answer)],
+    Arr.getSomes,
+    Arr.reduce(held, askAnswerStep),
+  )
+
+  if (state !== held) {
+    setHeld(state)
+  }
+
+  return {
+    state,
+    dispatch: (event: AskAnswerEvent) => {
+      setHeld((current) => askAnswerStep(current, event))
+    },
   }
 }
 
@@ -574,9 +615,14 @@ export const useChatCommands = ({
   const working = Option.isSome(activityView(activity).workingSince)
   const promptInFlight = isPromptInFlight(prompt)
   const blocked = ActivityState.guards.Blocked(activity)
-  const openAsk = Option.flatMap(
+  const openAsking = Option.flatMap(
     Option.filter(model.row, () => blocked && isPresent(model.presence)),
-    (row) => row.ask,
+    (row) => Option.map(row.ask, (ask) => ({ ask, asking: askingOf(row, ask) })),
+  )
+  const openAsk = Option.map(openAsking, ({ ask }) => ask)
+  const askAnswer = useAskAnswer(
+    Option.map(openAsking, ({ asking }) => asking),
+    answer,
   )
   const prompted = usePromptWait(
     items,
@@ -604,8 +650,7 @@ export const useChatCommands = ({
   const stopping = useStopLock(stop)
   const always = useAlwaysNotes(opened, answer, session)
   const mode: ComposerMode = Option.isSome(openAsk) ? 'decline' : 'prompt'
-  const answering = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(answer, ask.id)))
-  const declining = Option.exists(openAsk, (ask) => isAnswerUnderway(answerState(prompt, ask.id)))
+  const answering = Option.isSome(openAsk) && isAnswerUnderway(askAnswer.state)
 
   useClearSentDraft(prompt, draft, setDraft)
   useRestoreUndeliveredDraft(prompt, draft, setDraft)
@@ -622,7 +667,7 @@ export const useChatCommands = ({
   }
 
   const send = (text: string) => {
-    Option.match(openAsk, {
+    Option.match(openAsking, {
       onNone: () => {
         if (Option.isSome(refusalOf(text))) {
           composerFailure.onPromptSent()
@@ -634,7 +679,7 @@ export const useChatCommands = ({
         onPromptSent()
         sendPrompt(new Prompt({ pane, text }))
       },
-      onSome: (ask) => {
+      onSome: ({ ask }) => {
         onPromptSent()
         sendPrompt(
           new AnswerAsk({
@@ -647,17 +692,19 @@ export const useChatCommands = ({
     })
   }
 
-  const answerAsk = (ask: Ask) => (given: AskAnswer) => {
-    always.expect(alwaysNoteFor(ask, given, items, session))
-    answer.send(new AnswerAsk({ pane, ask: ask.id, answer: given }))
+  const answerAsk = (ask: Ask, asking: string) => (given: AskAnswer) => {
+    const key = answer.send(new AnswerAsk({ pane, ask: ask.id, answer: given }))
+
+    always.expect(alwaysNoteFor(ask, given, items, session), key)
+    askAnswer.dispatch(answerPressed(asking, key, given))
   }
 
   return {
-    ask: Option.map(openAsk, (ask) => ({
+    ask: Option.map(openAsking, ({ ask, asking }) => ({
       ask,
-      state: answerState(answer, ask.id),
-      disabled: !canAct || declining,
-      onAnswer: answerAsk(ask),
+      state: askAnswer.state,
+      disabled: !canAct || isDeclineOut(prompt),
+      onAnswer: answerAsk(ask, asking),
       onDeclineWithMessage: send,
     })),
     alwaysNotes: always.notes,

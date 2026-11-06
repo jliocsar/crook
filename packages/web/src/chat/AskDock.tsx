@@ -7,16 +7,20 @@ import * as React from 'react'
 import type { Ask, AskQuestion, PermissionAsk, QuestionAsk, UnknownAsk } from '@crook/domain/Ask'
 import { Choose } from '@crook/domain/Command'
 import type { AskAnswer } from '@crook/domain/Command'
+import { stateMark } from '@crook/state-machine/Machine'
+import {
+  answerInFlight,
+  askAnswerMachine,
+  AskAnswerState,
+  isAnswerUnderway,
+} from '@crook/web/chat/AskAnswerMachine'
 import {
   alwaysCaption,
-  AskAnswerState,
   AskDetail,
   answerableQuestion,
-  answerInFlight,
   askDetail,
   askTitle,
   askTool,
-  isAnswerUnderway,
   NEEDS_YOU,
   permissionButtons,
   PLAIN_DECLINE,
@@ -63,7 +67,7 @@ const askNotice = (tone: FloatingNotice['tone'], text: string): Option.Option<Fl
   Option.some({ id: ASK_NOTICE_ID, tone, text })
 
 export const askAnswerNotice = (state: AskAnswerState): Option.Option<FloatingNotice> =>
-  AskAnswerState.$match(state, {
+  AskAnswerState.match(state, {
     Open: () => Option.none(),
     Answering: () => Option.none(),
     Answered: () => askNotice('quiet', ANSWERED_NOTE),
@@ -235,6 +239,7 @@ export function AskDock({
     <section
       ref={ref}
       data-slot="ask-dock"
+      {...stateMark(askAnswerMachine, controls.state)}
       aria-labelledby={labelId}
       className="-mx-1 flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain px-1 pb-1 *:shrink-0"
     >

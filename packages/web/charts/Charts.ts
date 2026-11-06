@@ -1,6 +1,7 @@
 import { chartOf, walk } from '@crook/state-machine/Walk'
 
 import { activityWalk } from './ActivityWalk.ts'
+import { askAnswerWalk } from './AskAnswerWalk.ts'
 import { composerFailureWalk } from './ComposerFailureWalk.ts'
 import { indicatorWalk } from './IndicatorWalk.ts'
 import { linkWalk } from './LinkWalk.ts'
@@ -15,6 +16,7 @@ export interface MachineChart {
 
 export const MACHINE_CHARTS: readonly MachineChart[] = [
   { file: 'activity.mmd', chart: () => chartOf(walk(activityWalk)) },
+  { file: 'ask-answer.mmd', chart: () => chartOf(walk(askAnswerWalk)) },
   { file: 'composer-failure.mmd', chart: () => chartOf(walk(composerFailureWalk)) },
   { file: 'indicator.mmd', chart: () => chartOf(walk(indicatorWalk)) },
   { file: 'link.mmd', chart: () => chartOf(walk(linkWalk)) },

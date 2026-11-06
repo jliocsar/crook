@@ -181,6 +181,14 @@ export const TIMELINE_EXPECTATIONS = {
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
   }),
+  'transition/plugin-prompt-while-sending': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'transition/scheduled-fire-while-slash-sending': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
   'transition/slash-send-following': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
@@ -272,6 +280,11 @@ export const TIMELINE_EXPECTATIONS = {
     background: inSequence('background-dock', 'background-summary'),
   }),
   'ask/next-ask': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+    ask: inSequence('ask-dock'),
+  }),
+  'ask/same-dialog-again': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
     ask: inSequence('ask-dock'),

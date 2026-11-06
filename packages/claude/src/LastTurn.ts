@@ -30,7 +30,7 @@ const CODEMODE_RUN_TOOL = 'mcp__codemode__run'
 const isTextBlock = Schema.is(TextBlock)
 const isToolResultBlock = Schema.is(ToolResultBlock)
 
-const isHumanPrompt = (message: UserMessage) =>
+const opensTurn = (message: UserMessage) =>
   !message.isMeta &&
   Arr.some(message.blocks, isTextBlock) &&
   !Arr.some(message.blocks, isToolResultBlock)
@@ -38,7 +38,7 @@ const isHumanPrompt = (message: UserMessage) =>
 const startsTurn = (message: TranscriptMessage) =>
   Match.value(message).pipe(
     Match.tagsExhaustive({
-      User: isHumanPrompt,
+      User: opensTurn,
       Assistant: () => false,
       System: () => false,
       UnrecognizedEntry: () => false,

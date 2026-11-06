@@ -21,7 +21,8 @@ export interface CommandAction {
   readonly state: CommandProgress
   readonly refusal: Option.Option<SendCommandFailure>
   readonly last: Option.Option<Command>
-  readonly send: (command: Command) => void
+  readonly key: IdempotencyKey
+  readonly send: (command: Command) => IdempotencyKey
 }
 
 interface ActionKeys {
@@ -63,12 +64,14 @@ export const useCommandAction = (machine: MachineId): CommandAction => {
     if (isIdle(state) || retry) {
       sendCurrent(request)
 
-      return
+      return keys.current
     }
 
     sendSpare(request)
     setKeys({ current: keys.spare, spare: mintIdempotencyKey() })
+
+    return keys.spare
   }
 
-  return { state, refusal, last, send }
+  return { state, refusal, last, key: keys.current, send }
 }

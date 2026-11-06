@@ -16,6 +16,7 @@ import {
   CompactBoundaryBlock,
   LocalCommandBlock,
   LocalCommandOutputBlock,
+  senderOf,
   SHELL_COMMAND_NAME,
   isTypedBlock,
 } from '@crook/domain/TranscriptMessage'
@@ -23,13 +24,19 @@ import type {
   AssistantMessage,
   CompactTrigger,
   ImageBlock,
+  PromptSender,
   SystemMessage,
   ToolResultBlock,
   ToolUseBlock,
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
 import { imagesIn, wordsIn } from '@crook/web/chat/Blocks'
-import { toolSummary } from '@crook/web/chat/ToolSummary'
+import {
+  decodeAgentInput,
+  decodePlan,
+  type PlanStep,
+  toolSummary,
+} from '@crook/web/chat/ToolSummary'
 import {
   NO_ROSTERS,
   type SessionRosters,
@@ -44,8 +51,6 @@ type RunStatus = Exclude<AgentRunStatus, 'pane closed'>
 
 export type AgentActivity = 'working' | 'blocked' | 'still'
 
-export type PlanStep = typeof PlanStep.Type
-
 export type ChatItem = Data.TaggedEnum<{
   UserPrompt: {
     readonly key: string
@@ -53,6 +58,7 @@ export type ChatItem = Data.TaggedEnum<{
     readonly images: readonly ImageBlock[]
     readonly queued: boolean
   }
+  ForeignPrompt: { readonly key: string; readonly sender: PromptSender; readonly words: string }
   AssistantText: { readonly key: string; readonly text: string; readonly failed: boolean }
   Tool: { readonly key: string; readonly call: ToolCallModel }
   Subagents: { readonly key: string; readonly runs: readonly SubagentRun[] }
@@ -64,6 +70,7 @@ export type ChatItem = Data.TaggedEnum<{
     readonly text: string
     readonly shell: boolean
     readonly output: readonly string[]
+    readonly sender: Option.Option<PromptSender>
   }
   Compacted: {
     readonly key: string
@@ -191,28 +198,11 @@ export class SubagentRun extends Data.Class<{
   readonly finishedAt: Option.Option<DateTime.Utc>
 }> {}
 
-export const PlanStep = Schema.Struct({
-  content: Schema.String,
-  status: Schema.Literals(['pending', 'in_progress', 'completed']),
-})
-
-const PlanInput = Schema.Struct({ todos: Schema.Array(PlanStep) })
-
-const AgentInput = Schema.Struct({
-  description: Schema.optionalKey(Schema.String),
-  prompt: Schema.optionalKey(Schema.String),
-  subagent_type: Schema.optionalKey(Schema.String),
-  model: Schema.optionalKey(Schema.String),
-  run_in_background: Schema.optionalKey(Schema.Boolean),
-})
-
-const decodePlan = Schema.decodeUnknownOption(PlanInput)
-const decodeAgentInput = Schema.decodeUnknownOption(AgentInput)
 const isCommandLine = Schema.is(LocalCommandBlock)
 const isCommandOutput = Schema.is(LocalCommandOutputBlock)
 const isCompactBoundary = Schema.is(CompactBoundaryBlock)
 
-const isHumanPrompt = (message: UserMessage): boolean =>
+const opensTurn = (message: UserMessage): boolean =>
   !message.isMeta &&
   !message.queued &&
   message.blocks.some((block) =>
@@ -222,7 +212,7 @@ const isHumanPrompt = (message: UserMessage): boolean =>
 const startsTurn = ({ message }: TranscriptLine): boolean =>
   Match.value(message).pipe(
     Match.tagsExhaustive({
-      User: isHumanPrompt,
+      User: opensTurn,
       Omitted: () => true,
       Assistant: () => false,
       System: () => false,
@@ -358,7 +348,10 @@ const outputDrafts = (
   return Option.match(group, {
     onNone: () => [draft(ChatItem.Note({ key, text: output, answersACommand: true }))],
     onSome: (command) => [
-      grouped(ChatItem.Command({ key, text: '', shell: false, output: [output] }), command),
+      grouped(
+        ChatItem.Command({ key, text: '', shell: false, output: [output], sender: Option.none() }),
+        command,
+      ),
     ],
   })
 }
@@ -367,6 +360,7 @@ const commandDrafts = (
   command: LocalCommandBlock,
   key: string,
   group: Option.Option<string>,
+  message: UserMessage,
 ): readonly Draft[] => {
   if (command.name === CLEAR_COMMAND) {
     return [draft(ChatItem.Cleared({ key }))]
@@ -381,6 +375,7 @@ const commandDrafts = (
           text: `${command.name} ${command.args}`.trim(),
           shell: command.name === SHELL_COMMAND_NAME,
           output: [],
+          sender: senderOf(message),
         }),
         opened,
       ),
@@ -600,7 +595,14 @@ const promptDraft = (message: UserMessage, key: string): readonly Draft[] => {
 
   return Str.isEmpty(text) && images.length === 0
     ? []
-    : [draft(ChatItem.UserPrompt({ key, text, images, queued: message.queued }))]
+    : [
+        draft(
+          Option.match(senderOf(message), {
+            onNone: () => ChatItem.UserPrompt({ key, text, images, queued: message.queued }),
+            onSome: (sender) => ChatItem.ForeignPrompt({ key, sender, words: text }),
+          }),
+        ),
+      ]
 }
 
 const userNoteDrafts = (
@@ -626,7 +628,7 @@ const userNoteDrafts = (
             Option.getOrElse(boundary, () => keyAt(index)),
           ),
         ],
-        LocalCommand: (command) => commandDrafts(command, keyAt(index), commandGroup),
+        LocalCommand: (command) => commandDrafts(command, keyAt(index), commandGroup, message),
         LocalCommandOutput: (output) => outputDrafts(output.text, keyAt(index), commandGroup),
         Interruption: () => [
           draft(

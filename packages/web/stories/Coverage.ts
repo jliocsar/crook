@@ -1,6 +1,6 @@
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
 import type { Ask, AskedAction } from '@crook/domain/Ask'
-import type { AskAnswerState } from '@crook/web/chat/AskModel'
+import type { AskAnswerState } from '@crook/web/chat/AskAnswerMachine'
 import type { ActivityState } from '@crook/web/chat/ActivityMachine'
 import type { JobKind, JobState } from '@crook/web/chat/BackgroundModel'
 import type { ChatItem } from '@crook/web/chat/ChatItems'
@@ -34,6 +34,15 @@ export const MOMENT_BEFORE_ANY_STATUS = 'before-first-value'
 export const STATE_COVERAGE = {
   chatItem: {
     UserPrompt: ['rows/prompt', 'rows/prompt-queued', 'rows/prompt-image'],
+    ForeignPrompt: [
+      'rows/plugin-prompt',
+      'rows/plugin-prompt-open',
+      'rows/plugin-prompt-unnamed',
+      'rows/script-prompt',
+      'rows/scheduled-prompt',
+      'rows/foreign-prompt-unknown',
+      'transition/plugin-prompt-while-sending',
+    ],
     AssistantText: ['rows/text-markdown', 'rows/text-failed'],
     Tool: ['rows/tool-running', 'rows/tool-read-open'],
     Subagents: ['rows/subagent-tree-running'],
@@ -46,6 +55,9 @@ export const STATE_COVERAGE = {
       'rows/slash-skill',
       'rows/slash-shell',
       'rows/slash-long-output',
+      'rows/script-command',
+      'rows/scheduled-command',
+      'transition/scheduled-fire-while-slash-sending',
       'real/slash-commands',
     ],
     Compacted: ['rows/compacted', 'rows/compacted-open'],
@@ -138,7 +150,7 @@ export const STATE_COVERAGE = {
   askAnswer: {
     Open: ['ask/permission-command'],
     Answering: ['ask/answering'],
-    Answered: ['ask/answered'],
+    Answered: ['ask/answered', 'ask/same-dialog-again'],
     AlreadyAnswered: ['ask/already-answered'],
     Refused: ['ask/refused'],
   } satisfies Record<AskAnswerState['_tag'], readonly string[]>,
@@ -229,6 +241,8 @@ export const REQUIRED_TRANSITIONS: readonly string[] = [
   'transition/compact-ends-the-turn',
   'transition/slash-send-lands',
   'transition/slash-send-silent',
+  'transition/plugin-prompt-while-sending',
+  'transition/scheduled-fire-while-slash-sending',
   'subagent/turn-with-tools',
   'transition/herd-first-load-from-cache',
 ]
