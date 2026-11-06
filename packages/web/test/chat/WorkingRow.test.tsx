@@ -32,6 +32,7 @@ import {
   prompt,
   REVIEWER,
   SESSION,
+  stopHookFeedback,
   subagent,
   toolResult,
   toolUse,
@@ -45,6 +46,8 @@ const WORKING_ELAPSED = { selector: '[data-slot="thinking-state-elapsed"]' }
 const ROW_ELEMENT = '[data-row="working"]'
 const STOP = 'Stop (Esc)'
 const SEND = 'Send'
+const HOOK_WORDS = '[/made/up/check.sh]: Run the check first.'
+const STOP_HOOK_ROW = 'A Stop hook blocked the stop'
 
 const live = (rows: readonly AgentRow[]) => liveWith(herd([machine(LAPTOP, rows)]))
 
@@ -118,6 +121,44 @@ describe('the Working row', () => {
       expect(screen.queryByRole('button', { name: STOP })).toBeNull()
       expect(screen.getByRole('button', { name: SEND })).toBeDefined()
       expect(activityState()).toBe('Finished')
+    }),
+  )
+
+  it.effect('brings the row and Stop back when a Stop hook sends Claude on after an answer', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(
+        CHAT,
+        live([agent('w1:p1', 'working', { secondsAgo: 120 })]),
+      )
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'Fix the herd')])])
+      yield* Effect.promise(() => screen.findByText('Working', WORKING_ROW))
+      yield* Queue.offer(transcript, chunk(10, 20, [answered(10, 'Fixed the herd', 5)]))
+      yield* findByRole('button', SEND)
+
+      expect(activityState()).toBe('Finished')
+
+      yield* Queue.offer(transcript, chunk(20, 30, [stopHookFeedback(20, HOOK_WORDS, 6)]))
+      yield* findByRole('button', STOP)
+      yield* Effect.promise(() => screen.findByText('Working', WORKING_ROW))
+
+      expect(screen.getByText('7m', WORKING_ELAPSED)).toBeDefined()
+      expect(screen.queryByRole('button', { name: SEND })).toBeNull()
+      expect(activityState()).toBe('Working')
+      expect(activityLine()).toContain('working')
+      expect(screen.queryByText(HOOK_WORDS)).toBeNull()
+
+      yield* Queue.offer(transcript, chunk(30, 40, [answered(30, 'Ran the check', 8)]))
+      yield* findByRole('button', SEND)
+
+      expect(screen.queryByText('Working', WORKING_ROW)).toBeNull()
+      expect(activityState()).toBe('Finished')
+
+      yield* Effect.promise(() =>
+        userEvent.click(screen.getByRole('button', { name: STOP_HOOK_ROW })),
+      )
+      yield* Effect.promise(() => screen.findByText(HOOK_WORDS))
     }),
   )
 

@@ -328,6 +328,37 @@ layer(services, { excludeTestServices: true })('parseLine on real transcript lin
     }),
   )
 
+  live.effect(
+    'reads a Stop hook feedback line as the hook, and nothing that only starts alike',
+    () =>
+      Effect.sync(() => {
+        const lineWith = (content: string | readonly object[], isMeta: boolean) =>
+          parseLine(lineOf(JSON.stringify({ type: 'user', isMeta, message: { content } })), LINE)
+
+        expect(
+          lineWith('Stop hook feedback:\n[/made/up/check.sh]: Run the check first.\n', true),
+        ).toMatchObject([
+          {
+            _tag: 'User',
+            isMeta: true,
+            stopHookFeedback: true,
+            blocks: [{ _tag: 'Text', text: '[/made/up/check.sh]: Run the check first.' }],
+          },
+        ])
+
+        const unmarked = [
+          lineWith('Stop hook feedback: what does this mean?', false),
+          lineWith('Caveat: about the hook', true),
+          lineWith('stop hook feedback: in other words', true),
+          lineWith([{ type: 'text', text: 'Stop hook feedback: in blocks' }], true),
+        ]
+
+        expect(unmarked.flat()).not.toContainEqual(
+          expect.objectContaining({ stopHookFeedback: true }),
+        )
+      }),
+  )
+
   live.effect('marks a typed /compact as meta, and nothing that only starts alike', () =>
     Effect.sync(() => {
       const metaOf = (content: string) =>

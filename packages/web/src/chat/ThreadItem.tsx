@@ -369,6 +369,52 @@ function Divider({ children }: { children: React.ReactNode }) {
   )
 }
 
+function RowDisclosure({
+  open,
+  onToggle,
+  children,
+}: {
+  open: boolean
+  onToggle: (open: boolean) => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      className="text-muted-foreground hover:text-foreground mx-auto inline-flex min-h-11 items-center gap-1 px-2 text-xs font-semibold"
+      onClick={() => {
+        onToggle(!open)
+      }}
+    >
+      {children}
+      <ChevronDown
+        aria-hidden="true"
+        size={INLINE_ICON_SIZE}
+        className={cn(
+          'transition-transform duration-200 motion-reduce:transition-none',
+          open && 'rotate-180',
+        )}
+      />
+    </button>
+  )
+}
+
+function StopHookFeedback({ words }: { words: string }) {
+  const [open, setOpen] = useRowFlag('stop-hook', false)
+
+  return (
+    <div className="grid grid-cols-1">
+      <RowDisclosure open={open} onToggle={setOpen}>
+        A Stop hook blocked the stop
+      </RowDisclosure>
+      <Collapse open={open}>
+        <OutputText text={words} className={cn(OUTPUT_CLASS, 'text-muted-foreground mx-1')} />
+      </Collapse>
+    </div>
+  )
+}
+
 function CompactedDivider({ summary }: { summary: Option.Option<string> }) {
   const [open, setOpen] = useRowFlag('summary', false)
 
@@ -379,24 +425,9 @@ function CompactedDivider({ summary }: { summary: Option.Option<string> }) {
         onNone: () => null,
         onSome: (text) => (
           <>
-            <button
-              type="button"
-              aria-expanded={open}
-              className="text-muted-foreground hover:text-foreground mx-auto inline-flex min-h-11 items-center gap-1 px-2 text-xs font-semibold"
-              onClick={() => {
-                setOpen(!open)
-              }}
-            >
+            <RowDisclosure open={open} onToggle={setOpen}>
               {open ? 'Hide summary' : 'Show summary'}
-              <ChevronDown
-                aria-hidden="true"
-                size={INLINE_ICON_SIZE}
-                className={cn(
-                  'transition-transform duration-200 motion-reduce:transition-none',
-                  open && 'rotate-180',
-                )}
-              />
-            </button>
+            </RowDisclosure>
             <Collapse open={open}>
               <Response className="text-muted-foreground border-border rounded-[var(--radius)] border p-3 text-sm leading-5">
                 {text}
@@ -434,6 +465,7 @@ function ThreadItemView({ item, environment }: { item: ChatItem; environment: Th
         <WithInlineCode text={note.text} />
       </Note>
     ),
+    StopHookFeedback: (feedback) => <StopHookFeedback words={feedback.words} />,
     Command: (command) => (
       <CommandRow text={command.text} shell={command.shell} output={command.output} />
     ),

@@ -164,6 +164,7 @@ export class UserMessage extends Schema.TaggedClass<UserMessage>()('User', {
   origin: Schema.OptionFromNullOr(Schema.String),
   queued: Schema.Boolean,
   blocks: Schema.Array(UserBlock),
+  stopHookFeedback: Schema.optionalKey(Schema.Boolean),
 }) {}
 
 export class AssistantMessage extends Schema.TaggedClass<AssistantMessage>()('Assistant', {

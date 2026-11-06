@@ -52,6 +52,18 @@ export const user = (
     blocks,
   })
 
+export const stopHookFeedback = (offset: number, words: string, seconds = 0) =>
+  new UserMessage({
+    offset: TranscriptOffset.make(offset),
+    uuid: Option.none(),
+    timestamp: at(seconds),
+    isMeta: true,
+    origin: Option.none(),
+    queued: false,
+    blocks: [new TextBlock({ text: words })],
+    stopHookFeedback: true,
+  })
+
 export const assistant = (
   offset: number,
   blocks: readonly AssistantBlock[],
