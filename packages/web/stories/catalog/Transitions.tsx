@@ -45,7 +45,14 @@ import {
   PANE,
   TEAM,
 } from '../Fixtures.ts'
-import { MANY_LINES_END, manyLinesChunk, MANY_TURNS_END, manyTurnsChunk } from '../ManyLines.ts'
+import {
+  LONG_THREAD_END,
+  longThreadChunk,
+  MANY_LINES_END,
+  manyLinesChunk,
+  MANY_TURNS_END,
+  manyTurnsChunk,
+} from '../ManyLines.ts'
 import { clicks, element, pause, seesSelector, seesText, types, until } from '../StageDom.ts'
 import { CLOCK_AFTER_START_SECONDS } from '../StoryEnv.ts'
 import { IDLE_HERD, QUESTION, TURN_STORIES, WORKING_HERD } from './Turns.tsx'
@@ -68,6 +75,9 @@ const LONG_ABOVE_LINES = 6
 const LONG_LINE_BYTES = 10
 const LONG_SETTLE_MS = 1000
 const VIEWPORT = '[data-slot="conversation-viewport"]'
+const LATEST = 'Latest'
+const WALK_STEP_PX = 300
+const WALK_PAUSE_MS = 50
 const STILL_ACTIVITY = '[data-machine="activity"][data-state="Still"]'
 
 const HELD_THREAD =
@@ -122,12 +132,15 @@ const linesOver = (from: number, count: number, word: string) =>
     Arr.makeBy(count, (index) => said(from + index * LONG_LINE_BYTES, `${word} ${index}`)),
   )
 
-const scrollsToTheTop = Effect.flatMap(element(VIEWPORT), (viewport) =>
+const walksToTheTop = Effect.flatMap(element(VIEWPORT), (viewport) =>
   Effect.sync(() => {
-    viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -viewport.scrollTop }))
-    viewport.scrollTop = 0
+    viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -WALK_STEP_PX }))
+    viewport.scrollTop -= WALK_STEP_PX
     viewport.dispatchEvent(new Event('scroll'))
-  }),
+  }).pipe(
+    Effect.andThen(pause(WALK_PAUSE_MS)),
+    Effect.repeat({ until: () => viewport.scrollTop <= 0 }),
+  ),
 )
 
 const showEarlierAtHoleStory = (
@@ -431,7 +444,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     'show-earlier-at-hole-long',
     'Show earlier at a hole, scrolled up to it',
     40,
-    scrollsToTheTop,
+    walksToTheTop,
   ),
   showEarlierAtHoleStory(
     'show-earlier-at-hole-following',
@@ -439,6 +452,21 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     12,
     pause(0),
   ),
+  linkStory({
+    slug: 'latest-from-far-up',
+    title: 'Latest, from the top of a long thread with every row measured',
+    shows: { text: CHAT_TITLE },
+    ends: { selector: `${VIEWPORT}[data-following]` },
+    path: CHAT_PATH,
+    link: liveWith(chatHerd()),
+    arrange: ({ link }) => feed(link, [opened(), longThreadChunk(), caughtUp(LONG_THREAD_END)]),
+    settle: () =>
+      pause(LONG_SETTLE_MS).pipe(
+        Effect.andThen(walksToTheTop),
+        Effect.andThen(pause(LONG_SETTLE_MS)),
+      ),
+    timeline: [step<LinkStage>(700, 'Tap Latest', () => clicks(LATEST))],
+  }),
   browserStory({
     slug: 'reconnect-chat-open',
     title: 'Reconnect with a chat open, on the real link',

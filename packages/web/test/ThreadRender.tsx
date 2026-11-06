@@ -355,6 +355,21 @@ export const historyOpen = () => {
         ),
       )
     },
+    pressesLatestFromWhere: () => {
+      const glideStarts: number[] = []
+
+      vi.spyOn(scrolling, 'scrollTo').mockImplementation(() => {
+        glideStarts.push(scrolling.scrollTop)
+      })
+      fireEvent.click(
+        present(
+          document.querySelector<HTMLElement>('[data-slot="conversation-jump"]'),
+          'the Latest button',
+        ),
+      )
+
+      return glideStarts
+    },
     growsBelow: (added: number) => {
       grow(added)
       fireEvent.scroll(scrolling)
@@ -404,6 +419,67 @@ const heldMeasurements = (rowHeight: number) => {
         report(entries, new HeldResizeObserver(report))
       }
     },
+  }
+}
+
+export const inTallRowsFarAboveShortOnes = (count: number, tall: number, short: number) => {
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
+    function rendered(this: HTMLElement) {
+      const index = this.dataset['index']
+
+      if (index === undefined) {
+        return 0
+      }
+
+      return Number(index) < count / 2 ? tall : short
+    },
+  )
+
+  const handle = React.createRef<ThreadHandle>()
+
+  render(
+    thread(
+      Arr.makeBy(count, (index) => row(`row ${index}`)),
+      handle,
+    ),
+  )
+
+  const scrolling = viewport()
+
+  Object.defineProperty(scrolling, 'scrollHeight', {
+    configurable: true,
+    get: () =>
+      Number.parseFloat(
+        present(
+          scrolling.querySelector<HTMLElement>('[data-slot="conversation-content"]'),
+          'the thread content',
+        ).style.height,
+      ),
+  })
+  vi.spyOn(scrolling, 'scrollTo').mockImplementation(() => undefined)
+  scrolling.scrollTop = bottomOf(scrolling)
+  fireEvent.scroll(scrolling)
+  fireEvent.touchStart(scrolling)
+  scrolling.scrollTop = 0
+  fireEvent.scroll(scrolling)
+  fireEvent.touchEnd(scrolling)
+
+  return {
+    pressesLatest: () => {
+      fireEvent.click(
+        present(
+          document.querySelector<HTMLElement>('[data-slot="conversation-jump"]'),
+          'the Latest button',
+        ),
+      )
+    },
+    sends: () => {
+      act(() => {
+        handle.current?.scrollToEnd()
+      })
+    },
+    top: () => scrolling.scrollTop,
+    rowsReachUpTo: () => startOfRowsJoinedToTheEnd(scrolling),
   }
 }
 
