@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest'
 
-import { bandsOf, movedSince } from '@crook/frames/ThreadBands'
+import { bandsOf, leastMovedSince, movedSince } from '@crook/frames/ThreadBands'
 import type { VerticalBox } from '@crook/frames/ThreadBands'
 
 const box = (top: number, bottom: number): VerticalBox => ({ top, bottom, height: bottom - top })
@@ -49,6 +49,35 @@ describe('bandsOf', () => {
       middle: 20,
       bottom: 0,
     })
+  })
+})
+
+describe('leastMovedSince', () => {
+  const previous = new Map([
+    ['first', 100],
+    ['second', 200],
+  ])
+
+  it('reads what every row both frames hold moved by at least', () => {
+    const rows = [
+      { key: 'first', top: 112 },
+      { key: 'second', top: 214 },
+    ]
+
+    expect(leastMovedSince(previous, rows)).toBe(12)
+  })
+
+  it('reads no move when a row stays put while one under it is pushed down', () => {
+    const rows = [
+      { key: 'first', top: 100 },
+      { key: 'second', top: 258 },
+    ]
+
+    expect(leastMovedSince(previous, rows)).toBe(0)
+  })
+
+  it('reads no move when the frames share no row', () => {
+    expect(leastMovedSince(previous, [{ key: 'landed', top: 300 }])).toBe(0)
   })
 })
 

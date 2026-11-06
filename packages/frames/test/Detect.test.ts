@@ -7,7 +7,15 @@ import * as Schema from 'effect/Schema'
 import { detect } from '@crook/frames/Detect'
 import type { Finding } from '@crook/frames/Detect'
 import { expectationOf, fromTable, inSequence } from '@crook/frames/Expectations'
-import { BACKTRACK_PIXELS, FrameLog, isStarved, movedAt } from '@crook/frames/FrameLog'
+import {
+  ROW_MOVE_PIXELS,
+  FrameLog,
+  isStarved,
+  leastMovedAt,
+  liftAt,
+  movedAt,
+} from '@crook/frames/FrameLog'
+import type { RecordedFrame } from '@crook/frames/FrameLog'
 
 import backtrackSmallFixture from './fixtures/backtrack-small.json' with { type: 'json' }
 import backtrackFixture from './fixtures/backtrack.json' with { type: 'json' }
@@ -15,10 +23,14 @@ import blankFixture from './fixtures/blank.json' with { type: 'json' }
 import cleanFixture from './fixtures/clean.json' with { type: 'json' }
 import emptyBandFixture from './fixtures/empty-band.json' with { type: 'json' }
 import filledBandFixture from './fixtures/filled-band.json' with { type: 'json' }
+import fingerDuringLiftFixture from './fixtures/finger-during-lift.json' with { type: 'json' }
 import fingerTurnsAroundFixture from './fixtures/finger-turns-around.json' with { type: 'json' }
 import flashFixture from './fixtures/flash.json' with { type: 'json' }
 import goneInALongFrameFixture from './fixtures/gone-in-a-long-frame.json' with { type: 'json' }
 import liftGlideFixture from './fixtures/lift-glide.json' with { type: 'json' }
+import liftMeasuredFixture from './fixtures/lift-measured.json' with { type: 'json' }
+import overshootCatchUpFixture from './fixtures/overshoot-catch-up.json' with { type: 'json' }
+import overshootSendFixture from './fixtures/overshoot-send.json' with { type: 'json' }
 import pairFixture from './fixtures/pair.json' with { type: 'json' }
 import shiftFixture from './fixtures/shift.json' with { type: 'json' }
 import slowFramesHoldFixture from './fixtures/slow-frames-hold.json' with { type: 'json' }
@@ -27,6 +39,15 @@ import swapFixture from './fixtures/swap.json' with { type: 'json' }
 const decodeLog = Schema.decodeUnknownSync(FrameLog)
 
 const MACHINE_REDIAL = 'transition/machine-redial'
+
+const framesWhereTheLiftRises = (log: FrameLog): readonly RecordedFrame[] =>
+  pipe(
+    log.frames,
+    Arr.drop(1),
+    Arr.zip(log.frames),
+    Arr.filter(([next, frame]) => liftAt(next) - liftAt(frame) >= ROW_MOVE_PIXELS),
+    Arr.map(([next]) => next),
+  )
 
 const keysOf = (findings: readonly Finding[]): readonly string[] =>
   Arr.map(findings, (finding) => finding.key)
@@ -144,7 +165,7 @@ describe('detect, over logs recorded from real runs', () => {
     const story = 'transition/slash-send-following'
     const log = decodeLog(liftGlideFixture)
 
-    expect(Arr.some(log.frames, (frame) => movedAt(frame) <= -BACKTRACK_PIXELS)).toBe(true)
+    expect(Arr.some(log.frames, (frame) => movedAt(frame) <= -ROW_MOVE_PIXELS)).toBe(true)
     expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
   })
 
@@ -156,12 +177,54 @@ describe('detect, over logs recorded from real runs', () => {
       Arr.drop(1),
       Arr.zip(log.frames),
       Arr.some(
-        ([next, frame]) => movedAt(frame) <= -BACKTRACK_PIXELS && movedAt(next) >= BACKTRACK_PIXELS,
+        ([next, frame]) => movedAt(frame) <= -ROW_MOVE_PIXELS && movedAt(next) >= ROW_MOVE_PIXELS,
       ),
     )
 
     expect(turnsAround).toBe(true)
     expect(keysOf(detect(story, log, expectationOf(story)))).not.toContain('backtrack')
+  })
+
+  it('reports a lift that took a row at its estimate, in the frame it rose', () => {
+    const story = 'transition/slash-send-following'
+    const findings = detect(story, decodeLog(overshootSendFixture), expectationOf(story))
+    const overshoot = findingNamed(findings, 'overshoot')
+
+    expect(keysOf(findings)).toEqual(['overshoot'])
+    expect(overshoot.check).toBe('overshoot')
+    expect(overshoot.firstFrame).toBe(overshoot.lastFrame)
+    expect(overshoot.words).toContain('at least 12 px')
+    expect(overshoot.words).toContain('from 0 to 96 px')
+  })
+
+  it('reports a catch-up that lifted rows estimated past the screen, though they fit it', () => {
+    const story = 'transition/reopen-over-big-gap'
+    const findings = detect(story, decodeLog(overshootCatchUpFixture), expectationOf(story))
+
+    expect(keysOf(findings)).toEqual(['overshoot'])
+    expect(findingNamed(findings, 'overshoot').words).toContain('at least 98 px')
+  })
+
+  it('reports no overshoot over a lift that takes what the row measured', () => {
+    const story = 'transition/slash-send-following'
+    const log = decodeLog(liftMeasuredFixture)
+
+    expect(framesWhereTheLiftRises(log).length).toBeGreaterThan(0)
+    expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
+  })
+
+  it('reports no overshoot where a finger moves every row down as a lift rises', () => {
+    const story = 'transition/slash-send-following'
+    const log = decodeLog(fingerDuringLiftFixture)
+
+    const movedByTheFinger = Arr.filter(
+      framesWhereTheLiftRises(log),
+      (frame) => leastMovedAt(frame) >= ROW_MOVE_PIXELS,
+    )
+
+    expect(movedByTheFinger.length).toBeGreaterThan(0)
+    expect(Arr.every(movedByTheFinger, (frame) => frame.thread?.held === true)).toBe(true)
+    expect(keysOf(detect(story, log, expectationOf(story)))).not.toContain('overshoot')
   })
 
   it('reports a band of the thread with no rows in it during a lift, at its widest frame', () => {

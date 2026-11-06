@@ -9,7 +9,14 @@ import { ArrowDown } from 'lucide-react'
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react'
 import * as React from 'react'
 
-import { departedKeys, heldFrom, liftFor, reachOf, withTheEnd } from '@crook/web/chat/Reveal'
+import {
+  departedKeys,
+  heldFrom,
+  liftFor,
+  pinWaitsForMeasures,
+  reachOf,
+  withTheEnd,
+} from '@crook/web/chat/Reveal'
 import type { LiftReach } from '@crook/web/chat/Reveal'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { RenderCacheScope } from '@crook/web/components/RenderCache'
@@ -61,6 +68,36 @@ const adjustsOnResizeWhile = (
     ? correctsOnlyGrowthAbove
     : undefined
 }
+
+const pinWaits = (
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+  element: HTMLElement,
+  rendered: number,
+): boolean =>
+  pinWaitsForMeasures({
+    rendered,
+    measured: virtualizer.getTotalSize(),
+    scrolled: element.scrollTop,
+    screen: element.clientHeight,
+  })
+
+const useRowMeasure = (
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+  following: React.RefObject<boolean>,
+) =>
+  React.useCallback(
+    (row: HTMLDivElement | null) => {
+      virtualizer.measureElement(row)
+
+      if (row !== null && following.current) {
+        virtualizer.resizeItem(
+          virtualizer.indexFromElement(row),
+          virtualizer.options.measureElement(row, undefined, virtualizer),
+        )
+      }
+    },
+    [virtualizer, following],
+  )
 
 const useOnScrollStop = (stopped: () => void) => {
   const scrolling = React.useRef(false)
@@ -453,6 +490,7 @@ export function Thread({
   })
   const totalSize = virtualizer.getTotalSize()
   const virtualItems = virtualizer.getVirtualItems()
+  const measureRow = useRowMeasure(virtualizer, followingRef)
   const landed = useLanded(virtualItems.length, totalSize)
   const holes = Arr.filter(rows, ({ hole }) => hole === true).length
   const animates = landed && !reduce
@@ -483,11 +521,16 @@ export function Thread({
 
   React.useLayoutEffect(() => {
     const element = viewport.current
+
+    if (element === null || pinWaits(virtualizer, element, totalSize)) {
+      return
+    }
+
     const holeFilled = holes < holesAtPin.current
 
     holesAtPin.current = holes
 
-    if (!followingRef.current || element === null) {
+    if (!followingRef.current) {
       return
     }
 
@@ -567,7 +610,7 @@ export function Thread({
                 return row === undefined ? null : (
                   <div
                     key={virtual.key}
-                    ref={virtualizer.measureElement}
+                    ref={measureRow}
                     data-index={virtual.index}
                     data-row={row.key}
                     className="absolute inset-x-0 top-0 px-4"

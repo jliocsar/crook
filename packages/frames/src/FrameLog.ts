@@ -6,7 +6,7 @@ import * as Schema from 'effect/Schema'
 
 export const STARVED_P90_FRAME_MS = 30
 export const EMPTY_BAND_PIXELS = 20
-export const BACKTRACK_PIXELS = 2
+export const ROW_MOVE_PIXELS = 2
 
 export const Box = Schema.Struct({
   x: Schema.Finite,
@@ -25,6 +25,7 @@ export const ThreadReading = Schema.Struct({
   middle: Schema.Finite,
   bottom: Schema.Finite,
   moved: Schema.Finite,
+  leastMoved: Schema.optionalKey(Schema.Finite),
   held: Schema.Boolean,
 })
 export type ThreadReading = typeof ThreadReading.Type
@@ -98,8 +99,19 @@ export const backtracks = (frame: RecordedFrame, next: RecordedFrame): boolean =
   next.frame === frame.frame + 1 &&
   frame.thread?.held !== true &&
   next.thread?.held !== true &&
-  movedAt(frame) <= -BACKTRACK_PIXELS &&
-  movedAt(next) >= BACKTRACK_PIXELS
+  movedAt(frame) <= -ROW_MOVE_PIXELS &&
+  movedAt(next) >= ROW_MOVE_PIXELS
+
+export const leastMovedAt = (frame: RecordedFrame): number => frame.thread?.leastMoved ?? 0
+
+export const liftAt = (frame: RecordedFrame): number => frame.thread?.lift ?? 0
+
+export const overshoots = (frame: RecordedFrame, next: RecordedFrame): boolean =>
+  next.frame === frame.frame + 1 &&
+  frame.thread?.held !== true &&
+  next.thread?.held !== true &&
+  liftAt(next) - liftAt(frame) >= ROW_MOVE_PIXELS &&
+  leastMovedAt(next) >= ROW_MOVE_PIXELS
 
 export const p90FrameMs = (frames: readonly RecordedFrame[]): number => {
   const mounted = frames.filter((frame) => frame.mounted)

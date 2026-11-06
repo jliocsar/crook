@@ -11,6 +11,7 @@ import {
   lifted,
   liftOf,
   phoneViewport,
+  VIEWPORT_HEIGHT,
 } from '../ThreadRender.tsx'
 
 const ANSWER_HEIGHT = 300
@@ -18,6 +19,8 @@ const TALL_ROW_HEIGHT = 300
 const SHORT_ROW_HEIGHT = 20
 const CACHED_ROWS = 4
 const LANDED_ROWS = 120
+const ROW_GAP = 12
+const EDGE_PADDING = 16
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -37,6 +40,20 @@ describe('Thread under reduced motion', () => {
       expect(fades('text')).toBe(false)
       expect(fades('tool')).toBe(false)
       expect(liftOf()).not.toContain(`${ANSWER_HEIGHT}px`)
+    }),
+  )
+
+  it.effect('pins to what a landed row measures, with no lift', () =>
+    Effect.gen(function* () {
+      const landing = yield* catchUpLands(TALL_ROW_HEIGHT, CACHED_ROWS, SHORT_ROW_HEIGHT, 1)
+
+      expect(lifted()).toBe(0)
+      expect(landing.topOfTheScreen).toBe(
+        CACHED_ROWS * (TALL_ROW_HEIGHT + ROW_GAP) +
+          SHORT_ROW_HEIGHT +
+          2 * EDGE_PADDING -
+          VIEWPORT_HEIGHT,
+      )
     }),
   )
 

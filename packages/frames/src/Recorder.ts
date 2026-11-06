@@ -15,7 +15,7 @@ import {
   UNSEEN_SAMPLE_SELECTOR,
 } from '@crook/frames/Marks'
 import type { MarkDefinition } from '@crook/frames/Marks'
-import { bandsOf, movedSince } from '@crook/frames/ThreadBands'
+import { bandsOf, leastMovedSince, movedSince } from '@crook/frames/ThreadBands'
 
 interface SeenElement {
   readonly box: { x: number; y: number; width: number; height: number }
@@ -192,6 +192,9 @@ const showsContent = (stage: Element, covers: readonly Element[]): boolean => {
   return false
 }
 
+const topsOf = (rows: readonly { readonly key: string; readonly box: DOMRect }[]) =>
+  rows.map((row) => ({ key: row.key, top: row.box.top }))
+
 const readThread = (
   covers: readonly Element[],
   previousTops: ReadonlyMap<string, number>,
@@ -219,10 +222,15 @@ const readThread = (
           top: round(bands.top),
           middle: round(bands.middle),
           bottom: round(bands.bottom),
-          moved: round(
-            movedSince(
+          moved: round(movedSince(previousTops, topsOf(rows))),
+          leastMoved: round(
+            leastMovedSince(
               previousTops,
-              rows.map((row) => ({ key: row.key, top: row.box.top })),
+              topsOf(
+                rows.filter(
+                  (row) => row.box.bottom > viewportBox.top && row.box.top < viewportBox.bottom,
+                ),
+              ),
             ),
           ),
           held,
