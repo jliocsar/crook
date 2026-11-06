@@ -32,6 +32,11 @@ export interface ThreadRow {
   readonly hole?: boolean
 }
 
+interface ContentSize {
+  readonly total: number
+  readonly rows: number
+}
+
 interface Ghost {
   readonly key: string
   readonly start: number
@@ -51,8 +56,11 @@ const ROW_GAP = 12
 
 const ThreadRowBody = React.memo(RowBody)
 
+const endOf = (viewport: HTMLElement, lifted: number): number =>
+  viewport.scrollHeight - lifted - viewport.clientHeight
+
 const isAtBottom = (viewport: HTMLElement, lifted: number): boolean =>
-  viewport.scrollHeight - lifted - viewport.scrollTop - viewport.clientHeight <= FOLLOW_THRESHOLD
+  endOf(viewport, lifted) - viewport.scrollTop <= FOLLOW_THRESHOLD
 
 const correctsOnlyGrowthAbove = (
   item: VirtualItem,
@@ -140,6 +148,11 @@ const useScrollIntent = () => {
 
   const isUserScroll = () => held.current || gestured.current
 
+  const keepsUsersPlace = React.useCallback(
+    () => (held.current || gestured.current) && !pinAsked.current,
+    [],
+  )
+
   const askedPin = React.useCallback(() => {
     pinAsked.current = true
   }, [])
@@ -172,6 +185,7 @@ const useScrollIntent = () => {
       }
     },
     isUserScroll,
+    keepsUsersPlace,
     askedPin,
     settle: (): boolean => {
       const repins = !isUserScroll() || pinAsked.current
@@ -180,6 +194,64 @@ const useScrollIntent = () => {
       pinAsked.current = false
 
       return repins
+    },
+  }
+}
+
+const contentMoved = (seen: React.RefObject<ContentSize>, now: ContentSize): boolean => {
+  const moved = now.total !== seen.current.total || now.rows !== seen.current.rows
+
+  seen.current = now
+
+  return moved
+}
+
+const usePins = (
+  viewport: React.RefObject<HTMLElement | null>,
+  following: React.RefObject<boolean>,
+  lifted: () => number,
+  intent: ReturnType<typeof useScrollIntent>,
+) => {
+  const leftFromEnd = React.useRef(0)
+  const { askedPin, keepsUsersPlace } = intent
+
+  const toBottom = React.useCallback(() => {
+    if (viewport.current !== null) {
+      askedPin()
+      viewport.current.scrollTop = endOf(viewport.current, lifted())
+    }
+  }, [viewport, lifted, askedPin])
+
+  const toWhereTheUserLeftIt = React.useCallback(() => {
+    if (viewport.current !== null) {
+      viewport.current.scrollTop = endOf(viewport.current, lifted()) - leftFromEnd.current
+    }
+  }, [viewport, lifted])
+
+  const pin = React.useCallback(() => {
+    if (keepsUsersPlace()) {
+      toWhereTheUserLeftIt()
+    } else {
+      toBottom()
+    }
+  }, [keepsUsersPlace, toWhereTheUserLeftIt, toBottom])
+
+  return {
+    toBottom,
+    pin,
+    settle: () => {
+      const repins = intent.settle()
+
+      if (following.current) {
+        if (repins) {
+          toBottom()
+        } else {
+          toWhereTheUserLeftIt()
+        }
+      }
+    },
+    scrollHeard: (element: HTMLElement) => {
+      leftFromEnd.current = Math.max(0, endOf(element, lifted()) - element.scrollTop)
     },
   }
 }
@@ -446,6 +518,7 @@ export function Thread({
   const [following, setFollowing] = React.useState(true)
   const followingRef = React.useRef(true)
   const lastTop = React.useRef(0)
+  const contentAtPin = React.useRef({ total: Number.NaN, rows: 0 })
   const holesAtPin = React.useRef(0)
   const intent = useScrollIntent()
   const reduce = useReducedMotion() ?? false
@@ -454,20 +527,8 @@ export function Thread({
   const [, renderReach] = React.useReducer((renders: number) => renders + 1, 0)
 
   const { askedPin } = intent
-
-  const toBottom = React.useCallback(() => {
-    if (viewport.current !== null) {
-      askedPin()
-      viewport.current.scrollTop =
-        viewport.current.scrollHeight - liftNow() - viewport.current.clientHeight
-    }
-  }, [liftNow, askedPin])
-
-  const onScrollStop = useOnScrollStop(() => {
-    if (intent.settle() && followingRef.current) {
-      toBottom()
-    }
-  })
+  const { toBottom, pin, settle, scrollHeard } = usePins(viewport, followingRef, liftNow, intent)
+  const onScrollStop = useOnScrollStop(settle)
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -522,6 +583,8 @@ export function Thread({
   React.useLayoutEffect(() => {
     const element = viewport.current
 
+    const contentChanged = contentMoved(contentAtPin, { total: totalSize, rows: rows.length })
+
     if (element === null || pinWaits(virtualizer, element, totalSize)) {
       return
     }
@@ -530,13 +593,13 @@ export function Thread({
 
     holesAtPin.current = holes
 
-    if (!followingRef.current) {
+    if (!followingRef.current || !contentChanged) {
       return
     }
 
     const before = element.scrollTop
 
-    toBottom()
+    pin()
 
     const grown = element.scrollTop - before
 
@@ -559,7 +622,7 @@ export function Thread({
     totalSize,
     rows.length,
     holes,
-    toBottom,
+    pin,
     animates,
     raise,
     holdReach,
@@ -586,6 +649,7 @@ export function Thread({
 
             lift.pinHeard()
             lastTop.current = top
+            scrollHeard(event.currentTarget)
             intent.scrolled()
 
             if (isAtBottom(event.currentTarget, liftNow())) {

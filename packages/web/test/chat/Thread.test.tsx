@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@effect/vitest'
+import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import { afterEach, beforeEach, vi } from 'vitest'
 
@@ -33,6 +34,8 @@ const RENDERED_ROW_HEIGHT = 120
 const SHORT_ROW_HEIGHT = 20
 const OPENING_ROW_HEIGHTS = [130, 140, 150, 160, 170]
 const OPENING_MEASURE_GAP_MS = 100
+const SCROLL_BEATS = 12
+const SCROLL_BEAT_MS = 50
 
 beforeEach(() => {
   stubMediaQueries([])
@@ -198,6 +201,58 @@ describe('Thread', () => {
 
       expect(opened.top()).toBe(opened.bottom() - NUDGE)
       expect(following()).toBe(true)
+    }),
+  )
+
+  it.effect('lifts only what landed under a finger holding a nudge, and keeps the nudge', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.fingerHoldsAfter(NUDGE)
+      opened.landsBelow(ANSWER_HEIGHT)
+
+      expect(lifted()).toBe(ANSWER_HEIGHT)
+      expect(opened.top()).toBe(opened.bottom() - NUDGE)
+    }),
+  )
+
+  it.effect('keeps a nudge through a row above measuring short, and after the finger lifts', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+
+      yield* wait(SETTLE_MS)
+      opened.fingerHoldsAfter(NUDGE)
+      opened.rowAboveMeasuresShort(SHORT_SCROLL)
+
+      expect(opened.top()).toBe(opened.bottom() - NUDGE)
+
+      opened.fingerLifts()
+      yield* wait(SETTLE_MS)
+
+      expect(opened.top()).toBe(opened.bottom() - NUDGE)
+      expect(lifted()).toBe(0)
+    }),
+  )
+
+  it.effect('lifts nothing when the thread lands with the content unchanged under a scroll', () =>
+    Effect.gen(function* () {
+      const opened = historyOpen()
+      const lifts = liftsWritten()
+
+      yield* Effect.forEach(
+        Arr.range(1, SCROLL_BEATS),
+        () =>
+          Effect.andThen(
+            Effect.sync(() => {
+              opened.correctedUp(1)
+            }),
+            wait(SCROLL_BEAT_MS),
+          ),
+        { discard: true },
+      )
+
+      expect(Math.max(0, ...lifts())).toBe(0)
     }),
   )
 

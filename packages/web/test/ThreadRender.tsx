@@ -328,7 +328,22 @@ export const historyOpen = () => {
       fireEvent.wheel(scrolling)
       movesUp(by)
     },
+    fingerHoldsAfter: (by: number) => {
+      fireEvent.touchStart(scrolling)
+      movesUp(by)
+    },
+    fingerLifts: () => {
+      fireEvent.touchEnd(scrolling)
+    },
     correctedUp: movesUp,
+    landsBelow: (added: number) => {
+      grow(added)
+      rerender(thread([...history, row('landed')], handle))
+    },
+    rowAboveMeasuresShort: (by: number) => {
+      grow(-by)
+      rerender(thread(history.slice(1), handle))
+    },
     pressesLatest: () => {
       fireEvent.click(
         present(
