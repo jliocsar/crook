@@ -71,7 +71,7 @@ one is a module the graph did not ask for.
 :::warning
 `prepare` runs `effect-tsgo patch --oxlint`, which patches the oxlint and TypeScript binaries in
 `node_modules`. Without it the Effect rules do not run. It is not optional and it re-runs on every
-install — do not "simplify" `prepare` down to `husky`.
+install — do not "simplify" `prepare` down to the git config line.
 
 It also validates that `oxlint`, `oxlint-tsgolint` and `@effect/tsgo` are a supported triple, so
 bump the three together. tsgo 0.58 added `effect-tsgo oxlint` and `effect-tsgo tsc`, which run
@@ -82,6 +82,17 @@ Any reinstall reverts the patch, and `prepare` then refuses to redo it because i
 exist — `Unknown plugin: 'effecttsgo'` is what that looks like. Run `bunx effect-tsgo unpatch
 --oxlint` first, then `bun run prepare` (measured, twice).
 :::
+
+The git hooks are plain scripts in `.githooks`, and `prepare` points `core.hooksPath` at them. Husky
+did nothing else we used. Formatting, lint on staged files and the typecheck run on commit; the whole
+repo's lint, the format check and the tests run on push, so a commit stays quick. A Claude Code hook
+refuses the Bash commands that skip them. It drops quoted text first, so a commit message mentioning
+a flag passes.
+
+`core.hooksPath` is one setting shared by every worktree of a repo, relative to each worktree's root.
+Running `prepare` in a worktree whose branch has `.githooks` takes the hooks away from every worktree
+on a branch that doesn't, so while such a branch is out, install there with `--ignore-scripts` and
+run `bunx effect-tsgo patch --oxlint` by hand.
 
 :::warning
 `typescript`, `oxlint`, `oxlint-tsgolint` AND `@effect/tsgo` itself are pinned EXACTLY (no `^`).
