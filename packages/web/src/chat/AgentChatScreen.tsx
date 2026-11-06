@@ -28,8 +28,8 @@ import type {
   ComposerStatus,
   PendingPromptRow,
 } from '@crook/web/chat/ChatCommands'
-import { CatchingUpPill, ChatStatusLine, RunningPill } from '@crook/web/chat/ChatHeader'
-import { firstRunningTreeKey, runningCount } from '@crook/web/chat/ChatItems'
+import { CatchingUpCapsule } from '@crook/web/chat/CatchingUpCapsule'
+import { ChatStatusLine } from '@crook/web/chat/ChatHeader'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
 import {
   chatStatus,
@@ -391,37 +391,24 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         }
         backLabel={backLabel}
         trailing={
-          <>
-            <CatchingUpPill shown={catchingUp && !dimmed} />
-            <RunningPill
-              count={runningCount(items)}
-              onShow={() => {
-                const key = firstRunningTreeKey(items)
-
-                if (Option.isSome(key)) {
-                  thread.current?.scrollToKey(key.value)
-                }
+          hasActions(model) && !closedHere ? (
+            <Button
+              variant="ghost"
+              size="icon-touch"
+              data-slot="chat-actions"
+              aria-label={`Actions for ${title}`}
+              className="text-muted-foreground shrink-0"
+              onClick={() => {
+                openActions(machine, pane, 'chat')
               }}
-            />
-            {hasActions(model) && !closedHere ? (
-              <Button
-                variant="ghost"
-                size="icon-touch"
-                data-slot="chat-actions"
-                aria-label={`Actions for ${title}`}
-                className="text-muted-foreground shrink-0"
-                onClick={() => {
-                  openActions(machine, pane, 'chat')
-                }}
-              >
-                <Ellipsis className="size-5" aria-hidden="true" />
-              </Button>
-            ) : null}
-          </>
+            >
+              <Ellipsis className="size-5" aria-hidden="true" />
+            </Button>
+          ) : null
         }
       />
       <BackgroundContext.Provider value={backgroundContext}>
-        <div {...stateMark(transcriptMachine, state)} className="min-h-0 flex-1">
+        <div {...stateMark(transcriptMachine, state)} className="relative min-h-0 flex-1">
           <Thread
             key={threadEpoch}
             handle={thread}
@@ -429,6 +416,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
             dimmed={dimmed}
             empty={threadContent.empty}
           />
+          <CatchingUpCapsule shown={catchingUp && !dimmed} />
         </div>
       </BackgroundContext.Provider>
       <BackgroundDock work={backgroundWork} />

@@ -229,7 +229,7 @@ describe('a laptop catch-up', () => {
 
       yield* Queue.offerAll(yield* link.transcriptFor(source), [caughtUp(10)])
       yield* eventually(() => {
-        expect(document.querySelector('[data-slot="catching-up-pill"]')).toBeNull()
+        expect(document.querySelector('[data-slot="catching-up-capsule"]')).toBeNull()
       })
       yield* Queue.offerAll(yield* link.transcriptFor(source), [
         chunk(10, 20, [said(10, 'Live after opening.')]),

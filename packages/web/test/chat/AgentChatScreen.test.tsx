@@ -562,7 +562,7 @@ describe('AgentChatScreen', () => {
         new SubagentsChanged({ session: SESSION, subagents: [subagent({ toolUseId: 'toolu_1' })] }),
       ])
 
-      expect(yield* findByRole('button', '1 running')).toBeDefined()
+      expect(yield* findByRole('button', '1 running, show details')).toBeDefined()
 
       yield* click(
         present(

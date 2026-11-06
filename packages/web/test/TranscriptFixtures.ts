@@ -169,6 +169,7 @@ export const subagent = (options: {
   readonly toolUseId: string
   readonly status?: SubagentStatus
   readonly id?: SubagentId
+  readonly background?: boolean
 }) =>
   new Subagent({
     id: options.id ?? REVIEWER,
@@ -178,7 +179,7 @@ export const subagent = (options: {
     toolUseId: Option.some(options.toolUseId),
     parent: Option.none(),
     spawnDepth: 1,
-    background: true,
+    background: options.background ?? true,
     status: options.status ?? 'running',
   })
 

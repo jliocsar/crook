@@ -15,7 +15,7 @@ import {
 import { activityMachine, activityView } from '@crook/web/chat/ActivityMachine'
 import { isUserPrompt, runsIn } from '@crook/web/chat/ChatItems'
 import type { SubagentRun } from '@crook/web/chat/ChatItems'
-import { CatchingUpPill } from '@crook/web/chat/ChatHeader'
+import { CatchingUpCapsule } from '@crook/web/chat/CatchingUpCapsule'
 import { cwdOf, isWatching, titleOf } from '@crook/web/chat/ChatModel'
 import { failureRows, useItemRows, workingRow } from '@crook/web/chat/ChatRows'
 import { ImageViewer } from '@crook/web/chat/Images'
@@ -190,10 +190,10 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
             ),
           })}
           backLabel={`Back to ${parentTitle}`}
-          trailing={<CatchingUpPill shown={catchingUp && !dimmed} />}
         />
-        <div {...stateMark(transcriptMachine, state)} className="min-h-0 flex-1">
+        <div {...stateMark(transcriptMachine, state)} className="relative min-h-0 flex-1">
           <Thread rows={threadContent.rows} dimmed={dimmed} empty={threadContent.empty} />
+          <CatchingUpCapsule shown={catchingUp && !dimmed} />
         </div>
         <div
           data-slot="chat-dock"

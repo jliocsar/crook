@@ -23,7 +23,6 @@ import {
   deriveChat,
   EMPTY_CHAT,
   isUserPrompt,
-  runningCount,
 } from '@crook/web/chat/ChatItems'
 import type { AgentActivity, ChatContext } from '@crook/web/chat/ChatItems'
 import { applyTranscriptEvent, EMPTY_TRANSCRIPT } from '@crook/web/chat/TranscriptState'
@@ -279,7 +278,6 @@ describe('chatItems', () => {
       'you: review',
       'subagents: Review the herd diff running, Check the tests failed',
     ])
-    expect(runningCount(items)).toBe(1)
   })
 
   it('reads a finished subagent as done from its roster entry', () => {
