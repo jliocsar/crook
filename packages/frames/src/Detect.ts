@@ -10,6 +10,7 @@ import {
   bandAt,
   BandPlace,
   EMPTY_BAND_PIXELS,
+  isStarved,
   marksOf,
   shows,
   showsEmptyBand,
@@ -43,7 +44,11 @@ export const Finding = Schema.Struct({
 })
 export type Finding = typeof Finding.Type
 
+const FLASH_MS = 400
+
 export const FLASH_FRAMES = 24
+
+const FRAME_MS = FLASH_MS / FLASH_FRAMES
 
 const first = (run: Run): RecordedFrame => Arr.headNonEmpty(run.frames)
 
@@ -53,6 +58,8 @@ const endOf = (run: Run): number =>
   Option.match(run.after, { onNone: () => last(run).at, onSome: (after) => after.at })
 
 const millisecondsOf = (run: Run): number => Math.round(endOf(run) - first(run).at)
+
+const heldMsOf = (run: Run): number => Math.round(last(run).at - first(run).at + FRAME_MS)
 
 const namesOf = (frame: RecordedFrame): string => {
   const marks = marksOf(frame)
@@ -125,15 +132,16 @@ const flashesOf = (
   frames: readonly RecordedFrame[],
   watchedFrom: number,
   flashFrames: number,
-): readonly Finding[] =>
-  Arr.flatMap(MARKS, ({ mark }) =>
+): readonly Finding[] => {
+  const clockCounts = !isStarved(frames)
+  const isFlash = (run: Run): boolean =>
+    run.frames.length < flashFrames && !(clockCounts && heldMsOf(run) >= FLASH_MS)
+
+  return Arr.flatMap(MARKS, ({ mark }) =>
     pipe(
       runsWhere(frames, (frame) => shows(frame, mark)),
       Arr.filter(
-        (run) =>
-          first(run).frame >= watchedFrom &&
-          run.frames.length < flashFrames &&
-          Option.isSome(run.after),
+        (run) => first(run).frame >= watchedFrom && isFlash(run) && Option.isSome(run.after),
       ),
       Arr.map((run) =>
         findingFromRun(
@@ -141,12 +149,13 @@ const flashesOf = (
           'flash',
           `flash:${mark}`,
           run,
-          `"${mark}" showed for only ${run.frames.length} frames (${millisecondsOf(run)} ms) and went away. A state has to hold ${flashFrames} frames or more, or not show at all.`,
+          `"${mark}" showed for only ${run.frames.length} frames over ${heldMsOf(run)} ms and went away. A state has to hold ${flashFrames} frames or ${FLASH_MS} ms, or not show at all.${clockCounts ? '' : ' This run was starved, so its clock does not count.'}`,
           clearestFrameOf(run, mark),
         ),
       ),
     ),
   )
+}
 
 const pairsOf = (
   story: string,
