@@ -3,6 +3,9 @@
     "always": [],
     "sometimes": ["flash:spinner"]
   },
+  "background/pane-closes": {
+    "always": ["shift:div[chat-dock]"]
+  },
   "transition/clear": {
     "always": ["shift:div[chat-dock]"]
   },

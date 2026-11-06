@@ -963,7 +963,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
       }),
     )
 
-    it.effect('tells the hub when a watch dies of a defect, instead of going quiet', () =>
+    it.effect('tells the hub in words when a watch dies of a defect, instead of going quiet', () =>
       Effect.gen(function* () {
         const state = yield* SubscriptionRef.make(stateOn(Option.some(FIRST_SESSION)))
         const streams = yield* defectiveStreams(state)
@@ -987,10 +987,8 @@ layer(Layer.mergeAll(BunFileSystem.layer, Path.layer), { excludeTestServices: tr
         const [opened, failed] = yield* takeAll(hub.accepted, 2)
 
         expect(opened).toBe(`0 opened ${FIRST_SESSION}`)
-        expect(failed).toContain(
-          `0 failed ${new TranscriptReadFailed({ detail: 'a bug in the crook agent stopped the watch: ' }).message}`,
-        )
-        expect(failed).toContain(LOCATOR_BUG)
+        expect(failed).toBe(`0 failed ${new TranscriptReadFailed({ detail: '' }).message}`)
+        expect(failed).not.toContain(LOCATOR_BUG)
       }),
     )
   },

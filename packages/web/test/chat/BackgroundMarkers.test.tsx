@@ -5,6 +5,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
+import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as Struct from 'effect/Struct'
 import { afterEach, beforeEach, vi } from 'vitest'
 
@@ -73,6 +74,27 @@ afterEach(() => {
 })
 
 describe('background work in the chat', () => {
+  it.effect('stops counting work as running when the pane it ran in closes', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(
+        CHAT,
+        liveWith(herd([machine(LAPTOP, [agent('w1:p1', 'working')])])),
+      )
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        launched,
+        new BackgroundChanged({ session: SESSION, tasks: [devServer('running')], activity: [] }),
+      ])
+      yield* Effect.promise(() => screen.findByText('1 running'))
+      yield* SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])])))
+      yield* Effect.promise(() => screen.findByText('This pane closed'))
+
+      expect(screen.queryByText('1 running')).toBeNull()
+    }),
+  )
+
   it.effect('marks where a background shell started and opens it from there', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(

@@ -4,7 +4,7 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import type * as React from 'react'
 
 import type { NotificationSettings } from '@crook/domain/Notifications'
-import { HarkNotConfigured } from '@crook/protocol/Hark'
+import { NO_TOKEN_SETUP } from '@crook/protocol/Hark'
 import { failureMessage } from '@crook/web/atoms/ActionFailure'
 import { ActionFailure } from '@crook/web/components/ActionFailure'
 import { Dimmed } from '@crook/web/components/Dimmed'
@@ -29,7 +29,7 @@ const SHARED_NOTE = 'Saved on the hub, so every device you log in on shares them
 const PRIVACY_NOTE =
   'Notifications name the agent and the machine, never what Claude wrote. Hark delivers them, so they open nothing in crook.'
 
-const NO_TOKEN_NOTE = `${new HarkNotConfigured().message} These switches are saved meanwhile, and apply once it has one.`
+const NO_TOKEN_NOTE = `${NO_TOKEN_SETUP} These switches are saved meanwhile, and apply once it has one.`
 
 const TEST_LABEL = {
   idle: 'Send a test',

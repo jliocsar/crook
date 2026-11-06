@@ -41,6 +41,7 @@ const READ_FAILED = new TranscriptReadFailed({ detail: 'disk unplugged' })
 const VIEWPORT = '[data-slot="conversation-viewport"]'
 const COMMAND_TIMEOUT_SECONDS = 45
 const SETTLE_BEFORE_SCROLL_MS = 150
+const OPENING_STATE_HOLD_MS = 800
 
 const LONG_CHAT_TITLE =
   'Find out why the reconnect banner flashes on every foreground and write down what it would take to stop it'
@@ -214,10 +215,18 @@ export const CHAT_STORIES: readonly StoryMaker[] = [
     settle: ({ link }) =>
       Effect.gen(function* () {
         yield* seesText('The quiet redial')
+        yield* pause(OPENING_STATE_HOLD_MS)
         yield* SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])])))
         yield* clicks('Start Claude here again')
       }),
     shows: { text: 'the command may still run' },
+  }),
+  chatStory({
+    slug: 'untitled',
+    title: 'Chat, a pane with no title',
+    row: agent('w1:p1', 'idle', { title: '', claudeSession: SESSION }),
+    events: CONVERSATION,
+    shows: { all: [{ text: 'The quiet redial' }, { absent: 'w1:p1' }] },
   }),
   chatStory({
     slug: 'not-claude',

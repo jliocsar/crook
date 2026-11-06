@@ -5,6 +5,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
+import * as Logger from 'effect/Logger'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
@@ -443,6 +444,28 @@ it.effect('sends a labels-only test, and says when no phone took it', () =>
     expect(noDevice).toEqual(new HarkReachedNoDevice())
   }).pipe(Effect.scoped),
 )
+
+it.effect('logs what Hark said when a test fails, since the phone is only told in words', () => {
+  const logged: string[] = []
+
+  return Effect.gen(function* () {
+    const { start } = yield* withNotifier(() => ({ status: 401, body: { error: 'token revoked' } }))
+    const refused = yield* Effect.flip((yield* start).notifier.sendTest)
+
+    expect(refused.message).not.toContain('401')
+    expect(logged.join('\n')).toContain('401')
+  }).pipe(
+    Effect.provideService(
+      Logger.CurrentLoggers,
+      new Set([
+        Logger.make(({ message }) => {
+          logged.push(String(message))
+        }),
+      ]),
+    ),
+    Effect.scoped,
+  )
+})
 
 it.effect('starts without a token, sends nothing and says it is not configured', () =>
   Effect.gen(function* () {

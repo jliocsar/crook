@@ -7,20 +7,25 @@ const STATUS_FORBIDDEN = 403
 
 export const STATUS_NO_DEVICE_ACCEPTED = 502
 
+const NO_TOKEN =
+  'The hub has no Hark token, so it sends no notifications, approvals or Live Activity.'
+
 const HARK_REQUIRED_SCOPES =
   'notifications:send, interactions:create, interactions:read and activities:write'
+
+export const NO_TOKEN_SETUP = `${NO_TOKEN} Set CROOK_HUB_HARK_TOKEN on the hub to a Hark agent token with the ${HARK_REQUIRED_SCOPES} scopes, then restart the hub.`
 
 const refusalHint = (status: number) =>
   Match.value(status).pipe(
     Match.when(
       STATUS_UNAUTHORIZED,
       () =>
-        'The token is unknown, revoked or expired: make a new agent token on hark.ryan.ceo and set CROOK_HUB_HARK_TOKEN on the hub to it.',
+        'The token is unknown, revoked or expired: make a new agent token on hark.ryan.ceo and give it to the hub.',
     ),
     Match.when(
       STATUS_FORBIDDEN,
       () =>
-        `The token lacks a scope the hub needs: make a new agent token with ${HARK_REQUIRED_SCOPES}, and set CROOK_HUB_HARK_TOKEN on the hub to it.`,
+        `The token lacks a scope the hub needs: make a new agent token with ${HARK_REQUIRED_SCOPES}, and give it to the hub.`,
     ),
     Match.when(
       STATUS_NO_DEVICE_ACCEPTED,
@@ -41,7 +46,7 @@ export class HarkNotConfigured extends Schema.TaggedError<HarkNotConfigured>()(
   {},
 ) {
   override get message(): string {
-    return `The hub has no Hark token, so it sends no notifications, approvals or Live Activity. Set CROOK_HUB_HARK_TOKEN on the hub to a Hark agent token with the ${HARK_REQUIRED_SCOPES} scopes, then restart the hub.`
+    return `${NO_TOKEN} Give the hub a Hark agent token, then restart it.`
   }
 }
 
@@ -50,7 +55,7 @@ export class HarkRefused extends Schema.TaggedError<HarkRefused>()('HarkRefused'
   explanation: Schema.OptionFromNullOr(Schema.String),
 }) {
   override get message(): string {
-    return `Hark refused the request with status ${this.status}${quoted(this.explanation)}. ${refusalHint(this.status)}`
+    return `Hark refused the request. ${refusalHint(this.status)}`
   }
 }
 
@@ -72,7 +77,7 @@ export class HarkServerFailed extends Schema.TaggedError<HarkServerFailed>()('Ha
   explanation: Schema.OptionFromNullOr(Schema.String),
 }) {
   override get message(): string {
-    return `Hark failed on its side with status ${this.status}${quoted(this.explanation)}. The hub tries its notifications again later; for a test, try again in a few minutes.`
+    return `Hark failed on its side. The hub tries its notifications again later; for a test, try again in a few minutes.`
   }
 }
 
@@ -81,7 +86,7 @@ export class HarkStillProcessing extends Schema.TaggedError<HarkStillProcessing>
   {},
 ) {
   override get message(): string {
-    return 'Hark is still processing an identical earlier request with the same idempotency key, so the hub asks again on its next turn.'
+    return 'Hark is still working on this same request, so the hub asks again on its next turn.'
   }
 }
 
@@ -89,7 +94,7 @@ export class HarkUnreachable extends Schema.TaggedError<HarkUnreachable>()('Hark
   detail: Schema.String,
 }) {
   override get message(): string {
-    return `The hub could not reach Hark: ${this.detail}. Check the hub's network, then try again.`
+    return "The hub could not reach Hark. Check the hub's network, then try again."
   }
 }
 
@@ -98,7 +103,7 @@ export class HarkAnswerUnreadable extends Schema.TaggedError<HarkAnswerUnreadabl
   { detail: Schema.String },
 ) {
   override get message(): string {
-    return `Hark answered with something the hub cannot read: ${this.detail}. Hark's API may have changed; check its OpenAPI document against this hub.`
+    return "Hark answered with something the hub cannot read. Hark's API may have changed; the hub's log says what it answered."
   }
 }
 
@@ -124,3 +129,22 @@ export type HarkFailure = typeof HarkFailure.Type
 
 export const TestNotificationFailure = Schema.Union([...HarkFailure.members, HarkReachedNoDevice])
 export type TestNotificationFailure = typeof TestNotificationFailure.Type
+
+const tokenFix = (status: number) =>
+  status === STATUS_UNAUTHORIZED || status === STATUS_FORBIDDEN
+    ? ' The hub reads its token from CROOK_HUB_HARK_TOKEN.'
+    : ''
+
+export const harkFailureForTheLog = (failure: TestNotificationFailure): string =>
+  Match.value(failure).pipe(
+    Match.tags({
+      HarkNotConfigured: () => NO_TOKEN_SETUP,
+      HarkRefused: (refused) =>
+        `${refused.message} Hark answered status ${refused.status}${quoted(refused.explanation)}.${tokenFix(refused.status)}`,
+      HarkServerFailed: (failed) =>
+        `${failed.message} Hark answered status ${failed.status}${quoted(failed.explanation)}.`,
+      HarkUnreachable: (unreachable) => `${unreachable.message} (${unreachable.detail})`,
+      HarkAnswerUnreadable: (unreadable) => `${unreadable.message} (${unreadable.detail})`,
+    }),
+    Match.orElse((other) => other.message),
+  )

@@ -80,6 +80,7 @@ const jobsAt =
       ),
       runs,
       now,
+      paneClosed: false,
     })
 
 const renderDock = (

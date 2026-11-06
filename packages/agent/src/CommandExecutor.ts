@@ -47,6 +47,7 @@ import {
   HerdrRefusedCommand,
   HerdrUnavailable,
   PaneNotAgent,
+  commandFailureForTheLog,
 } from '@crook/protocol/Commands'
 
 interface Execution {
@@ -85,6 +86,12 @@ const inputDelivered = (row: AgentRow): CommandReceipt =>
 
 const refusedCommand = (refused: HerdrPaneBusy | HerdrRequestRejected) =>
   Effect.fail(new HerdrRefusedCommand({ code: refused.code, detail: refused.detail }))
+
+const logWhatThePhoneIsNotTold = (failure: AgentCommandFailure) =>
+  Option.match(commandFailureForTheLog(failure), {
+    onNone: () => Effect.void,
+    onSome: (line) => Effect.logWarning(line),
+  })
 
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
@@ -263,6 +270,7 @@ const make = Effect.gen(function* () {
   ) {
     return yield* Cache.get(outcomes, { key, command }).pipe(
       Effect.flatMap(Effect.fromResult),
+      Effect.tapError(logWhatThePhoneIsNotTold),
       Effect.tapErrorTag(
         [
           'CommandDeliveryUnknown',

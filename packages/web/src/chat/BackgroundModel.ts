@@ -7,6 +7,7 @@ import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
+import * as Struct from 'effect/Struct'
 
 import type {
   BackgroundTask,
@@ -400,10 +401,16 @@ export const lastSeen = (job: BackgroundJob, now: DateTime.Utc): string =>
 
 export const isRoomy = (chips: readonly BackgroundJob[]): boolean => chips.length <= ROOMY_CHIPS
 
+const unconfirmedOnceClosed = (job: BackgroundJob): BackgroundJob =>
+  job.state === 'running'
+    ? new BackgroundJob(Struct.evolve(job, { state: (): JobState => 'unconfirmed' }))
+    : job
+
 export const backgroundJobs = (options: {
   readonly background: Option.Option<BackgroundChanged>
   readonly runs: readonly DockRun[]
   readonly now: DateTime.Utc
+  readonly paneClosed: boolean
 }): readonly BackgroundJob[] => {
   const activities = HashMap.fromIterable(
     Arr.map(
@@ -416,10 +423,12 @@ export const backgroundJobs = (options: {
     onSome: (found) => found.tasks,
   })
 
-  return [
+  const jobs = [
     ...Arr.map(options.runs, (run) => runJob(run, activities)),
     ...Arr.map(tasks, (task) => taskJob(task, options.now)),
   ]
+
+  return options.paneClosed ? Arr.map(jobs, unconfirmedOnceClosed) : jobs
 }
 
 export const dockOf = (jobs: readonly BackgroundJob[], now: DateTime.Utc): DockModel => {

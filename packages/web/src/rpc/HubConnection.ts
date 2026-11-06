@@ -92,10 +92,10 @@ const PLAIN_SOCKET_PROTOCOL = 'ws:'
 
 export class HubConnectionLost extends Schema.TaggedError<HubConnectionLost>()(
   'HubConnectionLost',
-  { detail: Schema.String },
+  {},
 ) {
   override get message(): string {
-    return `The connection to the hub failed (${this.detail}). crook reconnects on its own; if it keeps failing, check that the hub is running and reachable at this address.`
+    return 'The connection to the hub failed. crook reconnects on its own; if it keeps failing, check that the hub is running and reachable at this address.'
   }
 }
 
@@ -120,19 +120,17 @@ export const hubSocketUrl = (page: URL): URL => socketUrlOnPage(CLIENT_PATH, pag
 
 export const agentSocketUrl = (page: URL): URL => socketUrlOnPage(AGENT_PATH, page)
 
-const connectionLost = (error: RpcClientError) => new HubConnectionLost({ detail: error.message })
-
 const callDefected = (cause: unknown) => new HubCallDefected({ cause })
 
 const hubCall = <Success, Failure>(call: Effect.Effect<Success, Failure | RpcClientError>) =>
   call.pipe(
-    Effect.catchIf(Schema.is(RpcClientError), (error) => Effect.fail(connectionLost(error))),
+    Effect.catchIf(Schema.is(RpcClientError), () => Effect.fail(new HubConnectionLost())),
     Effect.catchDefect((cause) => Effect.fail(callDefected(cause))),
   )
 
 const hubStream = <Success, Failure>(stream: Stream.Stream<Success, Failure | RpcClientError>) =>
   stream.pipe(
-    Stream.catchIf(Schema.is(RpcClientError), (error) => Stream.fail(connectionLost(error))),
+    Stream.catchIf(Schema.is(RpcClientError), () => Stream.fail(new HubConnectionLost())),
     Stream.catchDefect((cause) => Stream.fail(callDefected(cause))),
   )
 

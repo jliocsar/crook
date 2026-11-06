@@ -296,7 +296,7 @@ The Agents tab: every agent on every machine, one section per machine.
   - line 1, where it runs: `workspace / tab` in 12/16, muted, with the workspace at
     `foreground/70` and 500. A pinned card shows a muted pin icon on the right.
   - line 2: the status icon, then the title in the display font (17/24, `-0.01em`; 620 when it
-    needs you, 500 otherwise). A title herdr doesn't know falls back to the pane id.
+    needs you, 500 otherwise). A title herdr doesn't know reads "Chat", here, in the sheet and in the chat's header alike, never the pane id.
   - line 3: the status pill, then the branch in plain mono 12px, muted, then the running subagent
     count: up to three 5px `bg-primary` dots and the number, in mono 12px. The count shows only
     while one runs, and only from an agent that publishes it.
@@ -822,7 +822,9 @@ Unmeasured knobs, picked in the prototype; settle them on the phone: the 1.5s "B
   It's fetched with credentials, because the exe.dev proxy guards every path.
 - **Notifications**: the title is the agent's title, so each agent threads on its own. The body
   is a verb and where it runs: "Wants to run Bash · laptop / crook", "Has a question · desk /
-  notes", "Finished · laptop / crook". All go into a `crook` project in Hark's inbox.
+  notes", "Finished · laptop / crook". An MCP tool reads in words here, in the Live Activity and on
+  the card: "Wants to run send message from plannotator", and code mode's one tool "code mode". All
+  go into a `crook` project in Hark's inbox.
 - **The Live Activity**: the title is "crook". The status is the herd in one line: "1 needs
   you · 2 working", "3 working", "All done". The detail is the agent that has waited longest
   ("Prototype the herd screen wants Bash · laptop"), or the latest working one. The symbol is

@@ -37,6 +37,7 @@ const jobsAt = (tasks: BackgroundChanged['tasks']) => (now: DateTime.Utc) =>
     background: Option.some(new BackgroundChanged({ session: SESSION, tasks, activity: [] })),
     runs: [],
     now,
+    paneClosed: false,
   })
 
 beforeEach(() => {

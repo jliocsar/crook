@@ -30,7 +30,7 @@ export class TranscriptReadFailed extends Schema.TaggedError<TranscriptReadFaile
   { detail: Schema.String },
 ) {
   override get message(): string {
-    return `The agent could not read this transcript: ${this.detail}`
+    return "The agent could not read this transcript. Try again; if it keeps failing, the agent's log on that machine says why."
   }
 }
 
@@ -39,7 +39,7 @@ export class TranscriptResumeRejected extends Schema.TaggedError<TranscriptResum
   { detail: Schema.String },
 ) {
   override get message(): string {
-    return `The transcript cannot resume where this screen left off: ${this.detail}`
+    return 'The transcript cannot resume where this screen left off. Try again to read it from the start.'
   }
 }
 
@@ -48,7 +48,7 @@ export class TranscriptSessionRejected extends Schema.TaggedError<TranscriptSess
   { session: ClaudeSessionId },
 ) {
   override get message(): string {
-    return `"${this.session}" is not a Claude session id the agent will look up: it only reads ids made of letters, digits and dashes. Open the chat from the herd again.`
+    return 'The agent will not look up this session: it only reads ids made of letters, digits and dashes. Open the chat from the herd again.'
   }
 }
 

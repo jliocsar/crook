@@ -39,9 +39,8 @@ const EVERYONE = liveWith(herd([laptopWith([porting, wiring, banner])]))
 const REST = liveWith(herd([laptopWith([wiring, banner])]))
 const PORTING_CHAT = '/m/laptop/p/w1%3Ap1'
 
-const openSheet = ({ registry }: LinkStage, pane: AgentRow['pane'] = porting.pane) =>
+const openSheetOn = (registry: LinkStage['registry'], pane: AgentRow['pane']) =>
   Effect.gen(function* () {
-    yield* seesText('Port the herd screen')
     yield* Effect.sync(() => {
       registry.set(
         agentActionsAtom,
@@ -53,6 +52,9 @@ const openSheet = ({ registry }: LinkStage, pane: AgentRow['pane'] = porting.pan
     })
     yield* element('[role="dialog"]')
   })
+
+const openSheet = ({ registry }: LinkStage, pane: AgentRow['pane'] = porting.pane) =>
+  Effect.andThen(seesText('Port the herd screen'), openSheetOn(registry, pane))
 
 const closedPane = Exit.succeed(new PaneClosed({ pane: porting.pane }))
 
@@ -83,6 +85,14 @@ export const ACTIONS_STORIES: readonly StoryMaker[] = [
     title: 'Actions sheet, a pane crook did not make',
     settle: (stage) => openSheet(stage, wiring.pane),
     shows: { text: "crook didn't open this pane" },
+  }),
+  linkStory({
+    slug: 'untitled',
+    title: 'Actions sheet, a pane with no title',
+    path: AGENTS_PATH,
+    link: liveWith(herd([laptopWith([agent('w1:p1', 'idle', { title: '' })])])),
+    settle: ({ registry }) => openSheetOn(registry, porting.pane),
+    shows: { all: [{ selector: '[role="dialog"]' }, { absent: 'w1:p1' }] },
   }),
   linkStory({
     slug: 'cannot-act',

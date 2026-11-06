@@ -11,7 +11,7 @@ import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdView } from '@crook/domain/HerdView'
 import { defaultNotificationPrefs, NotificationSettings } from '@crook/domain/Notifications'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
-import { HarkNotConfigured, HarkReachedNoDevice } from '@crook/protocol/Hark'
+import { HarkReachedNoDevice, NO_TOKEN_SETUP } from '@crook/protocol/Hark'
 import { HubCallDefected } from '@crook/web/rpc/HubConnection'
 import { UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 import { LogOutRefused } from '@crook/web/rpc/SessionCheck'
@@ -197,7 +197,7 @@ describe('SettingsScreen', () => {
       const notice = yield* Effect.promise(() => screen.findByRole('note'))
 
       expect(within(notice).getByText('Notifications are off')).toBeDefined()
-      expect(notice.textContent).toContain(new HarkNotConfigured().message)
+      expect(notice.textContent).toContain(NO_TOKEN_SETUP)
       expect(testButton().getAttribute('aria-disabled')).toBe('true')
       expect(switchOf('Approvals').hasAttribute('data-disabled')).toBe(false)
 

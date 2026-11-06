@@ -6,7 +6,7 @@ import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import { AgentStatus } from '@crook/domain/AgentStatus'
-import { RunCommand, PermissionAsk } from '@crook/domain/Ask'
+import { RunCommand, PermissionAsk, UseTool } from '@crook/domain/Ask'
 import { AskId, MachineId } from '@crook/domain/Ids'
 import { HubStorageFailed } from '@crook/protocol/ClientApi'
 import { ANNOUNCED } from '@crook/web/rpc/HubLinkState'
@@ -53,6 +53,17 @@ const lintAsk = new PermissionAsk({
   options: [],
   dialog: Option.none(),
 })
+
+const toolAsk = (tool: string) =>
+  new PermissionAsk({
+    id: AskId.make(`toolu_${tool}`),
+    source: 'hook',
+    tool,
+    plugin: Option.none(),
+    action: new UseTool({ input: {} }),
+    options: [],
+    dialog: Option.none(),
+  })
 
 const keptRows = [
   agent('w1:p1', 'working', { title: KEPT_TITLE, secondsAgo: 90 }),
@@ -326,6 +337,35 @@ export const HERD_STORIES: readonly StoryMaker[] = [
       ]),
     ),
     shows: { text: 'bun run lint' },
+  }),
+  herdStory({
+    slug: 'card-ask-mcp',
+    title: 'Agent card, what an MCP tool asks',
+    link: liveWith(
+      herd([
+        machine(LAPTOP, [
+          agent('w1:p1', 'blocked', {
+            title: 'Send the review',
+            ask: toolAsk('mcp__plannotator__send_message'),
+            secondsAgo: 30,
+          }),
+          agent('w1:p2', 'blocked', {
+            title: 'Probe the socket',
+            ask: toolAsk('mcp__codemode__run'),
+            secondsAgo: 40,
+          }),
+        ]),
+      ]),
+    ),
+    shows: {
+      all: [{ text: 'send message from plannotator' }, { text: 'code mode' }, { absent: 'mcp__' }],
+    },
+  }),
+  herdStory({
+    slug: 'card-untitled',
+    title: 'Agent card, a pane with no title',
+    link: liveWith(herd([machine(LAPTOP, [agent('w1:p1', 'working', { title: '' })])])),
+    shows: { all: [{ selector: '[data-slot="agent-title"]' }, { absent: 'w1:p1' }] },
   }),
   herdStory({
     slug: 'card-subagents',

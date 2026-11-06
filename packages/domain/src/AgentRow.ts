@@ -12,6 +12,8 @@ export type SeenMark = Pick<AgentRow, 'terminal' | 'stateChangeSeq'>
 
 type SettledStatus = Pick<AgentRow, 'status' | 'statusChangedAt'>
 
+export const UNTITLED_CHAT = 'Chat'
+
 export const StateChangeSeq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
 export const SubagentCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
@@ -59,11 +61,11 @@ export const isSameSeenMark: Equivalence.Equivalence<SeenMark> = Equivalence.Str
 
 export const agentTitle = (row: AgentRow): string => Option.getOrElse(row.label, () => row.title)
 
-export const agentTitleOrPane = (row: AgentRow): string =>
+export const agentTitleOrChat = (row: AgentRow): string =>
   pipe(
     agentTitle(row),
     Option.liftPredicate(Str.isNonEmpty),
-    Option.getOrElse(() => row.pane),
+    Option.getOrElse(() => UNTITLED_CHAT),
   )
 
 export const pendingAskSummary = (row: AgentRow): Option.Option<string> =>

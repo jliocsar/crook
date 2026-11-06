@@ -6,6 +6,7 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
+import * as Logger from 'effect/Logger'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as Queue from 'effect/Queue'
@@ -224,6 +225,35 @@ it.effect('passes a herdr refusal through and sends again on retry', () =>
     expect(yield* sent).toHaveLength(2)
   }),
 )
+
+it.effect('tells the phone a refusal in words and keeps what herdr said for the agent log', () => {
+  const logged: string[] = []
+
+  return Effect.gen(function* () {
+    const blocked = scriptedRejection(
+      AgentPromptMethod,
+      'agent_blocked',
+      'agent w1:p1 is waiting at an approval dialog',
+    )
+    const { executor } = yield* startExecutor([blocked])
+    const refused = yield* executor.execute(FIRST_ACTION, continuePrompt).pipe(Effect.flip)
+    const lines = logged.join('\n')
+
+    expect(refused.message).not.toContain('agent_blocked')
+    expect(refused.message).not.toContain('w1:p1')
+    expect(lines).toContain('agent_blocked')
+    expect(lines).toContain('waiting at an approval dialog')
+  }).pipe(
+    Effect.provideService(
+      Logger.CurrentLoggers,
+      new Set([
+        Logger.make(({ message }) => {
+          logged.push(String(message))
+        }),
+      ]),
+    ),
+  )
+})
 
 describe('a prompt while Claude waits on the laptop', () => {
   const inSession = machineStateWith([agentRow({ claudeSession: Option.some(SESSION) })])

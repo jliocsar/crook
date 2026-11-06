@@ -3,11 +3,13 @@ import * as DateTime from 'effect/DateTime'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Option from 'effect/Option'
+import * as Struct from 'effect/Struct'
 
 import { AgentRow, StatusBeforeHandoff } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { MachineId, PaneId, TabId, TerminalId, WorkspaceId } from '@crook/domain/Ids'
 import { defaultNotificationPrefs } from '@crook/domain/Notifications'
+import { PermissionAsk } from '@crook/domain/Ask'
 import { AskId } from '@crook/domain/Ids'
 import { HarkId } from '@crook/hub/HarkClient'
 import {
@@ -311,6 +313,22 @@ describe('approvals', () => {
     expect(idempotencyKeyOf(approval)).toEqual(
       Option.some('crook/laptop/w1:p1/term_1/7/approvals/toolu_1'),
     )
+  })
+
+  it('names an MCP tool in words, and an agent with no title as a chat, never its pane id', () => {
+    const asking = rowWith('blocked', 7, {
+      title: '',
+      ask: Option.some(
+        new PermissionAsk(
+          Struct.evolve(bashAsk('toolu_1'), { tool: () => 'mcp__plannotator__send_message' }),
+        ),
+      ),
+    })
+    const raised = raisedBetween(stateWith([rowWith('working', 6)]), stateWith([asking]), 'laptop')
+
+    expect(raised.map((wanted) => [wanted.title, wanted.body])).toEqual([
+      ['Chat', 'Wants to run send message from plannotator · laptop / crook'],
+    ])
   })
 
   it('keeps an approval while the agent waits on it, seen in crook or not', () => {

@@ -1,5 +1,4 @@
 import * as Effect from 'effect/Effect'
-import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { SubagentsChanged } from '@crook/domain/Transcript'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
 
@@ -177,14 +176,11 @@ export const SUBAGENT_STORIES: readonly StoryMaker[] = [
         { text: 'pane closed' },
         { absent: 'failed' },
         { selector: '[data-run][data-status="pane closed"]' },
+        { absent: '1 running' },
       ],
     },
+    link: liveWith(herd([machine(LAPTOP, [])])),
     own: REVIEW_LINES,
-    settle: ({ link }) =>
-      Effect.andThen(
-        seesText('Two risks found.'),
-        SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])]))),
-      ),
   }),
   story({
     slug: 'away',

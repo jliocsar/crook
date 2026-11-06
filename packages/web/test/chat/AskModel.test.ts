@@ -32,7 +32,6 @@ import {
   askTitle,
   isAnswerUnderway,
   permissionButtons,
-  toolName,
   withAlwaysNotes,
   withoutAskedCall,
 } from '@crook/web/chat/AskModel'
@@ -82,15 +81,8 @@ describe('askTitle', () => {
   })
 })
 
-describe('toolName', () => {
-  it('reads an MCP tool as its name and its server, and leaves any other tool alone', () => {
-    expect(toolName('mcp__plannotator__send_message')).toBe('send message from plannotator')
-    expect(toolName('mcp__claude_ai_Claude_Docs__batch')).toBe('batch from claude ai Claude Docs')
-    expect(toolName('mcp__plugin_paper-desktop_paper__get_guide')).toBe('get guide from paper')
-    expect(toolName('WebFetch')).toBe('WebFetch')
-  })
-
-  it('titles an ask with it', () => {
+describe('an MCP tool in an ask', () => {
+  it('titles the ask in words', () => {
     const ask = new PermissionAsk({
       id: ASK,
       source: 'hook',

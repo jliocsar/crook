@@ -7,6 +7,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
+import * as Logger from 'effect/Logger'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
@@ -22,6 +23,7 @@ import {
   HarkId,
   HarkNotification,
   makeTurns,
+  pauseOrGiveUp,
 } from '@crook/hub/HarkClient'
 import {
   HarkAnswerUnreadable,
@@ -31,6 +33,7 @@ import {
   HarkServerFailed,
   HarkStillProcessing,
   HarkUnreachable,
+  harkFailureForTheLog,
 } from '@crook/protocol/Hark'
 
 import {
@@ -55,6 +58,13 @@ const FINISHED = new HarkNotification({
 })
 
 const NOTIFICATION_ID = HarkId.make('anot_7MFuml')
+
+const rememberingLog = (lines: string[]) =>
+  new Set([
+    Logger.make(({ message }) => {
+      lines.push(String(message))
+    }),
+  ])
 
 const withHarkClient = Effect.fn('withHarkClient')(function* (
   script: HarkScript,
@@ -221,7 +231,8 @@ it.effect('names the notification Hark created when its answer cannot be read', 
     const failure = yield* Effect.flip(client.send(FINISHED))
 
     expect(failure).toBeInstanceOf(HarkAnswerUnreadable)
-    expect(failure.message).toContain('anot_7MFuml')
+    expect(harkFailureForTheLog(failure)).toContain('anot_7MFuml')
+    expect(failure.message).not.toContain('anot_7MFuml')
   }).pipe(Effect.scoped),
 )
 
@@ -232,10 +243,42 @@ it.effect('starts without a token, disabled, and says how to enable it', () =>
 
     expect(client.delivery).toBe('noToken')
     expect(failure).toEqual(new HarkNotConfigured())
-    expect(failure.message).toContain('CROOK_HUB_HARK_TOKEN')
+    expect(failure.message).not.toContain('CROOK_HUB_HARK_TOKEN')
     expect(yield* Queue.size(calls)).toBe(0)
   }).pipe(Effect.scoped),
 )
+
+it.effect('names the setting in the hub log as it starts without a token', () => {
+  const logged: string[] = []
+
+  return Effect.gen(function* () {
+    yield* withHarkClient(acceptingHark, Option.none())
+
+    expect(logged.join('\n')).toContain('CROOK_HUB_HARK_TOKEN')
+  }).pipe(Effect.provideService(Logger.CurrentLoggers, rememberingLog(logged)), Effect.scoped)
+})
+
+it.effect('logs what Hark said and what the phone is not told, when it gives up or retries', () => {
+  const logged: string[] = []
+  const refused = new HarkRefused({ status: 401, explanation: Option.some('token revoked') })
+  const unreachable = new HarkUnreachable({ detail: 'connection reset' })
+
+  return Effect.gen(function* () {
+    yield* pauseOrGiveUp('a test', refused)
+
+    const pausing = yield* Effect.forkChild(pauseOrGiveUp('a test', unreachable), {
+      startImmediately: true,
+    })
+
+    yield* Fiber.interrupt(pausing)
+
+    const lines = logged.join('\n')
+
+    expect(lines).toContain('token revoked')
+    expect(lines).toContain('CROOK_HUB_HARK_TOKEN')
+    expect(lines).toContain('connection reset')
+  }).pipe(Effect.provideService(Logger.CurrentLoggers, rememberingLog(logged)))
+})
 
 it.effect('spaces its requests so a minute never holds more than Hark allows', () =>
   Effect.gen(function* () {

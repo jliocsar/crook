@@ -31,6 +31,7 @@ import {
   HarkStillProcessing,
   HarkUnreachable,
   STATUS_NO_DEVICE_ACCEPTED,
+  harkFailureForTheLog,
 } from '@crook/protocol/Hark'
 
 export type HarkApprovalState = 'pending' | 'approved' | 'denied' | 'closed'
@@ -137,12 +138,12 @@ export const pauseOrGiveUp = (
 ): Effect.Effect<AfterHarkFailure> =>
   Option.match(pauseFor(failure), {
     onNone: () =>
-      Effect.logError(`The hub gave up on ${what}: ${failure.message}`).pipe(
+      Effect.logError(`The hub gave up on ${what}: ${harkFailureForTheLog(failure)}`).pipe(
         Effect.as<AfterHarkFailure>('gaveUp'),
       ),
     onSome: (pause) =>
       Effect.logWarning(
-        `The hub retries ${what} in ${Duration.format(pause)}: ${failure.message}`,
+        `The hub retries ${what} in ${Duration.format(pause)}: ${harkFailureForTheLog(failure)}`,
       ).pipe(Effect.andThen(Effect.sleep(pause)), Effect.as<AfterHarkFailure>('retry')),
   })
 
@@ -584,7 +585,7 @@ const connected = Effect.fn('HarkClient.connected')(function* (token: Redacted.R
 const notConfigured = Effect.gen(function* () {
   const failure = new HarkNotConfigured()
 
-  yield* Effect.logWarning(failure.message)
+  yield* Effect.logWarning(harkFailureForTheLog(failure))
 
   const fail = () => Effect.fail(failure)
 

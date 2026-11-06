@@ -5,7 +5,7 @@ import { Pin } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type * as React from 'react'
 
-import { agentTitleOrPane } from '@crook/domain/AgentRow'
+import { agentTitleOrChat } from '@crook/domain/AgentRow'
 import { AgentStatusIcon } from '@crook/web/herd/AgentStatusIcon'
 import { AgentStatusPill } from '@crook/web/herd/AgentStatusPill'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
@@ -140,7 +140,7 @@ export function AgentCard({ card }: { card: AgentCardModel }) {
             needsYou ? 'font-semibold' : 'font-medium',
           )}
         >
-          {agentTitleOrPane(row)}
+          {agentTitleOrChat(row)}
         </span>
       </span>
       {Option.match(card.askSummary, {
