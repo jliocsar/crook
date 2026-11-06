@@ -271,6 +271,40 @@ export const TURN_STORIES: readonly StoryMaker[] = [
     ],
   }),
   chatStory({
+    slug: 'slash-send-following-one-write',
+    title: 'A slash send at the end of a long thread, its command and output landing in one write',
+    shows: { text: 'Line 119' },
+    ends: {
+      all: [
+        { selector: '[data-slot="command"] code' },
+        { absent: 'Sent' },
+        { selector: STILL_ACTIVITY },
+      ],
+    },
+    events: [opened(), manyLinesChunk(0), caughtUp(MANY_LINES_END)],
+    timeline: [
+      step<LinkStage>(600, 'The user sends /model opus', sends('/model opus')),
+      step<LinkStage>(700, 'The command and its output land in one write', ({ link }) =>
+        feed(link, [
+          chunk(MANY_LINES_END, MANY_LINES_END + 20, [
+            user(MANY_LINES_END, [new LocalCommandBlock({ name: '/model', args: 'opus' })], {
+              seconds: TURN_START,
+            }),
+            user(
+              MANY_LINES_END + 10,
+              [
+                new LocalCommandOutputBlock({
+                  text: 'Set model to `Opus 5.5` and saved as your default for new sessions',
+                }),
+              ],
+              { seconds: TURN_START },
+            ),
+          ]),
+        ]),
+      ),
+    ],
+  }),
+  chatStory({
     slug: 'slash-send-silent',
     title: 'A slash send nothing answers ends its Sent row and says why it may be quiet',
     shows: { text: 'The quiet redial' },
