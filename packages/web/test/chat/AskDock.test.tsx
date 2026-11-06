@@ -241,6 +241,69 @@ describe('the ask dock', () => {
     }),
   )
 
+  it.effect('names an option no button answers, so the dialog holds no hidden choice', () =>
+    Effect.gen(function* () {
+      yield* renderApp(
+        CHAT,
+        blockedOn(
+          bashAsk(
+            dialogOptions([
+              ['Yes', 'yes'],
+              ['Yes, and switch to auto mode · auto mode handles these prompts for you', 'other'],
+              ['No', 'no'],
+            ]),
+          ),
+        ),
+      )
+
+      yield* findByRole('button', 'Yes')
+
+      expect(answerLabels()).toEqual(['Yes', 'No'])
+      expect(
+        within(dock()).getByText(
+          'Yes, and switch to auto mode · auto mode handles these prompts for you',
+        ),
+      ).toBeDefined()
+    }),
+  )
+
+  it.effect(
+    'says a dialog with no plain yes is answered on the laptop, and can still decline',
+    () =>
+      Effect.gen(function* () {
+        const { link } = yield* renderApp(
+          CHAT,
+          blockedOn(
+            bashAsk(
+              dialogOptions([
+                ['Yes, and use auto mode', 'other'],
+                ['No, keep planning', 'other'],
+              ]),
+            ),
+          ),
+        )
+        const no = yield* findByRole('button', 'No')
+
+        expect(answerLabels()).toEqual(['No'])
+        expect(within(dock()).getByText('Yes, and use auto mode')).toBeDefined()
+        expect(within(dock()).getByText('No, keep planning')).toBeDefined()
+
+        yield* click(no)
+        yield* eventually(() => {
+          expect(sentCommands(link)).toEqual([answered(new Decline({ message: Option.none() }))])
+        })
+      }),
+  )
+
+  it.effect('says nothing more when the buttons answer every option', () =>
+    Effect.gen(function* () {
+      yield* renderApp(CHAT, blockedOn(bashAsk()))
+      yield* findByRole('button', 'Yes')
+
+      expect(dock().querySelector('[data-slot="ask-laptop-options"]')).toBeNull()
+    }),
+  )
+
   it.effect('declines with Esc when the dialog could not be read', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, blockedOn(bashAsk([])))

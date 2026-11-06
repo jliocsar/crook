@@ -17,6 +17,7 @@ import {
   askTitle,
   askTool,
   isAnswerUnderway,
+  laptopOnlyOptions,
   NEEDS_YOU,
   permissionButtons,
   PLAIN_DECLINE,
@@ -50,6 +51,7 @@ const ANSWERED_NOTE = 'Answered. Waiting for Claude to move on.'
 const ALREADY_ANSWERED_NOTE = 'Already answered'
 const ASK_NOTICE_ID = 'ask-answer'
 const UNREADABLE_HINT = 'Decline it here, or tell Claude what to do instead.'
+const LAPTOP_ONLY_CAPTION = 'Claude also offers these, on the laptop only:'
 
 const QUESTIONNAIRE_HINT =
   'crook can only pick the answer to one question with one choice. Answer this one in the terminal, or tell Claude what to do instead.'
@@ -124,6 +126,22 @@ function AnswerButtons({
   )
 }
 
+function LaptopOnlyOptions({ labels }: { labels: readonly string[] }) {
+  return labels.length === 0 ? null : (
+    <div
+      data-slot="ask-laptop-options"
+      className="text-muted-foreground grid gap-0.5 text-xs leading-4"
+    >
+      <p>{LAPTOP_ONLY_CAPTION}</p>
+      <ul className="list-disc ps-4">
+        {labels.map((label) => (
+          <li key={label}>{label}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function PermissionDock({
   ask,
   cwd,
@@ -149,6 +167,7 @@ function PermissionDock({
           </p>
         ),
       })}
+      <LaptopOnlyOptions labels={laptopOnlyOptions(ask)} />
     </>
   )
 }

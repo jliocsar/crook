@@ -38,6 +38,7 @@ import { step } from '../Story.tsx'
 import type { LinkStage, StoryMaker } from '../Story.tsx'
 
 const ASK_DOCK = '[data-slot="ask-dock"]'
+const LAPTOP_OPTIONS = '[data-slot="ask-laptop-options"]'
 const BASH_ID = AskId.make('toolu_bash')
 const EDIT_ID = AskId.make('toolu_edit')
 
@@ -198,6 +199,85 @@ export const ASK_STORIES: readonly StoryMaker[] = [
       ]),
     ),
   ),
+  askStory(
+    'permission-webfetch',
+    'Ask, a fetch whose dialog ends on an answer',
+    new PermissionAsk({
+      id: AskId.make('toolu_fetch'),
+      source: 'hook',
+      tool: 'WebFetch',
+      plugin: Option.none(),
+      action: new UseTool({
+        input: { url: 'https://example.com/', prompt: 'What is the title of this page?' },
+      }),
+      options: options([
+        ['Yes', 'yes'],
+        ["Yes, and don't ask again for example.com", 'always'],
+        ['No, and tell Claude what to do differently (esc)', 'no'],
+      ]),
+      dialog: Option.some('fingerprint'),
+    }),
+  ),
+  chatStory({
+    slug: 'permission-laptop-option',
+    title: 'Ask, an option only the laptop can answer',
+    link: blocked(
+      bashAsk(
+        'npm --version',
+        options([
+          ['Yes', 'yes'],
+          ['Yes, and don’t ask again for: npm *', 'always'],
+          ['Yes, and switch to auto mode · auto mode handles these prompts for you', 'other'],
+          ['No', 'no'],
+        ]),
+      ),
+    ),
+    events: LEAD_IN,
+    shows: { selector: LAPTOP_OPTIONS },
+  }),
+  chatStory({
+    slug: 'permission-read-outside',
+    title: 'Ask, a read outside the project, with a lasting no',
+    link: blocked(
+      new PermissionAsk({
+        id: AskId.make('toolu_read'),
+        source: 'hook',
+        tool: 'Read',
+        plugin: Option.none(),
+        action: new UseTool({ input: { file_path: '/etc/hostname' } }),
+        options: options([
+          ['Yes, and keep allowing any reads outside the working directories', 'always'],
+          ['No, and block reads outside the working directories from now on', 'other'],
+          ['No, and ask again next time', 'no'],
+          ['Yes, but ask again next time', 'yes'],
+        ]),
+        dialog: Option.some('fingerprint'),
+      }),
+    ),
+    events: LEAD_IN,
+    shows: { selector: LAPTOP_OPTIONS },
+  }),
+  chatStory({
+    slug: 'permission-no-yes',
+    title: 'Ask, a dialog with no plain yes',
+    link: blocked(
+      new PermissionAsk({
+        id: AskId.make('toolu_plan'),
+        source: 'hook',
+        tool: 'ExitPlanMode',
+        plugin: Option.none(),
+        action: new UseTool({ input: { plan: 'Create a.txt holding the word hi.' } }),
+        options: options([
+          ['Yes, and use auto mode', 'other'],
+          ['Yes, manually approve edits', 'other'],
+          ['Tell Claude what to change shift+tab to approve with this feedback', 'other'],
+        ]),
+        dialog: Option.some('fingerprint'),
+      }),
+    ),
+    events: LEAD_IN,
+    shows: { selector: LAPTOP_OPTIONS },
+  }),
   askStory(
     'permission-unreadable',
     'Ask, a dialog crook could not read',

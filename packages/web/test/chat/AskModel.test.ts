@@ -31,6 +31,7 @@ import {
   answerInFlight,
   askTitle,
   isAnswerUnderway,
+  laptopOnlyOptions,
   permissionButtons,
   withAlwaysNotes,
   withoutAskedCall,
@@ -143,6 +144,64 @@ describe('permissionButtons', () => {
       new Decline({ message: Option.none() }),
     ])
     expect(permissionButtons(permission(command)).map((button) => button.label)).toEqual(['No'])
+  })
+})
+
+describe('laptopOnlyOptions', () => {
+  const command = new RunCommand({ command: 'ls' })
+  const labelled = (labels: readonly (readonly [string, AskOption['choice']])[]) =>
+    labels.map(([label, choice], index) => new AskOption({ number: index + 1, label, choice }))
+
+  it('names what the buttons cannot answer, and nothing they can', () => {
+    const options = labelled([
+      ['Yes', 'yes'],
+      ['Yes, and don’t ask again for: npm *', 'always'],
+      ['Yes, and switch to auto mode · auto mode handles these prompts for you', 'other'],
+      ['No', 'no'],
+    ])
+
+    expect(laptopOnlyOptions(permission(command, options))).toEqual([
+      'Yes, and switch to auto mode · auto mode handles these prompts for you',
+    ])
+  })
+
+  it('names a second lasting option, which the one Always button does not answer', () => {
+    const options = labelled([
+      ['Yes', 'yes'],
+      ['Yes, allow reading from src/ from this project', 'always'],
+      ['Yes, and always allow access to /tmp from this project', 'always'],
+      ['No', 'no'],
+    ])
+
+    expect(laptopOnlyOptions(permission(command, options))).toEqual([
+      'Yes, and always allow access to /tmp from this project',
+    ])
+  })
+
+  it('names every option of a dialog with no plain yes, without its key hint', () => {
+    const options = labelled([
+      ['Yes, and use auto mode', 'other'],
+      ['Yes, and manually approve edits (shift+tab)', 'other'],
+      ['No, keep planning', 'other'],
+    ])
+    const ask = permission(command, options)
+
+    expect(permissionButtons(ask).map((button) => button.label)).toEqual(['No'])
+    expect(laptopOnlyOptions(ask)).toEqual([
+      'Yes, and use auto mode',
+      'Yes, and manually approve edits',
+      'No, keep planning',
+    ])
+  })
+
+  it('says nothing when the buttons cover the dialog, or no dialog was read', () => {
+    const options = labelled([
+      ['Yes', 'yes'],
+      ['No, and tell Claude what to do differently (esc)', 'no'],
+    ])
+
+    expect(laptopOnlyOptions(permission(command, options))).toEqual([])
+    expect(laptopOnlyOptions(permission(command))).toEqual([])
   })
 })
 

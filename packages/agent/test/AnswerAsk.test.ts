@@ -196,6 +196,75 @@ layer(BunFileSystem.layer)('AnswerAsk', (it) => {
     }),
   )
 
+  it.effect('answers a dialog that ends on an option saying esc', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('124-webfetch-blocked')
+      const ask = bashAsk(screen)
+      const approving = yield* startExecutor(ask, [screenRead(screen), keysSent])
+
+      yield* approving.executor.execute(ACTION, answer(ask, new Approve({})))
+
+      expect(yield* sentAfter(approving.sent)).toEqual([READ_REQUEST, keysRequest(['enter'])])
+
+      const declining = yield* startExecutor(ask, [screenRead(screen), keysSent])
+
+      yield* declining.executor.execute(
+        ACTION,
+        answer(ask, new Decline({ message: Option.none() })),
+      )
+
+      expect(yield* sentAfter(declining.sent)).toEqual([READ_REQUEST, keysRequest(['esc'])])
+    }),
+  )
+
+  it.effect('refuses an answer to such a dialog once another one is on screen', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('124-webfetch-blocked')
+      const ask = bashAsk(screen)
+      const other = screen.replaceAll('example.com', 'example.org')
+      const { executor, sent } = yield* startExecutor(ask, [screenRead(other), keysSent])
+      const refused = yield* executor
+        .execute(ACTION, answer(ask, new Approve({})))
+        .pipe(Effect.flip)
+
+      expect(refused).toEqual(new AskNotPending({ pane: AGENT_PANE, ask: ask.id }))
+      expect(yield* sentAfter(sent)).toEqual([READ_REQUEST])
+    }),
+  )
+
+  it.effect('approves a read outside the project through its one-time option', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('122-read-outside-working-directories')
+      const ask = bashAsk(screen)
+      const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
+
+      yield* executor.execute(ACTION, answer(ask, new Approve({})))
+
+      expect(yield* sentAfter(sent)).toEqual([
+        READ_REQUEST,
+        keysRequest(['down', 'down', 'down', 'enter']),
+      ])
+    }),
+  )
+
+  it.effect('approves through a one-time option the terminal wrapped', () =>
+    Effect.gen(function* () {
+      const screen = (yield* spikeScreen('122-read-outside-working-directories')).replace(
+        'Yes, but ask again next time',
+        'Yes, but ask again next\n      time',
+      )
+      const ask = bashAsk(screen)
+      const { executor, sent } = yield* startExecutor(ask, [screenRead(screen), keysSent])
+
+      yield* executor.execute(ACTION, answer(ask, new Approve({})))
+
+      expect(yield* sentAfter(sent)).toEqual([
+        READ_REQUEST,
+        keysRequest(['down', 'down', 'down', 'enter']),
+      ])
+    }),
+  )
+
   it.effect('approves always through a don’t-ask-again option', () =>
     Effect.gen(function* () {
       const screen = yield* spikeScreen('105-npm-dont-ask-again')
