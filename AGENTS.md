@@ -1202,6 +1202,40 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   made again. That iOS drops a `scrollTop` write during momentum is not measured yet. After a
   user's own scroll with no pin asked it stays put, so a nudge that stays inside the follow
   threshold is left where the finger put it.
+- While the user's scroll is under way, a pin writes the end minus what that scroll left from it, so
+  a landing lifts by what landed and nothing else moves. A pin used to write the end itself, and
+  called what it moved growth. On the end of 120 lines at 4x, driven by a finger through CDP, three
+  runs each: a nudge of 30 or 44 px threw the rows up 5 to 6 px as a row above measured short, 6 of
+  6, and once the finger lifted the scroll's settling took the whole nudge back in one frame, 9 and
+  27 px, 118 to 208 ms later, 6 of 6, because that pin counted as one asked for. A finger resting
+  on a nudge had the same 9 to 15 px taken back under it, 3 of 3. Now none of it, 9 of 9: the nudges
+  end 16 and 32 px from the end, and one held through a landing keeps its 15 px while the lift and the
+  scroll both move 37 px and the rows stay (all measured). The next batch with no scroll under way
+  goes to the end and lifts what landed and the nudge, so a nudge lasts until then. "Under way" is a
+  finger down, or a gesture with a scroll that has not settled. A finger that pauses past the settling
+  and lifts starts no further scroll, so it left the gesture's flag set, and a batch landing after it
+  lifted 17 px and kept the 9 px nudge, 3 of 3; now it lifts 26 px and reaches the end, 3 of 3, while a
+  finger still down keeps the nudge and lifts 17 px, 3 of 3 before and after (measured). A wheel that
+  scrolls nothing here, as over a nested code block, left the same flag (a test holds it, not driven in
+  a browser).
+- A pin runs only when the content changed. The thread's first wait ending used to run one too, and
+  it read a scroll the thread had not heard, so the lift rose 9 px over content that had not grown,
+  3 of 3 with the finger pressed before the thread mounted, and 20 px on an earlier recording; now
+  0 of 3 (measured). That press stays unheard, so the scroll's settling still takes those 9 px back
+  in one frame, 3 of 3 (measured). A send's own jump to the end still wins over a nudge, in one frame:
+  15 px, 3 of 3 (measured).
+- A thread too short to scroll has no lift, and a landing there is the list growing. The rows above
+  hold, the new row takes the place of the row it lands above, usually Working, and that row steps
+  down by the new row and its gap: 58 and 64 px in one frame, or up 20 px as a Sent line goes. It
+  reaches the screen: following a band through the screencast, one step between pictures 16 to 17 ms
+  apart, 20 of 20 runs at each of 7 landings, and the new row whole in that same picture, 120 of 120.
+  It stays. Nothing is blank and nothing overlaps, and a glide would have to pass Working over the
+  new row, or fade the row in, which a live batch does not get (reasoned, not measured).
+- A sent row giving way to its transcript line really gets shorter, by the 20 px of its Sent line, so
+  a following thread's rows drop by that in one frame, 20 of 20 in pictures on a command at the end
+  of 120 lines. It stays. Keeping the height would leave 20 px empty under the bubble, and a lift only rises,
+  so taking the drop as a glide would need a lift below zero, which moves a Working row under the
+  bubble up and back (reasoned, not measured).
 - The chat route remounts its screen whenever the machine or pane changes, so following and the
   virtualizer's size cache start fresh per pane. A subagent opens as a child route, so the chat
   stays mounted under it and pins to the end when it is uncovered again.
@@ -2102,6 +2136,15 @@ the screen once per animation frame and fails on what a settled screenshot canno
   in a frame the lift rose 82.4 px, driven through CDP at 4x (measured), so a frame with a finger down
   is skipped. A flick's momentum is not marked, but a thread scrolling up stops following and
   raises no lift (read in the code).
+- A lift that rises in a frame the thread's content grew under 2 px, the same guard as the two checks
+  above, fails a story as `unpaid-lift`, finger or no finger: every lift is paid for by what landed. A
+  log with no height, recorded before the recorder read it, is not judged. A landing whose rows and lift
+  reach two different frames would read as unpaid, and none does: over a sweep's 59 stories all 8 lifts
+  rose in the frame the content grew (measured). Over the 57 timeline stories, one run
+  each, a lift rose by more than the content grew in no frame (measured), and each of three finger
+  recordings before the fix had one such frame, 9 px with the content still. A landing can lift
+  more than it grew, by what a nudge left, and passes: the check asks only that something landed.
+  Stories drive no finger, so a thread's unit tests hold the fix and recorded fixtures hold the check.
 - A baseline entry lists what a story always shows and what it only sometimes shows. A new key
   fails the story, an always key that did not happen fails it too and says to remove it, and a
   sometimes key does neither.

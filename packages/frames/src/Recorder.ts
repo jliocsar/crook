@@ -219,6 +219,7 @@ const readThread = (
       return {
         reading: {
           lift: round(contentBox.top - viewportBox.top + viewport.scrollTop),
+          height: round(contentBox.height),
           top: round(bands.top),
           middle: round(bands.middle),
           bottom: round(bands.bottom),

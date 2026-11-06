@@ -21,6 +21,7 @@ export type MarkReading = typeof MarkReading.Type
 
 export const ThreadReading = Schema.Struct({
   lift: Schema.Finite,
+  height: Schema.optionalKey(Schema.Finite),
   top: Schema.Finite,
   middle: Schema.Finite,
   bottom: Schema.Finite,
@@ -112,6 +113,17 @@ export const overshoots = (frame: RecordedFrame, next: RecordedFrame): boolean =
   next.thread?.held !== true &&
   liftAt(next) - liftAt(frame) >= ROW_MOVE_PIXELS &&
   leastMovedAt(next) >= ROW_MOVE_PIXELS
+
+export const heightAt = (frame: RecordedFrame): Option.Option<number> =>
+  Option.fromUndefinedOr(frame.thread?.height)
+
+export const liftsForNothing = (frame: RecordedFrame, next: RecordedFrame): boolean =>
+  next.frame === frame.frame + 1 &&
+  liftAt(next) - liftAt(frame) >= ROW_MOVE_PIXELS &&
+  pipe(
+    Option.zipWith(heightAt(frame), heightAt(next), (before, after) => after - before),
+    Option.exists((grown) => grown < ROW_MOVE_PIXELS),
+  )
 
 export const p90FrameMs = (frames: readonly RecordedFrame[]): number => {
   const mounted = frames.filter((frame) => frame.mounted)

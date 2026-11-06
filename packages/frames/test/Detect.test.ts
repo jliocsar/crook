@@ -24,6 +24,8 @@ import cleanFixture from './fixtures/clean.json' with { type: 'json' }
 import emptyBandFixture from './fixtures/empty-band.json' with { type: 'json' }
 import filledBandFixture from './fixtures/filled-band.json' with { type: 'json' }
 import fingerDuringLiftFixture from './fixtures/finger-during-lift.json' with { type: 'json' }
+import fingerHoldsThroughLandingsFixture from './fixtures/finger-holds-through-landings.json' with { type: 'json' }
+import fingerScrollsAwayFixture from './fixtures/finger-scrolls-away.json' with { type: 'json' }
 import fingerTurnsAroundFixture from './fixtures/finger-turns-around.json' with { type: 'json' }
 import flashFixture from './fixtures/flash.json' with { type: 'json' }
 import goneInALongFrameFixture from './fixtures/gone-in-a-long-frame.json' with { type: 'json' }
@@ -35,6 +37,7 @@ import pairFixture from './fixtures/pair.json' with { type: 'json' }
 import shiftFixture from './fixtures/shift.json' with { type: 'json' }
 import slowFramesHoldFixture from './fixtures/slow-frames-hold.json' with { type: 'json' }
 import swapFixture from './fixtures/swap.json' with { type: 'json' }
+import unpaidLiftFingerFixture from './fixtures/unpaid-lift-finger.json' with { type: 'json' }
 
 const decodeLog = Schema.decodeUnknownSync(FrameLog)
 
@@ -225,6 +228,39 @@ describe('detect, over logs recorded from real runs', () => {
     expect(movedByTheFinger.length).toBeGreaterThan(0)
     expect(Arr.every(movedByTheFinger, (frame) => frame.thread?.held === true)).toBe(true)
     expect(keysOf(detect(story, log, expectationOf(story)))).not.toContain('overshoot')
+  })
+
+  it('reports a lift that rose over content that did not grow, under a finger', () => {
+    const story = 'transition/slash-send-following'
+    const log = decodeLog(unpaidLiftFingerFixture)
+    const findings = detect(story, log, expectationOf(story))
+    const unpaid = findingNamed(findings, 'unpaid-lift')
+
+    expect(keysOf(findings)).toEqual(['unpaid-lift'])
+    expect(unpaid.check).toBe('unpaid-lift')
+    expect(unpaid.firstFrame).toBe(52)
+    expect(unpaid.lastFrame).toBe(52)
+    expect(unpaid.words).toContain('from 0 to 9 px')
+  })
+
+  it('reports no unpaid lift over landings a finger holds through, and a lift with no finger', () => {
+    const story = 'transition/slash-send-following'
+    const log = decodeLog(fingerHoldsThroughLandingsFixture)
+    const held = (frame: RecordedFrame): boolean => frame.thread?.held === true
+
+    expect(Arr.some(framesWhereTheLiftRises(log), held)).toBe(true)
+    expect(Arr.some(framesWhereTheLiftRises(log), (frame: RecordedFrame) => !held(frame))).toBe(
+      true,
+    )
+    expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
+  })
+
+  it('reports no unpaid lift over a finger scrolling the thread away', () => {
+    const story = 'transition/slash-send-following'
+    const log = decodeLog(fingerScrollsAwayFixture)
+
+    expect(Arr.some(log.frames, (frame) => leastMovedAt(frame) >= ROW_MOVE_PIXELS)).toBe(true)
+    expect(keysOf(detect(story, log, expectationOf(story)))).toEqual([])
   })
 
   it('reports a band of the thread with no rows in it during a lift, at its widest frame', () => {

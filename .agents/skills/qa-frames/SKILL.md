@@ -47,6 +47,7 @@ know what the marks name; your eyes on the sheet are the rest of the check.
 | `empty:<top\|middle\|bottom>` | The thread's viewport held a band with no row in it wider than the thread's own spacing, while rows were on screen. The image is the frame where the band was widest |
 | `backtrack` | A thread's row moved up in one frame and back down in the next, with no finger on the screen: the scroll and the lift that should cancel out landed apart. Words say by how much |
 | `overshoot` | Every row on screen moved down in the frame a lift rose, with no finger on the screen: the lift took more than what landed under them, so they drop and then glide back up. Words say by how much |
+| `unpaid-lift` | The lift rose in a frame the thread's content did not grow: nothing landed, so a pin took a move of the scroll as growth and the rows glide up for it. A finger on the screen is no excuse. Words say by how much |
 | `shift:<element>` | Layout moved past the story's budget; names what moved most |
 | `order:<track>:<a>><b>` | A state gave way to one the story does not allow there |
 
