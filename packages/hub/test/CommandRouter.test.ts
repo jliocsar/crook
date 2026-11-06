@@ -16,7 +16,11 @@ import * as TestClock from 'effect/testing/TestClock'
 import { InputDelivered, Prompt, StartAgent } from '@crook/domain/Command'
 import { IdempotencyKey, MachineId, PaneId, TerminalId } from '@crook/domain/Ids'
 import { CommandRouter } from '@crook/hub/CommandRouter'
-import { COMMAND_TIMEOUT, LAUNCH_COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
+import {
+  COMMAND_TIMEOUT,
+  LAUNCH_COMMAND_TIMEOUT,
+  MachineIdMismatch,
+} from '@crook/protocol/AgentLink'
 import {
   CommandTimedOut,
   MachineOffline,
@@ -272,7 +276,12 @@ it.effect('fences nothing for a link that has not published, or a failed write',
     const newer = yield* router.linkFor(LAPTOP)
     const other = yield* router.linkFor(WORK)
 
-    yield* newer.publish(ANY_STATE, Effect.fail('refused')).pipe(Effect.flip)
+    yield* newer
+      .publish(
+        ANY_STATE,
+        Effect.fail(new MachineIdMismatch({ connectedMachine: LAPTOP, publishedMachine: WORK })),
+      )
+      .pipe(Effect.flip)
     yield* older.publish(ANY_STATE, write('older'))
     yield* other.publish(machineStateWith(WORK, 1, []), write('other machine'))
 

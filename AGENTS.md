@@ -956,7 +956,10 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   state and its demand go out side by side, and a dial the agent gave up on never publishes. A late
   state landing before the successor's first is kept until that first state replaces it, which is
   safe because a session starts publishing from the current state (read in the agent), and dropping
-  an older link's state loses nothing for the same reason. A check of the state's version could not
+  an older link's state loses nothing for the same reason. In that order its push can still go out,
+  and the first state then withdraws it (reasoned, not measured). The record has one permit across
+  machines, which costs nothing new, since the herd's write already takes one across machines (read
+  in both). A check of the state's version could not
   do this: it restarts at 0 with the agent (read in the agent), and would refuse a restarted agent's
   first state.
 - A watch's delivered position lives beside the watch, outside the set the agents' demands are
