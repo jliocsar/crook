@@ -66,6 +66,7 @@ import type {
   ComposerFailureState,
 } from '@crook/web/chat/ComposerFailureMachine'
 import type { Restart } from '@crook/web/chat/EdgeCard'
+import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
 export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
@@ -356,6 +357,8 @@ const usePromptWait = (
   threadEpoch: number,
   inFlight: boolean,
   working: boolean,
+  claudeWaits: boolean,
+  askOpen: boolean,
 ) => {
   const [wait, setWait] = React.useState<PromptWait>(NOTHING_AWAITED)
   const [waitedIn, setWaitedIn] = React.useState(threadEpoch)
@@ -375,7 +378,7 @@ const usePromptWait = (
     setUnanswered(Option.none())
   }
 
-  React.useEffect(() => {
+  const giveUpAfter = (silence: Duration.Duration) => {
     if (Option.isNone(awaited) || working) {
       return undefined
     }
@@ -383,12 +386,31 @@ const usePromptWait = (
     const timer = window.setTimeout(() => {
       setUnanswered(Option.some({ text: awaited.value, answersThen: answers }))
       setWait((current) => waitWithoutCommands(current, items))
-    }, Duration.toMillis(COMMAND_SILENCE))
+    }, Duration.toMillis(silence))
 
     return () => {
       window.clearTimeout(timer)
     }
-  }, [Option.getOrUndefined(awaited), awaitedCommands, answers, working])
+  }
+
+  const awaitedText = Option.getOrUndefined(awaited)
+  const holdsForClaude = claudeWaits && !askOpen
+
+  React.useEffect(
+    () => giveUpAfter(COMMAND_SILENCE),
+    [awaitedText, awaitedCommands, answers, working],
+  )
+
+  React.useEffect(
+    () => (holdsForClaude ? giveUpAfter(NOTICE_DELAY) : undefined),
+    [awaitedText, awaitedCommands, answers, working, holdsForClaude],
+  )
+
+  React.useEffect(() => {
+    if (!claudeWaits) {
+      setUnanswered(Option.none())
+    }
+  }, [claudeWaits])
 
   React.useEffect(() => {
     if (arrived && Arr.isReadonlyArrayNonEmpty(wait.pending)) {
@@ -550,11 +572,18 @@ export const useChatCommands = ({
   const answer = useCommandAction(machine)
   const working = Option.isSome(activityView(activity).workingSince)
   const promptInFlight = isPromptInFlight(prompt)
-  const prompted = usePromptWait(items, threadEpoch, promptInFlight, working)
   const blocked = ActivityState.guards.Blocked(activity)
   const openAsk = Option.flatMap(
     Option.filter(model.row, () => blocked && isPresent(model.presence)),
     (row) => row.ask,
+  )
+  const prompted = usePromptWait(
+    items,
+    threadEpoch,
+    promptInFlight,
+    working,
+    isClaudeWaiting(model.row),
+    Option.isSome(openAsk),
   )
   const [refused, setRefused] = React.useState('')
   const refusalOf = (text: string) =>

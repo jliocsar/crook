@@ -48,6 +48,7 @@ interface Run {
 }
 
 const MAC_USER = 501
+const FULL_RESTART_WAIT_LIMIT_MS = 15_000
 const REFUSED_EXIT_CODE = 113
 const UNIT_SHOWN = 'ActiveState=active\nSubState=running\nUnitFileState=enabled\n'
 
@@ -362,21 +363,34 @@ layer(BunServices.layer, { excludeTestServices: true })('ServiceControl', (onDis
     }),
   )
 
-  onDisk.effect('says so when only the agent from before the restart answers', () =>
-    Effect.gen(function* () {
-      const { home, provide } = yield* scratch()
+  onDisk.effect(
+    'says so when only the agent from before the restart answers',
+    () =>
+      Effect.gen(function* () {
+        const { home, provide } = yield* scratch()
 
-      yield* installedAt(unitFile(home))
-      yield* runningAgentAt(home)
+        yield* installedAt(unitFile(home))
+        yield* runningAgentAt(home)
 
-      const report = restartReport(yield* restartService(new Systemd()).pipe(provide))
+        const report = restartReport(yield* restartService(new Systemd()).pipe(provide))
 
-      expect(report).toContain(
-        'Restarted the crook-agent service, but no new agent answered within',
-      )
-      expect(report).toContain(`process ${process.pid}, the agent from before, still answers`)
-    }),
+        expect(report).toContain(
+          'Restarted the crook-agent service, but no new agent answered within',
+        )
+        expect(report).toContain(`process ${process.pid}, the agent from before, still answers`)
+      }),
+    FULL_RESTART_WAIT_LIMIT_MS,
   )
+
+  it('says an agent that has not answered may still be coming up', () => {
+    const report = restartReport(
+      Result.fail(new StatusSocket.NoAgentAnswered({ path: '/status.sock', detail: 'ENOENT' })),
+    )
+
+    expect(report).toContain('it may still be coming up')
+    expect(report).toContain('run "crook-agent status" in a moment')
+    expect(report).toContain('its logs say why')
+  })
 
   onDisk.effect('restarts a launchd agent by booting it out and loading it again', () =>
     Effect.gen(function* () {

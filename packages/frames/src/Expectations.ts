@@ -185,6 +185,14 @@ export const TIMELINE_EXPECTATIONS = {
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
   }),
+  'transition/slash-send-opens-a-dialog': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
+  'transition/slash-send-waiting-blip': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
   'transition/slash-send-silent': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
