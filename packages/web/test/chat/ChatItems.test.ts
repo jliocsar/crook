@@ -17,6 +17,7 @@ import {
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 import compactionManual from '@crook/claude/fixtures/compaction-manual.jsonl?raw'
 import slashCommands from '@crook/claude/fixtures/slash-commands.jsonl?raw'
+import stopHookCap from '@crook/claude/fixtures/stop-hook-cap.jsonl?raw'
 import {
   ChatItem,
   chatItems,
@@ -53,6 +54,7 @@ import {
   REVIEWER,
   said,
   SESSION,
+  stopHookFeedback,
   subagent,
   toolResult,
   toolUse,
@@ -86,6 +88,7 @@ const describeItem = (item: ChatItem): string =>
       `subagents: ${subagents.runs.map((run) => `${run.description} ${run.status}`).join(', ')}`,
     Plan: (plan) => `plan: ${plan.steps.map((step) => step.status).join(' ')}`,
     Note: (note) => `note: ${note.text}`,
+    StopHookFeedback: (feedback) => `stop hook: ${feedback.words}`,
     Command: (command) => [`command: ${command.text}`, ...command.output].join(' => '),
     Compacted: (compacted) => `compacted: ${Option.getOrElse(compacted.summary, () => '')}`,
     Cleared: () => 'cleared',
@@ -237,6 +240,36 @@ describe('chatItems', () => {
         prompt(10, 'hello'),
       ]),
     ).toEqual(['you: hello'])
+  })
+
+  it('shows a real run up to the cap as one row per block and the notice that overrode it', () => {
+    const items = chatItems(
+      Arr.map(messagesOf(stopHookCap), (message) => ({ session: SESSION, message })),
+      context('still'),
+    ).map(describeItem)
+
+    expect(items.filter((item) => item.startsWith('stop hook: '))).toHaveLength(9)
+    expect(items.at(-2)).toBe(
+      'stop hook: [/made/up/check.sh]: Made-up check says: reply with the single word again.',
+    )
+    expect(items.at(-1)).toContain('A hook blocked the turn from ending 9 consecutive times')
+  })
+
+  it('shows a Stop hook as its own row, never as your prompt, inside the same turn', () => {
+    const lines = [
+      prompt(0, 'Fix it'),
+      toolUse(5, 'toolu_a', 'Read', { file_path: 'a.ts' }),
+      answered(10, 'Fixed'),
+      stopHookFeedback(20, '[/made/up/check.sh]: Run the check first.'),
+      answered(30, 'Ran it'),
+    ]
+
+    expect(shown(lines).slice(2)).toEqual([
+      'claude: Fixed',
+      'stop hook: [/made/up/check.sh]: Run the check first.',
+      'claude: Ran it',
+    ])
+    expect(chatItems(linesOf(lines), context()).filter(ChatItem.$is('UserPrompt'))).toHaveLength(1)
   })
 
   it('reads a call with no result as stopped once a later prompt started another turn', () => {

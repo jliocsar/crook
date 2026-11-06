@@ -15,6 +15,7 @@ import {
   quietTurnOver,
   sameActivity,
   STATUS_UNKNOWN,
+  working,
 } from '@crook/web/chat/ActivityMachine'
 import { caseName } from '@crook/state-machine/Machine'
 import type { WalkSpec } from '@crook/state-machine/Walk'
@@ -97,6 +98,12 @@ export const activityWalk: WalkSpec<ActivityState, ActivityEvent, never> = {
       name: 'the answer takes the Working row with it',
       holds: ({ event, to }) =>
         !ActivityEvent.guards.AnswerLanded(event) || ActivityState.guards.Finished(to),
+    },
+    {
+      name: "a line reopening an answered turn brings the Working row back at the turn's own start",
+      holds: ({ from, event, to }) =>
+        !(ActivityState.guards.Finished(from) && ActivityEvent.guards.AgentWorks(event)) ||
+        sameActivity(to, working(event.since)),
     },
     {
       name: 'a question takes the Working row with it',

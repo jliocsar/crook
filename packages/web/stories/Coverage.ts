@@ -39,6 +39,7 @@ export const STATE_COVERAGE = {
     Subagents: ['rows/subagent-tree-running'],
     Plan: ['rows/plan'],
     Note: ['rows/note-interrupted', 'rows/note-notice', 'rows/slash-failed', 'rows/slash-unknown'],
+    StopHookFeedback: ['rows/stop-hook', 'rows/stop-hook-open', 'transition/stop-hook-sends-back'],
     Command: [
       'rows/slash-local-command',
       'rows/slash-with-args',
@@ -224,6 +225,7 @@ export const REQUIRED_TRANSITIONS: readonly string[] = [
   'transition/prompt-to-answer',
   'transition/turn-with-tools',
   'transition/idle-before-answer',
+  'transition/stop-hook-sends-back',
   'transition/compact-ends-the-turn',
   'transition/slash-send-lands',
   'transition/slash-send-silent',

@@ -196,6 +196,7 @@ const answersACommand = (item: ChatItem): boolean =>
     Plan: () => false,
     Omitted: () => false,
     Unreadable: () => false,
+    StopHookFeedback: () => false,
   })
 
 const commandAnswerCount = (items: readonly ChatItem[]): number =>

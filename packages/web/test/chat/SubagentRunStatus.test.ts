@@ -76,6 +76,7 @@ const describeItem = (item: ChatItem): string =>
     Compacted: () => 'compacted',
     Omitted: () => 'omitted',
     Unreadable: () => 'unreadable',
+    StopHookFeedback: () => 'stop hook',
   })
 
 const durationOf = (run: SubagentRun) =>

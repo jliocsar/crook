@@ -62,6 +62,7 @@ const BASH_STDOUT_TAG = 'bash-stdout'
 const BASH_STDERR_TAG = 'bash-stderr'
 const LINE_BREAK = '\n'
 const TYPED_COMPACT = /^\/compact(\s|$)/u
+const STOP_HOOK_FEEDBACK_PREFIX = 'Stop hook feedback:'
 const HUMAN_ORIGIN = 'human'
 const QUEUED_PROMPT_MODE = 'prompt'
 const ANSI_ESCAPE = String.fromCodePoint(0x1b)
@@ -490,10 +491,20 @@ const isTaskNotification = (raw: RawUser) => (text: string) =>
   raw.origin?.kind === TASK_NOTIFICATION_TAG ||
   text.trimStart().startsWith(`<${TASK_NOTIFICATION_TAG}>`)
 
+const isStopHookFeedback = (raw: RawUser) =>
+  raw.isMeta === true &&
+  Predicate.isString(raw.message.content) &&
+  raw.message.content.startsWith(STOP_HOOK_FEEDBACK_PREFIX)
+
 const stringContentBlock = (raw: RawUser, text: string): UserBlock =>
   pipe(
     Option.liftPredicate(raw, (entry) => entry.isCompactSummary === true),
     Option.map((): UserBlock => new CompactSummaryBlock({ text })),
+    Option.orElse((): Option.Option<UserBlock> =>
+      Option.map(Option.liftPredicate(raw, isStopHookFeedback), () =>
+        textBlock(text.slice(STOP_HOOK_FEEDBACK_PREFIX.length).trim()),
+      ),
+    ),
     Option.orElse((): Option.Option<UserBlock> =>
       pipe(
         Option.liftPredicate(text, isTaskNotification(raw)),
@@ -541,18 +552,24 @@ const unrecognizedEntry = (offset: TranscriptOffset, entryType: string) => [
   new UnrecognizedEntry({ offset, entryType }),
 ]
 
+const userMessage = (raw: RawUser, json: Schema.Json, offset: TranscriptOffset) => {
+  const fields = {
+    ...envelopeOf(json, offset),
+    isMeta: raw.isMeta === true || isTypedCompact(raw),
+    origin: Option.fromUndefinedOr(raw.origin?.kind),
+    queued: false,
+    blocks: userBlocks(raw),
+  }
+
+  return isStopHookFeedback(raw)
+    ? new UserMessage({ ...fields, stopHookFeedback: true })
+    : new UserMessage(fields)
+}
+
 const userEntry = (json: Schema.Json, offset: TranscriptOffset): readonly TranscriptMessage[] =>
   Option.match(decodeUser(json), {
     onNone: () => unrecognizedEntry(offset, 'user'),
-    onSome: (raw) => [
-      new UserMessage({
-        ...envelopeOf(json, offset),
-        isMeta: raw.isMeta === true || isTypedCompact(raw),
-        origin: Option.fromUndefinedOr(raw.origin?.kind),
-        queued: false,
-        blocks: userBlocks(raw),
-      }),
-    ],
+    onSome: (raw) => [userMessage(raw, json, offset)],
   })
 
 const assistantBlock = (value: Schema.Json): AssistantBlock =>

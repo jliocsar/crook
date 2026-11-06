@@ -228,12 +228,14 @@ const userBlockEnds = (block: UserBlock): Option.Option<boolean> =>
   )
 
 const userEnds = (message: UserMessage): Option.Option<boolean> =>
-  pipe(
-    Option.liftPredicate(message, (found) => !found.isMeta),
-    Option.map((found) => pipe(found.blocks, Arr.map(userBlockEnds), Arr.getSomes)),
-    Option.filter((signs) => signs.length > 0),
-    Option.map((signs) => Arr.contains(signs, true)),
-  )
+  message.stopHookFeedback === true
+    ? Option.some(false)
+    : pipe(
+        Option.liftPredicate(message, (found) => !found.isMeta),
+        Option.map((found) => pipe(found.blocks, Arr.map(userBlockEnds), Arr.getSomes)),
+        Option.filter((signs) => signs.length > 0),
+        Option.map((signs) => Arr.contains(signs, true)),
+      )
 
 const assistantEnds = (message: AssistantMessage): boolean =>
   message.isApiError || Option.exists(message.stopReason, (reason) => reason !== TOOL_USE_STOP)

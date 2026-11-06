@@ -36,6 +36,7 @@ import {
   PIXEL_PNG,
   prompt,
   said,
+  stopHookFeedback,
   subagent,
   SESSION,
   toolResult,
@@ -53,6 +54,8 @@ import type { SubagentStatus } from '@crook/domain/Subagent'
 import type { TranscriptMessage } from '@crook/domain/TranscriptMessage'
 
 const TOOL_HEADER = '[data-slot="tool-call-header"]'
+const STOP_HOOK_ROW = 'A Stop hook blocked the stop'
+const STOP_HOOK_WORDS = '[/made/up/check.sh]: Run the check before you stop.'
 
 const RICH_MARKDOWN = [
   '## What changed',
@@ -374,6 +377,27 @@ export const ROW_STORIES: readonly StoryMaker[] = [
     [compactBoundary(0), compactSummary(10, 'We were fixing the banner.')],
     { text: 'Conversation compacted' },
   ),
+  rowStory(
+    'stop-hook',
+    'Row, a Stop hook blocked the stop, words folded away',
+    [
+      answered(0, 'The banner looks right.'),
+      stopHookFeedback(10, STOP_HOOK_WORDS),
+      said(20, 'Ran the check it asked for.'),
+    ],
+    { text: STOP_HOOK_ROW },
+  ),
+  chatStory({
+    slug: 'stop-hook-open',
+    title: 'Row, a Stop hook blocked the stop, words open',
+    events: opensWith([
+      answered(0, 'The banner looks right.'),
+      stopHookFeedback(10, STOP_HOOK_WORDS),
+      said(20, 'Ran the check it asked for.'),
+    ]),
+    settle: () => clicks(STOP_HOOK_ROW),
+    shows: { text: STOP_HOOK_WORDS },
+  }),
   chatStory({
     slug: 'compacted-open',
     title: 'Row, Conversation compacted, summary open',

@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { parseLine } from '@crook/claude/TranscriptParser'
 import compactionAuto from '@crook/claude/fixtures/compaction-auto.jsonl?raw'
 import plainTurn from '@crook/claude/fixtures/plain-turn.jsonl?raw'
+import stopHookCap from '@crook/claude/fixtures/stop-hook-cap.jsonl?raw'
 import subagentSession from '@crook/claude/fixtures/subagent/ff0f77be-1e98-4bb2-8b24-38d673361867.jsonl?raw'
 import toolUseAndResult from '@crook/claude/fixtures/tool-use-and-result.jsonl?raw'
 import {
@@ -39,6 +40,7 @@ const REAL_TRANSCRIPTS = [
   ['a tool call and its result', toolUseAndResult],
   ['a compaction', compactionAuto],
   ['a session with subagents', subagentSession],
+  ['a Stop hook blocking up to its cap', stopHookCap],
 ] as const
 
 const encoder = new TextEncoder()

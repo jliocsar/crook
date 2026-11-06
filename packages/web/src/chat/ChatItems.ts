@@ -26,7 +26,7 @@ import type {
   ToolUseBlock,
   UserMessage,
 } from '@crook/domain/TranscriptMessage'
-import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
+import { imagesIn, wordsIn } from '@crook/web/chat/Blocks'
 import { toolSummary } from '@crook/web/chat/ToolSummary'
 import {
   NO_ROSTERS,
@@ -35,7 +35,6 @@ import {
 } from '@crook/web/chat/TranscriptState'
 import type { AgentRunStatus } from '@crook/web/components/ui/subagent-tree'
 import type { ToolCallStatus } from '@crook/web/components/ui/tool-call'
-import { PARAGRAPH_BREAK } from '@crook/web/text/Lines'
 
 type ToolStatus = ToolCallStatus
 
@@ -57,6 +56,7 @@ export type ChatItem = Data.TaggedEnum<{
   Subagents: { readonly key: string; readonly runs: readonly SubagentRun[] }
   Plan: { readonly key: string; readonly steps: readonly PlanStep[] }
   Note: { readonly key: string; readonly text: string; readonly answersACommand: boolean }
+  StopHookFeedback: { readonly key: string; readonly words: string }
   Command: {
     readonly key: string
     readonly text: string
@@ -599,7 +599,7 @@ const assistantDrafts = (
   )
 
 const promptDraft = (message: UserMessage, key: string): readonly Draft[] => {
-  const text = Arr.join(textsIn(message.blocks), PARAGRAPH_BREAK).trim()
+  const text = wordsIn(message.blocks).trim()
   const images = imagesIn(message.blocks)
 
   return Str.isEmpty(text) && images.length === 0
@@ -641,13 +641,18 @@ const userNoteDrafts = (
     ),
   )
 
+const metaDrafts = (message: UserMessage, key: string): readonly Draft[] =>
+  message.stopHookFeedback === true
+    ? [draft(ChatItem.StopHookFeedback({ key, words: wordsIn(message.blocks) }))]
+    : []
+
 const userDrafts = (
   message: UserMessage,
   keyAt: (index: number) => string,
   placement: Placement,
 ): readonly Draft[] =>
   message.isMeta
-    ? []
+    ? metaDrafts(message, keyAt(0))
     : [...promptDraft(message, keyAt(-1)), ...userNoteDrafts(message, keyAt, placement)]
 
 const systemDrafts = (

@@ -1,6 +1,8 @@
+import stopHookCap from '@crook/claude/fixtures/stop-hook-cap.jsonl?raw'
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
+import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
 import { TranscriptOffset } from '@crook/domain/Ids'
@@ -47,6 +49,7 @@ import type { TranscriptLine } from '@crook/web/chat/TranscriptState'
 import { walk } from '@crook/state-machine/Walk'
 
 import { activityWalk } from '../../charts/ActivityWalk.ts'
+import { messagesOf } from '../../stories/RealTranscriptFixtures.ts'
 import { agent, START } from '../HerdFixtures.ts'
 import {
   answered,
@@ -55,6 +58,7 @@ import {
   compactSummary,
   prompt,
   SESSION,
+  stopHookFeedback,
   toolResult,
   toolUse,
   turnDuration,
@@ -72,9 +76,15 @@ const PREVIOUS_ANSWER = evidence(true, EARLIER)
 const PROMPT = evidence(false)
 const ANSWER = evidence(true)
 const NO_EVIDENCE = Option.none<TurnEvidence>()
+const HOOK_WORDS = '[/made/up/check.sh]: Run the check first.'
+const BLOCKS_BEFORE_THE_OVERRIDE = 9
+const LAST_WRITE_MESSAGES = 3
+
+const step = (state: ActivityState, event: ActivityEvent): ActivityState =>
+  activityMachine.transition(state, event)[0]
 
 const after = (start: ActivityState, events: readonly ActivityEvent[]): ActivityState =>
-  Arr.reduce(events, start, (state, event) => activityMachine.transition(state, event)[0])
+  Arr.reduce(events, start, step)
 
 const workingRow = Option.some(agent('w1:p1', 'working', { secondsAgo: 0 }))
 const since = Option.getOrThrow(Option.map(workingRow, (row) => row.statusChangedAt))
@@ -216,6 +226,69 @@ describe('what a subagent run says happened', () => {
   })
 })
 
+describe('a Stop hook blocking every stop up to the cap', () => {
+  const startingWork: ActivityState = working(since)
+
+  const lineOf = (message: TranscriptMessage): TranscriptLine => ({ session: SESSION, message })
+
+  const rounds = pipe(
+    Arr.range(1, BLOCKS_BEFORE_THE_OVERRIDE),
+    Arr.flatMap((round) => [
+      answered(round * 100, `Answer ${round}`, round * 2),
+      stopHookFeedback(round * 100 + 10, HOOK_WORDS, round * 2 + 1),
+    ]),
+  )
+
+  const roundStates = pipe(
+    Arr.range(1, BLOCKS_BEFORE_THE_OVERRIDE),
+    Arr.flatMap(() => [finished(since), working(since)]),
+  )
+
+  const evidenceUpTo = (messages: readonly TranscriptMessage[], count: number) =>
+    lastTurnEvidence(pipe(messages, Arr.take(count), Arr.map(lineOf)))
+
+  const statesOver = (messages: readonly TranscriptMessage[], row: typeof workingRow) =>
+    pipe(
+      Arr.range(1, messages.length),
+      Arr.map((count) => evidenceUpTo(messages, count)),
+      Arr.scan<ActivityState, Option.Option<TurnEvidence>>(startingWork, (state, found) =>
+        step(state, activityEventOf(PANE_LIVE, row, found)),
+      ),
+      Arr.drop(1),
+    )
+
+  it('keeps a subagent run working when a hook blocks its stop, as the same evidence says', () => {
+    expect(
+      runEventOf(
+        Option.some(since),
+        evidenceUpTo([answered(0, 'Done', 2), stopHookFeedback(10, HOOK_WORDS, 3)], 2),
+      ),
+    ).toEqual(agentWorks(since))
+  })
+
+  it('reads done on each answer and working again on each block, at the start of the turn', () => {
+    const states = statesOver([prompt(0, 'Fix it', 1), ...rounds], workingRow)
+
+    expect(states).toEqual([working(since), ...roundStates])
+  })
+
+  it('holds on a real run, and the block past the cap lands with the end of the turn', () => {
+    const real = messagesOf(stopHookCap)
+    const beforeLastWrite = Arr.dropRight(real, LAST_WRITE_MESSAGES)
+    const states = statesOver(beforeLastWrite, workingRow)
+    const answeredLast = pipe(states, Arr.prepend(startingWork), Arr.lastNonEmpty)
+    const everyLine = evidenceUpTo(real, real.length)
+
+    expect(states).toEqual([working(since), ...Arr.dropRight(roundStates, 1)])
+    expect(step(answeredLast, activityEventOf(PANE_LIVE, workingRow, everyLine))).toEqual(
+      finished(since),
+    )
+    expect(step(answeredLast, activityEventOf(PANE_LIVE, idleRow, everyLine))).toEqual(
+      still('idle'),
+    )
+  })
+})
+
 describe('the transcript evidence of a turn', () => {
   const linesOf = (messages: readonly TranscriptMessage[]): readonly TranscriptLine[] =>
     messages.map((message) => ({ session: SESSION, message }))
@@ -240,6 +313,24 @@ describe('the transcript evidence of a turn', () => {
         compactSummary(20, 'We fixed it.'),
         user(30, [new TextBlock({ text: 'caveat' })], { isMeta: true }),
         user(40, [new LocalCommandBlock({ name: '/compact', args: '' })]),
+      ]),
+    ).toEqual(Option.some(true))
+  })
+
+  it('reads a Stop hook sending Claude back as the turn going on after its answer', () => {
+    expect(ended([answered(0, 'Fixed'), stopHookFeedback(10, HOOK_WORDS)])).toEqual(
+      Option.some(false),
+    )
+    expect(
+      ended([answered(0, 'Fixed'), stopHookFeedback(10, HOOK_WORDS), answered(20, 'Again')]),
+    ).toEqual(Option.some(true))
+  })
+
+  it('reads the same line from an agent too old to mark it as it always did', () => {
+    expect(
+      ended([
+        answered(0, 'Fixed'),
+        user(10, [new TextBlock({ text: `Stop hook feedback:\n${HOOK_WORDS}` })], { isMeta: true }),
       ]),
     ).toEqual(Option.some(true))
   })

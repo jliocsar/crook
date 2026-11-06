@@ -169,6 +169,10 @@ export const TIMELINE_EXPECTATIONS = {
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
   }),
+  'transition/stop-hook-sends-back': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+  }),
   'transition/compact-ends-the-turn': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),

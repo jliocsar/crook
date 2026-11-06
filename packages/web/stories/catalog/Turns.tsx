@@ -23,8 +23,10 @@ import {
   compactSummary,
   opened,
   prompt,
+  stopHookFeedback,
   toolResult,
   toolUse,
+  turnDuration,
   user,
 } from '../../test/TranscriptFixtures.ts'
 import { chatHerd, chatStory, delivered } from '../ChatFixtures.ts'
@@ -38,6 +40,8 @@ import type { LinkStage, StoryMaker } from '../Story.tsx'
 const STILL_ACTIVITY = '[data-machine="activity"][data-state="Still"]'
 const COMPOSER_FIELD_NAME = /Message/u
 const TYPED_COMPACT = '/compact keep the toast'
+const STOP_HOOK_ROW = 'A Stop hook blocked the stop'
+const HOOK_WORDS = '[/made/up/check.sh]: Run the second check before you stop.'
 const UNANSWERED_FIND_MS = Duration.toMillis(COMMAND_SILENCE) + 2000
 const BLIP_ANSWER_MS = 100
 const BLIP_LET_GO_MS = 117
@@ -135,6 +139,48 @@ export const TURN_STORIES: readonly StoryMaker[] = [
         feed(link, [
           chunk(60, 70, [answered(60, 'Idle came first, the answer after.', TURN_START + 12)]),
         ]),
+      ),
+    ],
+  }),
+  chatStory({
+    slug: 'stop-hook-sends-back',
+    title: 'An answer, a Stop hook sends Claude back twice, and the third answer ends the turn',
+    shows: { text: 'The quiet redial' },
+    ends: {
+      all: [
+        { text: 'All three checks ran.' },
+        { text: STOP_HOOK_ROW },
+        { selector: STILL_ACTIVITY },
+      ],
+    },
+    events: CONVERSATION,
+    timeline: [
+      step<LinkStage>(900, 'herdr says working', ({ link }) =>
+        SubscriptionRef.set(link.state, WORKING_HERD),
+      ),
+      step<LinkStage>(500, 'The prompt reaches the transcript', ({ link }) =>
+        feed(link, [chunk(50, 60, [prompt(50, QUESTION, TURN_START)])]),
+      ),
+      step<LinkStage>(1200, 'An answer that looks final lands', ({ link }) =>
+        feed(link, [chunk(60, 70, [answered(60, 'The toast looks right.', TURN_START + 4)])]),
+      ),
+      step<LinkStage>(600, 'The hook blocks the stop', ({ link }) =>
+        feed(link, [chunk(70, 80, [stopHookFeedback(70, HOOK_WORDS, TURN_START + 5)])]),
+      ),
+      step<LinkStage>(1700, 'Claude answers again', ({ link }) =>
+        feed(link, [chunk(80, 90, [answered(80, 'Ran the second check.', TURN_START + 7)])]),
+      ),
+      step<LinkStage>(600, 'The hook blocks the stop again', ({ link }) =>
+        feed(link, [chunk(90, 100, [stopHookFeedback(90, HOOK_WORDS, TURN_START + 8)])]),
+      ),
+      step<LinkStage>(1700, 'The answer the hook lets go', ({ link }) =>
+        feed(link, [chunk(100, 110, [answered(100, 'All three checks ran.', TURN_START + 10)])]),
+      ),
+      step<LinkStage>(600, 'The turn ends in the transcript', ({ link }) =>
+        feed(link, [chunk(110, 120, [turnDuration(110, TURN_START + 11)])]),
+      ),
+      step<LinkStage>(300, 'herdr says idle', ({ link }) =>
+        SubscriptionRef.set(link.state, IDLE_HERD),
       ),
     ],
   }),
