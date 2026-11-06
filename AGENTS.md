@@ -1624,11 +1624,34 @@ machine as offline (all four tests of it hung until their 20 s limit before the 
 state says nothing about the panes, so the hub keeps the machine's seen marks and herdr version
 through any lost state rather than treating its empty list as every pane gone.
 
-`pane.process_info` leaves out `foreground_processes` and `foreground_process_group_id` when it
-catches a pane's shell between two children (measured: 1 of 47 raw reads on panes running a printing
-loop; the first of 14 failed calls in one loaded run was this). crook's schema requires the first,
-so such a read fails as a changed protocol and that pane goes without a session for that one
-refresh. Whether a pane whose foreground stays Claude ever shows it is not measured.
+`pane.process_info` leaves out `foreground_processes` and `foreground_process_group_id` when the
+group holding the pane's terminal has no live process, which is a shell caught between two children.
+The two go together, and the list is never sent empty (read in a newer herdr's source; on 0.9.5, none
+of the reads below sent an empty list or one field without the other). Measured on herdr 0.9.5 in a
+named session, reading every pane back to back for 120 s, one run under zsh and one under bash, a copy
+of `sleep` named `claude` staying in the foreground showed it in 0 of 173115 reads, and a copy of
+bash named `claude` running one child after another in 0 of 98922. A shell's printing loop showed it
+in 8110 of 150885, a shell looping over a stand-in that lives 50 ms in 143 of 165531, an idle shell in
+0 of 241421, and a stand-in stopped with SIGTSTP in 0 of 188291, where the reply lists the shell.
+
+A real Claude was not read through that call, only through what it reports from. Seven Claudes
+running under herdr on the laptop, read from `/proc` every 5.6 ms for 900 s while one of them ran a
+subagent's tool calls, held the terminal in their own process group in all 161839 reads of each. Their
+tool shells sit in a session of their own with no terminal (read off `ps`), so a tool call never takes
+the foreground. So a pane whose foreground stays Claude does not show it, and it shows up around a
+Claude that exited or a pane that was never running one.
+
+Its absence therefore says nothing about the pane, while a list that holds no Claude does. Reading it
+as no Claude would cost more than a stale name: a session missing from one read dismisses what the
+hooks recorded for it, leaves its Ask to the screen alone and loses its waiting mark (read in the
+code), and such a read used to do that even with herdr reporting the session, since it failed as a
+changed protocol. So the row keeps the session it last held for that same terminal, as long as a pid
+file still names that session, then what herdr reports. A pid file going is what ends a Claude that
+stopped cleanly, so its wake cannot land on a read that keeps the session. A Claude killed outright
+leaves its pid file, so that wake is herdr dropping its agent (reasoned, not measured). A session
+under a Claude root the agent does not watch is never named, so it goes on such a read, as herdr's
+report of it already does (read in the code). None of this reaches the wire, which only ever carries
+the row's session, so older phones and hubs see nothing new.
 :::
 
 :::tip
