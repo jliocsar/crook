@@ -4,6 +4,9 @@ import * as Equal from 'effect/Equal'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import {
+  Activity,
+  BookOpen,
+  Braces,
   ChevronDown,
   CircleCheck,
   Circle,
@@ -13,16 +16,27 @@ import {
   FileText,
   Globe,
   Search,
+  Send,
   SquareTerminal,
+  Workflow,
   Wrench,
 } from 'lucide-react'
 import * as React from 'react'
 
 import { relativeToFolder } from '@crook/domain/Ask'
+import { CODE_MODE_TOOL } from '@crook/domain/ToolName'
+import { stringField } from '@crook/domain/ToolSubject'
 import type { PromptSender } from '@crook/domain/TranscriptMessage'
 import type { ChatItem, SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
 import { ChatItem as ChatItems } from '@crook/web/chat/ChatItems'
-import { type PlanStep, stringField, toolTitle } from '@crook/web/chat/ToolSummary'
+import {
+  approvalMessage,
+  type ToolField,
+  toolFields,
+  ToolResultView,
+  toolResultView,
+} from '@crook/web/chat/ToolResultView'
+import { type PlanStep, toolTitle } from '@crook/web/chat/ToolSummary'
 import { useBackgroundMarker } from '@crook/web/chat/BackgroundMarker'
 import { Thumbs } from '@crook/web/chat/Images'
 import { RowAction } from '@crook/web/chat/RowAction'
@@ -39,6 +53,7 @@ import {
   withoutLineNumbers,
 } from '@crook/web/chat/ToolView'
 import { Collapse } from '@crook/web/components/Collapse'
+import { FoldedOutput } from '@crook/web/components/FoldedOutput'
 import { OutputText } from '@crook/web/components/OutputText'
 import { useRowFlag } from '@crook/web/components/RowMemory'
 import { CodeBlock } from '@crook/web/components/ui/code-block'
@@ -52,7 +67,7 @@ import {
   languageOfPath,
   SHELL_LANGUAGE,
 } from '@crook/web/highlight/Highlighter'
-import { LINE_BREAK } from '@crook/web/text/Lines'
+import { FOLDED_CODE_CHARACTERS, FOLDED_CODE_LINES, LINE_BREAK } from '@crook/web/text/Lines'
 import { useNow } from '@crook/web/time/Now'
 
 export interface ThreadEnvironment {
@@ -69,6 +84,10 @@ const INLINE_CODE = /`([^`\n]+)`/u
 const PLUGIN_SENDER = 'plugin'
 const SCHEDULED_SENDER = 'scheduled'
 const SDK_SENDER = 'sdk'
+const APPROVAL_SUBJECT = 'asked for approval'
+const APPROVAL_LABEL = 'Asked for approval'
+const RESULT_LABEL = 'result'
+const JSON_LANGUAGE = 'json'
 
 const TOOL_ICON = new Map([
   ['Read', FileText],
@@ -81,6 +100,13 @@ const TOOL_ICON = new Map([
   ['Glob', Search],
   ['WebFetch', Globe],
   ['WebSearch', Globe],
+  ['ToolSearch', Search],
+  ['Skill', BookOpen],
+  ['Monitor', Activity],
+  ['SendMessage', Send],
+  ['Workflow', Workflow],
+  [CODE_MODE_TOOL, Braces],
+  ['mcp__executor__execute', Braces],
 ])
 
 const STEP_ICON = {
@@ -145,6 +171,106 @@ function ResultOutput({
   })
 }
 
+function FoldedCode({
+  code,
+  label,
+  language,
+  memorySlot,
+}: {
+  code: string
+  label: string
+  language: string
+  memorySlot: string
+}) {
+  return (
+    <CodeBlock
+      code={code}
+      filename={label}
+      language={language}
+      maxLines={FOLDED_CODE_LINES}
+      maxCharacters={FOLDED_CODE_CHARACTERS}
+      memorySlot={memorySlot}
+      wrap
+    />
+  )
+}
+
+function LabelledOutput({
+  label,
+  text,
+  memorySlot,
+}: {
+  label: string
+  text: string
+  memorySlot: string
+}) {
+  return (
+    <div data-slot="tool-field" className="grid min-w-0 gap-1">
+      <p className="text-muted-foreground text-xs font-medium">{label}</p>
+      <FoldedOutput text={text} memorySlot={memorySlot} />
+    </div>
+  )
+}
+
+function ToolFieldView({ field }: { field: ToolField }) {
+  return Option.match(field.language, {
+    onSome: (language) => (
+      <FoldedCode
+        code={field.text}
+        label={field.label}
+        language={language}
+        memorySlot={`field code ${field.key}`}
+      />
+    ),
+    onNone: () => (
+      <LabelledOutput
+        label={field.label}
+        text={field.text}
+        memorySlot={`field output ${field.key}`}
+      />
+    ),
+  })
+}
+
+function ToolResult({ call }: { call: ToolCallModel }) {
+  return Option.match(toolResultView(call), {
+    onNone: () => null,
+    onSome: ToolResultView.$match({
+      Structured: ({ text }) =>
+        call.status === 'error' ? (
+          <FoldedOutput text={text} memorySlot="output result" failed />
+        ) : (
+          <FoldedCode
+            code={text}
+            label={RESULT_LABEL}
+            language={JSON_LANGUAGE}
+            memorySlot="code result"
+          />
+        ),
+      Words: ({ text }) => (
+        <FoldedOutput text={text} memorySlot="output result" failed={call.status === 'error'} />
+      ),
+    }),
+  })
+}
+
+function ReadablePanel({ call }: { call: ToolCallModel }) {
+  return (
+    <>
+      {Option.match(approvalMessage(call), {
+        onNone: () => null,
+        onSome: (message) => (
+          <LabelledOutput label={APPROVAL_LABEL} text={message} memorySlot="output approval" />
+        ),
+      })}
+      {toolFields(call.name, call.input).map((field) => (
+        <ToolFieldView key={field.key} field={field} />
+      ))}
+      <ToolResult call={call} />
+    </>
+  )
+}
+
 function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
   const path = pathOf(call)
   const shownPath = Option.map(path, (found) => relativeToFolder(cwd, found))
@@ -197,12 +323,7 @@ function ToolPanel({ call, cwd }: { call: ToolCallModel; cwd: string }) {
     return <ResultOutput call={call} language={language} numbered />
   }
 
-  return (
-    <>
-      <OutputText text={JSON.stringify(call.input, null, 2)} className={OUTPUT_CLASS} />
-      <ResultOutput call={call} language={Option.none()} />
-    </>
-  )
+  return <ReadablePanel call={call} />
 }
 
 function ToolCard({ call, environment }: { call: ToolCallModel; environment: ThreadEnvironment }) {
@@ -226,7 +347,12 @@ function ToolCallCard({
 
   return (
     <ToolCall
-      name={toolTitle(call)}
+      name={toolTitle(
+        Option.match(approvalMessage(call), {
+          onNone: () => call,
+          onSome: () => ({ name: call.name, summary: Option.some(APPROVAL_SUBJECT) }),
+        }),
+      )}
       status={call.status}
       icon={<Icon size={INLINE_ICON_SIZE} />}
       duration={toolDuration(call, now)}

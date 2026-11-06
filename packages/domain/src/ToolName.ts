@@ -3,8 +3,9 @@ import * as Option from 'effect/Option'
 
 const MCP_TOOL = /^mcp__(?<server>.+?)__(?<name>.+)$/u
 const PLUGIN_SERVER = /^plugin_.+_(?<server>[^_]+)$/u
-const CODE_MODE_TOOL = 'mcp__codemode__run'
 const CODE_MODE_NAME = 'code mode'
+
+export const CODE_MODE_TOOL = 'mcp__codemode__run'
 
 const spoken = (identifier: string): string => identifier.replaceAll(/_+/gu, ' ')
 

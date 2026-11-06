@@ -18,6 +18,7 @@ import type {
 import type { SubagentId } from '@crook/domain/Ids'
 import type { SubagentStatus } from '@crook/domain/Subagent'
 import type { BackgroundChanged } from '@crook/domain/Transcript'
+import { toolName } from '@crook/domain/ToolName'
 import { firstLine } from '@crook/domain/ToolSubject'
 import { clockElapsed, shortElapsed } from '@crook/web/time/Elapsed'
 
@@ -286,8 +287,8 @@ export const activityText = (activity: SubagentActivity): Option.Option<string> 
   Option.orElse(
     Option.map(activity.tool, (tool) =>
       Option.match(activity.subject, {
-        onNone: () => tool,
-        onSome: (subject) => `${tool}(${subject})`,
+        onNone: () => toolName(tool),
+        onSome: (subject) => `${toolName(tool)}(${subject})`,
       }),
     ),
     () => activity.text,
