@@ -1805,6 +1805,7 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   compile) and over the routes and the link matrix (a new route fails it at run time). It cannot
   see a state that lives in a boolean, a local `useState` or CSS, and a story names what it
   shows, not that the state looks right.
+- Whether a machine has lost herdr is an `Option`, so its type asks the coverage test for no story: that table lists them by hand, and a new way to read the state fails nothing. The pill keeps one line beside the badge and the update pill. On a card the three take 226.4 px of 285 at 375 wide and of 300 at 390, and in the machine's header, with its narrower gap, 214.4 of 319 and of 334; at 320 the card has 3.6 px to spare. A long name truncates and leaves that row alone. The Herdr row stays 44 px tall as a version and as a lost time. The pill arriving moves the update pill sideways in one frame, 79.8 px on a card and 73.8 in the header, for 0.00076 and 0.00124 of layout shift, with the row's own value in the second (all measured in Chromium, the shifts at 390x844 and 4x CPU throttling).
 - Reduced motion is a stubbed `matchMedia` set before the first render. It reaches Motion only:
   the `motion-reduce:` utilities read the real media query (reasoned, not measured). Emulating it
   in the browser instead makes the dev page reload in a loop (reported by another agent, not
