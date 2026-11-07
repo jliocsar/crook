@@ -23,7 +23,7 @@ import {
 } from '@crook/domain/Transcript'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
-import { COLD_START, HubLinkState, RECOVERED } from '@crook/web/rpc/HubLinkState'
+import { COLD_START, HubLinkState, RECOVERED, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
 import { click, eventually, findByRole, present, wait } from '../Dom.ts'
@@ -70,6 +70,8 @@ const catchingUpCapsule = () => document.querySelector('[data-slot="catching-up-
 
 const dimmedFlags = () =>
   Array.from(document.querySelectorAll('[data-state="dimmed"]'), () => 'true')
+
+const catchingUpDim = () => document.querySelector('[data-catching-up]')
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -216,6 +218,110 @@ describe('a chat catching up', () => {
     }),
   )
 
+  it.live("dims only the rows it holds back, on the capsule's delay, and lands them clear", () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp(CHAT, current())
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Seen before.')]),
+        caughtUp(10),
+      ])
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByText('Seen before.')).toBeNull()
+      })
+      yield* Effect.promise(() =>
+        router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+      )
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+
+      expect(catchingUpDim()).toBeNull()
+
+      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+
+      const dim = present(catchingUpDim(), 'The catch-up dim')
+
+      expect(dim.getAttribute('data-slot')).toBe('conversation-content')
+      expect(dim.className).toContain('opacity-85')
+      expect(dim.contains(screen.getByText('Seen before.'))).toBe(true)
+      expect(present(catchingUpCapsule(), 'The capsule').closest('[data-catching-up]')).toBeNull()
+      expect(document.querySelector('header')?.closest('[data-catching-up]')).toBeNull()
+      expect(
+        document.querySelector('[data-slot="chat-dock"]')?.closest('[data-catching-up]'),
+      ).toBeNull()
+      expect(dimmedFlags()).not.toContain('true')
+
+      const seen: string[] = []
+      const observer = new MutationObserver(() => {
+        seen.push(
+          `${catchingUpDim() !== null} ${screen.queryByText('Missed while away.') !== null}`,
+        )
+      })
+
+      observer.observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+      })
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(10, 20, [said(10, 'Missed while away.')]),
+        caughtUp(20),
+      ])
+      yield* Effect.promise(() => screen.findByText('Missed while away.'))
+      yield* eventually(() => {
+        expect(seen.at(-1)).toBe('false true')
+      })
+      observer.disconnect()
+
+      expect(seen).not.toContain('true true')
+    }),
+  )
+
+  it.live('gives the rows over to the away dim when the hub goes away while it catches up', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp(CHAT, current())
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Seen before.')]),
+        caughtUp(10),
+      ])
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByText('Seen before.')).toBeNull()
+      })
+      yield* Effect.promise(() =>
+        router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+      )
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+
+      const content = present(catchingUpDim(), 'The catch-up dim')
+
+      yield* SubscriptionRef.update(
+        link.state,
+        (state) => new HubLinkState({ status: UNREACHABLE, herd: state.herd }),
+      )
+      yield* eventually(() => {
+        expect(dimmedFlags()).toContain('true')
+      })
+
+      expect(catchingUpDim()).toBeNull()
+      expect(content.className).toContain('transition-opacity')
+      expect(content.className).not.toContain('opacity-85')
+
+      yield* eventually(() => {
+        expect(catchingUpCapsule()).toBeNull()
+      })
+    }),
+  )
+
   it.live('moves below the banner, which lies over the top of the thread', () =>
     Effect.gen(function* () {
       const { link, router } = yield* renderApp(CHAT, current())
@@ -283,6 +389,9 @@ describe('a chat catching up', () => {
         present(catchingUpCapsule(), 'The capsule').closest('[data-machine="transcript"]'),
       ).not.toBeNull()
       expect(document.querySelector('header')?.textContent).not.toContain('Catching up')
+      expect(
+        present(catchingUpDim(), 'The catch-up dim').contains(screen.getByText('Seen before.')),
+      ).toBe(true)
     }),
   )
 

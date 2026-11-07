@@ -27,7 +27,7 @@ import {
   useTranscriptThread,
 } from '@crook/web/chat/OpenedChat'
 import { PresenceState } from '@crook/web/chat/PresenceMachine'
-import { Thread } from '@crook/web/chat/Thread'
+import { Thread, threadDimOf } from '@crook/web/chat/Thread'
 import { useThreadContent } from '@crook/web/chat/ThreadEmpty'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -37,6 +37,7 @@ import {
   isLoadingEarlier,
   saysCatchingUp,
   shownOf,
+  showsStaleRows,
   transcriptMachine,
 } from '@crook/web/chat/TranscriptMachine'
 import { linesOf, NO_ROSTERS, rostersOf } from '@crook/web/chat/TranscriptState'
@@ -112,6 +113,10 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
   const { state } = transcript
   const view = React.useMemo(() => shownOf(state), [state])
   const catchingUp = isWatching(model) && saysCatchingUp(state)
+  const threadDim = threadDimOf({
+    away: dimmed,
+    staleRows: isWatching(model) && showsStaleRows(state),
+  })
   const cwd = cwdOf(model)
   const paneClosed = PresenceState.guards.Closed(model.presence)
   const parentLines = linesOf(parent)
@@ -193,7 +198,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
           backLabel={`Back to ${parentTitle}`}
         />
         <div {...stateMark(transcriptMachine, state)} className="relative min-h-0 flex-1">
-          <Thread rows={threadContent.rows} dimmed={dimmed} empty={threadContent.empty} />
+          <Thread rows={threadContent.rows} dim={threadDim} empty={threadContent.empty} />
           <CatchingUpCapsule shown={catchingUp && !dimmed} />
         </div>
         <div

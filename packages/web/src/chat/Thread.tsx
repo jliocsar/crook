@@ -47,12 +47,28 @@ export interface ThreadHandle {
   readonly scrollToEnd: () => void
 }
 
+export type ThreadDim = 'clear' | 'away' | 'catching-up'
+
 const ESTIMATED_ROW_HEIGHT = 84
 const OVERSCAN = 8
 const EDGE_PADDING = 16
 const FOLLOW_THRESHOLD = 48
 const JUMP_ICON_SIZE = 13
 const ROW_GAP = 12
+
+export const threadDimOf = ({
+  away,
+  staleRows,
+}: {
+  away: boolean
+  staleRows: boolean
+}): ThreadDim => {
+  if (away) {
+    return 'away'
+  }
+
+  return staleRows ? 'catching-up' : 'clear'
+}
 
 const ThreadRowBody = React.memo(RowBody)
 
@@ -526,12 +542,12 @@ function LatestButton({ following, onJump }: { following: boolean; onJump: () =>
 
 function ThreadBody({
   rows,
-  dimmed,
+  dim,
   empty,
   handle,
 }: {
   rows: readonly ThreadRow[]
-  dimmed: boolean
+  dim: ThreadDim
   empty: React.ReactNode
   handle?: React.Ref<ThreadHandle>
 }) {
@@ -670,7 +686,7 @@ function ThreadBody({
 
   return (
     <RenderCacheScope>
-      <Dimmed dimmed={dimmed} className="relative h-full min-h-0">
+      <Dimmed dimmed={dim === 'away'} className="relative h-full min-h-0">
         <div
           ref={viewport}
           data-slot="conversation-viewport"
@@ -699,7 +715,12 @@ function ThreadBody({
             <motion.div
               ref={content}
               data-slot="conversation-content"
-              className="relative w-full"
+              data-catching-up={dim === 'catching-up' || undefined}
+              className={cn(
+                'relative w-full',
+                dim !== 'clear' && 'transition-opacity duration-(--motion) ease-(--ease-out)',
+                dim === 'catching-up' && 'opacity-85',
+              )}
               style={{ height: totalSize, transform: lift.transform }}
             >
               {virtualItems.map((virtual) => {
