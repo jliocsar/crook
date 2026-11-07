@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import * as Equivalence from 'effect/Equivalence'
 import { pipe } from 'effect/Function'
 import * as Number from 'effect/Number'
 import * as Option from 'effect/Option'
@@ -43,6 +44,8 @@ export const RecordedFrame = Schema.Struct({
   blank: Schema.Boolean,
   rows: Schema.Int,
   thread: Schema.optional(ThreadReading),
+  cover: Schema.optional(Schema.Finite),
+  cards: Schema.optionalKey(Schema.Array(Schema.String)),
   marks: Schema.Record(Schema.String, MarkReading),
   states: Schema.Record(Schema.String, Schema.String),
   added: Schema.Array(Schema.String),
@@ -58,6 +61,7 @@ export const ShiftEntry = Schema.Struct({
   at: Schema.Finite,
   value: Schema.Finite,
   hadRecentInput: Schema.Boolean,
+  behindCover: Schema.optionalKey(Schema.Boolean),
   sources: Schema.Array(ShiftSource),
 })
 export type ShiftEntry = typeof ShiftEntry.Type
@@ -124,6 +128,22 @@ export const liftsForNothing = (frame: RecordedFrame, next: RecordedFrame): bool
     Option.zipWith(heightAt(frame), heightAt(next), (before, after) => after - before),
     Option.exists((grown) => grown < ROW_MOVE_PIXELS),
   )
+
+const sameCards = Arr.makeEquivalence(Equivalence.String)
+
+const withoutTops = (cards: readonly string[]): readonly string[] =>
+  Arr.map(cards, (card) => card.slice(0, card.lastIndexOf('|')))
+
+export const cardsChangeInView = (
+  before: RecordedFrame,
+  frame: RecordedFrame,
+  next: RecordedFrame,
+): boolean =>
+  next.frame === frame.frame + 1 &&
+  (frame.cover ?? 0) >= ROW_MOVE_PIXELS &&
+  ((before.cover ?? 0) >= ROW_MOVE_PIXELS
+    ? !sameCards(frame.cards ?? [], next.cards ?? [])
+    : !sameCards(withoutTops(frame.cards ?? []), withoutTops(next.cards ?? [])))
 
 export const p90FrameMs = (frames: readonly RecordedFrame[]): number => {
   const mounted = frames.filter((frame) => frame.mounted)

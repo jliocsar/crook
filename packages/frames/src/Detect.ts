@@ -10,6 +10,7 @@ import {
   backtracks,
   bandAt,
   BandPlace,
+  cardsChangeInView,
   EMPTY_BAND_PIXELS,
   isStarved,
   leastMovedAt,
@@ -42,6 +43,7 @@ export const Check = Schema.Literals([
   'backtrack',
   'overshoot',
   'unpaid-lift',
+  'list-moved',
   'order',
 ])
 export type Check = typeof Check.Type
@@ -303,6 +305,28 @@ const unpaidLiftsOf = (story: string, frames: readonly RecordedFrame[]): readonl
     })),
   )
 
+const listMovesOf = (story: string, frames: readonly RecordedFrame[]): readonly Finding[] =>
+  pipe(
+    frames,
+    Arr.drop(2),
+    Arr.zip(Arr.drop(frames, 1)),
+    Arr.zip(frames),
+    Arr.filter(([[next, frame], before]) => cardsChangeInView(before, frame, next)),
+    Arr.map(([[next, frame]]) => ({
+      check: 'list-moved' as const,
+      key: 'list-moved',
+      story,
+      firstFrame: next.frame,
+      lastFrame: next.frame,
+      imageFrame: next.frame,
+      fromMs: Math.round(next.at),
+      toMs: Math.round(next.at),
+      marks: marksOf(next),
+      states: statesOf(next),
+      words: `The cards under a pushed screen ${frame.cover ?? 0} px off its place changed in view, from [${(frame.cards ?? []).join(', ')}] to [${(next.cards ?? []).join(', ')}]. The list has to be right before any of it shows.`,
+    })),
+  )
+
 const impactOf = (source: ShiftSource): number =>
   Math.hypot(source.to.x - source.from.x, source.to.y - source.from.y) *
   Math.max(source.from.width * source.from.height, source.to.width * source.to.height)
@@ -326,6 +350,15 @@ const frameAtOrAfter = (
     () => Arr.last(frames),
   )
 
+const followsARestingCover = (frames: readonly RecordedFrame[], at: number): boolean =>
+  Option.exists(
+    Option.flatMap(
+      Arr.findLastIndex(frames, (frame) => frame.at <= at),
+      (painted) => Arr.get(frames, painted - 1),
+    ),
+    (before) => before.cover === 0,
+  )
+
 const shiftsOf = (
   story: string,
   log: FrameLog,
@@ -336,7 +369,13 @@ const shiftsOf = (
     onNone: () => 0,
     onSome: (frame) => frame.at,
   })
-  const watched = Arr.filter(log.shifts, (entry) => !entry.hadRecentInput && entry.at >= startsAt)
+  const watched = Arr.filter(
+    log.shifts,
+    (entry) =>
+      !entry.hadRecentInput &&
+      entry.at >= startsAt &&
+      !(entry.behindCover === true && followsARestingCover(frames, entry.at)),
+  )
   const total = Arr.reduce(watched, 0, (sum, entry) => sum + entry.value)
   const opening = Option.flatMap(Arr.head(watched), (entry) => frameAtOrAfter(frames, entry.at))
   const closing = Option.flatMap(Arr.last(watched), (entry) => frameAtOrAfter(frames, entry.at))
@@ -472,6 +511,7 @@ export const detect = (
             ...backtracksOf(story, watched),
             ...overshootsOf(story, watched),
             ...unpaidLiftsOf(story, watched),
+            ...listMovesOf(story, watched),
             ...shiftsOf(story, log, watched, expectation),
             ...Object.entries(expectation.order).flatMap(([track, order]) =>
               brokenOrderOf(story, watched, track, order),

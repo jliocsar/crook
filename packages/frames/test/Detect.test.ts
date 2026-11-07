@@ -20,6 +20,9 @@ import type { RecordedFrame } from '@crook/frames/FrameLog'
 import backtrackSmallFixture from './fixtures/backtrack-small.json' with { type: 'json' }
 import backtrackFixture from './fixtures/backtrack.json' with { type: 'json' }
 import blankFixture from './fixtures/blank.json' with { type: 'json' }
+import cardsChangeFixture from './fixtures/cards-change-as-cover-leaves.json' with { type: 'json' }
+import cardsRightFixture from './fixtures/cards-right-as-cover-leaves.json' with { type: 'json' }
+import cardsSettleFixture from './fixtures/cards-settle-as-swipe-starts.json' with { type: 'json' }
 import cleanFixture from './fixtures/clean.json' with { type: 'json' }
 import emptyBandFixture from './fixtures/empty-band.json' with { type: 'json' }
 import filledBandFixture from './fixtures/filled-band.json' with { type: 'json' }
@@ -34,6 +37,7 @@ import liftMeasuredFixture from './fixtures/lift-measured.json' with { type: 'js
 import overshootCatchUpFixture from './fixtures/overshoot-catch-up.json' with { type: 'json' }
 import overshootSendFixture from './fixtures/overshoot-send.json' with { type: 'json' }
 import pairFixture from './fixtures/pair.json' with { type: 'json' }
+import shiftAsCoverLeavesFixture from './fixtures/shift-as-cover-leaves.json' with { type: 'json' }
 import shiftFixture from './fixtures/shift.json' with { type: 'json' }
 import slowFramesHoldFixture from './fixtures/slow-frames-hold.json' with { type: 'json' }
 import swapFixture from './fixtures/swap.json' with { type: 'json' }
@@ -154,6 +158,54 @@ describe('detect, over logs recorded from real runs', () => {
     expect(backtrack.lastFrame).toBe(143)
     expect(backtrack.words).toContain('moved up 37 px')
     expect(backtrack.words).toContain('back down 37 px')
+  })
+
+  it('reports cards changing under a pushed screen that has moved off its place', () => {
+    const story = 'transition/herd-moves-under-chat-then-back'
+    const findings = detect(story, decodeLog(cardsChangeFixture), expectationOf(story))
+    const moved = findingNamed(findings, 'list-moved')
+
+    expect(moved.check).toBe('list-moved')
+    expect(moved.words).toContain('Sweep the release notes')
+  })
+
+  it('passes cards that are already right when the pushed screen leaves', () => {
+    const story = 'transition/herd-moves-under-chat-then-back'
+
+    expect(keysOf(detect(story, decodeLog(cardsRightFixture), expectationOf(story)))).not.toContain(
+      'list-moved',
+    )
+  })
+
+  it('leaves a card top alone in the frame a pushed screen first moves, read ahead of Motion', () => {
+    const story = 'transition/herd-moves-while-typing-then-swipe'
+
+    expect(
+      keysOf(detect(story, decodeLog(cardsSettleFixture), expectationOf(story))),
+    ).not.toContain('list-moved')
+  })
+
+  it('counts no shift in the first paint after a resting pushed screen has gone', () => {
+    const story = 'actions/toast-after-chat-close'
+    const log = decodeLog(shiftAsCoverLeavesFixture)
+
+    expect(Arr.some(log.shifts, (entry) => entry.value > 0.01)).toBe(true)
+    expect(detect(story, log, expectationOf(story)).map((finding) => finding.check)).not.toContain(
+      'shift',
+    )
+  })
+
+  it('counts a shift that a resting pushed screen did not cover', () => {
+    const story = 'actions/toast-after-chat-close'
+    const log = decodeLog(shiftAsCoverLeavesFixture)
+    const inView = {
+      ...log,
+      shifts: Arr.map(log.shifts, (entry) => ({ ...entry, behindCover: false })),
+    }
+
+    expect(detect(story, inView, expectationOf(story)).map((finding) => finding.check)).toContain(
+      'shift',
+    )
   })
 
   it('reports the same backtrack when only the last few pixels of a lift came late', () => {
