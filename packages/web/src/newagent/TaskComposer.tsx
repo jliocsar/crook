@@ -4,15 +4,12 @@ import * as React from 'react'
 
 import { keepFocus } from '@crook/web/components/KeepFocus'
 import { isSendKey } from '@crook/web/components/SendKey'
+import { FITTED_FIELD, FitsItsText } from '@crook/web/components/ui/fits-its-text'
 import { ROUND_BUTTON } from '@crook/web/components/ui/prompt-input'
 import { Spinner } from '@crook/web/components/ui/spinner'
 
 const SEND_SPINNER_SIZE = 16
-
-const growToContent = (field: HTMLTextAreaElement) => {
-  field.style.height = 'auto'
-  field.style.height = `${field.scrollHeight}px`
-}
+const FIELD_TEXT = 'max-h-[calc(6lh_+_1.25rem)] px-2 py-2.5 text-base leading-6'
 
 export function TaskComposer({
   task,
@@ -30,14 +27,7 @@ export function TaskComposer({
   onSend: () => void
 }) {
   const fieldId = React.useId()
-  const field = React.useRef<HTMLTextAreaElement>(null)
   const sendable = canSend && task.trim() !== ''
-
-  React.useLayoutEffect(() => {
-    if (field.current !== null) {
-      growToContent(field.current)
-    }
-  }, [task])
 
   return (
     <form
@@ -55,24 +45,29 @@ export function TaskComposer({
         First message to Claude
       </label>
       <div className="flex items-end gap-2 p-1.5">
-        <textarea
-          ref={field}
-          id={fieldId}
-          rows={1}
-          value={task}
-          disabled={disabled}
-          placeholder="What should Claude work on?"
-          className="placeholder:text-muted-foreground block max-h-[calc(6lh_+_1.25rem)] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-base leading-6 outline-none disabled:opacity-60"
-          onChange={(event) => {
-            onTaskChange(event.target.value)
-          }}
-          onKeyDown={(event) => {
-            if (isSendKey(event)) {
-              event.preventDefault()
-              event.currentTarget.form?.requestSubmit()
-            }
-          }}
-        />
+        <FitsItsText text={task} textClass={FIELD_TEXT} className="min-w-0 flex-1">
+          <textarea
+            id={fieldId}
+            rows={1}
+            value={task}
+            disabled={disabled}
+            placeholder="What should Claude work on?"
+            className={cn(
+              FITTED_FIELD,
+              FIELD_TEXT,
+              'placeholder:text-muted-foreground block bg-transparent outline-none disabled:opacity-60',
+            )}
+            onChange={(event) => {
+              onTaskChange(event.target.value)
+            }}
+            onKeyDown={(event) => {
+              if (isSendKey(event)) {
+                event.preventDefault()
+                event.currentTarget.form?.requestSubmit()
+              }
+            }}
+          />
+        </FitsItsText>
         <button
           type="submit"
           aria-label="Start Claude"

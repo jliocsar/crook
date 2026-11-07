@@ -24,7 +24,7 @@ export const chatHerd = (row: AgentRow = chatAgent(), connection: MachineConnect
   herd([
     machine(LAPTOP, [row], {
       connection,
-      agentVersion: '0.0.1',
+      agentVersion: '0.0.2',
       herdrVersion: '0.9.5',
     }),
   ])
@@ -32,7 +32,7 @@ export const chatHerd = (row: AgentRow = chatAgent(), connection: MachineConnect
 export const idleChat = liveWith(chatHerd())
 
 export const shellOnlyHerd = (pane = 'w1:p1') =>
-  herd([machine(LAPTOP, [], { shellPanes: [pane], agentVersion: '0.0.1' })])
+  herd([machine(LAPTOP, [], { shellPanes: [pane], agentVersion: '0.0.2' })])
 
 export const delivered = ({ link }: LinkStage, text: string) =>
   Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text }))))

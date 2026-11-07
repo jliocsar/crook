@@ -881,6 +881,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   (reasoned, not measured). With rows on screen it never says so, and a rejected resume keeps them
   until the agent's first chunk replaces them. A file left truly empty behind such a rejection
   therefore keeps showing the old rows until Claude writes again (reasoned, not measured).
+- Whether an agent sends the caught-up mark is read from the first version that does, 0.0.2, never from the hub's version. Reading it as any agent behind the hub took every agent that had not updated yet for one that cannot say, so every chunk went straight on screen with no skeleton, no hold and no capsule, which is how a 0.0.8 agent under a 0.0.11 hub read (every tag from 0.0.2 sends it, read in each; a test fails on the old rule). A real 0.0.8 binary was not run against this phone.
 - A chat with nothing cached whose pane closed or whose Claude exited showed a blank thread above
   the card. It says the phone has no messages, as a machine that is away does.
 - A close from the chat that stayed on the chat, blank, for the rest of a story was the story and
@@ -1380,6 +1381,8 @@ a turn of its own, enqueued as a task notification.
 - A worker that awaits its own setup before it listens for messages loses every message posted
   in the meantime: the highlighter answered nothing until it listened first and loaded lazily
   (measured).
+- A field that grows with its text sits in a grid over an invisible copy of that text, and reads no height of its own. Setting its height to `auto` to measure it collapsed the dock for one layout on every key, and the thread's scroll was pulled back to fit: at 390 wide, 10 scroll events all at one position, the thread 120 px short of its end for 131 of 148 frames. Laid out from the copy, 5 scroll events of 24 px, one per wrapped line, off the end for those 5 frames of 133 and ending on it (real keystrokes in Chromium, unthrottled, one run of each). That this is the flicker a phone showed is a guess, since iOS is not measured. The copy's words sit in a pseudo-element, so they join no witness's text.
+- Typing renders no thread. The draft's state lives in the chat's screen, so each key re-renders the screen, and two values it hands down were rebuilt per render: a session `Option` and a filtered list. A memo on the thread did nothing until they held: 6 thread renders over 5 keys before, 0 after, and 5 with only the `Option` rebuilt (measured by the render counter). A thread renders by itself for a while after its rows land, so a test counting per key waits past that: 1 render at 50 ms, 0 at 1000 ms (measured).
 - A clock read at the top of a screen re-renders the whole screen every second. In the chat that
   re-rendered every visible row; moving the clock into the leaves that show an elapsed time, each
   ticking only while its span is running, halved the idle render time (measured at 4x

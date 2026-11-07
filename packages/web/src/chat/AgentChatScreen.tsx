@@ -268,7 +268,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const cwd = cwdOf(model)
   const rosters = rostersOf(view)
   const lines = linesOf(view)
-  const session = threadSessionOf(state)
+  const session = React.useMemo(() => threadSessionOf(state), [state])
   const threadEpoch = useThreadEpoch(session)
   const activity = useChatActivity(model, lines, hasFailed(state))
   const { workingSince, itemActivity } = activityView(activity)

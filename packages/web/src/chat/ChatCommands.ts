@@ -529,6 +529,10 @@ const useAlwaysNotes = (
   )
   const answered = Option.exists(heard, AskAnswerEvent.guards.Delivered)
   const abandoned = Option.isSome(heard) && !answered
+  const sessionNotes = React.useMemo(
+    () => Arr.filter(notes, (note) => Equal.equals(note.session, session)),
+    [notes, session],
+  )
 
   React.useEffect(() => {
     if (answered && Option.isSome(awaited)) {
@@ -544,7 +548,7 @@ const useAlwaysNotes = (
   }, [answered, abandoned])
 
   return {
-    notes: Arr.filter(notes, (note) => Equal.equals(note.session, session)),
+    notes: sessionNotes,
     expect: (note: Option.Option<AlwaysNote>, key: IdempotencyKey) => {
       setAwaited(Option.map(note, (expected) => ({ note: expected, key })))
     },
