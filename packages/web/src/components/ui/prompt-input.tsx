@@ -5,6 +5,7 @@ import * as React from 'react'
 
 import { keepFocus } from '@crook/web/components/KeepFocus'
 import { isSendKey } from '@crook/web/components/SendKey'
+import { FITTED_FIELD, FitsItsText } from '@crook/web/components/ui/fits-its-text'
 
 export type PromptInputStatus = 'ready' | 'working'
 
@@ -24,28 +25,13 @@ type PromptInputProps = Omit<React.HTMLAttributes<HTMLFormElement>, 'onSubmit' |
   stopLabel?: string
 }
 
-const MAX_ROWS = 6
+const FIELD_TEXT = 'px-3.5 py-3 text-base leading-6'
+const FIELD_ROWS_HEIGHT = 'max-h-42'
 const STOP_ICON_SIZE = 13
 const SEND_ICON_SIZE = 16
 
 export const ROUND_BUTTON =
   'bg-foreground text-background focus-visible:ring-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-opacity duration-150 focus-visible:ring-2 focus-visible:outline-none motion-reduce:transition-none'
-
-const fitToContent = (field: HTMLTextAreaElement) => {
-  const styles = window.getComputedStyle(field)
-  const lineHeight = Number.parseFloat(styles.lineHeight)
-  const padding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom)
-  const max = lineHeight * MAX_ROWS + padding
-
-  field.style.height = 'auto'
-
-  if (Number.isNaN(max)) {
-    return
-  }
-
-  field.style.height = `${Math.min(field.scrollHeight, max)}px`
-  field.style.overflowY = field.scrollHeight > max ? 'auto' : 'hidden'
-}
 
 export function PromptInput({
   value,
@@ -66,12 +52,6 @@ export function PromptInput({
 }: PromptInputProps) {
   const fieldId = React.useId()
   const canSend = value.trim().length > 0 && !disabled && !sending
-
-  React.useLayoutEffect(() => {
-    if (fieldRef.current !== null) {
-      fitToContent(fieldRef.current)
-    }
-  }, [fieldRef, value])
 
   const submit = () => {
     if (canSend) {
@@ -96,26 +76,32 @@ export function PromptInput({
       <label className="sr-only" htmlFor={fieldId}>
         {label}
       </label>
-      <textarea
-        ref={fieldRef}
-        id={fieldId}
-        data-slot="prompt-input-field"
-        rows={1}
-        disabled={disabled}
-        placeholder={placeholder}
-        value={value}
-        enterKeyHint="enter"
-        className="placeholder:text-muted-foreground block w-full resize-none bg-transparent px-3.5 py-3 text-base leading-6 outline-none disabled:opacity-60"
-        onChange={(event) => {
-          onValueChange(event.target.value)
-        }}
-        onKeyDown={(event) => {
-          if (isSendKey(event)) {
-            event.preventDefault()
-            submit()
-          }
-        }}
-      />
+      <FitsItsText text={value} textClass={cn(FIELD_TEXT, FIELD_ROWS_HEIGHT)}>
+        <textarea
+          ref={fieldRef}
+          id={fieldId}
+          data-slot="prompt-input-field"
+          rows={1}
+          disabled={disabled}
+          placeholder={placeholder}
+          value={value}
+          enterKeyHint="enter"
+          className={cn(
+            FITTED_FIELD,
+            FIELD_TEXT,
+            'placeholder:text-muted-foreground block bg-transparent outline-none disabled:opacity-60',
+          )}
+          onChange={(event) => {
+            onValueChange(event.target.value)
+          }}
+          onKeyDown={(event) => {
+            if (isSendKey(event)) {
+              event.preventDefault()
+              submit()
+            }
+          }}
+        />
+      </FitsItsText>
       <div data-slot="prompt-input-toolbar" className="flex items-center gap-2 px-2 pb-2">
         {status === 'working' ? (
           <button

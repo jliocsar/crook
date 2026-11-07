@@ -160,7 +160,7 @@ const blockedRow = (ask: Ask, seq = 1): AgentRow =>
   agent('w1:p1', 'blocked', { ask, title: CHAT_TITLE, seq, secondsAgo: 30 })
 
 const blocked = (ask: Ask) =>
-  liveWith(herd([machine(LAPTOP, [blockedRow(ask)], { agentVersion: '0.0.1' })]))
+  liveWith(herd([machine(LAPTOP, [blockedRow(ask)], { agentVersion: '0.0.2' })]))
 
 const LEAD_IN = [
   opened(),
@@ -413,7 +413,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
       step<LinkStage>(700, 'Claude moves on to an edit', ({ link }) =>
         SubscriptionRef.set(
           link.state,
-          liveWith(herd([machine(LAPTOP, [blockedRow(editAsk, 2)], { agentVersion: '0.0.1' })])),
+          liveWith(herd([machine(LAPTOP, [blockedRow(editAsk, 2)], { agentVersion: '0.0.2' })])),
         ),
       ),
     ],
@@ -446,7 +446,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
                     claudeWaiting: false,
                   }),
                 ],
-                { agentVersion: '0.0.1' },
+                { agentVersion: '0.0.2' },
               ),
             ]),
           ),
@@ -455,7 +455,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
       step<LinkStage>(200, 'Claude moves on to an edit', ({ link }) =>
         SubscriptionRef.set(
           link.state,
-          liveWith(herd([machine(LAPTOP, [blockedRow(editAsk, 2)], { agentVersion: '0.0.1' })])),
+          liveWith(herd([machine(LAPTOP, [blockedRow(editAsk, 2)], { agentVersion: '0.0.2' })])),
         ),
       ),
     ],
@@ -483,7 +483,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
           liveWith(
             herd([
               machine(LAPTOP, [agent('w1:p1', 'working', { title: CHAT_TITLE, seq: 2 })], {
-                agentVersion: '0.0.1',
+                agentVersion: '0.0.2',
               }),
             ]),
           ),
@@ -493,7 +493,7 @@ export const ASK_STORIES: readonly StoryMaker[] = [
         SubscriptionRef.set(
           link.state,
           liveWith(
-            herd([machine(LAPTOP, [blockedRow(sameDialogAsk, 3)], { agentVersion: '0.0.1' })]),
+            herd([machine(LAPTOP, [blockedRow(sameDialogAsk, 3)], { agentVersion: '0.0.2' })]),
           ),
         ),
       ),

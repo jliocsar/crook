@@ -56,6 +56,8 @@ const ROW_GAP = 12
 
 const ThreadRowBody = React.memo(RowBody)
 
+export const Thread = React.memo(ThreadBody)
+
 const endOf = (viewport: HTMLElement, lifted: number): number =>
   viewport.scrollHeight - lifted - viewport.clientHeight
 
@@ -522,7 +524,7 @@ function LatestButton({ following, onJump }: { following: boolean; onJump: () =>
   )
 }
 
-export function Thread({
+function ThreadBody({
   rows,
   dimmed,
   empty,

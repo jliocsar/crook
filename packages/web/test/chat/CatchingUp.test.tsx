@@ -12,6 +12,8 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { Prompt } from '@crook/domain/Command'
+import { CrookVersion } from '@crook/domain/CrookVersion'
+import { HerdView } from '@crook/domain/HerdView'
 import { PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import {
   omittedBetween,
@@ -24,7 +26,7 @@ import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 import { COLD_START, HubLinkState, RECOVERED } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
-import { click, eventually, findByRole, present } from '../Dom.ts'
+import { click, eventually, findByRole, present, wait } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
@@ -46,6 +48,7 @@ const VIEWPORT_HEIGHT = 812
 const source = new PaneTranscript({ pane: PANE })
 
 const OLDER_AGENT = '0.0.0'
+const PAST_THE_SKELETON_HOLD_MS = 700
 const NOTICE_WAIT_MS = Duration.toMillis(NOTICE_DELAY) + 200
 const TWO_NOTICE_WAITS_LIMIT_MS = 15_000
 
@@ -59,7 +62,7 @@ const laptopOn = (connection: 'online' | 'offline', agentVersion: string) =>
     ]),
   )
 
-const laptop = (connection: 'online' | 'offline') => laptopOn(connection, '0.0.1')
+const laptop = (connection: 'online' | 'offline') => laptopOn(connection, '0.0.2')
 
 const current = () => laptop('online')
 
@@ -82,6 +85,34 @@ afterEach(() => {
 })
 
 describe('a chat catching up', () => {
+  it.effect('holds the rows back for an agent behind the hub that still says it caught up', () =>
+    Effect.gen(function* () {
+      const behindTheHub = liveWith(
+        new HerdView({
+          machines: [
+            machine(LAPTOP, [agent('w1:p1', 'idle', { claudeSession: SESSION })], {
+              agentVersion: '0.0.8',
+            }),
+          ],
+          hubVersion: CrookVersion.make('0.0.11'),
+        }),
+      )
+      const { link } = yield* renderApp(CHAT, behindTheHub)
+      const transcript = yield* link.transcriptFor(source)
+
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [said(0, 'Older line.')])])
+      yield* wait(PAST_THE_SKELETON_HOLD_MS)
+
+      expect(screen.getByText('Loading the conversation')).toBeDefined()
+      expect(screen.queryByText('Older line.')).toBeNull()
+
+      yield* Queue.offerAll(transcript, [chunk(10, 20, [said(10, 'Newer line.')]), caughtUp(20)])
+      yield* Effect.promise(() => screen.findByText('Newer line.'))
+
+      expect(screen.getByText('Older line.')).toBeDefined()
+    }),
+  )
+
   it.live(
     'asks for nothing until a herd says whether the agent marks where it caught up',
     () =>

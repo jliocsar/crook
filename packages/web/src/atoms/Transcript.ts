@@ -10,7 +10,7 @@ import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { isBehind } from '@crook/domain/CrookVersion'
+import { CrookVersion, isBehind } from '@crook/domain/CrookVersion'
 import { findMachine, type HerdView, isOnline } from '@crook/domain/HerdView'
 import type { ClaudeSessionId, MachineId, PaneId, SubagentId } from '@crook/domain/Ids'
 import {
@@ -57,6 +57,7 @@ export interface WatchSignals {
 export type TranscriptKey = PaneTranscriptKey | SubagentTranscriptKey
 
 const CHAT_OPEN_TAIL = TranscriptTailBytes.make(512 * 1024)
+const FIRST_AGENT_WITH_CAUGHT_UP = CrookVersion.make('0.0.2')
 
 export class PaneTranscriptKey extends Data.TaggedClass('PaneTranscriptKey')<{
   readonly machine: MachineId
@@ -249,7 +250,7 @@ const awaitsCaughtUpAtom = Atom.family((machine: MachineId) =>
       Option.exists(findMachine(snapshot.view, machine), (entry) =>
         Option.exists(
           entry.machine.agentVersion,
-          (version) => !isBehind(version, snapshot.view.hubVersion),
+          (version) => !isBehind(version, FIRST_AGENT_WITH_CAUGHT_UP),
         ),
       ),
     ),

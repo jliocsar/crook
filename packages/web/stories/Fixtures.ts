@@ -57,19 +57,19 @@ export const LAPTOP_MACHINE = machine(
     agent('w1:p3', 'done', { title: 'Write the banner', secondsAgo: 600, branch: 'feat/banner' }),
     agent('w1:p4', 'idle', { title: 'Port the herd screen', secondsAgo: 3600 }),
   ],
-  { agentVersion: '0.0.1', herdrVersion: '0.9.5' },
+  { agentVersion: '0.0.2', herdrVersion: '0.9.5' },
 )
 
 export const DESK_MACHINE = machine(
   DESK,
   [agent('w2:p1', 'working', { title: 'Run the nightly build', secondsAgo: 900 })],
-  { agentVersion: '0.0.1', herdrVersion: '0.9.5' },
+  { agentVersion: '0.0.2', herdrVersion: '0.9.5' },
 )
 
 export const TEAM = herd([LAPTOP_MACHINE, DESK_MACHINE])
 
 export const laptopWith = (rows: readonly AgentRow[]) =>
-  herd([machine(LAPTOP, rows, { agentVersion: '0.0.1', herdrVersion: '0.9.5' })])
+  herd([machine(LAPTOP, rows, { agentVersion: '0.0.2', herdrVersion: '0.9.5' })])
 
 export const CONVERSATION: readonly TranscriptEvent[] = [
   opened(),
