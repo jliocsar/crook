@@ -1,28 +1,50 @@
 import { useAtomValue } from '@effect/atom-react/Hooks'
 import { RegistryContext } from '@effect/atom-react/RegistryContext'
-import { pipe } from 'effect/Function'
+import { constVoid, pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Atom from 'effect/reactivity/Atom'
-import { MotionGlobalConfig, rootProjectionNode, useInstantLayoutTransition } from 'motion/react'
+import { MotionGlobalConfig } from 'motion/react'
 import * as React from 'react'
 
-const UNCOVERING_ATTRIBUTE = 'data-uncovering'
+export type CoverPhase = 'shown' | 'arriving' | 'over'
 
-const neverCoveredAtom = Atom.make(false)
-const alwaysCoveredAtom = Atom.make(true)
+type LivePhase = CoverPhase | 'typing'
 
-const CoveredContext = React.createContext<Atom.Atom<boolean>>(neverCoveredAtom)
+export type PushedPosition = 'arriving' | 'over' | 'leaving'
 
-const shownWhileUncovered = <Value,>(
-  covered: Atom.Atom<boolean>,
+interface Cover {
+  readonly phase: Atom.Atom<LivePhase>
+  readonly clocksStopped: Atom.Atom<boolean>
+  readonly still: React.RefObject<boolean>
+}
+
+const STILL_ATTRIBUTE = 'data-still'
+const TYPING_PAUSE_MS = 1000
+
+const coverAt = (phase: Atom.Atom<LivePhase>, still: boolean): Cover => ({
+  phase,
+  clocksStopped: Atom.map(phase, (current) => current !== 'shown'),
+  still: { current: still },
+})
+
+const NEVER_COVERED = coverAt(Atom.make<LivePhase>('shown'), false)
+const ALWAYS_COVERED = coverAt(Atom.make<LivePhase>('arriving'), true)
+
+const CoverContext = React.createContext<Cover>(NEVER_COVERED)
+
+export const PushedPositionContext =
+  React.createContext<(position: PushedPosition) => void>(constVoid)
+
+const heldWhileUnsettled = <Value,>(
+  phase: Atom.Atom<LivePhase>,
   source: Atom.Atom<Value>,
 ): Atom.Atom<Value> =>
   Atom.readable((get) => {
-    const hidden = get(covered)
+    const current = get(phase)
 
     return pipe(
       get.self<Value>(),
-      Option.filter(() => hidden),
+      Option.filter(() => current === 'arriving' || current === 'typing'),
       Option.getOrElse(() => get(source)),
     )
   })
@@ -37,87 +59,113 @@ const afterFirstFrame = (run: () => void): (() => void) => {
   }
 }
 
-export const useCoveredAtom = (): Atom.Atom<boolean> => React.useContext(CoveredContext)
+export const coverPhaseOf = (pushed: boolean, position: PushedPosition): CoverPhase =>
+  !pushed || position === 'leaving' ? 'shown' : position
+
+export const useCoveredAtom = (): Atom.Atom<boolean> => React.useContext(CoverContext).clocksStopped
 
 export const useShownAtomValue = <Value,>(source: Atom.Atom<Value>): Value => {
-  const covered = useCoveredAtom()
-  const shown = React.useMemo(() => shownWhileUncovered(covered, source), [covered, source])
+  const { phase } = React.useContext(CoverContext)
+  const held = React.useMemo(() => heldWhileUnsettled(phase, source), [phase, source])
+  const value = useAtomValue(held)
+  const inBackground = React.useDeferredValue(value)
+  const current = useAtomValue(phase)
 
-  return useAtomValue(shown)
+  return current === 'over' || current === 'typing' ? inBackground : value
+}
+
+export const useIsStillUnderCover = (): boolean => React.useContext(CoverContext).still.current
+
+function StillEdge({ instant }: { instant: boolean }) {
+  const { still } = React.useContext(CoverContext)
+
+  const apply = () => {
+    if (still.current) {
+      MotionGlobalConfig.instantAnimations = instant
+    }
+  }
+
+  React.useLayoutEffect(apply)
+  React.useEffect(apply)
+
+  return null
+}
+
+export function StillUnderCover({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <StillEdge instant />
+      {children}
+      <StillEdge instant={false} />
+    </>
+  )
 }
 
 export function FrozenScope({ children }: { children: React.ReactNode }) {
-  return <CoveredContext value={alwaysCoveredAtom}>{children}</CoveredContext>
+  return <CoverContext value={ALWAYS_COVERED}>{children}</CoverContext>
 }
 
 export function CoveredScope({
-  covered,
+  phase,
   children,
 }: {
-  covered: boolean
+  phase: CoverPhase
   children: React.ReactNode
 }) {
   const registry = React.useContext(RegistryContext)
-  const [coveredAtom] = React.useState(() => Atom.make(covered))
-  const shownCovered = useAtomValue(coveredAtom)
+  const [phaseAtom] = React.useState(() => Atom.make<LivePhase>(phase))
+  const [cover] = React.useState(() => coverAt(phaseAtom, phase !== 'shown'))
   const scope = React.useRef<HTMLDivElement>(null)
-  const uncovering = React.useRef(false)
-  const instantLayout = useInstantLayoutTransition()
 
   React.useLayoutEffect(() => {
-    if (covered === registry.get(coveredAtom)) {
-      return
-    }
-
-    uncovering.current = !covered
-    scope.current?.toggleAttribute(UNCOVERING_ATTRIBUTE, uncovering.current)
-    registry.set(coveredAtom, covered)
-  }, [covered, registry, coveredAtom])
-
-  React.useInsertionEffect(() => {
-    if (uncovering.current) {
-      MotionGlobalConfig.instantAnimations = true
-    }
-  }, [shownCovered])
-
-  React.useLayoutEffect(() => {
-    if (uncovering.current && rootProjectionNode.current?.isUpdating === true) {
-      instantLayout()
-    }
-  }, [shownCovered, instantLayout])
+    cover.still.current = cover.still.current || phase !== 'shown'
+    scope.current?.toggleAttribute(STILL_ATTRIBUTE, cover.still.current && phase !== 'arriving')
+    registry.set(phaseAtom, phase)
+  }, [phase, registry, phaseAtom, cover])
 
   React.useEffect(() => {
-    if (!uncovering.current) {
+    if (phase !== 'over') {
       return undefined
     }
 
-    uncovering.current = false
-    MotionGlobalConfig.instantAnimations = false
+    let pause: number | undefined
 
-    const settle = () => {
-      scope.current?.toggleAttribute(UNCOVERING_ATTRIBUTE, false)
+    const whileCovered = (next: LivePhase) => {
+      if (registry.get(phaseAtom) !== 'shown') {
+        registry.set(phaseAtom, next)
+      }
     }
 
-    const cancel = afterFirstFrame(settle)
+    const onInput = () => {
+      whileCovered('typing')
+      window.clearTimeout(pause)
+      pause = window.setTimeout(() => {
+        whileCovered('over')
+      }, TYPING_PAUSE_MS)
+    }
+
+    window.addEventListener('input', onInput, { capture: true, passive: true })
 
     return () => {
-      cancel()
-      settle()
+      window.removeEventListener('input', onInput, { capture: true })
+      window.clearTimeout(pause)
     }
-  }, [shownCovered])
+  }, [phase, registry, phaseAtom])
 
-  React.useEffect(
-    () => () => {
-      if (uncovering.current) {
-        MotionGlobalConfig.instantAnimations = false
-      }
-    },
-    [],
-  )
+  React.useEffect(() => {
+    if (phase !== 'shown') {
+      return undefined
+    }
+
+    return afterFirstFrame(() => {
+      cover.still.current = false
+      scope.current?.toggleAttribute(STILL_ATTRIBUTE, false)
+    })
+  }, [phase, cover])
 
   return (
     <div ref={scope} data-slot="covered-scope" className="contents">
-      <CoveredContext value={coveredAtom}>{children}</CoveredContext>
+      <CoverContext value={cover}>{children}</CoverContext>
     </div>
   )
 }

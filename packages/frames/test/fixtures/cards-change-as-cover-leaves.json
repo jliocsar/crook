@@ -1,0 +1,174 @@
+{
+  "timeOrigin": 1794011124894.2,
+  "frames": [
+    {
+      "frame": 186,
+      "at": 4008.2,
+      "vsync": 4007.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "cover": 389.2,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Write the banner|done|231",
+        "Fix the reconnect banner|working|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Finished",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 187,
+      "at": 4024.8,
+      "vsync": 4024.4,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "cover": 389.4,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Write the banner|done|231",
+        "Fix the reconnect banner|working|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Finished",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 188,
+      "at": 4041.7,
+      "vsync": 4041.1,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "cover": 389.6,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Write the banner|done|231",
+        "Fix the reconnect banner|working|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Finished",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.8
+    },
+    {
+      "frame": 189,
+      "at": 4202.8,
+      "vsync": 4191.1,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Write the banner|done|231",
+        "Fix the reconnect banner|working|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|blocked|607",
+        "Sweep the release notes|working|715"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 748, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": ["span", "style", "span", "li"],
+      "removed": ["div[pushed-screen]", "span", "style", "span"],
+      "readMs": 3.1
+    },
+    {
+      "frame": 190,
+      "at": 4223.1,
+      "vsync": 4207.7,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Write the banner|done|231",
+        "Fix the reconnect banner|working|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|blocked|607",
+        "Sweep the release notes|working|715"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 748, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": [],
+      "removed": [],
+      "readMs": 1.6
+    },
+    {
+      "frame": 191,
+      "at": 4273.4,
+      "vsync": 4224.4,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|working|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": [],
+      "removed": ["li"],
+      "readMs": 2.2
+    }
+  ],
+  "shifts": [],
+  "steps": []
+}

@@ -146,7 +146,7 @@ describe('the Machines tab', () => {
     }),
   )
 
-  it.effect('holds still under a machine screen, which renders only for its own machine', () =>
+  it.effect('follows under a machine screen, which renders only for its own machine', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(LAPTOP_DETAIL, liveWith(herd([laptop, deskAt(0)])))
 
@@ -163,7 +163,7 @@ describe('the Machines tab', () => {
         { discard: true },
       )
 
-      expect(subtract(countedOf(WATCHED_OF_THE_MACHINE_LIST), before)).toEqual([0, 0, 0])
+      expect(subtract(countedOf(WATCHED_OF_THE_MACHINE_LIST), before)[0]).toBeGreaterThan(0)
       expect((RENDER_COUNTS.get('MachineDetail') ?? 0) - detailBefore).toBe(0)
 
       yield* setsHerd(

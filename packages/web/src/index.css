@@ -157,7 +157,7 @@ a:focus-visible {
   color: var(--accent-foreground);
 }
 
-[data-uncovering] * {
+[data-still] * {
   transition: none !important;
 }
 

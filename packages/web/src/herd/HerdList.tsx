@@ -2,7 +2,7 @@ import { cn } from 'cn'
 import * as Equal from 'effect/Equal'
 import * as Option from 'effect/Option'
 import { Pin, PinOff, X } from 'lucide-react'
-import { AnimatePresence, motion, PresenceContext } from 'motion/react'
+import { AnimatePresence, motion, PresenceContext, useIsPresent } from 'motion/react'
 import * as React from 'react'
 
 import { toGlobalPaneId } from '@crook/domain/Ids'
@@ -26,7 +26,8 @@ import {
 import { MachineSection } from '@crook/web/herd/MachineSection'
 import { NoMachines } from '@crook/web/machines/NoMachines'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
-import { SPRING } from '@crook/web/motion/Springs'
+import { useIsStillUnderCover } from '@crook/web/navigation/Covered'
+import { INSTANT, SPRING } from '@crook/web/motion/Springs'
 import { useFailureToast } from '@crook/web/toast/FailureToast'
 
 export type OpenAgent = (machine: MachineId, card: AgentCardModel, opener: HTMLElement) => void
@@ -118,12 +119,15 @@ const AgentCardBody = React.memo(function AgentCardBody({
 }, Equal.equals)
 
 function AgentCardRow(props: AgentCardRowProps) {
+  const still = useIsStillUnderCover()
+  const present = useIsPresent()
+
   return (
     <motion.li
       layout="position"
-      transition={SPRING}
+      transition={still ? INSTANT : SPRING}
       exit={motionTokens().exit}
-      className="grid grid-cols-1 gap-2"
+      className={still && !present ? 'hidden' : 'grid grid-cols-1 gap-2'}
     >
       <PresenceContext value={null}>
         <AgentCardBody {...props} />

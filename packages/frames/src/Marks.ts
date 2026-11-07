@@ -31,6 +31,9 @@ export const SCREEN_SELECTOR = `${COVER_SELECTOR}, [data-slot="tab-scroller"]`
 export const THREAD_VIEWPORT_SELECTOR = '[data-slot="conversation-viewport"]'
 export const THREAD_CONTENT_SELECTOR = '[data-slot="conversation-content"]'
 export const UNSEEN_SAMPLE_SELECTOR = '[skullet-ghost]'
+export const CARD_SELECTOR = '[data-slot="agent-card"]'
+export const CARD_TITLE_SELECTOR = '[data-slot="agent-title"]'
+export const CARD_STATUS_SELECTOR = '[data-slot="agent-status"]'
 
 export const CHROME_SELECTOR =
   'header, nav, [data-slot="chat-dock"], [data-slot="new-agent-dock"], [data-slot="toast"], [data-slot="sheet"], [data-slot="sheet-backdrop"]'

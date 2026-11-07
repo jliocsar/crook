@@ -1,0 +1,215 @@
+{
+  "timeOrigin": 1794011790294.8,
+  "frames": [
+    {
+      "frame": 173,
+      "at": 3814.4,
+      "vsync": 3813.8,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "thread": {
+        "lift": 0,
+        "height": 278,
+        "top": 16,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 388.9,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "thread-rows": { "x": 388.9, "y": 73, "width": 1.1, "height": 76, "opacity": 1 },
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 },
+        "composer": { "x": 388.9, "y": 717, "width": 1.1, "height": 127, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 174,
+      "at": 3831.2,
+      "vsync": 3830.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "cover": 389.1,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 175,
+      "at": 3847.6,
+      "vsync": 3847.2,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "cover": 389.3,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 176,
+      "at": 3864.1,
+      "vsync": 3863.9,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "cover": 389.5,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 1.7
+    },
+    {
+      "frame": 177,
+      "at": 3911.1,
+      "vsync": 3897.2,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": [],
+      "removed": ["div[pushed-screen]"],
+      "readMs": 2.1
+    },
+    {
+      "frame": 178,
+      "at": 3926.8,
+      "vsync": 3913.9,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": [],
+      "removed": [],
+      "readMs": 1.2
+    },
+    {
+      "frame": 179,
+      "at": 3931.5,
+      "vsync": 3930.5,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": [],
+      "removed": [],
+      "readMs": 1.1
+    }
+  ],
+  "shifts": [],
+  "steps": []
+}

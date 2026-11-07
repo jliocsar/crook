@@ -16,7 +16,11 @@ import type { ConnectionNotice } from '@crook/web/connection/ConnectionView'
 import { INSTANT, SPRING } from '@crook/web/motion/Springs'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
 import { translate, useTransformString } from '@crook/web/motion/TransformString'
-import { useShownAtomValue } from '@crook/web/navigation/Covered'
+import {
+  StillUnderCover,
+  useIsStillUnderCover,
+  useShownAtomValue,
+} from '@crook/web/navigation/Covered'
 import { shortElapsed } from '@crook/web/time/Elapsed'
 import { useNow } from '@crook/web/time/Now'
 
@@ -80,37 +84,39 @@ export function HeaderBanner() {
       className="pointer-events-none absolute inset-x-0 top-full overflow-hidden"
       style={{ height: BANNER_HEIGHT_PX }}
     >
-      <AnimatePresence initial={false}>
-        {Option.match(notice, {
-          onNone: () => null,
-          onSome: (shown) => (
-            <motion.div
-              key="banner"
-              data-slot="connection-banner"
-              data-notice={shown}
-              className={cn(
-                'flex h-full items-center gap-2 px-4 text-xs leading-4 font-medium transition-colors duration-(--motion) ease-(--ease-out)',
-                TONE[shown],
-              )}
-              initial={{ opacity: 0, transform: transform.translate('Y', -BANNER_HEIGHT_PX) }}
-              animate={{ opacity: 1, transform: translate('Y', 0) }}
-              exit={{ opacity: 0, transform: transform.translate('Y', -BANNER_HEIGHT_PX) }}
-              transition={motionTokens().fade}
-            >
-              {NOTICE_ICON[shown]}
-              <Swap id={shown}>{NOTICE_COPY[shown].line}</Swap>
-              {Option.match(syncedAtOf(connection), {
-                onNone: () => null,
-                onSome: (at) => (
-                  <span className="ml-auto font-mono whitespace-nowrap opacity-70">
-                    <LastSynced at={at} />
-                  </span>
-                ),
-              })}
-            </motion.div>
-          ),
-        })}
-      </AnimatePresence>
+      <StillUnderCover>
+        <AnimatePresence initial={false}>
+          {Option.match(notice, {
+            onNone: () => null,
+            onSome: (shown) => (
+              <motion.div
+                key="banner"
+                data-slot="connection-banner"
+                data-notice={shown}
+                className={cn(
+                  'flex h-full items-center gap-2 px-4 text-xs leading-4 font-medium transition-colors duration-(--motion) ease-(--ease-out)',
+                  TONE[shown],
+                )}
+                initial={{ opacity: 0, transform: transform.translate('Y', -BANNER_HEIGHT_PX) }}
+                animate={{ opacity: 1, transform: translate('Y', 0) }}
+                exit={{ opacity: 0, transform: transform.translate('Y', -BANNER_HEIGHT_PX) }}
+                transition={motionTokens().fade}
+              >
+                {NOTICE_ICON[shown]}
+                <Swap id={shown}>{NOTICE_COPY[shown].line}</Swap>
+                {Option.match(syncedAtOf(connection), {
+                  onNone: () => null,
+                  onSome: (at) => (
+                    <span className="ml-auto font-mono whitespace-nowrap opacity-70">
+                      <LastSynced at={at} />
+                    </span>
+                  ),
+                })}
+              </motion.div>
+            ),
+          })}
+        </AnimatePresence>
+      </StillUnderCover>
     </div>
   )
 }
@@ -118,12 +124,13 @@ export function HeaderBanner() {
 export function BannerRoom({ children }: { children: React.ReactNode }) {
   const connection = useShownAtomValue(connectionAtom)
   const reduce = useReducedMotion() ?? false
+  const still = useIsStillUnderCover()
 
   return (
     <motion.div
       initial={false}
       animate={{ y: Option.isSome(noticeOf(connection)) ? BANNER_HEIGHT_PX : 0 }}
-      transition={reduce ? INSTANT : SPRING}
+      transition={reduce || still ? INSTANT : SPRING}
     >
       {children}
     </motion.div>
