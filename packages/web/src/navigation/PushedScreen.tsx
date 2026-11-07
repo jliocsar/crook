@@ -2,17 +2,19 @@ import type { ParsedHistoryState } from '@tanstack/history'
 import { useParentMatches, useRouter, useRouterState } from '@tanstack/react-router'
 import type { AnyRouter } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
-import { pipe } from 'effect/Function'
+import { constVoid, pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import { ChevronLeft } from 'lucide-react'
 import { animate, motion, useMotionValue, useReducedMotion } from 'motion/react'
 import * as React from 'react'
+import * as ReactDOM from 'react-dom'
 
 import { useAxisLock } from '@crook/web/components/swipe/AxisLock'
 import { Button } from '@crook/web/components/ui/button'
 import { HeaderBanner } from '@crook/web/connection/ConnectionBanner'
 import { GLIDE } from '@crook/web/motion/Springs'
 import { COLUMN_STYLE, useColumnWidth } from '@crook/web/navigation/Column'
+import { PushedPositionContext } from '@crook/web/navigation/Covered'
 import { focusScreenTitle, restoreFocus } from '@crook/web/navigation/Focus'
 import { keyboardFitStyle, useKeyboardFit } from '@crook/web/navigation/KeyboardFit'
 import { findOpener } from '@crook/web/navigation/Opener'
@@ -109,6 +111,7 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
   const arrived = React.useRef(false)
   const dragOrigin = React.useRef<Option.Option<number>>(Option.none())
   const edgeLock = useAxisLock()
+  const reportPosition = React.useContext(PushedPositionContext)
   const landedOnAnotherEntry = Option.exists(
     leftFrom,
     (index) => landedIndex !== undefined && landedIndex < index,
@@ -119,8 +122,16 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
 
   const arrive = () => {
     arrived.current = true
+    reportPosition('over')
     focusScreenTitle(screen.current)
   }
+
+  React.useEffect(
+    () => () => {
+      reportPosition('arriving')
+    },
+    [reportPosition],
+  )
 
   React.useEffect(() => {
     if (!slidesIn) {
@@ -159,6 +170,8 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
       return
     }
 
+    reportPosition('leaving')
+
     if (router.state.status === 'pending') {
       offsetX.jump(0)
       leave()
@@ -193,11 +206,17 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
 
     if (reduce) {
       offsetX.jump(0)
+      reportPosition('over')
 
       return
     }
 
-    animate(offsetX, 0, GLIDE)
+    animate(offsetX, 0, {
+      ...GLIDE,
+      onComplete: () => {
+        reportPosition('over')
+      },
+    })
   }
 
   const edge: EdgeHandlers = {
@@ -214,6 +233,9 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
     },
     onPointerMove: (event) => {
       if (Option.isSome(dragOrigin.current) && Option.contains(edgeLock.follow(event), 'x')) {
+        ReactDOM.flushSync(() => {
+          reportPosition('leaving')
+        })
         offsetX.set(Math.max(0, event.clientX - dragOrigin.current.value))
       }
     },
@@ -230,10 +252,12 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
       className="bg-background fixed inset-y-0 z-30 flex flex-col shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.25)]"
       style={{ ...COLUMN_STYLE, ...keyboardFitStyle(keyboardFit), x: offsetX }}
     >
-      <PushedScreenContext value={Option.some({ back, edge })}>
-        <EdgeBack />
-        {children}
-      </PushedScreenContext>
+      <PushedPositionContext value={constVoid}>
+        <PushedScreenContext value={Option.some({ back, edge })}>
+          <EdgeBack />
+          {children}
+        </PushedScreenContext>
+      </PushedPositionContext>
     </motion.div>
   )
 }

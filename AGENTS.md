@@ -1457,9 +1457,8 @@ a turn of its own, enqueued as a task notification.
 - The Agents page stays mounted under a pushed chat. It used to re-render whole on every herd
   update and every clock second: with fifteen cards on three machines and a chat open, each herd
   render was about 680 component renders, and the page cost 373 to 394 ms of main-thread task
-  time per herd update and 144 to 186 ms per idle second at 4x throttling. Covered, it now holds
-  what it shows and its clocks stop: 0 herd-page renders per herd update from another machine and
-  per clock second, and the task time per herd update fell to 17 to 31 ms, the rest of the app.
+  time per herd update and 144 to 186 ms per idle second at 4x throttling. Under a chat its clocks
+  stop: 0 herd-page renders per clock second. What it does on a herd update is the entries below.
   Shown and idle, it commits once a second with only the elapsed times re-rendering, 105
   component renders and 38 to 41 ms per second (all measured on the dev server with a fake hub,
   counting renders through React's devtools hook, two to eight runs each).
@@ -1486,8 +1485,10 @@ a turn of its own, enqueued as a task notification.
   atoms inside the covered scope, like the Agents page, and a machine's screen renders only for its
   own machine: an update from another machine under that screen went from 262 renders and 110 to 113
   ms to none, and its clock second from 235 renders and 105 to 113 ms to 12 and 13 to 18 ms (measured
-  as above, 3 machines). A herd update to the shown list itself stays about what it was, 22 to 29 ms
-  before and 26 to 31 after, and is left alone.
+  as above, 3 machines). The tab under that screen has since gone back to following the herd in the
+  background, as the Agents page does, so it pays what the shown list pays (reasoned, not measured). A
+  herd update to the shown list itself stays about what it was, 22 to 29 ms before and 26 to 31 after,
+  and is left alone.
 - What a status flip costs outside the screen is too small to spend code on, so deltas stay unbuilt.
   With 15 agents the phone encoded its herd snapshot in about 1 ms and wrote it to IndexedDB in about 1
   ms at 4x CPU throttling, 56 ms at worst. A flip sends one machine's entry, 2440
@@ -1517,41 +1518,19 @@ a turn of its own, enqueued as a task notification.
   does, and the next dial asks again. Each dial resumes, so a failing backoff restarts the chat's
   notice wait, and the link's own notice dims the chat at that same second, which hides the capsule
   (reasoned, not measured).
-- A covered screen reads atoms through a derived atom that returns its own previous value while
-  the covered flag is set and reads nothing else, so a herd update wakes none of its components.
-  The flag is an atom set in a layout effect rather than a context value, since a context change
-  re-renders every reader on cover, as the chat starts its slide (reasoned, not measured).
-  Elapsed times follow one shared ticker atom, so every label on a page changes in one commit,
-  and stop following it while covered; uncovering sets each to the current time at once.
-- A screen that first mounts already covered, such as the herd under a chat opened cold from a
-  link, holds the first value it read until it is uncovered, even an empty one (reasoned, not
-  measured).
-- React's hidden `Activity` was ruled out: it hides its tree with `display: none` (read in
-  react-dom's source), and the herd shows under a chat while it slides in and under the back swipe.
-- Uncovering shows the current herd without its animations. Remounting the list was ruled out: the
-  chat returns focus to the card that opened it as it unmounts, and a remount replaces that card.
-  Setting the covered atom re-renders its readers in a second synchronous commit (reasoned, not
-  measured). Motion's global instant flag is held from that commit's insertion effects to the
-  scope's own passive effect, which runs after its descendants' (reasoned, not measured): Motion
-  starts exits in layout effects and other value animations in passive ones, and only syncs props
-  in its insertion effects (read in its source). Motion's own instant transition holds the flag two
-  frames, and the toast a close from the chat shows once the herd is back would land inside them
-  (reasoned, not measured). Layout animations start a frame later (reasoned, not measured), so
-  the projection root's next update is blocked instead, and only when one is pending: a block with
-  nothing to consume it skips the next real reorder (read in Motion's source). The block is
-  global, so any other layout animation updating in that same commit lands instantly too.
-- Those global switches reach nothing outside the herd, because the herd is uncovered only once the
-  pushed screen has gone: a back tap and a swipe released past the threshold both slide the screen
-  out in full and navigate when the slide completes, and a swipe released short never navigates.
-  At 4x throttling the chat's slide-out took 30 and 32 frames, about 500 ms, the same curve as its
-  slide-in. The flag came on about 180 and 240 ms after the chat sat fully off screen, stayed on for 26
-  to 30 ms, and no frame showed the chat after that (measured in Chromium at 390x844, one run of
-  each). The tab bar runs no Motion animation.
-- CSS transitions still played on uncover (the status pill's colours, measured), so the scope
-  disables transitions for its descendants until the second animation frame after: the first
-  frame's callbacks run before that frame computes the new styles (reasoned, not measured). With
-  it, 3 of 3 uncovers ran no transition and no frame of layout animation, while a reorder once
-  shown still played its spring, 99 card frames of it (measured in Chromium).
+- The list under a chat that has arrived follows the herd. It used to hold what it showed until the chat had gone, so a back tap or a swipe slid the chat off old cards, and they changed after the slide with the chat already off screen, a removed card's gap showing first (measured in Chromium at 390x844 and 4x CPU throttling, and in the pictures). A close from the chat got the same. Going by what a frame reads now, no card changes, leaves or moves from the first frame of a back tap or a swipe, a swipe that stops part way included, and the slide's worst frame went from 50 ms, the catch-up at its end, to 18 to 20 ms (one run of each, 4x).
+- A screen under a pushed one is in one of four phases. Arriving holds what it shows, since a tap's own seen mark would otherwise change the card under the finger while the chat slides over it (reasoned, not measured). Over renders herd updates in the background, through a deferred value and a memoized body, so they are one React transition that yields to anything else. Typing is over with a hold on it. Shown is live and in sight, and the screen is shown from the moment a back tap or a swipe starts, not from when the chat is gone: a swipe released short goes back to over once the chat has come back. A pushed screen says where it stands to the tab under it, and a screen pushed over a pushed screen says nothing to it.
+- A herd update under an arrived chat costs what it costs on a shown list. A status flip among fifteen cards on three machines took 203 to 225 ms of main-thread task per flip, three runs of twelve, against 7 ms or less while the list held. Nothing yielded in its commit: rendered at once beside typing, a keystroke's time to its next frame went from a p90 of 44.3 to 46.5 ms and a worst of 52.5 to 75.9 to a p90 of 81.8 to 83.1 and a worst of 103.9 to 127.9, with 11 or 12 tasks over 50 ms per run, the longest 81 ms, one flip a second (dev server, 4x, three runs each). So any input under the chat holds the list for a second after the last one, the second a link's notice waits, reused and not measured anew. With it the same typing read a p90 of 46.4 to 49.8 ms and a worst of 53 to 93.1, with no task over 50 ms, and the median stayed 41 to 45 throughout. A production build and a phone are not measured. An input is what is listened for rather than a key, since a phone's keyboard does not always send one (reasoned, not measured).
+- A back tap or a swipe inside that second catches the list up synchronously in the commit that starts it, the one case where a slide starts behind a full list render, so the chat stays where it was for one long frame: 195 ms on a tap and 164 ms on a swipe, with a change among five cards, and the first frame that shows the list shows it right (measured on the dev server in Chromium at 4x, one run of each, and in the pictures). A swipe's first move flushes that commit before it moves the chat, because a move is not a discrete event and its render could otherwise land after a frame showing the old cards (reasoned: one run without the flush landed it in time). A herd update that lands while the chat is already leaving plays as on any shown list, since it happens in view (read in the code).
+- A new status icon's pop still plays during that catch-up on a development build, for 8 pictures, 130 ms: its strict-mode second run comes after the flag has gone off (the pop gone in 1 of 1 runs with strict mode taken out, and which effect does it is reasoned). A production build makes no second run, and a phone is not measured.
+- Motion's instant flag is global, so it is set by an empty component right before the list and cleared by another right after, in both the layout and the passive effect pass. Effects run in tree order inside one synchronous pass, so the flag covers the list's effects and no one else's, a chat's rows landing in the same commit included (reasoned from React's order, a test holds it off afterwards). Motion starts exits in layout effects and other value animations in passive ones (read in its source). Layout animations start a frame later, so a row reads its transition at render rather than from that flag. The flag and the row's transition stay instant until the second animation frame after the screen is shown, for the catch-up commit above.
+- An instant exit still takes a frame, then a low-priority render, to leave. A card closed under the chat stayed for 2 frames after the chat left and the rows below jumped 108 px, 70 ms after the toast had shown. Such a row hides itself in the commit it starts leaving, so the rows below hold their place from the first frame (measured in Chromium at 4x, one run of each).
+- A screen that first mounts under a chat, such as the herd under a chat opened cold from a link, goes to over once that screen has mounted, since it has no slide to wait for, so it follows the herd from its first value (read in the code, not measured).
+- The flag for the phases is an atom set in a layout effect rather than a context value, since a context change re-renders every reader on cover, as the chat starts its slide (reasoned, not measured). Elapsed times follow one shared ticker atom, so every label on a page changes in one commit, and stop following it under a chat; the first frame a slide can show already holds the current time, because shown starts with the tap.
+- React's hidden `Activity` was ruled out: it hides its tree with `display: none` (read in react-dom's source), and the herd shows under a chat while it slides in and under the back swipe.
+- Remounting the list to land what changed was ruled out: the chat returns focus to the card that opened it as it unmounts, and a remount replaces that card. The card stays the same element while the herd moves under it (a test holds it).
+- CSS transitions played on what changed under the chat (the status pill's colours, measured), so the scope disables transitions for its descendants while the chat is over and until the second animation frame after: the first frame's callbacks run before that frame computes the new styles (reasoned, not measured). The attribute goes on when the chat has arrived and not at the tap, so a card's press highlight still fades under the arriving chat (reasoned, not measured).
+- A layout shift under a resting pushed screen moves nothing anyone sees, and neither does the shift in the first paint after that screen starts to leave, or goes, so the frame tool leaves both out for what sits in the list, and counts a shift on the screen on top as ever: with the list live, a card closed under a chat read 0.0285 there and failed a story with nothing moving on screen. The first frame a pushed screen moves is read ahead of Motion's frame, so a card's top there is a step behind what the frame paints, 108 px on a swipe's first move while the pictures show them in place (measured), and only its title and status are judged. The tool's own check for this is a card's title, status or top changing between two frames while a pushed screen sits off its place, and it fails on the old hold (measured).
 - An atom subscription made without `immediate` does not compute the atom, so it depends on
   nothing and never fires until something else reads the atom: a test that counted wakes that way
   counted none, whatever the atom did (measured). The first read by anything else then fires it

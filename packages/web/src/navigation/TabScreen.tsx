@@ -1,8 +1,9 @@
 import { Outlet } from '@tanstack/react-router'
-import type * as React from 'react'
+import * as React from 'react'
 
 import { BannerRoom, HeaderBanner } from '@crook/web/connection/ConnectionBanner'
-import { CoveredScope } from '@crook/web/navigation/Covered'
+import { coverPhaseOf, CoveredScope, PushedPositionContext } from '@crook/web/navigation/Covered'
+import type { PushedPosition } from '@crook/web/navigation/Covered'
 import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 
 export const TAB_SCROLLER_SELECTOR = '[data-slot="tab-scroller"]'
@@ -29,6 +30,7 @@ export function TabScreen({
   children?: React.ReactNode
 }) {
   const covered = useCoveredByPushedScreen()
+  const [position, setPosition] = React.useState<PushedPosition>('arriving')
 
   return (
     <>
@@ -37,12 +39,14 @@ export function TabScreen({
         data-slot="tab-scroller"
         className="no-scrollbar h-dvh overflow-y-auto overscroll-y-none pb-[calc(var(--tab-bar-height)+var(--safe-bottom)+1rem)]"
       >
-        <CoveredScope covered={covered}>
+        <CoveredScope phase={coverPhaseOf(covered, position)}>
           <TabHeader title={title} action={action} />
           <BannerRoom>{children}</BannerRoom>
         </CoveredScope>
       </div>
-      <Outlet />
+      <PushedPositionContext value={setPosition}>
+        <Outlet />
+      </PushedPositionContext>
     </>
   )
 }
