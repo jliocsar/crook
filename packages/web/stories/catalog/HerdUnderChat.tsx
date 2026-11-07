@@ -36,12 +36,12 @@ const goesBack = clicks(BACK).pipe(Effect.andThen(chatHasLeft))
 
 const onLaptopUnderChat = (rows: readonly AgentRow[]) =>
   machine(LAPTOP, [chatAgent('idle'), ...rows], {
-    agentVersion: '0.0.1',
+    agentVersion: '0.0.2',
     herdrVersion: '0.9.5',
   })
 
 const onDeskUnderChat = (rows: readonly AgentRow[]) =>
-  machine(DESK, rows, { agentVersion: '0.0.1', herdrVersion: '0.9.5' })
+  machine(DESK, rows, { agentVersion: '0.0.2', herdrVersion: '0.9.5' })
 
 const BEFORE_MOVING_UNDER_CHAT = herd([
   onLaptopUnderChat([
