@@ -822,9 +822,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   chat's transcript, is waiting from its first value on and says nothing about a refresh. So the
   chat's atom emits a machine's state, which holds both the view on screen and the fold still
   being read: the thread's "Catching up" capsule and the pending Show earlier and Try again rows are
-  each a tag of that state, and a screen reads nothing else. The cue hides while the chat is
-  dimmed, since the dim already says the hub or the machine is away, and once the pane no longer
-  runs Claude, whose transcript never catches up. A failed watch is not catching up, and pressing
+  each a tag of that state, and a screen reads nothing else. The cue and the catch-up dim hide while
+  the chat is dimmed as away, since that dim already says the hub or the machine is away, and once
+  the pane no longer runs Claude, whose transcript never catches up. A failed watch is not catching up, and pressing
   Try again is a tag of its own.
 - A read that ends within a second says nothing. The cue, a pill in the header when these were measured, used to show as soon as a watch
   resumed, and on a reconnect and a foreground return it held 17 frames (317 ms) and 14 frames
@@ -857,6 +857,30 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   (all measured in Chromium). A capsule beside a skeleton is a forbidden pair in the frame tool:
   the states that say catching up each hold a view and a skeleton means there is none (read in the
   machine), and the sweep holds that.
+- The rows a catch-up holds back dim while the capsule says so, and only the rows: the header, the
+  dock, the capsule and the Latest button stay as they are. The dim reads the one state that both
+  shows the capsule and keeps the held rows on screen, so it waits the capsule's second and fades in
+  on the capsule's own fade, and the frame log's transcript state names it frame for frame over 17
+  catch-up, reopen and reconnect stories. It leaves at once, in the commit the rows land, rather than
+  holding the capsule's 400 ms: the capsule may stay over rows already landed, and a dim that stayed
+  would call those new rows old. On a slow catch-up the dim held 42 frames, 837 ms, and on a
+  reconnect 31 frames, 679 ms, each leaving in the frame the row count grew while the capsule went on
+  to its hold, and no frame of the 17 stories showed it beside the catch-up divider (all measured in
+  Chromium at 390x844 and 4x CPU throttling, one run each). A read that lands inside the capsule's
+  hold therefore gives a dim shorter than a flash's limit, as a spinner goes with its host, so the dim
+  carries no frame mark; the story whose read lands about 1.1 s after the tap never committed the
+  state that dims (one run), as it never committed the capsule's.
+- The catch-up dim takes the rows to 85%, where the away dim takes the whole thread to 60%. On the
+  catch-up stories' rows the small muted text read 6.61 to 1 in light and 7.02 in dark at full
+  strength, 4.61 and 5.40 at 85%, 4.11 and 4.92 at 80%, and 2.69 and 3.29 at 60%, with body text
+  at 10.09 to 11.71 at 85% (computed from the rendered colours in Chromium, both themes, two
+  stories). So 85% is the deepest of those that keeps every row's text over the 4.5 small text
+  needs. A dimmed row still opens: a tap on a tool row expanded it with the dim on (measured once).
+  The thread takes one dim at a time, so the two never show together, and the away dim wins, as it
+  does over the capsule: on a reconnect the frame log held the away dim for the one frame of the
+  catching-up state that the link was still unreachable, and the catch-up dim after it (measured
+  once). When the away dim takes over, the rows fade back on the fade the whole thread dims on, so
+  the thread only darkens (reasoned, not measured).
 - A chat counts its running subagents only in its dock. The dock counts every running subagent of
   the session, a foreground one included and marked "Claude waits on it", and its chip opens that
   run's screen in one tap, as a tree row does. So the header's count added only a scroll to the
@@ -1516,8 +1540,8 @@ a turn of its own, enqueued as a task notification.
   a chat with nothing cached says "No messages yet" a second later and a cached chat lands with no
   catch-up (read in the chat's machine, not measured). A dial that fails before its first herd ends the watch quietly, as any lost connection
   does, and the next dial asks again. Each dial resumes, so a failing backoff restarts the chat's
-  notice wait, and the link's own notice dims the chat at that same second, which hides the capsule
-  (reasoned, not measured).
+  notice wait, and the link's own notice dims the chat as away at that same second, which hides the
+  capsule and the catch-up dim (reasoned, not measured).
 - The list under a chat that has arrived follows the herd. It used to hold what it showed until the chat had gone, so a back tap or a swipe slid the chat off old cards, and they changed after the slide with the chat already off screen, a removed card's gap showing first (measured in Chromium at 390x844 and 4x CPU throttling, and in the pictures). A close from the chat got the same. Going by what a frame reads now, no card changes, leaves or moves from the first frame of a back tap or a swipe, a swipe that stops part way included, and the slide's worst frame went from 50 ms, the catch-up at its end, to 18 to 20 ms (one run of each, 4x).
 - A screen under a pushed one is in one of four phases. Arriving holds what it shows, since a tap's own seen mark would otherwise change the card under the finger while the chat slides over it (reasoned, not measured). Over renders herd updates in the background, through a deferred value and a memoized body, so they are one React transition that yields to anything else. Typing is over with a hold on it. Shown is live and in sight, and the screen is shown from the moment a back tap or a swipe starts, not from when the chat is gone: a swipe released short goes back to over once the chat has come back. A pushed screen says where it stands to the tab under it, and a screen pushed over a pushed screen says nothing to it.
 - A herd update under an arrived chat costs what it costs on a shown list. A status flip among fifteen cards on three machines took 203 to 225 ms of main-thread task per flip, three runs of twelve, against 7 ms or less while the list held. Nothing yielded in its commit: rendered at once beside typing, a keystroke's time to its next frame went from a p90 of 44.3 to 46.5 ms and a worst of 52.5 to 75.9 to a p90 of 81.8 to 83.1 and a worst of 103.9 to 127.9, with 11 or 12 tasks over 50 ms per run, the longest 81 ms, one flip a second (dev server, 4x, three runs each). So any input under the chat holds the list for a second after the last one, the second a link's notice waits, reused and not measured anew. With it the same typing read a p90 of 46.4 to 49.8 ms and a worst of 53 to 93.1, with no task over 50 ms, and the median stayed 41 to 45 throughout. A production build and a phone are not measured. An input is what is listened for rather than a key, since a phone's keyboard does not always send one (reasoned, not measured).
@@ -1550,8 +1574,8 @@ a turn of its own, enqueued as a task notification.
   transcripts at every cut. A chat that opened current, a cold open, a watch that failed or started
   over, and a catch-up that added no row get nothing. The fold judges the lines when the read ends,
   and the screen turns them into row keys, since only it has rows.
-- The catch-up shows nothing but the thread's "Catching up" capsule, past its first second, while it
-  waits for the fresher view. Its rows then land in one commit under one ordinary lift capped at a screen,
+- The catch-up shows nothing but the thread's "Catching up" capsule and the dim on the rows it
+  holds, past its first second, while it waits for the fresher view. Its rows then land in one commit under one ordinary lift capped at a screen,
   with a static divider above the first new row. Releasing them one row at a time, with a chip
   carried down a trail, held a reopen back from its end: reopening a thread of 120 lines with 40
   new ones took 267 to 273 frames, 5.1 to 5.5 s of lift, and ran past a story's wait for its last

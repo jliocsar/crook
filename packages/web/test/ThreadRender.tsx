@@ -21,7 +21,7 @@ const row = (key: string): ThreadRow => ({ key, content: <p>{key}</p> })
 const WORKING: ThreadRow = { key: 'working', content: <p>Working</p>, placeholder: true }
 
 const thread = (rows: readonly ThreadRow[], handle: React.Ref<ThreadHandle>) => (
-  <Thread handle={handle} rows={rows} dimmed={false} empty={<p>No messages yet</p>} />
+  <Thread handle={handle} rows={rows} dim="clear" empty={<p>No messages yet</p>} />
 )
 
 const viewport = (): HTMLElement =>
