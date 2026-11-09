@@ -30,25 +30,32 @@ the push hook failed on another agent's half-done worktree, once per tool (measu
 tracks one config of each, so nothing else changes.
 :::
 
-The `effecttsgo/*` Effect rules come from two `@effect/tsgo` presets that `.oxlintrc.json` extends:
-`recommended` and `effect-native`, which bans the globals Effect replaces — `process.env`, the
-global `console`, `Date`, `fetch`, timers, `new Promise`. `recommended` carried those itself until
-tsgo moved them out, so a bump that only follows `recommended` silently drops them (measured going
-from 0.36.1 to 0.64.1). They are type-aware, and the presets turn type-aware mode on — which is why
-no `--type-aware` flag appears in the scripts.
+The `effecttsgo/*` Effect rules come from four `@effect/tsgo` presets that `.oxlintrc.json` extends:
+`recommended`, `correctness` and `antipattern`, which add four rules `recommended` leaves off, and
+`effect-native`, which bans the globals Effect replaces — `process.env`, the global `console`,
+`Date`, `fetch`, timers, `new Promise`. `recommended` carried those itself until tsgo moved them
+out, so a bump that only follows `recommended` silently drops them (measured going from 0.36.1 to
+0.64.1). They are type-aware, and the presets turn type-aware mode on — which is why no
+`--type-aware` flag appears in the scripts. Since tsgo 0.67.3 they also read inside a class's
+`extends` expression, so a service's inline `make` is checked like any other code (measured).
 
 The tsgo rules that are off say why beside themselves in `.oxlintrc.json`. Two are off because
 their quickfixes write what begone-slop rejects: a map to `undefined` becomes `Effect.asVoid`, and a
-catch returning `Effect.void` becomes a log-less `Effect.ignore`. `unstable-api-usage` is off
-because crook is built on the modules Effect tags unstable — the platform services, SQL, RPC, atoms
-and `@effect/vitest` — so it flagged every use (1,679 on the bump) and could single out none.
+catch returning `Effect.void` becomes a log-less `Effect.ignore`. `unnecessary-effect-gen` stays on,
+but don't take its fix for a body with no return and a non-void success: it writes `Effect.asVoid`
+too (read in tsgo 0.67.4's source). `oxlint --fix` left a probe of that shape unchanged, so it's the
+editor's quickfix to watch. `unstable-api-usage` stays on, and the language-service plugin block
+allow-lists the `@stability unstable` families crook is built on: the platform services, SQL, RPC,
+sockets, atoms and `@effect/vitest`. Without the list it reports every use (2,318 on 4.1.2), and with
+it an unstable family from anywhere else still fails the gate (measured). A new one goes on the list
+deliberately, or not at all.
 Schema classes carry no brand: the language-service plugin limits `brandedSchemaClasses` to
 `Error` and `Opaque`, since a tagged class's literal `_tag` already keeps two classes apart and a
 plain `Schema.Class` here is a wire shape decoded at a boundary.
 
 oxlint's `promise` rules decide whether `x.catch(…)` is a Promise call by looking at the receiver,
 and they treat a namespace import as one that might be a Promise. So `Effect.catch` and
-`Stream.catch` count as Promise chains (measured on oxlint 1.90.0). `prefer-await-to-then` reports
+`Stream.catch` count as Promise chains (measured on oxlint 1.90.0; `valid-params` still rejects it on 1.91.0). `prefer-await-to-then` reports
 each one that isn't under a `yield` or an `await`, which is why it's off. `valid-params` is a
 correctness rule and stays on, but it rejects the data-first `Effect.catch(self, handler)` as a
 `Promise.catch()` with two arguments, so use the pipe form. Never rewrite a catch into something
@@ -71,17 +78,40 @@ one is a module the graph did not ask for.
 :::warning
 `prepare` runs `effect-tsgo patch --oxlint`, which patches the oxlint and TypeScript binaries in
 `node_modules`. Without it the Effect rules do not run. It is not optional and it re-runs on every
-install — do not "simplify" `prepare` down to `husky`.
+install — do not "simplify" `prepare` down to the git config line.
 
 It also validates that `oxlint`, `oxlint-tsgolint` and `@effect/tsgo` are a supported triple, so
 bump the three together. tsgo 0.58 added `effect-tsgo oxlint` and `effect-tsgo tsc`, which run
 patched binaries without touching `node_modules`; crook still patches, since editors and plain
 `tsc` launch the stock binaries.
 
-Any reinstall reverts the patch, and `prepare` then refuses to redo it because its backups still
-exist — `Unknown plugin: 'effecttsgo'` is what that looks like. Run `bunx effect-tsgo unpatch
---oxlint` first, then `bun run prepare` (measured, twice).
+A reinstall reverts the patch and `prepare` redoes it: `Unknown plugin: 'effecttsgo'` is what a
+missing patch looks like, and the Effect rules ran again after `bun install --force` and a patch
+(measured on tsgo 0.67.4). A toolchain bump still unpatches first, with `bunx effect-tsgo unpatch
+--oxlint`, since that restores the old build's binaries.
 :::
+
+The git hooks are plain scripts in `.githooks`, and `prepare` points `core.hooksPath` at them. Husky
+did nothing else we used. Formatting, lint on staged files and the typecheck run on commit; the whole
+repo's lint, the format check and the tests run on push, so a commit stays quick. A Claude Code hook
+refuses the Bash commands that skip them. It drops quoted text first, so a commit message mentioning
+a flag passes.
+
+`core.hooksPath` is one setting shared by every worktree of a repo, relative to each worktree's root.
+Running `prepare` in a worktree whose branch has `.githooks` takes the hooks away from every worktree
+on a branch that doesn't, so while such a branch is out, install there with `--ignore-scripts` and
+run `bunx effect-tsgo patch --oxlint` by hand.
+
+Installs wait three days for a new release, set in `bunfig.toml`. A version an exact pin asks for
+fails too, and a young optional package is skipped with no error, which is how tsgo's platform
+binary goes missing. A lockfile's entries aren't re-checked: a frozen install from a clean copy found
+every one (measured). So a bump you mean to make runs `bun install --minimum-release-age 0` once, and
+every later install reads the lockfile.
+
+Effect's packages take their version from the `catalog` under the root's `workspaces`, and every
+manifest says `catalog:`, so one line moves them together. A frozen install resolves it to one copy of
+`effect`, and the release build bundles what the install resolved: the host build's binaries report
+their version, and the release smoke script passes on them (all measured).
 
 :::warning
 `typescript`, `oxlint`, `oxlint-tsgolint` AND `@effect/tsgo` itself are pinned EXACTLY (no `^`).
@@ -219,7 +249,6 @@ under `effect/`, since every leaf module is PascalCase. Type-only imports are ex
 
 Since `effect@4.0.5` the former `effect/unstable/*` modules sit directly under `effect/`
 (`effect/rpc/Rpc`, `effect/cli/Command`) and `effect/unstable/*` is no longer exported (measured).
-The `effect-best-practices` references still spell the old paths; drop the `unstable/` segment.
 The same release made the `Config` constructors PascalCase (`Config.String`, `Config.Int`;
 `Config.string` is gone), and a `Config` is itself an `Effect` (both measured).
 
@@ -242,10 +271,10 @@ for something to exist, such as a folder Claude has not made yet, silences the w
 (measured: a watch of background work hung until it read the current state up front and emitted
 it).
 
-`Effect.filter` with an effectful predicate and a `concurrency` option returns what it keeps in
-the order the predicates finished, not in input order (read in `effect@4.0.5`'s source; a test
-saw a sorted list come back shuffled). Where order matters, `Effect.forEach` into `Option`s and
-`Arr.getSomes` keeps it.
+`Effect.filter` with an effectful predicate and a `concurrency` option keeps input order (measured
+on `effect@4.1.2`: predicates that finished in 10, 20 and 30 ms over `[30, 10, 20]` gave `[30, 10,
+20]`). `effect@4.0.5` returned them in the order they finished, and code written then goes through
+`Effect.forEach` into `Option`s and `Arr.getSomes`, which still holds.
 
 A fiber forked into a scope that closes before the fiber first runs never runs any of its effect
 (measured: a step forked from inside a `forkScoped` fiber never started when the session scope
@@ -285,6 +314,13 @@ A bump writes the version into every `package.json`, the root's and the workspac
 lockfile included, and into the herdr plugin's manifest, which a test holds to the agent's
 version. Run the gate on the bump commit before pushing its tag: `check-version` reads only the
 two apps, so a tag pushed after it alone failed the release gate on the manifest (measured).
+
+A new Effect doesn't have to reach both ends at once. The compiled binaries of an agent on
+`effect@4.0.5` and a hub on `effect@4.1.2` attached, published and served `WatchHerd` in both pairings
+over NDJSON, and a hub on either version opened a database the other had written (measured, with no
+panes, so no command or transcript crossed). Effect's `Persistence` key layout changed in 4.1, and
+nothing here reaches it: a store is SQLite on the hub, JSON files on the agent and `idb-keyval` on the
+phone.
 :::
 
 :::caution
@@ -317,6 +353,22 @@ the scope that should own it, with `Layer.build`, and provide the resulting cont
 :::
 
 :::tip
+A composed layer is memoized by identity. `Layer.provide`, `Layer.provideMerge` and `Layer.mergeAll`
+check the memo map, so one composed value referenced from two parents builds once, a `Layer.fresh`
+inside it included (measured: 2 builds on `effect@4.0.5`, 1 on `effect@4.1.2`). Two parents that need
+their own instance need two layer values.
+:::
+
+:::warning
+A defect beats a typed failure when the runtime combines the two. A typed failure whose finalizer
+dies reaches `Effect.catch`, `Effect.ignore` and `Stream.catch` as a defect, and none of them recovers
+it (measured: all three recovered on `effect@4.0.5`, none on `effect@4.1.2`). So a dying finalizer
+cannot hide behind typed recovery, and what must survive one catches it with `Effect.catchDefect`. An
+`Effect.all` whose first child fails before a dying sibling has run still recovers (measured on
+both).
+:::
+
+:::tip
 `Queue.fail` lets a consumer take everything buffered before it sees the failure, so failing a
 queue to end a stream drops nothing already queued (measured). `Stream.runCollect` over that stream
 still reports only the failure, so a test that needs the items as well collects them with
@@ -328,7 +380,7 @@ A parked `Queue.offer` is resumed synchronously inside the call that takes its m
 resumes it through `Effect.callback`, which runs the offerer's fiber in place. What the offerer
 does next has already run by the time the taker resumes, unless its op budget runs out right
 there, so a test cannot slip an interrupt between the offer and its next step (measured on
-`effect@4.0.5`). Guard such a gap by making the consumer idempotent, and test that part on its own.
+`effect@4.1.2`). Guard such a gap by making the consumer idempotent, and test that part on its own.
 :::
 
 :::caution
@@ -374,22 +426,23 @@ reset interrupts the running effect.
 :::
 
 :::warning
-Effect's `Semaphore` is not fair (read in its source, measured on `effect@4.0.5`): a release wakes
-the waiters on a scheduled task, so a fiber that takes the permit again right after releasing it
-gets in first. A loop of instantly answered long polls starved another caller for 300 test-clock
-seconds. Where several fibers share one permit and one of them loops, hand the turn to the oldest
-waiter explicitly.
+Effect's `Semaphore` stopped letting a later `take` overtake a queued waiter that fits (measured: a
+fiber looping on one permit got in 341 times ahead of a waiter on `effect@4.0.5`, and once on
+`effect@4.1.2`). A larger request can still be overtaken by a smaller one behind it (read in its
+source). Before that, a loop of instantly answered long polls starved another caller for 300
+test-clock seconds, which is why the one place that has a long poll hands the turn to the oldest
+waiter itself. It also admits the poll on its own terms, so it stays.
 :::
 
 :::tip
-A `Result` is not yieldable inside `Effect.gen` in `effect@4.0.5`, whatever the
-`effect-best-practices` table says (measured: a type error). Lift it with `Effect.fromResult`.
+A `Result` is not yieldable inside `Effect.gen` in `effect@4.1.2` (measured: a type error, and it dies
+at runtime). Lift it with `Effect.fromResult`.
 
 `Effect.andThen(effect, f)` runs what `f` returns as an effect: an `f` that only does a side
-effect and returns nothing dies with `Not a valid effect: undefined` (measured on `effect@4.0.5`).
+effect and returns nothing dies with `Not a valid effect: undefined` (measured on `effect@4.1.2`).
 Write the step in an `Effect.gen` body, or map with `Effect.map`.
 
-`Arr.filterMap` takes a function returning a `Result`, not an `Option`, in `effect@4.0.5` (measured: a
+`Arr.filterMap` takes a function returning a `Result`, not an `Option`, in `effect@4.1.2` (measured: a
 type error). Keep an `Option` pipeline on `Arr.flatMap` or `Arr.getSomes`. `Arr.replicate` and
 `Arr.makeBy` clamp the count to at least 1 (read in their source), so a count that can be zero is
 guarded before the call.
@@ -426,13 +479,20 @@ and bound to that connection, one RPC server per connection, never read back fro
 :::
 
 :::warning
-Never read `_tag`. The `_` prefix means private. Use `Match.tag`/`Match.tags`/`Match.tagsExhaustive`,
-a library guard (`Cause.isTimeoutError`, `Exit.isFailure`, `Result.isFailure`), or `instanceof` where
-the module instance is shared. Prefer exhaustive so a new variant fails to compile.
-Enforced: `begone-slop/no-tag-access`.
+Never read `_tag`. A read keeps compiling when a variant is added, so the new case goes unhandled.
+Use `Match.tagsExhaustive`, so a new variant fails to compile, then `Match.tag`/`Match.tags`, a library
+guard (`Cause.isTimeoutError`, `Exit.isFailure`, `Result.isFailure`), or `instanceof` where the module
+instance is shared. Privacy isn't the argument: Effect declares `_tag` as a schema field and reads it
+in its own docs. `Match.orElse` gives up exhaustiveness as well, so reach for it only where a new
+variant really belongs in the fallback. Enforced: `begone-slop/no-tag-access`.
+
+A predicate is one of two things. One that decides something about every variant, such as which
+blocks a person typed, what starts a turn, or which failures retry, is exhaustive: the new variant
+needs that decision. One that only asks whether a value is one named variant is `Schema.is(X)`, which
+works on a tagged class and a tagged error alike, and needs no fallback at all.
 
 Nested `reason` unions too — `SqlError`/`AiError` put the variant in `reason`, out of the failure
-channel, so `catchTag` misses it and some `effect-best-practices` snippets write `error.reason._tag`.
+channel, so `catchTag` misses it.
 Replacements per `references/core/error-handling.md`: `Effect.catchReason`, `Effect.catchReasons`,
 `Effect.unwrapReason` + `catchTags`, or `Match.value(error.reason).pipe(Match.tagsExhaustive({…}))`.
 Disable-comment only after all four fail; say which in the comment.
@@ -454,9 +514,8 @@ wrapper that swallowed it — and never loosen the catch to meet the code:
 Only the second is machine-checked (it ends in a `_tag` read, so `begone-slop/no-tag-access`
 rejects it — measured). The other two read as ordinary code; they are on you.
 
-`Effect.retry`'s `while` takes a plain predicate, with no tag-based variant, so the tag-free form is
-`Match.value(error).pipe(Match.tag('X', () => true), Match.orElse(() => false))`. Verbose, and still
-not a licence to read `_tag`.
+`Effect.retry`'s `while` takes a plain predicate, with no tag-based variant, so it gets one of those
+two, and neither is a licence to read `_tag`.
 :::
 
 :::warning
@@ -464,7 +523,7 @@ Error schema fields must not shadow `Error`'s own. Fields are assigned onto the 
 or `stack` field replaces what identifies the error as an error — `Cause.pretty`, `String(error)`,
 the stack header, OTLP `exception.type`/`exception.stacktrace` all read it (measured). Name for what
 it holds (`userName`), not where it sits. `message`/`cause` stay legal.
-Enforced: `begone-slop/no-shadowed-error-field`, but only on the pre-4.0.5 class names (see below).
+Enforced: `begone-slop/no-shadowed-error-field`.
 :::
 
 :::warning
@@ -538,10 +597,9 @@ The ones with behaviour worth knowing before you trip on them:
   argument — the rule reads `options[0]` only — which oxlint validates against the rule's JSON
   `meta.schema` before the rule runs.
 - `no-tag-access` — no `x._tag`, `switch (x._tag)`, `const { _tag } = x`. Defining a tag is fine.
-- `no-shadowed-error-field` — no `name`/`stack` field on `TaggedErrorClass`/`ErrorClass`. It does
-  not know `effect@4.0.5`'s names yet: in 4.0.5 the classes are `Schema.TaggedError` and
-  `Schema.Error` (`TaggedErrorClass` is gone), and the rule stays silent on a `name` or `stack`
-  field there (measured). The fix belongs in `begone-slop`; until it ships, this one is on review.
+- `no-shadowed-error-field` — no `name`/`stack` field on `Schema.TaggedError`/`Schema.Error`
+  (measured on `begone-slop` 0.2.11; `TaggedErrorClass` isn't in Effect 4.1.2). tsgo's
+  `error-payload-shadows-name` reports the same field.
 - `no-comments` and `require-safety-comment-for-type-assertion` are one doctrine in two rules: prose
   is banned everywhere except where an assertion demands it.
 
@@ -2368,7 +2426,7 @@ Do not guess about Effect, oxc or Bun. Do not trust a plausible claim in a revie
 `src/` also carries `@internal` exports that the shipped declarations strip, so a name found by
 grepping it can still fail to typecheck. `Schema.UnknownFromJsonString` is one, and
 `effecttsgo/prefer-schema-over-json` suggests it in its message anyway; the public spelling is
-`Schema.fromJsonString(Schema.Json)` (both measured on `effect@4.0.5`). Check a name found in `src`
+`Schema.fromJsonString(Schema.Json)` (both measured on `effect@4.1.2`). Check a name found in `src`
 for `@internal` before building on it.
 :::
 

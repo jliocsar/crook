@@ -110,33 +110,33 @@ export const activityMachine: Machine<ActivityState, ActivityEvent> = {
 }
 
 export const activityView = (state: ActivityState): ActivityView =>
-  ActivityState.match<ActivityView>(state, {
-    NoAgent: () => ({
+  ActivityState.match(state, {
+    NoAgent: (): ActivityView => ({
       status: Option.none(),
       workingSince: Option.none(),
       itemActivity: 'still',
     }),
-    Still: ({ status }) => ({
+    Still: ({ status }): ActivityView => ({
       status: Option.some(status),
       workingSince: Option.none(),
       itemActivity: 'still',
     }),
-    Blocked: () => ({
+    Blocked: (): ActivityView => ({
       status: Option.some('blocked'),
       workingSince: Option.none(),
       itemActivity: 'blocked',
     }),
-    Working: ({ since }) => ({
+    Working: ({ since }): ActivityView => ({
       status: Option.some('working'),
       workingSince: Option.some(since),
       itemActivity: 'working',
     }),
-    Finished: () => ({
+    Finished: (): ActivityView => ({
       status: Option.some('done'),
       workingSince: Option.none(),
       itemActivity: 'still',
     }),
-    Away: ({ was }) => ({
+    Away: ({ was }): ActivityView => ({
       status: Option.none(),
       workingSince: Option.none(),
       itemActivity: was,
@@ -186,7 +186,7 @@ export const activityEventOf = (
       onSome: (found) => statusEvent(found, evidence),
     })
 
-  return PresenceState.match<ActivityEvent>(presence, {
+  return PresenceState.match(presence, {
     Loading: statusOfRow,
     Live: statusOfRow,
     Redialing: statusOfRow,

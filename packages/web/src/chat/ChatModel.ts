@@ -98,7 +98,7 @@ const agentStatus = (activity: ActivityState): ChatStatus =>
   })
 
 export const chatStatus = (model: ChatScreenModel, activity: ActivityState): ChatStatus =>
-  PresenceState.match<ChatStatus>(model.presence, {
+  PresenceState.match(model.presence, {
     Loading: () => agentStatus(activity),
     Live: () => agentStatus(activity),
     Redialing: () => agentStatus(activity),
@@ -116,19 +116,19 @@ export const titleOf = (model: ChatScreenModel): string =>
   Option.match(model.row, { onNone: () => UNTITLED_CHAT, onSome: agentTitleOrChat })
 
 export const edgeKindOf = (model: ChatScreenModel): Option.Option<EdgeKind> =>
-  PresenceState.match<Option.Option<EdgeKind>>(model.presence, {
+  PresenceState.match(model.presence, {
     Loading: () => Option.none(),
     Live: () => Option.none(),
     Redialing: () => Option.none(),
     Reconnecting: () => Option.none(),
-    Away: () => Option.some('away'),
-    Exited: () => Option.some('exited'),
-    Closed: () => Option.some('closed'),
+    Away: () => Option.some<EdgeKind>('away'),
+    Exited: () => Option.some<EdgeKind>('exited'),
+    Closed: () => Option.some<EdgeKind>('closed'),
     NotClaude: () => Option.none(),
   })
 
 export const endedAtOf = (model: ChatScreenModel): Option.Option<DateTime.Utc> =>
-  PresenceState.match<Option.Option<DateTime.Utc>>(model.presence, {
+  PresenceState.match(model.presence, {
     Loading: () => Option.none(),
     Live: () => Option.none(),
     Redialing: () => Option.none(),

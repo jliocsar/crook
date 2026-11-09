@@ -89,9 +89,7 @@ const make = Effect.gen(function* () {
 
     return ifPresent(entry, fileSystem.stat(entry)).pipe(
       flatMapSome(
-        (
-          info: FileSystem.File.Info,
-        ): Effect.Effect<Option.Option<string>, GitMetadataUnreadable> =>
+        (info: FileSystem.File.Info): Effect.Effect<Option.Option<string>, GitMetadataUnreadable> =>
           info.type === 'Directory'
             ? Effect.succeedSome(entry)
             : pointedGitDirectory(directory, entry),

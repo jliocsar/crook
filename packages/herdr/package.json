@@ -12,8 +12,8 @@
     "test": "vitest run --fsModuleCachePath node_modules/.vitest-cache"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.5",
-    "effect": "4.0.5"
+    "@effect/platform-bun": "catalog:",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@crook/tsconfig": "workspace:*"

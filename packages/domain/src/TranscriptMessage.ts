@@ -1,3 +1,4 @@
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
@@ -135,6 +136,21 @@ export const UserBlock = Schema.Union([
   UnrecognizedBlock,
 ])
 export type UserBlock = typeof UserBlock.Type
+
+export const isTypedBlock = (block: UserBlock): boolean =>
+  Match.value(block).pipe(
+    Match.tagsExhaustive({
+      Text: () => true,
+      Image: () => true,
+      LocalCommand: () => true,
+      ToolResult: () => false,
+      CompactSummary: () => false,
+      TaskNotification: () => false,
+      LocalCommandOutput: () => false,
+      Interruption: () => false,
+      Unrecognized: () => false,
+    }),
+  )
 
 export const AssistantBlock = Schema.Union([
   TextBlock,

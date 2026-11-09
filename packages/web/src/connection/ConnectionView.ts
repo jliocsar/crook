@@ -34,7 +34,7 @@ export const connectionView = (state: HubLinkState): ConnectionView => {
   const syncedAt = Option.map(state.herd, (herd) => herd.syncedAt)
   const hasHerd = Option.isSome(state.herd)
 
-  return LinkStatus.match<ConnectionView>(state.status, {
+  return LinkStatus.match(state.status, {
     ColdStart: () => (hasHerd ? ConnectionView.Resuming() : ConnectionView.Starting()),
     Redialing: () => ConnectionView.Redialing(),
     Parked: () => ConnectionView.Redialing(),

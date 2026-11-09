@@ -7,6 +7,7 @@ import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import type { PlatformError } from 'effect/PlatformError'
+import * as Schema from 'effect/Schema'
 
 import type { TranscriptFile } from '@crook/claude/TranscriptLocator'
 import {
@@ -16,29 +17,34 @@ import {
   messagesIn,
   openWithSize,
 } from '@crook/claude/TranscriptTail'
-import type { ToolUseBlock, TranscriptMessage, UserMessage } from '@crook/domain/TranscriptMessage'
+import {
+  TextBlock,
+  ToolResultBlock,
+  type ToolUseBlock,
+  type TranscriptMessage,
+  type UserMessage,
+} from '@crook/domain/TranscriptMessage'
 
 const CODEMODE_RUN_TOOL = 'mcp__codemode__run'
 
+const isTextBlock = Schema.is(TextBlock)
+const isToolResultBlock = Schema.is(ToolResultBlock)
+
 const opensTurn = (message: UserMessage) =>
   !message.isMeta &&
-  Arr.some(message.blocks, (block) =>
-    Match.value(block).pipe(
-      Match.tag('Text', () => true),
-      Match.orElse(() => false),
-    ),
-  ) &&
-  !Arr.some(message.blocks, (block) =>
-    Match.value(block).pipe(
-      Match.tag('ToolResult', () => true),
-      Match.orElse(() => false),
-    ),
-  )
+  Arr.some(message.blocks, isTextBlock) &&
+  !Arr.some(message.blocks, isToolResultBlock)
 
 const startsTurn = (message: TranscriptMessage) =>
   Match.value(message).pipe(
-    Match.tag('User', opensTurn),
-    Match.orElse(() => false),
+    Match.tagsExhaustive({
+      User: opensTurn,
+      Assistant: () => false,
+      System: () => false,
+      UnrecognizedEntry: () => false,
+      Malformed: () => false,
+      Omitted: () => false,
+    }),
   )
 
 const toolUsesOf = (message: TranscriptMessage): readonly ToolUseBlock[] =>

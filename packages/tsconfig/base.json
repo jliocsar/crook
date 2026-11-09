@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Effect-TS/language-service/refs/heads/main/schema.json",
+  "$schema": "../../node_modules/@effect/tsgo/schema.json",
   "extends": "@jliocsar/begone-slop/tsconfig",
   "compilerOptions": {
     "types": ["bun"],
@@ -7,7 +7,25 @@
       {
         "name": "@effect/language-service",
         "diagnostics": false,
-        "brandedSchemaClasses": ["Error", "Opaque"]
+        "brandedSchemaClasses": ["Error", "Opaque"],
+        "namespaceImportPackages": ["effect"],
+        "allowedUnstableApis": [
+          "@effect/atom-react",
+          "@effect/platform-bun",
+          "@effect/platform-node-shared",
+          "@effect/sql-sqlite-bun",
+          "@effect/vitest",
+          "effect/FileSystem",
+          "effect/Path",
+          "effect/PlatformError",
+          "effect/cli",
+          "effect/http",
+          "effect/process",
+          "effect/reactivity",
+          "effect/rpc",
+          "effect/socket",
+          "effect/sql"
+        ]
       }
     ]
   }

@@ -101,11 +101,7 @@ export const reachOf = (
   )
 }
 
-export const heldFrom = (
-  held: Option.Option<number>,
-  reach: LiftReach,
-  overscan: number,
-): number =>
+export const heldFrom = (held: Option.Option<number>, reach: LiftReach, overscan: number): number =>
   reach.rendered
     ? Option.match(held, {
         onNone: () => reach.from,

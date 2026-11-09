@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@crook/domain": "workspace:*",
-    "effect": "4.0.5"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@crook/tsconfig": "workspace:*"

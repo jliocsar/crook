@@ -4,7 +4,6 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
-import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
@@ -91,6 +90,7 @@ const storedKeys = (entries: Ref.Ref<ReadonlyMap<string, StoredEntry>>) =>
 
 const SavedFields = Schema.Record(Schema.String, Schema.Json)
 const SavedLines = Schema.Array(SavedFields)
+const isOmitted = Schema.is(OmittedLines)
 
 const rewriteSaved = (
   store: TranscriptStore,
@@ -105,8 +105,6 @@ const rewriteSaved = (
 
     yield* store.write(found.key, { ...saved, lines: rewrite(lines) })
   })
-
-const OMITTED_TAG = 'Omitted'
 
 const gapsOver = (gaps: number) =>
   Arr.makeBy(gaps, (index) => {
@@ -181,14 +179,7 @@ describe('TranscriptCache', () => {
 
       expect(restored.lines).toEqual(crossed.lines)
       expect(restored.position).toEqual(crossed.position)
-      expect(
-        Arr.filter(restored.lines, ({ message }) =>
-          Match.value(message).pipe(
-            Match.tag(OMITTED_TAG, () => true),
-            Match.orElse(() => false),
-          ),
-        ),
-      ).toHaveLength(1)
+      expect(Arr.filter(restored.lines, ({ message }) => isOmitted(message))).toHaveLength(1)
     }),
   )
 

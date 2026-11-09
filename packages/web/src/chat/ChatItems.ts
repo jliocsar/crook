@@ -13,10 +13,12 @@ import * as Str from 'effect/String'
 import type { ClaudeSessionId, SubagentId } from '@crook/domain/Ids'
 import { type Subagent, type SubagentStatus, statusOfNotice } from '@crook/domain/Subagent'
 import {
+  CompactBoundaryBlock,
   LocalCommandBlock,
   LocalCommandOutputBlock,
   senderOf,
   SHELL_COMMAND_NAME,
+  isTypedBlock,
 } from '@crook/domain/TranscriptMessage'
 import type {
   AssistantMessage,
@@ -197,26 +199,25 @@ export class SubagentRun extends Data.Class<{
 
 const isCommandLine = Schema.is(LocalCommandBlock)
 const isCommandOutput = Schema.is(LocalCommandOutputBlock)
+const isCompactBoundary = Schema.is(CompactBoundaryBlock)
 
 const opensTurn = (message: UserMessage): boolean =>
   !message.isMeta &&
   !message.queued &&
   message.blocks.some((block) =>
-    Match.value(block).pipe(
-      Match.tags({
-        Text: () => true,
-        Image: () => true,
-        LocalCommand: (command) => command.opensTurn === true,
-      }),
-      Match.orElse(() => false),
-    ),
+    isCommandLine(block) ? block.opensTurn === true : isTypedBlock(block),
   )
 
 const startsTurn = ({ message }: TranscriptLine): boolean =>
   Match.value(message).pipe(
-    Match.tag('User', opensTurn),
-    Match.tag('Omitted', () => true),
-    Match.orElse(() => false),
+    Match.tagsExhaustive({
+      User: opensTurn,
+      Omitted: () => true,
+      Assistant: () => false,
+      System: () => false,
+      UnrecognizedEntry: () => false,
+      Malformed: () => false,
+    }),
   )
 
 const keyOf = ({ session, message }: TranscriptLine, index: number): string =>
@@ -228,12 +229,7 @@ const boundaryOf = ({ session, message }: TranscriptLine): Option.Option<string>
   Match.value(message).pipe(
     Match.tag('System', (system) =>
       Option.liftPredicate(`compact ${session} ${message.offset}`, () =>
-        system.blocks.some((block) =>
-          Match.value(block).pipe(
-            Match.tag('CompactBoundary', () => true),
-            Match.orElse(() => false),
-          ),
-        ),
+        system.blocks.some(isCompactBoundary),
       ),
     ),
     Match.orElse(() => Option.none<string>()),

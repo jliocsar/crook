@@ -9,7 +9,7 @@ import type { ClaudeSessionId } from '@crook/domain/Ids'
 import type { SkillListing } from '@crook/domain/Skill'
 import { TranscriptCaughtUp, TranscriptEvent } from '@crook/domain/Transcript'
 import { MachineNotInHerd, PaneNotInHerd } from '@crook/protocol/ClientApi'
-import { TranscriptFailure } from '@crook/protocol/Transcripts'
+import { TranscriptFailure, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { landedOver, pendingOver } from '@crook/web/chat/CatchUp'
 import {
   applyTranscriptEvent,
@@ -211,13 +211,18 @@ export const awaitsOf = (state: TranscriptViewState): boolean =>
   )
 
 export const isRestarting = (state: TranscriptViewState): boolean =>
-  Match.value(state).pipe(
-    Match.tags({
-      NoView: ({ restarting }) => restarting,
-      LoadingEarlier: ({ restarting }) => restarting,
-    }),
-    Match.orElse(() => false),
-  )
+  TranscriptViewState.match(state, {
+    NoView: ({ restarting }) => restarting,
+    Cached: () => false,
+    Holding: () => false,
+    CatchingUp: () => false,
+    NoticeLeaving: () => false,
+    LoadingEarlier: ({ restarting }) => restarting,
+    Current: () => false,
+    OpenedEmpty: () => false,
+    Failed: () => false,
+    Retrying: () => false,
+  })
 
 export const threadSessionOf = (state: TranscriptViewState): Option.Option<ClaudeSessionId> =>
   Option.orElse(sessionOf(Option.some(foldOf(state))), () => sessionOf(shownOf(state)))
@@ -458,11 +463,7 @@ const freshestOf = (state: TranscriptViewState): TranscriptView =>
     onSome: (shown) => (hasLines(foldOf(state)) || !hasLines(shown) ? foldOf(state) : shown),
   })
 
-const isResumeRejected = (failure: TranscriptWatchFailure): boolean =>
-  Match.value(failure).pipe(
-    Match.tag('TranscriptResumeRejected', () => true),
-    Match.orElse(() => false),
-  )
+const isResumeRejected = Schema.is(TranscriptResumeRejected)
 
 const startedOver = (state: TranscriptViewState): TranscriptStep => {
   const fold = readAgain(foldOf(state), false)
