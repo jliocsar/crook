@@ -1,8 +1,35 @@
 #!/usr/bin/env sh
-# Whole-repo pass: catches drift on files the staged pass never saw, which is
-# exactly what the type-aware rules are for.
+# Whole-repo lint and format check, then only the tests the pushed commits can
+# affect: vitest --changed walks each member's module graph, other members'
+# sources included, and reruns everything when a package.json or config moved.
 
 node_modules/.bin/oxlint --deny-warnings --no-error-on-unmatched-pattern --disable-nested-config || exit 1
 bunx oxfmt --check --disable-nested-config || exit 1
 
-bun run test || exit 1
+zero=0000000000000000000000000000000000000000
+head=$(git rev-parse HEAD)
+base=""
+whole=""
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$local_sha" != "$head" ]; then whole=1; continue; fi
+  if [ "$remote_sha" = "$zero" ]; then
+    candidate=$(git merge-base "$local_sha" origin/main 2>/dev/null) || { whole=1; continue; }
+  elif git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    candidate=$remote_sha
+  else
+    whole=1
+    continue
+  fi
+  [ -n "$base" ] && [ "$base" != "$candidate" ] && whole=1
+  base=$candidate
+done
+
+if [ -z "$whole" ] && [ -z "$base" ]; then
+  exit 0
+elif [ -n "$whole" ]; then
+  bun run test || exit 1
+else
+  bun run test --changed "$base" || exit 1
+fi

@@ -93,7 +93,13 @@ missing patch looks like, and the Effect rules ran again after `bun install --fo
 
 The git hooks are plain scripts in `.githooks`, and `prepare` points `core.hooksPath` at them. Husky
 did nothing else we used. Formatting, lint on staged files and the typecheck run on commit; the whole
-repo's lint, the format check and the tests run on push, so a commit stays quick. A Claude Code hook
+repo's lint and the format check run on push, so a commit stays quick, and so do the tests the pushed
+commits can reach: each member's `vitest --changed` against what the remote already has. The whole
+suite took 2 min 42 s, 141 s of it the web member's 1523 tests, past an agent's 2 min Bash timeout
+and flaky beside other agents' work (measured). `--changed` follows the module graph into other
+members (a domain leaf touched picked 61 web test files, measured) and reruns everything when a
+`package.json` or a Vite or Vitest config moved (read in its source). A new branch diffs from its merge base with `origin/main`, and a
+push it cannot place, such as a branch other than the one checked out, runs the whole suite. A Claude Code hook
 refuses the Bash commands that skip them. It drops quoted text first, so a commit message mentioning
 a flag passes.
 
