@@ -1,4 +1,7 @@
 import {
+  CARD_SELECTOR,
+  CARD_STATUS_SELECTOR,
+  CARD_TITLE_SELECTOR,
   CHROME_SELECTOR,
   COVER_SELECTOR,
   isContentMark,
@@ -244,6 +247,25 @@ const readThread = (
   return undefined
 }
 
+const readCards = (): readonly string[] =>
+  Array.from(document.querySelectorAll(CARD_SELECTOR))
+    .filter((card) => card.checkVisibility())
+    .map((card) => {
+      const title = card.querySelector(CARD_TITLE_SELECTOR)?.textContent ?? ''
+      const status = card.querySelector(CARD_STATUS_SELECTOR)?.getAttribute('data-status') ?? ''
+
+      return `${title}|${status}|${Math.round(card.getBoundingClientRect().top)}`
+    })
+
+const coverMovedBy = (covers: readonly Element[]): number | undefined => {
+  const [cover] = covers
+  const screen = document.querySelector('[data-slot="tab-scroller"]')
+
+  return cover === undefined || screen === null
+    ? undefined
+    : round(cover.getBoundingClientRect().left - screen.getBoundingClientRect().left)
+}
+
 const isLayoutShift = (entry: PerformanceEntry): entry is LayoutShift =>
   entry.entryType === 'layout-shift'
 
@@ -253,6 +275,12 @@ const shiftedName = (node: Node | null | undefined): string => {
   }
 
   return node instanceof Element ? pathOf(node) : nameOf(node)
+}
+
+const isInTheCoveredList = (node: Node | null | undefined): boolean => {
+  const element = node instanceof Element ? node : (node?.parentElement ?? null)
+
+  return (element?.closest('[data-slot="tab-scroller"]') ?? null) !== null
 }
 
 const describeShiftSource = (source: LayoutShiftSource) => ({
@@ -304,11 +332,15 @@ const install = (): void => {
 
   new PerformanceObserver((list) => {
     for (const entry of list.getEntries().filter(isLayoutShift)) {
+      const sources = entry.sources ?? []
+
       shifts.push({
         at: round(entry.startTime),
         value: entry.value,
         hadRecentInput: entry.hadRecentInput,
-        sources: (entry.sources ?? []).map(describeShiftSource),
+        behindCover:
+          sources.length > 0 && sources.every((source) => isInTheCoveredList(source.node)),
+        sources: sources.map(describeShiftSource),
       })
     }
   }).observe({ type: 'layout-shift', buffered: true })
@@ -342,6 +374,8 @@ const install = (): void => {
       blank: mounted && !hasContentMark && !showsContent(stage, covers),
       rows: mounted ? document.querySelectorAll(ROW_SELECTOR).length : 0,
       thread: thread?.reading,
+      cover: mounted ? coverMovedBy(covers) : undefined,
+      cards: mounted ? readCards() : [],
       marks: Object.fromEntries(readings),
       states: mounted ? readStates() : {},
       added,

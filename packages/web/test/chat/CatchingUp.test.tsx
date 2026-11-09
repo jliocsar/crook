@@ -12,6 +12,8 @@ import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { Prompt } from '@crook/domain/Command'
+import { CrookVersion } from '@crook/domain/CrookVersion'
+import { HerdView } from '@crook/domain/HerdView'
 import { PaneId, TranscriptOffset } from '@crook/domain/Ids'
 import {
   omittedBetween,
@@ -21,10 +23,10 @@ import {
 } from '@crook/domain/Transcript'
 import { TranscriptReadFailed, TranscriptResumeRejected } from '@crook/protocol/Transcripts'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
-import { COLD_START, HubLinkState, RECOVERED } from '@crook/web/rpc/HubLinkState'
+import { COLD_START, HubLinkState, RECOVERED, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
-import { click, eventually, findByRole, present } from '../Dom.ts'
+import { click, eventually, findByRole, present, wait } from '../Dom.ts'
 import { agent, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { inputDelivered } from '../HubFakes.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
@@ -46,6 +48,7 @@ const VIEWPORT_HEIGHT = 812
 const source = new PaneTranscript({ pane: PANE })
 
 const OLDER_AGENT = '0.0.0'
+const PAST_THE_SKELETON_HOLD_MS = 700
 const NOTICE_WAIT_MS = Duration.toMillis(NOTICE_DELAY) + 200
 const TWO_NOTICE_WAITS_LIMIT_MS = 15_000
 
@@ -59,7 +62,7 @@ const laptopOn = (connection: 'online' | 'offline', agentVersion: string) =>
     ]),
   )
 
-const laptop = (connection: 'online' | 'offline') => laptopOn(connection, '0.0.1')
+const laptop = (connection: 'online' | 'offline') => laptopOn(connection, '0.0.2')
 
 const current = () => laptop('online')
 
@@ -67,6 +70,8 @@ const catchingUpCapsule = () => document.querySelector('[data-slot="catching-up-
 
 const dimmedFlags = () =>
   Array.from(document.querySelectorAll('[data-state="dimmed"]'), () => 'true')
+
+const catchingUpDim = () => document.querySelector('[data-catching-up]')
 
 beforeEach(() => {
   stubMediaQueries(['(prefers-reduced-motion)'])
@@ -82,6 +87,34 @@ afterEach(() => {
 })
 
 describe('a chat catching up', () => {
+  it.effect('holds the rows back for an agent behind the hub that still says it caught up', () =>
+    Effect.gen(function* () {
+      const behindTheHub = liveWith(
+        new HerdView({
+          machines: [
+            machine(LAPTOP, [agent('w1:p1', 'idle', { claudeSession: SESSION })], {
+              agentVersion: '0.0.8',
+            }),
+          ],
+          hubVersion: CrookVersion.make('0.0.11'),
+        }),
+      )
+      const { link } = yield* renderApp(CHAT, behindTheHub)
+      const transcript = yield* link.transcriptFor(source)
+
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [said(0, 'Older line.')])])
+      yield* wait(PAST_THE_SKELETON_HOLD_MS)
+
+      expect(screen.getByText('Loading the conversation')).toBeDefined()
+      expect(screen.queryByText('Older line.')).toBeNull()
+
+      yield* Queue.offerAll(transcript, [chunk(10, 20, [said(10, 'Newer line.')]), caughtUp(20)])
+      yield* Effect.promise(() => screen.findByText('Newer line.'))
+
+      expect(screen.getByText('Older line.')).toBeDefined()
+    }),
+  )
+
   it.live(
     'asks for nothing until a herd says whether the agent marks where it caught up',
     () =>
@@ -185,6 +218,110 @@ describe('a chat catching up', () => {
     }),
   )
 
+  it.live("dims only the rows it holds back, on the capsule's delay, and lands them clear", () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp(CHAT, current())
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Seen before.')]),
+        caughtUp(10),
+      ])
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByText('Seen before.')).toBeNull()
+      })
+      yield* Effect.promise(() =>
+        router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+      )
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+
+      expect(catchingUpDim()).toBeNull()
+
+      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+
+      const dim = present(catchingUpDim(), 'The catch-up dim')
+
+      expect(dim.getAttribute('data-slot')).toBe('conversation-content')
+      expect(dim.className).toContain('opacity-85')
+      expect(dim.contains(screen.getByText('Seen before.'))).toBe(true)
+      expect(present(catchingUpCapsule(), 'The capsule').closest('[data-catching-up]')).toBeNull()
+      expect(document.querySelector('header')?.closest('[data-catching-up]')).toBeNull()
+      expect(
+        document.querySelector('[data-slot="chat-dock"]')?.closest('[data-catching-up]'),
+      ).toBeNull()
+      expect(dimmedFlags()).not.toContain('true')
+
+      const seen: string[] = []
+      const observer = new MutationObserver(() => {
+        seen.push(
+          `${catchingUpDim() !== null} ${screen.queryByText('Missed while away.') !== null}`,
+        )
+      })
+
+      observer.observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+      })
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(10, 20, [said(10, 'Missed while away.')]),
+        caughtUp(20),
+      ])
+      yield* Effect.promise(() => screen.findByText('Missed while away.'))
+      yield* eventually(() => {
+        expect(seen.at(-1)).toBe('false true')
+      })
+      observer.disconnect()
+
+      expect(seen).not.toContain('true true')
+    }),
+  )
+
+  it.live('gives the rows over to the away dim when the hub goes away while it catches up', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* renderApp(CHAT, current())
+
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Seen before.')]),
+        caughtUp(10),
+      ])
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByText('Seen before.')).toBeNull()
+      })
+      yield* Effect.promise(() =>
+        router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+      )
+      yield* Effect.promise(() => screen.findByText('Seen before.'))
+      yield* Effect.sleep(Duration.millis(NOTICE_WAIT_MS))
+
+      const content = present(catchingUpDim(), 'The catch-up dim')
+
+      yield* SubscriptionRef.update(
+        link.state,
+        (state) => new HubLinkState({ status: UNREACHABLE, herd: state.herd }),
+      )
+      yield* eventually(() => {
+        expect(dimmedFlags()).toContain('true')
+      })
+
+      expect(catchingUpDim()).toBeNull()
+      expect(content.className).toContain('transition-opacity')
+      expect(content.className).not.toContain('opacity-85')
+
+      yield* eventually(() => {
+        expect(catchingUpCapsule()).toBeNull()
+      })
+    }),
+  )
+
   it.live('moves below the banner, which lies over the top of the thread', () =>
     Effect.gen(function* () {
       const { link, router } = yield* renderApp(CHAT, current())
@@ -252,6 +389,9 @@ describe('a chat catching up', () => {
         present(catchingUpCapsule(), 'The capsule').closest('[data-machine="transcript"]'),
       ).not.toBeNull()
       expect(document.querySelector('header')?.textContent).not.toContain('Catching up')
+      expect(
+        present(catchingUpDim(), 'The catch-up dim').contains(screen.getByText('Seen before.')),
+      ).toBe(true)
     }),
   )
 

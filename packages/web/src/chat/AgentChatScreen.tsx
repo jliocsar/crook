@@ -61,7 +61,7 @@ import {
   useOpenedChat,
   useTranscriptThread,
 } from '@crook/web/chat/OpenedChat'
-import { Thread } from '@crook/web/chat/Thread'
+import { Thread, threadDimOf } from '@crook/web/chat/Thread'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import { useThreadContent } from '@crook/web/chat/ThreadEmpty'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -70,6 +70,7 @@ import {
   isLoadingEarlier,
   saysCatchingUp,
   shownOf,
+  showsStaleRows,
   skillsOf,
   threadSessionOf,
   transcriptMachine,
@@ -262,13 +263,17 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const state = React.useDeferredValue(transcript.state)
   const view = React.useMemo(() => shownOf(state), [state])
   const catchingUp = isWatching(model) && saysCatchingUp(state)
+  const threadDim = threadDimOf({
+    away: dimmed,
+    staleRows: isWatching(model) && showsStaleRows(state),
+  })
   const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
   const [draft, setDraft] = React.useState('')
   const cwd = cwdOf(model)
   const rosters = rostersOf(view)
   const lines = linesOf(view)
-  const session = threadSessionOf(state)
+  const session = React.useMemo(() => threadSessionOf(state), [state])
   const threadEpoch = useThreadEpoch(session)
   const activity = useChatActivity(model, lines, hasFailed(state))
   const { workingSince, itemActivity } = activityView(activity)
@@ -416,7 +421,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
             key={threadEpoch}
             handle={thread}
             rows={threadContent.rows}
-            dimmed={dimmed}
+            dim={threadDim}
             empty={threadContent.empty}
           />
           <CatchingUpCapsule shown={catchingUp && !dimmed} />

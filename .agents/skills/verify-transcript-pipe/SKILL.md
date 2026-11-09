@@ -17,7 +17,7 @@ lives between three processes, where a unit test holds one still.
 
 ## Does your change touch it?
 
-Sync commit: `2e9b1c2`
+Sync commit: `491a402`
 
 The command compares these files with that commit and exits 2 when any of them moved. Each line
 is the file, then the functions the model stands for.
@@ -217,8 +217,8 @@ One `Semaphore` waiter at a time (at most one dead socket's call). A delayed cal
 when `SocketsMayReorder` is on, and `holds/late-publish-from-dead-socket` is the check that turns
 it on. A dead link is never the newest to ask for demands once its successor has: a client speaks
 only after its upgrade's reply, so links are minted in the order the agent's real connections
-started, and a dial the agent gave up on never asks, so it fences nothing. Fairness on the pipe's own steps for `AlwaysSettles`. `awaitsCaughtUp` is true: a current
-agent.
+started, and a dial the agent gave up on never asks, so it fences nothing. Fairness on the pipe's own steps for `AlwaysSettles`. `awaitsCaughtUp` is true: an agent
+that sends the mark, whether or not it is behind the hub.
 
 ## A skip over a big gap
 
@@ -266,7 +266,7 @@ not fold fails `reach/hole-folded` at its reopen.
   failures and resumes, and never steps a timer; the machine's own walk holds the rest.
 - A file that is rewritten, or an offset from another file: a rejected resume is modelled as an
   arbitrary `TranscriptResumeRejected`, not from its cause.
-- An agent older than the hub (`awaitsCaughtUp` false), and several phones on one pane, whose
+- An agent too old to send the mark (`awaitsCaughtUp` false), and several phones on one pane, whose
   watches are independent.
 - A hub restart, except as both connections dropping.
 - A publish that dies of a defect: the agent tells the phone the watch failed, and a test holds it.

@@ -1,4 +1,5 @@
 import * as Arr from 'effect/Array'
+import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Equal from 'effect/Equal'
@@ -8,6 +9,7 @@ import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Order from 'effect/Order'
 import * as Path from 'effect/Path'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
@@ -23,6 +25,7 @@ import { ClaudeSessionId } from '@crook/domain/Ids'
 interface SessionRecord {
   readonly session: ClaudeSessionId
   readonly waiting: boolean
+  readonly leftWaitingAt: Option.Option<number>
 }
 
 type SessionsByFile = HashMap.HashMap<string, SessionRecord>
@@ -87,15 +90,61 @@ export const isRunning = (
   )
 }
 
+const leftWaitingAtOf = (
+  contents: SessionFile,
+  before: Option.Option<SessionRecord>,
+  now: number,
+): Option.Option<number> => {
+  if (contents.status === WAITING_STATUS) {
+    return Option.none()
+  }
+
+  return Option.exists(before, (record) => record.waiting) && contents.status !== undefined
+    ? Option.some(now)
+    : Option.flatMap(before, (record) => record.leftWaitingAt)
+}
+
+const recordOf = (
+  contents: SessionFile,
+  before: Option.Option<SessionRecord>,
+  now: number,
+): SessionRecord => ({
+  session: contents.sessionId,
+  waiting: contents.status === WAITING_STATUS,
+  leftWaitingAt: leftWaitingAtOf(
+    contents,
+    Option.filter(before, (record) => record.session === contents.sessionId),
+    now,
+  ),
+})
+
 const noteRecord =
-  (file: string, record: Option.Option<SessionRecord>) =>
-  (known: SessionsByFile): readonly [boolean, SessionsByFile] => [
-    !Equal.equals(HashMap.get(known, file), record),
-    Option.match(record, {
-      onNone: () => HashMap.remove(known, file),
-      onSome: (named) => HashMap.set(known, file, named),
+  (file: string, contents: Option.Option<SessionFile>, now: number) =>
+  (known: SessionsByFile): readonly [boolean, SessionsByFile] => {
+    const before = HashMap.get(known, file)
+    const record = Option.map(contents, (found) => recordOf(found, before, now))
+
+    return [
+      !Equal.equals(before, record),
+      Option.match(record, {
+        onNone: () => HashMap.remove(known, file),
+        onSome: (named) => HashMap.set(known, file, named),
+      }),
+    ]
+  }
+
+const leftWaitingAtIn = (known: SessionsByFile, session: ClaudeSessionId) => {
+  const records = Arr.filter(HashMap.toValues(known), (record) => record.session === session)
+
+  return pipe(
+    Arr.flatMap(records, (record) => Option.toArray(record.leftWaitingAt)),
+    Arr.match({
+      onEmpty: () => Option.none<number>(),
+      onNonEmpty: (moments) => Option.some(Arr.max(moments, Order.Number)),
     }),
-  ]
+    Option.filter(() => !Arr.some(records, (record) => record.waiting)),
+  )
+}
 
 const make = (roots: readonly string[], procRoot: string) =>
   Effect.gen(function* () {
@@ -107,13 +156,11 @@ const make = (roots: readonly string[], procRoot: string) =>
 
     const readSessionFile = (file: string) =>
       contentsOfSessionFile(fileSystem, file).pipe(
-        Effect.map(
-          Option.map((contents): SessionRecord => ({
-            session: contents.sessionId,
-            waiting: contents.status === WAITING_STATUS,
-          })),
+        Effect.flatMap((contents) =>
+          Effect.flatMap(Clock.currentTimeMillis, (now) =>
+            Ref.modify(sessions, noteRecord(file, contents, now)),
+          ),
         ),
-        Effect.flatMap((record) => Ref.modify(sessions, noteRecord(file, record))),
         Effect.catchTag('ClaudeSessionFileUnreadable', (error) =>
           Effect.as(Effect.logDebug(error.message), false),
         ),
@@ -249,6 +296,8 @@ const make = (roots: readonly string[], procRoot: string) =>
           HashMap.some((held) => held.session === session),
         ),
       waiting,
+      leftWaitingAt: (session) =>
+        Effect.map(Ref.get(sessions), (known) => leftWaitingAtIn(known, session)),
       runningPid,
     })
   })
@@ -259,6 +308,7 @@ export class ClaudeSessionFiles extends Context.Service<
     readonly changes: Stream.Stream<void>
     readonly holds: (session: ClaudeSessionId) => Effect.Effect<boolean>
     readonly waiting: (session: ClaudeSessionId) => Effect.Effect<Option.Option<boolean>>
+    readonly leftWaitingAt: (session: ClaudeSessionId) => Effect.Effect<Option.Option<number>>
     readonly runningPid: (session: ClaudeSessionId) => Effect.Effect<Option.Option<number>>
   }
 >()('@crook/agent/ClaudeSessionFiles') {
@@ -279,6 +329,7 @@ export class ClaudeSessionFiles extends Context.Service<
         changes,
         holds: (session) => Effect.succeed(held.includes(session)),
         waiting: () => waiting,
+        leftWaitingAt: () => Effect.succeedNone,
         runningPid: () => Effect.succeed(runningPid),
       }),
     )

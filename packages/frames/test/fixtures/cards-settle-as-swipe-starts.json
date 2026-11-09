@@ -1,0 +1,271 @@
+{
+  "timeOrigin": 1794014102392.2,
+  "frames": [
+    {
+      "frame": 149,
+      "at": 3425.2,
+      "vsync": 3424,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "thread": {
+        "lift": 0,
+        "height": 278,
+        "top": 16,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Write the banner|done|231",
+        "Fix the reconnect banner|idle|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|working|607"
+      ],
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "activity-quiet": { "x": 52, "y": 34, "width": 151.4, "height": 16, "opacity": 1 },
+        "send-button": { "x": 325, "y": 779, "width": 44, "height": 44, "opacity": 1 },
+        "composer": { "x": 0, "y": 717, "width": 390, "height": 127, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.2
+    },
+    {
+      "frame": 150,
+      "at": 3441.7,
+      "vsync": 3440.7,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "thread": {
+        "lift": 0,
+        "height": 278,
+        "top": 16,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Write the banner|done|231",
+        "Fix the reconnect banner|idle|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|working|607"
+      ],
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "activity-quiet": { "x": 52, "y": 34, "width": 151.4, "height": 16, "opacity": 1 },
+        "send-button": { "x": 325, "y": 779, "width": 44, "height": 44, "opacity": 1 },
+        "composer": { "x": 0, "y": 717, "width": 390, "height": 127, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.5
+    },
+    {
+      "frame": 151,
+      "at": 3458.2,
+      "vsync": 3457.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "thread": {
+        "lift": 0,
+        "height": 278,
+        "top": 16,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Write the banner|done|231",
+        "Fix the reconnect banner|idle|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|working|607"
+      ],
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 76, "opacity": 1 },
+        "activity-quiet": { "x": 52, "y": 34, "width": 151.4, "height": 16, "opacity": 1 },
+        "send-button": { "x": 325, "y": 779, "width": 44, "height": 44, "opacity": 1 },
+        "composer": { "x": 0, "y": 717, "width": 390, "height": 127, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 152,
+      "at": 3622.4,
+      "vsync": 3474,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "thread": {
+        "lift": 0,
+        "height": 278,
+        "top": 16,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 60,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|339",
+        "Port the herd screen|idle|447",
+        "Run the nightly build|blocked|607",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "thread-rows": { "x": 60, "y": 73, "width": 330, "height": 76, "opacity": 1 },
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 },
+        "activity-quiet": { "x": 112, "y": 34, "width": 151.4, "height": 16, "opacity": 1 },
+        "send-button": { "x": 385, "y": 779, "width": 5, "height": 44, "opacity": 1 },
+        "composer": { "x": 60, "y": 717, "width": 330, "height": 127, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": ["span", "style", "span", "li"],
+      "removed": [],
+      "readMs": 2.2
+    },
+    {
+      "frame": 153,
+      "at": 3646.9,
+      "vsync": 3624,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "thread": {
+        "lift": 0,
+        "height": 278,
+        "top": 16,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 60,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "thread-rows": { "x": 60, "y": 73, "width": 330, "height": 76, "opacity": 1 },
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 },
+        "activity-quiet": { "x": 112, "y": 34, "width": 151.4, "height": 16, "opacity": 1 },
+        "send-button": { "x": 385, "y": 779, "width": 5, "height": 44, "opacity": 1 },
+        "composer": { "x": 60, "y": 717, "width": 330, "height": 127, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": ["span", "style", "span"],
+      "readMs": 2
+    },
+    {
+      "frame": 154,
+      "at": 3662.5,
+      "vsync": 3657.3,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 4,
+      "thread": {
+        "lift": 0,
+        "height": 278,
+        "top": 16,
+        "middle": 12,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 60,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Fix the reconnect banner|idle|231",
+        "Port the herd screen|idle|339",
+        "Run the nightly build|blocked|499",
+        "Sweep the release notes|working|607"
+      ],
+      "marks": {
+        "thread-rows": { "x": 60, "y": 73, "width": 330, "height": 76, "opacity": 1 },
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 640, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 },
+        "activity-quiet": { "x": 112, "y": 34, "width": 151.4, "height": 16, "opacity": 1 },
+        "send-button": { "x": 385, "y": 779, "width": 5, "height": 44, "opacity": 1 },
+        "composer": { "x": 60, "y": 717, "width": 330, "height": 127, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "Current",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 3.2
+    }
+  ],
+  "shifts": [],
+  "steps": []
+}

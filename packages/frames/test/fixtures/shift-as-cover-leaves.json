@@ -1,0 +1,174 @@
+{
+  "timeOrigin": 1794011805667.3,
+  "frames": [
+    {
+      "frame": 78,
+      "at": 1941.3,
+      "vsync": 1940.8,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 1,
+      "thread": {
+        "lift": 0,
+        "height": 74,
+        "top": 16,
+        "middle": 0,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Port the herd screen|working|231",
+        "Write the banner|idle|339"
+      ],
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 42, "opacity": 1 },
+        "working": { "x": 0, "y": 73, "width": 390, "height": 42, "opacity": 1 },
+        "stop-button": { "x": 325, "y": 779, "width": 44, "height": 44, "opacity": 1 },
+        "composer": { "x": 0, "y": 717, "width": 390, "height": 127, "opacity": 1 },
+        "spinner": { "x": 31, "y": 86, "width": 16, "height": 16, "opacity": 0.95 },
+        "sheet": { "x": 0, "y": 579, "width": 390, "height": 265, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Working",
+        "transcript": "NoView",
+        "indicator": "Holding",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.2
+    },
+    {
+      "frame": 79,
+      "at": 1958.2,
+      "vsync": 1957.5,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 1,
+      "thread": {
+        "lift": 0,
+        "height": 74,
+        "top": 16,
+        "middle": 0,
+        "bottom": 16,
+        "moved": 0,
+        "leastMoved": 0,
+        "held": false
+      },
+      "cover": 0,
+      "cards": [
+        "Wire the hub link|blocked|123",
+        "Port the herd screen|working|231",
+        "Write the banner|idle|339"
+      ],
+      "marks": {
+        "thread-rows": { "x": 0, "y": 73, "width": 390, "height": 42, "opacity": 1 },
+        "working": { "x": 0, "y": 73, "width": 390, "height": 42, "opacity": 1 },
+        "stop-button": { "x": 325, "y": 779, "width": 44, "height": 44, "opacity": 1 },
+        "composer": { "x": 0, "y": 717, "width": 390, "height": 127, "opacity": 1 },
+        "spinner": { "x": 31, "y": 86, "width": 16, "height": 16, "opacity": 0.97 },
+        "sheet": { "x": 0, "y": 579, "width": 390, "height": 265, "opacity": 1 }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Working",
+        "transcript": "NoView",
+        "indicator": "Holding",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 2.1
+    },
+    {
+      "frame": 80,
+      "at": 2180.1,
+      "vsync": 1974.2,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": ["Wire the hub link|blocked|123", "Write the banner|idle|339"],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 264, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 },
+        "toast": { "x": 0, "y": 740, "width": 390, "height": 36, "opacity": 1 },
+        "sheet": { "x": 0, "y": 794.5, "width": 390, "height": 49.5, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": ["span[hollow-dot]", "style", "span", "div", "div"],
+      "removed": [
+        "button[chat-actions]",
+        "span[status-dot]",
+        "div[conversation-content]",
+        "div[chat-dock]",
+        "style",
+        "div[pushed-screen]"
+      ],
+      "readMs": 3
+    },
+    {
+      "frame": 81,
+      "at": 2217.8,
+      "vsync": 2207.4,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": ["Wire the hub link|blocked|123", "Write the banner|idle|231"],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 264, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 },
+        "toast": { "x": 0, "y": 740, "width": 390, "height": 36, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": [],
+      "removed": ["div", "span", "span"],
+      "readMs": 1.7
+    },
+    {
+      "frame": 82,
+      "at": 2246.9,
+      "vsync": 2224.2,
+      "phase": "done",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cards": ["Wire the hub link|blocked|123", "Write the banner|idle|231"],
+      "marks": {
+        "herd-list": { "x": 0, "y": 56, "width": 390, "height": 264, "opacity": 1 },
+        "agent-card": { "x": 27, "y": 123, "width": 336, "height": 76, "opacity": 1 },
+        "toast": { "x": 0, "y": 740, "width": 390, "height": 36, "opacity": 1 }
+      },
+      "states": { "link": "Live" },
+      "added": [],
+      "removed": ["li"],
+      "readMs": 1.9
+    }
+  ],
+  "shifts": [
+    {
+      "at": 2209.2,
+      "value": 0.028456752474631676,
+      "hadRecentInput": false,
+      "behindCover": true,
+      "sources": [
+        {
+          "element": "div[swipe-card]",
+          "from": { "x": 12, "y": 328, "width": 366, "height": 100 },
+          "to": { "x": 12, "y": 220, "width": 366, "height": 100 }
+        }
+      ]
+    }
+  ],
+  "steps": []
+}

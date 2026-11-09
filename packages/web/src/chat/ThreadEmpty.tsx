@@ -1,3 +1,4 @@
+import * as React from 'react'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 
@@ -62,10 +63,13 @@ export const useThreadContent = (
   const shown = emptyThreadOf(model, state, started)
   const holding = useSkeletonHold(rows.length === 0 && shown === 'skeleton')
 
-  return {
-    rows: holding ? NO_ROWS : rows,
-    empty: <ThreadEmpty shown={holding ? 'skeleton' : shown} model={model} />,
-  }
+  const emptyShown = holding ? 'skeleton' : shown
+  const empty = React.useMemo(
+    () => <ThreadEmpty shown={emptyShown} model={model} />,
+    [emptyShown, model],
+  )
+
+  return { rows: holding ? NO_ROWS : rows, empty }
 }
 
 function QuietLine({ text }: { text: string }) {

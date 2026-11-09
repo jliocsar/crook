@@ -20,6 +20,7 @@ import {
   type ScreenDialog,
   dialogFingerprint,
   keysToSelect,
+  optionText,
 } from '@crook/claude/ScreenDialog'
 import type { AgentRow } from '@crook/domain/AgentRow'
 import { type Ask, type AskChoice, askDialog } from '@crook/domain/Ask'
@@ -191,7 +192,7 @@ const make = Effect.gen(function* () {
       pane,
       dialog,
       choiceLabel(choice),
-      (option) => optionChoice(option.label) === choice,
+      (option) => optionChoice(optionText(option)) === choice,
     )
 
   const answer = Effect.fn('AskAnswers.answer')(function* (given: AnswerAsk, row: AgentRow) {

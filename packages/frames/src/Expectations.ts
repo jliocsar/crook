@@ -51,6 +51,10 @@ export const NO_DECLARED_ORDER: Expectation = story({})
 
 export const TIMELINE_EXPECTATIONS = {
   'transition/cold-chat-open': story(A_CHAT),
+  'transition/herd-moves-under-chat-then-back': story(A_CHAT),
+  'transition/herd-moves-under-chat-then-swipe': story(A_CHAT),
+  'transition/herd-moves-while-typing-then-back': story(A_CHAT),
+  'transition/herd-moves-while-typing-then-swipe': story(A_CHAT),
   'transition/cached-reopen-catch-up': story(
     { thread: inSequence('thread-rows'), dock: inSequence('composer') },
     { watchFrom: 'first-step' },
@@ -280,6 +284,11 @@ export const TIMELINE_EXPECTATIONS = {
     background: inSequence('background-dock', 'background-summary'),
   }),
   'ask/next-ask': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+    ask: inSequence('ask-dock'),
+  }),
+  'ask/answered-before-herdr-moves': story({
     thread: inSequence('thread-rows'),
     dock: inSequence('composer'),
     ask: inSequence('ask-dock'),

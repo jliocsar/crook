@@ -1,5 +1,6 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import { expect, layer } from '@effect/vitest'
+import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -114,6 +115,127 @@ layer(services, { excludeTestServices: true })('ClaudeSessionFiles', (it) => {
 
       expect(yield* awaitMove(files)).toBe(true)
       expect(yield* files.waiting(SESSION)).toEqual(Option.some(false))
+    }),
+  )
+
+  it.effect('marks when a file stops saying waiting, and unmarks when it says so again', () =>
+    Effect.gen(function* () {
+      const { file, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
+
+      const before = yield* Clock.currentTimeMillis
+
+      yield* fileSystem.writeFileString(file, fileSaying(IDLE))
+
+      expect(yield* awaitMove(files)).toBe(true)
+
+      const left = yield* files.leftWaitingAt(SESSION)
+
+      expect(Option.exists(left, (at) => at >= before)).toBe(true)
+
+      yield* fileSystem.writeFileString(file, fileSaying(BUSY))
+
+      expect(yield* staysStill(files)).toBe(true)
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(left)
+
+      yield* fileSystem.writeFileString(file, fileSaying(WAITING))
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('marks nothing for a file that never said waiting', () =>
+    Effect.gen(function* () {
+      const { file, files, fileSystem } = yield* waitingProbe(IDLE)
+
+      yield* fileSystem.writeFileString(file, fileSaying(BUSY))
+
+      expect(yield* staysStill(files)).toBe(true)
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('marks nothing for a Claude too old to write a status', () =>
+    Effect.gen(function* () {
+      const root = yield* rootWithSession(SESSION)
+      const files = yield* watchingRoots([root])
+
+      yield* awaitMove(files)
+
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('marks nothing for a file that loses its status', () =>
+    Effect.gen(function* () {
+      const { file, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      yield* fileSystem.writeFileString(file, sessionFile(SESSION))
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('marks nothing on a half-written file, then marks the finished one', () =>
+    Effect.gen(function* () {
+      const { file, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      yield* fileSystem.writeFileString(file, fileSaying(IDLE).slice(0, -10))
+
+      expect(yield* staysStill(files)).toBe(true)
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
+
+      yield* fileSystem.writeFileString(file, fileSaying(IDLE))
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(Option.isSome(yield* files.leftWaitingAt(SESSION))).toBe(true)
+    }),
+  )
+
+  it.effect('marks nothing when a killed Claude leaves its file saying waiting', () =>
+    Effect.gen(function* () {
+      const { procRoot, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      yield* fileSystem.remove(`${procRoot}/${PID}`, { recursive: true })
+
+      expect(yield* staysStill(files)).toBe(true)
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
+    }),
+  )
+
+  it.effect('marks a file leaving waiting with no /proc to read, off the file alone', () =>
+    Effect.gen(function* () {
+      const { procRoot, file, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      yield* fileSystem.remove(`${procRoot}/${PID}`, { recursive: true })
+
+      expect(yield* files.waiting(SESSION)).toEqual(Option.some(false))
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
+
+      yield* fileSystem.writeFileString(file, fileSaying(IDLE))
+
+      expect(yield* awaitMove(files)).toBe(true)
+      expect(Option.isSome(yield* files.leftWaitingAt(SESSION))).toBe(true)
+    }),
+  )
+
+  it.effect('marks nothing while another Claude on the session still says waiting', () =>
+    Effect.gen(function* () {
+      const { root, file, files, fileSystem } = yield* waitingProbe(WAITING)
+
+      yield* fileSystem.writeFileString(
+        `${root}/sessions/${DEAD_PID}.json`,
+        fileSaying(WAITING, DEAD_PID),
+      )
+      yield* awaitMove(files)
+      yield* fileSystem.writeFileString(file, fileSaying(IDLE))
+
+      yield* awaitMove(files)
+
+      expect(yield* files.leftWaitingAt(SESSION)).toEqual(Option.none())
     }),
   )
 

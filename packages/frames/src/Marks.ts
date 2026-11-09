@@ -31,6 +31,9 @@ export const SCREEN_SELECTOR = `${COVER_SELECTOR}, [data-slot="tab-scroller"]`
 export const THREAD_VIEWPORT_SELECTOR = '[data-slot="conversation-viewport"]'
 export const THREAD_CONTENT_SELECTOR = '[data-slot="conversation-content"]'
 export const UNSEEN_SAMPLE_SELECTOR = '[skullet-ghost]'
+export const CARD_SELECTOR = '[data-slot="agent-card"]'
+export const CARD_TITLE_SELECTOR = '[data-slot="agent-title"]'
+export const CARD_STATUS_SELECTOR = '[data-slot="agent-status"]'
 
 export const CHROME_SELECTOR =
   'header, nav, [data-slot="chat-dock"], [data-slot="new-agent-dock"], [data-slot="toast"], [data-slot="sheet"], [data-slot="sheet-backdrop"]'
@@ -97,6 +100,7 @@ export const MARKS: readonly MarkDefinition[] = [
     selector: '[data-slot="prompt-input-field"]:disabled',
   },
   { mark: 'ask-dock', track: 'ask', selector: '[data-slot="ask-dock"]' },
+  { mark: 'ask-unreadable', track: 'ask-unreadable', selector: '[data-slot="ask-unreadable"]' },
   { mark: 'composer-note', track: 'composer-note', selector: '[data-slot="composer-note"]' },
   { mark: 'banner', track: 'link', selector: '[data-slot="connection-banner"]' },
   { mark: 'spinner', track: 'indicator', selector: '[data-slot="spinner"]' },

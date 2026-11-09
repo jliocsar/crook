@@ -805,7 +805,14 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
 - A pane closing says nothing about whether a run failed, so a run cut off that way reads "pane
   closed" with a neutral dot rather than red.
 - The dock went on counting that run: "1 running" with its clock going, under a row reading "pane closed", since the row read the pane and the dock read only the run's own status (seen in a story, with the pane's presence reading closed). Once a pane has closed the dock counts nothing as running, shells and monitors included, because nothing can say they still run, and the thread's markers read them as last seen. What already ended keeps how it ended.
-- An MCP tool reads in words on a card, in a notification and on a Live Activity: its name, then the server it comes from. Code mode's one tool is named `run`, which would read "Wants to run run from codemode", so it reads as "code mode". The words sit in the domain member for the thread's tool rows to take up when they are redesigned; until then those rows keep the raw name, and so does the ask's mono line, which shows the exact thing being approved.
+- An MCP tool reads in words on a card, in a notification and on a Live Activity: its name, then the server it comes from. Code mode's one tool is named `run`, which would read "Wants to run run from codemode", so it reads as "code mode". The thread's tool rows and the dock's subagent line read the same words. Only the ask's mono line keeps the raw name, since it shows the exact thing being approved.
+- A tool crook has no view of its own for reads by its fields rather than as one JSON blob. Code mode's code and each of its inputs sit apart under the names the code reads, a JSON result is set out and highlighted, and any other text stays as text. Setting one out goes through a parse, so a number too large for a double would read rounded (reasoned, not measured). Of three looks tried in the kitchen, the row stayed one line of 46 px with its code above its result, over a second line that showed the result (60 px) and over a panel opening on the result with the code behind a switch. The second line read as `{` on a structured result and had to hold its room before the result landed, since a row that grows under its key moves the rows below it a frame late. The switch hid the code a failure is about.
+- The most common row there is, over the newest 370 main transcripts of both Claude roots through the real parser: 16889 of 23293 tool calls were code mode, 1644 executor's, 698 SendMessage, 353 Monitor, 300 ToolSearch, 157 Skill and 10 Workflow (measured). A folded row costs what it did: 150 of them, 12900 px, driven by a finger through CDP at 4x CPU throttling, read a p90 frame of 16.7 ms and no long task both before and after, three runs each, with every row at 46 px. A subject costs a median of 0.003 ms in Bun, and the fields are worked out only when a panel opens. Opening a row with its code highlighted took 39 to 52 ms to its second animation frame, against 31 to 40 ms for the JSON it replaced, five cold runs each with no long task. Its height was the same before and after the highlight landed and after scrolling away and back (all measured in Chromium). A wrapped code line keeps its height highlighted.
+- A code mode row names the tools its code reaches, since its first line says little: the median one runs 133 characters where a row at 390 wide shows 25 in all, its name included, and 14173 of 14407 calls spell a tool by name (measured). Spelled through a variable it falls back to that first line. The agent names them the same way for the dock's line, and an agent too old to do so sends the first line, read beside the tool's name in words.
+- A code mode run that fails says so only in its text, by opening `run failed: `. Of 434 failed runs in those transcripts, 307 carried no error flag and read as done (measured). Only the opening counts: 22 of 14465 results held those words further in.
+- Code folds at 10 lines and 1000 characters, about the 90th percentile of both, and a result at 12 lines, what the scroller it replaced held in its 224 px, and 600 characters, what those lines hold when wrapped at 390 wide. So 13841 of 16878 programs and 8672 of 16887 results show whole (measured). Characters count because a result can be one line: executor's JSON ran to 49054 characters on one line, and a program's first line to 7381. A result of 13451 characters unfolded in 24 to 32 ms with no long task (measured at 4x), and then scrolls in its own 384 px rather than making the row that tall.
+- An executor call that needs approval has no form to read: all 126 results that said so were in form mode with no field in their schema (measured), so what it asks is one message. The row says it asked and shows that message and what the call would do, and offers nothing to press, since nothing on the phone answers or resumes an approval. It reads as stopped rather than done, since the call has not run.
+- ToolSearch's matches are references the parser drops, 471 of them in the newest 200 mains (measured), so its row shows the query and no result. Keeping them is a change for the agent, and nobody has asked for it.
 - A chat's title holds its room before the link's first value, invisible rather than absent, so
   nothing moves when the name lands, and after that value a pane the herd has no name for reads
   "Chat". It used to read the raw pane id in both. A card, a sheet, a notification and a Live Activity read the same word, so two untitled panes in one folder read alike on the list.
@@ -873,9 +880,9 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   chat's transcript, is waiting from its first value on and says nothing about a refresh. So the
   chat's atom emits a machine's state, which holds both the view on screen and the fold still
   being read: the thread's "Catching up" capsule and the pending Show earlier and Try again rows are
-  each a tag of that state, and a screen reads nothing else. The cue hides while the chat is
-  dimmed, since the dim already says the hub or the machine is away, and once the pane no longer
-  runs Claude, whose transcript never catches up. A failed watch is not catching up, and pressing
+  each a tag of that state, and a screen reads nothing else. The cue and the catch-up dim hide while
+  the chat is dimmed as away, since that dim already says the hub or the machine is away, and once
+  the pane no longer runs Claude, whose transcript never catches up. A failed watch is not catching up, and pressing
   Try again is a tag of its own.
 - A read that ends within a second says nothing. The cue, a pill in the header when these were measured, used to show as soon as a watch
   resumed, and on a reconnect and a foreground return it held 17 frames (317 ms) and 14 frames
@@ -908,6 +915,30 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   (all measured in Chromium). A capsule beside a skeleton is a forbidden pair in the frame tool:
   the states that say catching up each hold a view and a skeleton means there is none (read in the
   machine), and the sweep holds that.
+- The rows a catch-up holds back dim while the capsule says so, and only the rows: the header, the
+  dock, the capsule and the Latest button stay as they are. The dim reads the one state that both
+  shows the capsule and keeps the held rows on screen, so it waits the capsule's second and fades in
+  on the capsule's own fade, and the frame log's transcript state names it frame for frame over 17
+  catch-up, reopen and reconnect stories. It leaves at once, in the commit the rows land, rather than
+  holding the capsule's 400 ms: the capsule may stay over rows already landed, and a dim that stayed
+  would call those new rows old. On a slow catch-up the dim held 42 frames, 837 ms, and on a
+  reconnect 31 frames, 679 ms, each leaving in the frame the row count grew while the capsule went on
+  to its hold, and no frame of the 17 stories showed it beside the catch-up divider (all measured in
+  Chromium at 390x844 and 4x CPU throttling, one run each). A read that lands inside the capsule's
+  hold therefore gives a dim shorter than a flash's limit, as a spinner goes with its host, so the dim
+  carries no frame mark; the story whose read lands about 1.1 s after the tap never committed the
+  state that dims (one run), as it never committed the capsule's.
+- The catch-up dim takes the rows to 85%, where the away dim takes the whole thread to 60%. On the
+  catch-up stories' rows the small muted text read 6.61 to 1 in light and 7.02 in dark at full
+  strength, 4.61 and 5.40 at 85%, 4.11 and 4.92 at 80%, and 2.69 and 3.29 at 60%, with body text
+  at 10.09 to 11.71 at 85% (computed from the rendered colours in Chromium, both themes, two
+  stories). So 85% is the deepest of those that keeps every row's text over the 4.5 small text
+  needs. A dimmed row still opens: a tap on a tool row expanded it with the dim on (measured once).
+  The thread takes one dim at a time, so the two never show together, and the away dim wins, as it
+  does over the capsule: on a reconnect the frame log held the away dim for the one frame of the
+  catching-up state that the link was still unreachable, and the catch-up dim after it (measured
+  once). When the away dim takes over, the rows fade back on the fade the whole thread dims on, so
+  the thread only darkens (reasoned, not measured).
 - A chat counts its running subagents only in its dock. The dock counts every running subagent of
   the session, a foreground one included and marked "Claude waits on it", and its chip opens that
   run's screen in one tap, as a tree row does. So the header's count added only a scroll to the
@@ -932,6 +963,7 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   (reasoned, not measured). With rows on screen it never says so, and a rejected resume keeps them
   until the agent's first chunk replaces them. A file left truly empty behind such a rejection
   therefore keeps showing the old rows until Claude writes again (reasoned, not measured).
+- Whether an agent sends the caught-up mark is read from the first version that does, 0.0.2, never from the hub's version. Reading it as any agent behind the hub took every agent that had not updated yet for one that cannot say, so every chunk went straight on screen with no skeleton, no hold and no capsule, which is how a 0.0.8 agent under a 0.0.11 hub read (every tag from 0.0.2 sends it, read in each; a test fails on the old rule). A real 0.0.8 binary was not run against this phone.
 - A chat with nothing cached whose pane closed or whose Claude exited showed a blank thread above
   the card. It says the phone has no messages, as a machine that is away does.
 - A close from the chat that stayed on the chat, blank, for the rest of a story was the story and
@@ -1431,6 +1463,8 @@ a turn of its own, enqueued as a task notification.
 - A worker that awaits its own setup before it listens for messages loses every message posted
   in the meantime: the highlighter answered nothing until it listened first and loaded lazily
   (measured).
+- A field that grows with its text sits in a grid over an invisible copy of that text, and reads no height of its own. Setting its height to `auto` to measure it collapsed the dock for one layout on every key, and the thread's scroll was pulled back to fit: at 390 wide, 10 scroll events all at one position, the thread 120 px short of its end for 131 of 148 frames. Laid out from the copy, 5 scroll events of 24 px, one per wrapped line, off the end for those 5 frames of 133 and ending on it (real keystrokes in Chromium, unthrottled, one run of each). That this is the flicker a phone showed is a guess, since iOS is not measured. The copy's words sit in a pseudo-element, so they join no witness's text.
+- Typing renders no thread. The draft's state lives in the chat's screen, so each key re-renders the screen, and two values it hands down were rebuilt per render: a session `Option` and a filtered list. A memo on the thread did nothing until they held: 6 thread renders over 5 keys before, 0 after, and 5 with only the `Option` rebuilt (measured by the render counter). A thread renders by itself for a while after its rows land, so a test counting per key waits past that: 1 render at 50 ms, 0 at 1000 ms (measured).
 - A clock read at the top of a screen re-renders the whole screen every second. In the chat that
   re-rendered every visible row; moving the clock into the leaves that show an elapsed time, each
   ticking only while its span is running, halved the idle render time (measured at 4x
@@ -1505,9 +1539,8 @@ a turn of its own, enqueued as a task notification.
 - The Agents page stays mounted under a pushed chat. It used to re-render whole on every herd
   update and every clock second: with fifteen cards on three machines and a chat open, each herd
   render was about 680 component renders, and the page cost 373 to 394 ms of main-thread task
-  time per herd update and 144 to 186 ms per idle second at 4x throttling. Covered, it now holds
-  what it shows and its clocks stop: 0 herd-page renders per herd update from another machine and
-  per clock second, and the task time per herd update fell to 17 to 31 ms, the rest of the app.
+  time per herd update and 144 to 186 ms per idle second at 4x throttling. Under a chat its clocks
+  stop: 0 herd-page renders per clock second. What it does on a herd update is the entries below.
   Shown and idle, it commits once a second with only the elapsed times re-rendering, 105
   component renders and 38 to 41 ms per second (all measured on the dev server with a fake hub,
   counting renders through React's devtools hook, two to eight runs each).
@@ -1534,8 +1567,10 @@ a turn of its own, enqueued as a task notification.
   atoms inside the covered scope, like the Agents page, and a machine's screen renders only for its
   own machine: an update from another machine under that screen went from 262 renders and 110 to 113
   ms to none, and its clock second from 235 renders and 105 to 113 ms to 12 and 13 to 18 ms (measured
-  as above, 3 machines). A herd update to the shown list itself stays about what it was, 22 to 29 ms
-  before and 26 to 31 after, and is left alone.
+  as above, 3 machines). The tab under that screen has since gone back to following the herd in the
+  background, as the Agents page does, so it pays what the shown list pays (reasoned, not measured). A
+  herd update to the shown list itself stays about what it was, 22 to 29 ms before and 26 to 31 after,
+  and is left alone.
 - What a status flip costs outside the screen is too small to spend code on, so deltas stay unbuilt.
   With 15 agents the phone encoded its herd snapshot in about 1 ms and wrote it to IndexedDB in about 1
   ms at 4x CPU throttling, 56 ms at worst. A flip sends one machine's entry, 2440
@@ -1563,43 +1598,21 @@ a turn of its own, enqueued as a task notification.
   a chat with nothing cached says "No messages yet" a second later and a cached chat lands with no
   catch-up (read in the chat's machine, not measured). A dial that fails before its first herd ends the watch quietly, as any lost connection
   does, and the next dial asks again. Each dial resumes, so a failing backoff restarts the chat's
-  notice wait, and the link's own notice dims the chat at that same second, which hides the capsule
-  (reasoned, not measured).
-- A covered screen reads atoms through a derived atom that returns its own previous value while
-  the covered flag is set and reads nothing else, so a herd update wakes none of its components.
-  The flag is an atom set in a layout effect rather than a context value, since a context change
-  re-renders every reader on cover, as the chat starts its slide (reasoned, not measured).
-  Elapsed times follow one shared ticker atom, so every label on a page changes in one commit,
-  and stop following it while covered; uncovering sets each to the current time at once.
-- A screen that first mounts already covered, such as the herd under a chat opened cold from a
-  link, holds the first value it read until it is uncovered, even an empty one (reasoned, not
-  measured).
-- React's hidden `Activity` was ruled out: it hides its tree with `display: none` (read in
-  react-dom's source), and the herd shows under a chat while it slides in and under the back swipe.
-- Uncovering shows the current herd without its animations. Remounting the list was ruled out: the
-  chat returns focus to the card that opened it as it unmounts, and a remount replaces that card.
-  Setting the covered atom re-renders its readers in a second synchronous commit (reasoned, not
-  measured). Motion's global instant flag is held from that commit's insertion effects to the
-  scope's own passive effect, which runs after its descendants' (reasoned, not measured): Motion
-  starts exits in layout effects and other value animations in passive ones, and only syncs props
-  in its insertion effects (read in its source). Motion's own instant transition holds the flag two
-  frames, and the toast a close from the chat shows once the herd is back would land inside them
-  (reasoned, not measured). Layout animations start a frame later (reasoned, not measured), so
-  the projection root's next update is blocked instead, and only when one is pending: a block with
-  nothing to consume it skips the next real reorder (read in Motion's source). The block is
-  global, so any other layout animation updating in that same commit lands instantly too.
-- Those global switches reach nothing outside the herd, because the herd is uncovered only once the
-  pushed screen has gone: a back tap and a swipe released past the threshold both slide the screen
-  out in full and navigate when the slide completes, and a swipe released short never navigates.
-  At 4x throttling the chat's slide-out took 30 and 32 frames, about 500 ms, the same curve as its
-  slide-in. The flag came on about 180 and 240 ms after the chat sat fully off screen, stayed on for 26
-  to 30 ms, and no frame showed the chat after that (measured in Chromium at 390x844, one run of
-  each). The tab bar runs no Motion animation.
-- CSS transitions still played on uncover (the status pill's colours, measured), so the scope
-  disables transitions for its descendants until the second animation frame after: the first
-  frame's callbacks run before that frame computes the new styles (reasoned, not measured). With
-  it, 3 of 3 uncovers ran no transition and no frame of layout animation, while a reorder once
-  shown still played its spring, 99 card frames of it (measured in Chromium).
+  notice wait, and the link's own notice dims the chat as away at that same second, which hides the
+  capsule and the catch-up dim (reasoned, not measured).
+- The list under a chat that has arrived follows the herd. It used to hold what it showed until the chat had gone, so a back tap or a swipe slid the chat off old cards, and they changed after the slide with the chat already off screen, a removed card's gap showing first (measured in Chromium at 390x844 and 4x CPU throttling, and in the pictures). A close from the chat got the same. Going by what a frame reads now, no card changes, leaves or moves from the first frame of a back tap or a swipe, a swipe that stops part way included, and the slide's worst frame went from 50 ms, the catch-up at its end, to 18 to 20 ms (one run of each, 4x).
+- A screen under a pushed one is in one of four phases. Arriving holds what it shows, since a tap's own seen mark would otherwise change the card under the finger while the chat slides over it (reasoned, not measured). Over renders herd updates in the background, through a deferred value and a memoized body, so they are one React transition that yields to anything else. Typing is over with a hold on it. Shown is live and in sight, and the screen is shown from the moment a back tap or a swipe starts, not from when the chat is gone: a swipe released short goes back to over once the chat has come back. A pushed screen says where it stands to the tab under it, and a screen pushed over a pushed screen says nothing to it.
+- A herd update under an arrived chat costs what it costs on a shown list. A status flip among fifteen cards on three machines took 203 to 225 ms of main-thread task per flip, three runs of twelve, against 7 ms or less while the list held. Nothing yielded in its commit: rendered at once beside typing, a keystroke's time to its next frame went from a p90 of 44.3 to 46.5 ms and a worst of 52.5 to 75.9 to a p90 of 81.8 to 83.1 and a worst of 103.9 to 127.9, with 11 or 12 tasks over 50 ms per run, the longest 81 ms, one flip a second (dev server, 4x, three runs each). So any input under the chat holds the list for a second after the last one, the second a link's notice waits, reused and not measured anew. With it the same typing read a p90 of 46.4 to 49.8 ms and a worst of 53 to 93.1, with no task over 50 ms, and the median stayed 41 to 45 throughout. A production build and a phone are not measured. An input is what is listened for rather than a key, since a phone's keyboard does not always send one (reasoned, not measured).
+- A back tap or a swipe inside that second catches the list up synchronously in the commit that starts it, the one case where a slide starts behind a full list render, so the chat stays where it was for one long frame: 195 ms on a tap and 164 ms on a swipe, with a change among five cards, and the first frame that shows the list shows it right (measured on the dev server in Chromium at 4x, one run of each, and in the pictures). A swipe's first move flushes that commit before it moves the chat, because a move is not a discrete event and its render could otherwise land after a frame showing the old cards (reasoned: one run without the flush landed it in time). A herd update that lands while the chat is already leaving plays as on any shown list, since it happens in view (read in the code).
+- A new status icon's pop still plays during that catch-up on a development build, for 8 pictures, 130 ms: its strict-mode second run comes after the flag has gone off (the pop gone in 1 of 1 runs with strict mode taken out, and which effect does it is reasoned). A production build makes no second run, and a phone is not measured.
+- Motion's instant flag is global, so it is set by an empty component right before the list and cleared by another right after, in both the layout and the passive effect pass. Effects run in tree order inside one synchronous pass, so the flag covers the list's effects and no one else's, a chat's rows landing in the same commit included (reasoned from React's order, a test holds it off afterwards). Motion starts exits in layout effects and other value animations in passive ones (read in its source). Layout animations start a frame later, so a row reads its transition at render rather than from that flag. The flag and the row's transition stay instant until the second animation frame after the screen is shown, for the catch-up commit above.
+- An instant exit still takes a frame, then a low-priority render, to leave. A card closed under the chat stayed for 2 frames after the chat left and the rows below jumped 108 px, 70 ms after the toast had shown. Such a row hides itself in the commit it starts leaving, so the rows below hold their place from the first frame (measured in Chromium at 4x, one run of each).
+- A screen that first mounts under a chat, such as the herd under a chat opened cold from a link, goes to over once that screen has mounted, since it has no slide to wait for, so it follows the herd from its first value (read in the code, not measured).
+- The flag for the phases is an atom set in a layout effect rather than a context value, since a context change re-renders every reader on cover, as the chat starts its slide (reasoned, not measured). Elapsed times follow one shared ticker atom, so every label on a page changes in one commit, and stop following it under a chat; the first frame a slide can show already holds the current time, because shown starts with the tap.
+- React's hidden `Activity` was ruled out: it hides its tree with `display: none` (read in react-dom's source), and the herd shows under a chat while it slides in and under the back swipe.
+- Remounting the list to land what changed was ruled out: the chat returns focus to the card that opened it as it unmounts, and a remount replaces that card. The card stays the same element while the herd moves under it (a test holds it).
+- CSS transitions played on what changed under the chat (the status pill's colours, measured), so the scope disables transitions for its descendants while the chat is over and until the second animation frame after: the first frame's callbacks run before that frame computes the new styles (reasoned, not measured). The attribute goes on when the chat has arrived and not at the tap, so a card's press highlight still fades under the arriving chat (reasoned, not measured).
+- A layout shift under a resting pushed screen moves nothing anyone sees, and neither does the shift in the first paint after that screen starts to leave, or goes, so the frame tool leaves both out for what sits in the list, and counts a shift on the screen on top as ever: with the list live, a card closed under a chat read 0.0285 there and failed a story with nothing moving on screen. The first frame a pushed screen moves is read ahead of Motion's frame, so a card's top there is a step behind what the frame paints, 108 px on a swipe's first move while the pictures show them in place (measured), and only its title and status are judged. The tool's own check for this is a card's title, status or top changing between two frames while a pushed screen sits off its place, and it fails on the old hold (measured).
 - An atom subscription made without `immediate` does not compute the atom, so it depends on
   nothing and never fires until something else reads the atom: a test that counted wakes that way
   counted none, whatever the atom did (measured). The first read by anything else then fires it
@@ -1619,8 +1632,8 @@ a turn of its own, enqueued as a task notification.
   transcripts at every cut. A chat that opened current, a cold open, a watch that failed or started
   over, and a catch-up that added no row get nothing. The fold judges the lines when the read ends,
   and the screen turns them into row keys, since only it has rows.
-- The catch-up shows nothing but the thread's "Catching up" capsule, past its first second, while it
-  waits for the fresher view. Its rows then land in one commit under one ordinary lift capped at a screen,
+- The catch-up shows nothing but the thread's "Catching up" capsule and the dim on the rows it
+  holds, past its first second, while it waits for the fresher view. Its rows then land in one commit under one ordinary lift capped at a screen,
   with a static divider above the first new row. Releasing them one row at a time, with a chip
   carried down a trail, held a reopen back from its end: reopening a thread of 120 lines with 40
   new ones took 267 to 273 frames, 5.1 to 5.5 s of lift, and ran past a story's wait for its last
@@ -1895,7 +1908,13 @@ A dialog closing need not say so in the transcript. Escape wrote `idle` 13 to 19
 
 The re-read 380 ms after an answer stays, and at that length. The pid file does not replace it, because the case it exists for changes nothing in the pid file: over 28 answers with another dialog queued behind, from two or three parallel Reads outside the project, the file stayed `waiting`, herdr sent no event, and the next dialog was on screen within 103 ms of the keys answering (the screen read every 100 ms or so). Where the row moved onto it, from the keys answering, one Claude per run: with Claude's hooks and the re-read 204 to 514 ms over 10 moves; with the hooks and no re-read 354 to 465 ms, 5 of 5, moved by the first call's `PostToolUse`; with the re-read and no hooks 603 to 742 ms, 5 of 5; with neither it stayed on the answered ask for the whole 10 s watched, 5 of 5, until a second tap re-read it. The hooks are merged in by hand, so a machine can lack them, and a first call that runs long would hold back that `PostToolUse` (reasoned, not measured).
 
-Its length holds too. Over 32 answers that ended the dialogs, the pid file left `waiting` within 51 ms of the keys answering, and herdr's status followed 8 to 331 ms behind the file, at most 332 ms after the keys. So a re-read sooner than that lands before herdr's flip, which is what the pid file's own re-read does: in 16 of the 32 the row read blocked over a screen with no dialog, an `UnknownAsk` where the answered ask had been, for 199 to 231 ms before it left blocked. That is a flash on a phone looking at the dock, and it is still there.
+Its length holds too. Over 32 answers that ended the dialogs, the pid file left `waiting` within 51 ms of the keys answering, and herdr's status followed 8 to 331 ms behind the file, at most 332 ms after the keys. So a re-read sooner than that lands before herdr's flip, which is what the pid file's own re-read does: in 16 of the 32 the row read blocked over a screen with no dialog, an `UnknownAsk` where the answered ask had been, for 199 to 231 ms before it left blocked.
+
+A dialog closing keeps the row's ask until herdr moves or a second has passed. The pid file leaves `waiting` first, which wakes a re-read, and that read can meet herdr's blocked over a screen with no dialog. It used to publish that as an unreadable ask, or as a permission with no options where a hook still named the call. On a real Claude Code 2.1.318 and herdr 0.9.5, through a real hub to a phone client on one machine, that was 11 of 16 answers, the laptop's own keys among them, for 119 to 244 ms. Over an emulated 300 ms round trip on the phone's socket it was 6 of 10, for 302 to 306 ms, so a slower link shows it for longer: the two updates reach the phone a round trip apart, which fits the hub waiting on each acknowledgement (reasoned from the RPC entries). In a story the swap read 9 frames over 128 ms and 0.0268 of layout shift, with a Decline live over a dialog already gone, whose Esc would land on the turn just approved (read in the code, not pressed). The notification plan also reads that swap as a new question and raises `Has a question` for a dialog already answered (run through the plan's own function, with no Hark). With the hold it was 0 of 16, and a real `/mcp`, which nothing can read, still read as unreadable with the file saying `waiting`.
+
+Refusing to read a screen as a dialog whenever the file says not waiting was the first idea, and it can hide a real one. Where `/proc` is missing every status reads as not waiting, so an unreadable dialog on such a machine would simply not exist, and a screen the file does not cover, such as one shown before a session starts, would go the same way (reasoned, not measured). So the hold needs the file seen moving from `waiting` to another status, and it ends on its own. That move comes from the watch alone, so it reads the same with no `/proc`. A file that never said `waiting`, one with no status, a half-written one until it can be read, a killed Claude's, which never moves and keeps the hold off for its whole session, a screen that could not be read and a row with no ask yet in that blocked episode all read as they did. A dialog on the screen always wins, and the file saying `waiting` again ends the hold.
+
+The second is a guard: from the file moving to the row leaving blocked took 213 to 590 ms over those 16 answers, and 281 to 791 ms with the phone's own 150 ms in it. The hold wakes a re-read when it ends, since an idle herdr sends nothing. So being wrong costs an unreadable dialog that opens within that second without the file saying `waiting`, which shows a second late at most; every dialog whose file has been read so far wrote `waiting`. A hook naming a next call during the hold changes nothing until the file says `waiting` or its dialog is on the screen, whichever is first (read in the code, not measured). The ask kept is the one the row already showed, rather than none, because a blocked row with no ask says it is waiting for Claude's question, which is its own flash. A tap during the hold meets the check of the screen against the ask's dialog, and is refused as already answered (read in the code, not measured). A story plays the rows and cannot run the hold, so the same story fails on the old rows and passes on the new, and the real runs above are what hold the agent. The unreadable ask carries a mark of its own, since the dock's own mark stayed up through the swap and the frame tool read nothing.
 
 Parallel calls' permission requests reach the agent in either order, since each hook runs as a process of its own, while Claude's dialogs keep the order of the calls. A row used to pick a request by its place in the queue, so a swapped pair named the second call over the first call's dialog. Approving answered the dialog on screen, the next dialog then matched the ask the row already held, so the row did not move, and every tap on it was refused as already answered until the laptop answered it. With every hook's arrival logged at the agent, on a real 2.1.318 running Haiku, two parallel Reads outside the project: 16 rounds, 5 with the requests swapped, 1 to 42 ms apart, and those same 5 named the wrong file and stuck (measured). An earlier count read 2 of 17, and none of 10 without the hooks.
 
@@ -1905,7 +1924,15 @@ Where two different calls both fit the dialog, such as one path inside another o
 
 A tool with no header of its own needs this most, since nothing else ties it to the dialog: that is how a declined call's details could show over the next dialog. A tool's input is on screen for what was measured, one real run of each: every string of an MCP call, quoted, escaped, and laid out over `│` lines, 682 characters uncut, and a Read's path whether or not a symlink adds a line. A decline fired no hook in 2 of 3 runs and left no pending behind in any of them: the row reaching idle dropped it, and declining the first dialog of a batch ended the whole batch.
 
-A WebFetch dialog ends on `No, and tell Claude what to do differently (esc)` with no `Esc to cancel` line, so it reads as no dialog and its row carries no options (measured, one run). A Claude started with no permission mode shows a Read outside the project under the header `Read outside the working directories`, with no counter, and its one-time option is `Yes, but ask again next time`, so an Approve finds no `Yes` to press (measured, one run). Neither is fixed here.
+A Read outside the project under a Claude started with no permission mode has the header `Read outside the working directories`, with no counter (measured, one run).
+
+A permission dialog need not carry an `Esc to cancel` line. A fetch ends on an answer marked `(esc)` and a plan approval on `ctrl+g to edit in <editor>` (measured, one run of each on a real 2.1.318), and the network dialogs' `Deny (esc)` ends the same way (read in its binary). Each used to read as no dialog: on a real fetch the row carried no options and the phone drew only No, and an Approve sent anyway was refused as unreadable with nothing typed. Either ending counts only as the screen's last line, because Claude's input box sits under anything it says, so a conversation quoting one is still no dialog. That leaves a wrapped label working, since the marker ends the line it wrapped to. Over real dialogs through a real agent and hub, from a phone's call: a fetch's Approve, Always and Decline left the ask 600, 250 and 250 ms after the answer, a read outside the project's Approve and Decline 650 and 350 ms, and a plan's Decline 650 ms, each polled every 50 ms, one run of each.
+
+Options fall in with what a button does. A one-time yes is `Yes`, `Allow` or `Yes, but ask again next time`, the last of which moves the cursor down three lines on a read outside the project, where it comes fourth (measured, its next read asked again). A no is what Esc does, since the phone's No presses Esc: `No`, any label marked `(esc)`, and `No, and ask again next time`, whose answer is the same denial Esc gives that dialog (read in the binary). An answer selects by the whole label, wrapped lines included, the same text its class was read from.
+
+What no button answers, the dock names as offered on the laptop only: a mode switch such as `Yes, and switch to auto mode`, `No, and block reads outside the working directories from now on`, a second lasting option beside the one Always presses, and all three of a plan approval's, which has no plain yes. Choosing by label stays a question's alone, so a tap cannot change a session's permission mode, and an answer to any of these still has to name the dialog on screen. The classes on the wire did not change. An older phone hides the same options it always did and answers what it can through the agent, and an agent too old for this sends `Yes, but ask again next time` as other, which a current phone lists as a laptop option rather than offering a Yes that would be refused.
+
+A plan's text sits above the rule that starts the part of the screen read as the dialog, so the header alone ties a plan approval to its call, and the fingerprint does not cover the plan. Only one plan can wait at a time (reasoned, not measured), and only Decline can land on one from the phone. The lock screen still offers Approve on a dialog with no plain yes, where the answer is refused and the pane reads needs you (read in the code, not measured).
 
 An answered ask is remembered with the dialog it carried, so one id over a new dialog is a new answer, and only the same dialog is refused.
 :::
@@ -2104,6 +2131,7 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   the `motion-reduce:` utilities read the real media query (reasoned, not measured). Emulating it
   in the browser instead makes the dev page reload in a loop (reported by another agent, not
   measured here).
+- A file put back with `git checkout` while the catalog runs can stay stale if it sits in another member: the server kept handing out a domain leaf's older transform after the file was restored, and touching the file changed nothing, where a restart did (measured once). Restart it after swapping code under it, rather than trusting what a story then shows.
 - Vite discovers the highlighter's languages only when a chat first renders, and reloads the page
   once on each fresh server (measured), so the first story of a run can restart, and a sweep
   started in that page dies with it. Load a chat first and wait for the reload.

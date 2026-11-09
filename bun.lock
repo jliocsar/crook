@@ -19,7 +19,7 @@
     },
     "packages/agent": {
       "name": "@crook/agent",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "@crook/claude": "workspace:*",
         "@crook/domain": "workspace:*",
@@ -34,7 +34,7 @@
     },
     "packages/claude": {
       "name": "@crook/claude",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "@crook/domain": "workspace:*",
         "diff": "8.0.4",
@@ -47,7 +47,7 @@
     },
     "packages/domain": {
       "name": "@crook/domain",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "effect": "catalog:",
       },
@@ -57,7 +57,7 @@
     },
     "packages/frames": {
       "name": "@crook/frames",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "@effect/platform-bun": "catalog:",
         "effect": "catalog:",
@@ -68,7 +68,7 @@
     },
     "packages/herdr": {
       "name": "@crook/herdr",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "@effect/platform-bun": "catalog:",
         "effect": "catalog:",
@@ -79,7 +79,7 @@
     },
     "packages/hub": {
       "name": "@crook/hub",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "@crook/domain": "workspace:*",
         "@crook/protocol": "workspace:*",
@@ -98,7 +98,7 @@
     },
     "packages/protocol": {
       "name": "@crook/protocol",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "@crook/domain": "workspace:*",
         "effect": "catalog:",
@@ -109,7 +109,7 @@
     },
     "packages/release": {
       "name": "@crook/release",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "@crook/domain": "workspace:*",
         "@crook/web": "workspace:*",
@@ -122,7 +122,7 @@
     },
     "packages/state-machine": {
       "name": "@crook/state-machine",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "effect": "catalog:",
       },
@@ -132,11 +132,11 @@
     },
     "packages/tsconfig": {
       "name": "@crook/tsconfig",
-      "version": "0.0.10",
+      "version": "0.0.13",
     },
     "packages/web": {
       "name": "@crook/web",
-      "version": "0.0.10",
+      "version": "0.0.13",
       "dependencies": {
         "@base-ui/react": "^1.9.0",
         "@crook/domain": "workspace:*",

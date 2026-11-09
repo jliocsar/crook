@@ -879,7 +879,7 @@ describe('AgentChatScreen loading', () => {
   const current = () =>
     liveWith(
       herd([
-        laptopWith([agent('w1:p1', 'idle', { claudeSession: SESSION })], { agentVersion: '0.0.1' }),
+        laptopWith([agent('w1:p1', 'idle', { claudeSession: SESSION })], { agentVersion: '0.0.2' }),
       ]),
     )
   const source = new PaneTranscript({ pane: PANE })
@@ -907,22 +907,20 @@ describe('AgentChatScreen loading', () => {
     }),
   )
 
-  it.effect(
-    'streams every chunk from an agent older than the hub, which never says it caught up',
-    () =>
-      Effect.gen(function* () {
-        const { link } = yield* renderApp(
-          CHAT,
-          liveWith(herd([laptopWith([agent('w1:p1', 'idle')], { agentVersion: '0.0.0' })])),
-        )
+  it.effect('streams every chunk from an agent too old to say it caught up', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(
+        CHAT,
+        liveWith(herd([laptopWith([agent('w1:p1', 'idle')], { agentVersion: '0.0.0' })])),
+      )
 
-        yield* Queue.offerAll(yield* link.transcriptFor(source), [
-          opened(),
-          chunk(0, 10, [said(0, 'Older line.')]),
-        ])
+      yield* Queue.offerAll(yield* link.transcriptFor(source), [
+        opened(),
+        chunk(0, 10, [said(0, 'Older line.')]),
+      ])
 
-        expect(yield* Effect.promise(() => screen.findByText('Older line.'))).toBeDefined()
-      }),
+      expect(yield* Effect.promise(() => screen.findByText('Older line.'))).toBeDefined()
+    }),
   )
 
   it.effect('opens a chat again where it left off, and shows the rest once it caught up', () =>

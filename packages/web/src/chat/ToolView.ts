@@ -4,9 +4,10 @@ import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
+import { toolName } from '@crook/domain/ToolName'
+import { stringField } from '@crook/domain/ToolSubject'
 import type { PatchHunk, ToolResultBlock } from '@crook/domain/TranscriptMessage'
 import { imagesIn, textsIn } from '@crook/web/chat/Blocks'
-import { stringField } from '@crook/web/chat/ToolSummary'
 import type { SubagentRun, ToolCallModel } from '@crook/web/chat/ChatItems'
 import type { Picture } from '@crook/web/chat/Images'
 import type { DiffHunk } from '@crook/web/components/ui/diff-view'
@@ -53,7 +54,10 @@ export const pathOf = (call: ToolCallModel): Option.Option<string> =>
   stringField(call.input, PATH_FIELD)
 
 export const picturesOf = (call: ToolCallModel): readonly Picture[] => {
-  const name = Option.getOrElse(Option.map(pathOf(call), fileName), () => `${call.name} image`)
+  const name = Option.getOrElse(
+    Option.map(pathOf(call), fileName),
+    () => `${toolName(call.name)} image`,
+  )
 
   return Option.match(call.result, {
     onNone: () => [],

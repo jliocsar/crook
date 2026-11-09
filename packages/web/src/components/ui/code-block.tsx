@@ -8,6 +8,7 @@ import * as React from 'react'
 
 import { useRowFlag } from '@crook/web/components/RowMemory'
 import { useHighlightedLines } from '@crook/web/highlight/Highlighter'
+import { foldedLines } from '@crook/web/text/Lines'
 
 type CopyState = 'idle' | 'copied' | 'error'
 
@@ -16,6 +17,8 @@ type CodeBlockProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   filename?: string | undefined
   language?: string | undefined
   maxLines?: number
+  maxCharacters?: number
+  memorySlot?: string
   wrap?: boolean
 }
 
@@ -47,8 +50,13 @@ class ClipboardWriteFailed extends Schema.TaggedError<ClipboardWriteFailed>()(
   }
 }
 
-const moreLinesLabel = (hidden: number): string =>
-  hidden === 1 ? 'Show 1 more line' : `Show ${hidden} more lines`
+const moreLinesLabel = (hidden: number): string => {
+  if (hidden === 0) {
+    return 'Show all'
+  }
+
+  return hidden === 1 ? 'Show 1 more line' : `Show ${hidden} more lines`
+}
 
 const useCopy = (code: string) => {
   const [copyState, setCopyState] = React.useState<CopyState>('idle')
@@ -188,16 +196,22 @@ export function CodeBlock({
   filename,
   language,
   maxLines,
+  maxCharacters = Number.POSITIVE_INFINITY,
+  memorySlot = 'code',
   wrap = false,
   className,
   ...rootProps
 }: CodeBlockProps) {
   const { copyState, copy } = useCopy(code)
-  const [expanded, setExpanded] = useRowFlag('code', false)
+  const [expanded, setExpanded] = useRowFlag(memorySlot, false)
   const lines = React.useMemo(() => code.replace(/\n$/u, '').split('\n'), [code])
-  const collapsible = maxLines !== undefined && lines.length > maxLines
+  const folded = React.useMemo(
+    () => foldedLines(lines, maxLines ?? lines.length, maxCharacters),
+    [lines, maxLines, maxCharacters],
+  )
+  const collapsible = folded.clipped
   const clipped = collapsible && !expanded
-  const shown = clipped ? lines.slice(0, maxLines) : lines
+  const shown = clipped ? folded.lines : lines
   const label = filename ?? language
   const highlighted = useHighlightedLines(shown.join('\n'), Option.fromUndefinedOr(language))
 

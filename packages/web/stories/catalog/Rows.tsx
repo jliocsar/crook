@@ -98,6 +98,49 @@ const A_PATCH = [
   }),
 ]
 
+const CODE_MODE_TOOL = 'mcp__codemode__run'
+
+const CODE_MODE_SHORT =
+  "const run = await tools.call('Bash', { command: 'git status --short' })\nreturn run.text"
+const CODE_MODE_LONG = [
+  "const herd = '/home/ada/Projects/herd'",
+  'const shell = async (command: string) => {',
+  "  const run = await tools.call('Bash', { command, timeout: 25000 })",
+  '  return run.text',
+  '}',
+  '',
+  'const before = await shell(`cd ${herd} && git status --short`)',
+  "const manifest = await tools.call('Read', { file_path: `${herd}/package.json` })",
+  'const version = JSON.parse(manifest.text).version',
+  "const next = version.split('.').map(Number)",
+  'next[2] += 1',
+  '',
+  "await tools.call('Write', {",
+  '  file_path: `${herd}/VERSION`,',
+  "  content: next.join('.'),",
+  '})',
+  '',
+  'const tests = await shell(`cd ${herd} && bun run test 2>&1 | tail -5`)',
+  'const after = await shell(`cd ${herd} && git status --short`)',
+  '',
+  'return { version: next.join("."), changed: before !== after, tests }',
+].join('\n')
+const LONG_LINT_OUTPUT = Arr.makeBy(
+  212,
+  (index) => `src/chat/Thread${index}.tsx:${index + 1}:12  warning  'draft${index}' is never used`,
+).join('\n')
+const APPROVAL_RESULT = JSON.stringify({
+  status: 'approval-required',
+  requestId: 'request_1',
+  expiresAt: 1800000000000,
+  elicitation: {
+    mode: 'form',
+    message: 'Create a Linear issue titled "Rotate the staging keys" in the Platform team?',
+    requestedSchema: { type: 'object', properties: {} },
+  },
+  invocation: { app: 'linear', tool: 'createIssue', kind: 'mutation' },
+})
+
 const toolPair = (name: string, input: Schema.Json, output: string, id = `toolu_${name}`) => [
   toolUse(0, id, name, input),
   toolResult(10, id, output),
@@ -294,6 +337,128 @@ export const ROW_STORIES: readonly StoryMaker[] = [
     'NotebookEdit',
     { notebook_path: `${CWD}/a.ipynb`, new_source: 'x = 1' },
     'Cell updated.',
+  ),
+  ...toolView(
+    'code-mode',
+    'a short code mode call',
+    CODE_MODE_TOOL,
+    { code: CODE_MODE_SHORT },
+    ' M src/chat/ThreadItem.tsx\n?? tmp/',
+  ),
+  rowStory(
+    'tool-code-mode-long-open',
+    'Tool view, a long code mode call folded to its first lines, with a structured result',
+    toolPair(
+      CODE_MODE_TOOL,
+      { code: CODE_MODE_LONG },
+      JSON.stringify({ version: '0.4.2', changed: true, tests: '812 passed' }),
+    ),
+    { all: [{ text: 'Show 11 more lines' }, { text: 'code mode(Bash, Read, Write)' }] },
+    { open: true },
+  ),
+  rowStory(
+    'tool-code-mode-failed-open',
+    'Tool view, a code mode run that failed though its result says no error',
+    toolPair(
+      CODE_MODE_TOOL,
+      {
+        code: "const file = await tools.call('Read', { file_path: 'herd.json' })\nreturn file.body",
+      },
+      "run failed: Property 'body' does not exist on the value Read returns.",
+    ),
+    {
+      all: [{ selector: '[data-slot="tool-call"][data-status="error"]' }, { text: 'run failed:' }],
+    },
+    { open: true },
+  ),
+  rowStory(
+    'tool-code-mode-long-result-open',
+    'Tool view, a code mode call with a very long result, folded',
+    toolPair(
+      CODE_MODE_TOOL,
+      { code: "return (await tools.call('Bash', { command: 'bun run lint' })).text" },
+      LONG_LINT_OUTPUT,
+    ),
+    { selector: '[data-slot="folded-output"] button' },
+    { open: true },
+  ),
+  rowStory(
+    'tool-code-mode-inputs-open',
+    'Tool view, a code mode call with inputs, each under its own name',
+    toolPair(
+      CODE_MODE_TOOL,
+      {
+        code: "await tools.call('Write', { file_path: 'a.md', content: inputs.body })",
+        inputs: { body: '# Herd\n\nA note written from an input.' },
+      },
+      'undefined',
+    ),
+    { text: 'inputs.body' },
+    { open: true },
+  ),
+  chatStory({
+    slug: 'tool-code-mode-running',
+    title: 'Tool view, a code mode call still running',
+    row: chatAgent('working'),
+    events: opensWith([toolUse(0, 'toolu_code', CODE_MODE_TOOL, { code: CODE_MODE_SHORT })]),
+    shows: { selector: '[data-slot="tool-call"][data-status="running"]' },
+  }),
+  rowStory(
+    'tool-executor-approval-open',
+    'Tool view, an executor call that asked for approval, which only reads',
+    toolPair(
+      'mcp__executor__call',
+      { calls: [{ path: 'tools.linear.createIssue', input: { team: 'Platform' } }] },
+      APPROVAL_RESULT,
+    ),
+    {
+      all: [
+        { selector: '[data-slot="tool-call"][data-status="stopped"]' },
+        { text: 'Asked for approval' },
+        { text: 'call from executor(asked for approval)' },
+      ],
+    },
+    { open: true },
+  ),
+  ...toolView(
+    'executor-execute',
+    'an executor program',
+    'mcp__executor__execute',
+    { code: "return await tools.linear.getIssue({ id: 'JC-198' })" },
+    JSON.stringify({ result: { ok: true, title: 'Readable rows' } }),
+  ),
+  ...toolView(
+    'monitor',
+    'a Monitor with no background job behind it',
+    'Monitor',
+    { description: 'Watch the deploy log', command: 'tail -f deploy.log', timeout_ms: 300000 },
+    'Monitor started (task t1, expires in 300s).',
+  ),
+  ...toolView(
+    'send-message',
+    'SendMessage',
+    'SendMessage',
+    { to: 'reviewer', message: 'The branch is ready for you to read.' },
+    JSON.stringify({ success: true, message: 'Delivered to reviewer.', msg_id: 'msg_1' }),
+  ),
+  ...toolView(
+    'workflow',
+    'Workflow',
+    'Workflow',
+    { scriptPath: `${CWD}/.claude/workflows/gate.js`, args: { fast: true } },
+    'Workflow started with task t2.',
+  ),
+  rowStory(
+    'tool-code-mode-thread',
+    'A long thread of code mode calls, the most common row there is',
+    pipe(
+      Arr.makeBy(150, (index) => [
+        toolUse(index * 20, `toolu_${index}`, CODE_MODE_TOOL, { code: CODE_MODE_LONG }),
+        toolResult(index * 20 + 10, `toolu_${index}`, LONG_LINT_OUTPUT),
+      ]),
+      Arr.flatten,
+    ),
+    { text: 'code mode(Bash, Read, Write)' },
   ),
   ...toolView('skill', 'Skill', 'Skill', { skill: 'prototype' }, 'Launching skill.'),
   ...toolView('tool-search', 'ToolSearch', 'ToolSearch', { query: 'select:Read' }, 'Matched 1.'),

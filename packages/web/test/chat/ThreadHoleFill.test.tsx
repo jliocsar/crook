@@ -44,7 +44,7 @@ const rowsOf = (messages: readonly TranscriptMessage[]): readonly ThreadRow[] =>
   )
 
 const thread = (rows: readonly ThreadRow[]) => (
-  <Thread rows={rows} dimmed={false} empty={<p>No messages yet</p>} />
+  <Thread rows={rows} dim="clear" empty={<p>No messages yet</p>} />
 )
 
 const startOfRowHolding = (text: string): number =>

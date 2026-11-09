@@ -1,14 +1,20 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem'
 import { expect, layer } from '@effect/vitest'
+import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
+import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
+import * as Schema from 'effect/Schema'
+import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
+import * as TestClock from 'effect/testing/TestClock'
 
+import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { HookInbox } from '@crook/agent/HookInbox'
 import { PaneScreens } from '@crook/agent/PaneScreens'
 import { PendingAsks } from '@crook/agent/PendingAsks'
@@ -34,6 +40,7 @@ import {
   EditFile,
   PermissionAsk,
   RunCommand,
+  UnknownAsk,
   askDialog,
 } from '@crook/domain/Ask'
 import { AskId, ClaudeSessionId } from '@crook/domain/Ids'
@@ -45,6 +52,10 @@ const SESSION = ClaudeSessionId.make('84f3659c-7fcf-4280-8580-b82ae5fd8f91')
 const SESSION_OPTION = Option.some(SESSION)
 const COMMAND = 'echo probe-bash-native > bash-native.txt'
 const BLOCKED = agentInfo({ agent_status: 'blocked', state_change_seq: 4 })
+const BLANK_SCREEN = 'Thinking…\n'
+const JUST_NOW = 10
+const LONG_AGO = 60_000
+const JUST_BEFORE_THE_HOLD_ENDS = 999
 
 const bashCall = (toolUseId: string) => [
   new PreToolUsePayload({
@@ -117,12 +128,14 @@ const scriptedScreens = Effect.fn('scriptedScreens')(function* (
 const startAsks = Effect.fn('startAsks')(function* (
   payloads: readonly (PreToolUsePayload | PermissionRequestPayload)[],
   screens: readonly Option.Option<string>[],
+  leftWaitingAt: Effect.Effect<Option.Option<number>> = Effect.succeedNone,
 ) {
   const ledger = yield* SubscriptionRef.make(ledgerOf(payloads))
   const { read, reads } = yield* scriptedScreens(screens)
   const context = yield* Layer.build(
     Layer.provide(PendingAsks.layer, [
       HookInbox.layerTest(ledger),
+      Layer.mock(ClaudeSessionFiles, { leftWaitingAt: () => leftWaitingAt }),
       Layer.mock(PaneScreens, { read }),
       Layer.mock(TranscriptLocator, { locate: () => Effect.succeedNone }),
       Layer.mock(LastTurn, { read: () => Effect.succeed([]) }),
@@ -132,7 +145,157 @@ const startAsks = Effect.fn('startAsks')(function* (
   return { asks: Context.get(context, PendingAsks), ledger, reads }
 })
 
+const isUnknown = Schema.is(UnknownAsk)
+
+const closingProbe = Effect.fn('closingProbe')(function* (leftAgo: number) {
+  const screen = yield* spikeScreen('12-native-bash-t20')
+  const leftWaitingAt = yield* Ref.make(Option.none<number>())
+  const started = yield* startAsks(
+    bashCall('toolu_01XXC3'),
+    [Option.some(screen), Option.some(BLANK_SCREEN)],
+    Ref.get(leftWaitingAt),
+  )
+  const shown = yield* started.asks.askOf(BLOCKED, SESSION_OPTION, 0)
+  const now = yield* Clock.currentTimeMillis
+
+  yield* Ref.set(leftWaitingAt, Option.some(now - leftAgo))
+
+  return { ...started, shown }
+})
+
+layer(BunFileSystem.layer)('PendingAsks on the test clock', (it) => {
+  it.effect('wakes the state when the hold on a closing dialog ends', () =>
+    Effect.gen(function* () {
+      const { asks, shown } = yield* closingProbe(0)
+      const wakes = yield* Ref.make(0)
+
+      yield* asks.changes.pipe(
+        Stream.runForEach(() => Ref.update(wakes, (count) => count + 1)),
+        Effect.forkScoped,
+      )
+      yield* Effect.yieldNow
+
+      const wakesBefore = yield* Ref.get(wakes)
+
+      expect(yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)).toEqual(shown)
+
+      yield* TestClock.adjust(Duration.millis(JUST_BEFORE_THE_HOLD_ENDS))
+
+      expect(yield* Ref.get(wakes)).toBe(wakesBefore)
+
+      yield* TestClock.adjust(Duration.millis(1))
+      yield* Effect.yieldNow
+
+      const woken = yield* Ref.get(wakes)
+
+      expect(woken).toBeGreaterThan(wakesBefore)
+      expect(yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)).not.toEqual(shown)
+    }),
+  )
+})
+
 layer(BunFileSystem.layer, { excludeTestServices: true })('PendingAsks', (it) => {
+  it.effect('keeps the ask it showed while the dialog closes and herdr has not moved', () =>
+    Effect.gen(function* () {
+      const { asks, shown } = yield* closingProbe(JUST_NOW)
+
+      expect(Option.exists(shown, Schema.is(PermissionAsk))).toBe(true)
+      expect(yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)).toEqual(shown)
+    }),
+  )
+
+  it.effect('reads a screen with no dialog as it always did once the hold is over', () =>
+    Effect.gen(function* () {
+      const { asks, shown } = yield* closingProbe(LONG_AGO)
+
+      expect(yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)).not.toEqual(shown)
+    }),
+  )
+
+  it.effect('reads a screen with no dialog as it always did when no dialog just closed', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('12-native-bash-t20')
+      const { asks } = yield* startAsks([], [Option.some(screen), Option.some(BLANK_SCREEN)])
+
+      yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+
+      expect(Option.exists(yield* asks.askOf(BLOCKED, SESSION_OPTION, 0), isUnknown)).toBe(true)
+    }),
+  )
+
+  it.effect('always reads a dialog on the screen, right after another closed', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('12-native-bash-t20')
+      const leftWaitingAt = yield* Ref.make(Option.none<number>())
+      const { asks } = yield* startAsks(
+        [],
+        [Option.some(BLANK_SCREEN), Option.some(screen)],
+        Ref.get(leftWaitingAt),
+      )
+
+      yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+      yield* Ref.set(leftWaitingAt, Option.some(yield* Clock.currentTimeMillis))
+
+      const next = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+
+      expect(Option.flatMap(next, askDialog)).toEqual(
+        Option.map(parseDialog(screen), dialogFingerprint),
+      )
+    }),
+  )
+
+  it.effect('has nothing to hold when it showed no ask for this blocked episode', () =>
+    Effect.gen(function* () {
+      const { asks } = yield* startAsks(
+        [],
+        [Option.some(BLANK_SCREEN)],
+        Effect.asSome(Clock.currentTimeMillis),
+      )
+
+      expect(Option.exists(yield* asks.askOf(BLOCKED, SESSION_OPTION, 0), isUnknown)).toBe(true)
+    }),
+  )
+
+  it.effect('does not hold the ask of an earlier blocked episode', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('12-native-bash-t20')
+      const leftWaitingAt = yield* Ref.make(Option.none<number>())
+      const { asks } = yield* startAsks(
+        [],
+        [Option.some(screen), Option.some(BLANK_SCREEN)],
+        Ref.get(leftWaitingAt),
+      )
+
+      yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+      yield* Ref.set(leftWaitingAt, Option.some(yield* Clock.currentTimeMillis))
+
+      const later = yield* asks.askOf(
+        agentInfo({ agent_status: 'blocked', state_change_seq: 5 }),
+        SESSION_OPTION,
+        0,
+      )
+
+      expect(Option.exists(later, isUnknown)).toBe(true)
+    }),
+  )
+
+  it.effect('does not hold over a screen it could not read', () =>
+    Effect.gen(function* () {
+      const screen = yield* spikeScreen('12-native-bash-t20')
+      const leftWaitingAt = yield* Ref.make(Option.none<number>())
+      const { asks } = yield* startAsks(
+        [],
+        [Option.some(screen), Option.none()],
+        Ref.get(leftWaitingAt),
+      )
+      const shown = yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)
+
+      yield* Ref.set(leftWaitingAt, Option.some(yield* Clock.currentTimeMillis))
+
+      expect(yield* asks.askOf(BLOCKED, SESSION_OPTION, 0)).not.toEqual(shown)
+    }),
+  )
+
   it.effect("reads a blocked agent's ask from its hook, with the options its dialog shows", () =>
     Effect.gen(function* () {
       const screen = yield* spikeScreen('12-native-bash-t20')

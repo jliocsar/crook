@@ -246,6 +246,7 @@ export const isCaughtUp = Schema.is(TranscriptCaughtUp)
 export const hasFailed = TranscriptViewState.isAnyOf(['Failed', 'Retrying'])
 export const knowsNothing = TranscriptViewState.isAnyOf(['NoView', 'Failed', 'Retrying'])
 export const saysCatchingUp = TranscriptViewState.isAnyOf(['CatchingUp', 'NoticeLeaving'])
+export const showsStaleRows = TranscriptViewState.guards.CatchingUp
 export const holdsBack = TranscriptViewState.isAnyOf([
   'NoView',
   'Holding',

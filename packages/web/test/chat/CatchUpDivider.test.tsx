@@ -31,7 +31,7 @@ const current = () =>
   liveWith(
     herd([
       machine(LAPTOP, [agent('w1:p1', 'idle', { claudeSession: SESSION })], {
-        agentVersion: '0.0.1',
+        agentVersion: '0.0.2',
       }),
     ]),
   )

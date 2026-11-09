@@ -9,17 +9,68 @@ import { useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import type { OpenAgentActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
+import type { ConnectionView } from '@crook/web/connection/ConnectionView'
 import { herdLayoutAtom, resyncAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { Button } from '@crook/web/components/ui/button'
 import { HerdList } from '@crook/web/herd/HerdList'
 import type { OpenAgent } from '@crook/web/herd/HerdList'
+import type { HerdLayout } from '@crook/web/herd/HerdLayout'
 import { HerdSkeleton } from '@crook/web/herd/HerdSkeleton'
 import { PullToResync } from '@crook/web/herd/PullToResync'
 import { AddMachineSheet } from '@crook/web/machines/AddMachineSheet'
-import { useShownAtomValue } from '@crook/web/navigation/Covered'
+import { StillUnderCover, useShownAtomValue } from '@crook/web/navigation/Covered'
 import { openedFrom } from '@crook/web/navigation/Opener'
 import { TabScreen } from '@crook/web/navigation/TabScreen'
+
+interface HerdBodyProps {
+  readonly isOpen: (machine: MachineId) => boolean
+  readonly onToggle: (machine: MachineId) => void
+  readonly onOpenAgent: OpenAgent
+  readonly onOpenActions: OpenAgentActions
+  readonly onNewAgent: (opener: HTMLElement) => void
+  readonly onAddMachine: () => void
+}
+
+const HerdContent = React.memo(function HerdContent({
+  connection,
+  layout,
+  isOpen,
+  onToggle,
+  onOpenAgent,
+  onOpenActions,
+  onNewAgent,
+  onAddMachine,
+}: HerdBodyProps & {
+  readonly connection: ConnectionView
+  readonly layout: Option.Option<HerdLayout>
+}) {
+  const resync = useAtomSet(resyncAtom, { mode: 'promise' })
+
+  return (
+    <StillUnderCover>
+      {Option.match(layout, {
+        onNone: () => <HerdSkeleton label="Loading your agents" />,
+        onSome: (herdLayout) => (
+          <PullToResync enabled={allowsActions(connection)} onResync={() => resync(undefined)}>
+            <Dimmed dimmed={dimsContent(connection)}>
+              <HerdList
+                layout={herdLayout}
+                controlsEnabled={allowsActions(connection)}
+                isOpen={isOpen}
+                onToggle={onToggle}
+                onOpenAgent={onOpenAgent}
+                onOpenActions={onOpenActions}
+                onNewAgent={onNewAgent}
+                onAddMachine={onAddMachine}
+              />
+            </Dimmed>
+          </PullToResync>
+        ),
+      })}
+    </StillUnderCover>
+  )
+})
 
 const useCollapsedMachines = () => {
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<MachineId>>(new Set())
@@ -58,44 +109,11 @@ function NewAgentButton({ onOpen }: { onOpen: (opener: HTMLElement) => void }) {
   )
 }
 
-function HerdBody({
-  isOpen,
-  onToggle,
-  onOpenAgent,
-  onOpenActions,
-  onNewAgent,
-  onAddMachine,
-}: {
-  isOpen: (machine: MachineId) => boolean
-  onToggle: (machine: MachineId) => void
-  onOpenAgent: OpenAgent
-  onOpenActions: OpenAgentActions
-  onNewAgent: (opener: HTMLElement) => void
-  onAddMachine: () => void
-}) {
+function HerdBody(props: HerdBodyProps) {
   const connection = useShownAtomValue(connectionAtom)
   const layout = useShownAtomValue(herdLayoutAtom)
-  const resync = useAtomSet(resyncAtom, { mode: 'promise' })
 
-  return Option.match(layout, {
-    onNone: () => <HerdSkeleton label="Loading your agents" />,
-    onSome: (herdLayout) => (
-      <PullToResync enabled={allowsActions(connection)} onResync={() => resync(undefined)}>
-        <Dimmed dimmed={dimsContent(connection)}>
-          <HerdList
-            layout={herdLayout}
-            controlsEnabled={allowsActions(connection)}
-            isOpen={isOpen}
-            onToggle={onToggle}
-            onOpenAgent={onOpenAgent}
-            onOpenActions={onOpenActions}
-            onNewAgent={onNewAgent}
-            onAddMachine={onAddMachine}
-          />
-        </Dimmed>
-      </PullToResync>
-    ),
-  })
+  return <HerdContent connection={connection} layout={layout} {...props} />
 }
 
 export function HerdScreen() {

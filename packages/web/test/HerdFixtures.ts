@@ -124,4 +124,4 @@ export const machine = (
   })
 
 export const herd = (machines: readonly HerdMachine[]) =>
-  new HerdView({ machines, hubVersion: CrookVersion.make('0.0.1') })
+  new HerdView({ machines, hubVersion: CrookVersion.make('0.0.2') })

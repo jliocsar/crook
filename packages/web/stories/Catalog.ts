@@ -9,6 +9,7 @@ import { ENVIRONMENT_STORIES } from './catalog/Environment.tsx'
 import { REAL_TRANSCRIPT_STORIES } from './catalog/RealTranscripts.tsx'
 import { ROW_STORIES } from './catalog/Rows.tsx'
 import { SUBAGENT_STORIES } from './catalog/Subagent.tsx'
+import { HERD_UNDER_CHAT_STORIES } from './catalog/HerdUnderChat.tsx'
 import { TRANSITION_STORIES } from './catalog/Transitions.tsx'
 import { GATE_STORIES } from './catalog/Gate.tsx'
 import { HERD_STORIES } from './catalog/Herd.tsx'
@@ -38,7 +39,7 @@ export const CATALOG_STORIES: readonly Story[] = [
   ...groupOf('subagent', SUBAGENT_STORIES),
   ...groupOf('real', REAL_TRANSCRIPT_STORIES),
   ...groupOf('environment', ENVIRONMENT_STORIES),
-  ...groupOf('transition', TRANSITION_STORIES),
+  ...groupOf('transition', [...HERD_UNDER_CHAT_STORIES, ...TRANSITION_STORIES]),
   ...groupOf('link', LINK_STORIES),
 ]
 
