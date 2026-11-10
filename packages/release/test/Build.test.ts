@@ -13,8 +13,8 @@ describe('Build.compileArguments', () => {
       '--no-compile-autoload-bunfig',
       '--target=bun-linux-x64',
       '--outfile=/work/crook/dist/crook-hub-linux-x64',
-      '--asset=/work/crook/packages/web/dist',
-      '/work/crook/packages/hub/src/main.ts',
+      '--asset=/work/crook/apps/web/dist',
+      '/work/crook/apps/hub/src/main.ts',
     ])
     expect(compileArguments({ app: 'agent', target: 'darwin-arm64' }, WORKSPACE)).toEqual([
       'build',
@@ -24,7 +24,7 @@ describe('Build.compileArguments', () => {
       '--target=bun-darwin-arm64',
       '--outfile=/work/crook/dist/crook-agent-darwin-arm64',
       '--splitting',
-      '/work/crook/packages/agent/src/main.ts',
+      '/work/crook/apps/agent/src/main.ts',
     ])
   })
 })

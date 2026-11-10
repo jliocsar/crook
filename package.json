@@ -5,6 +5,7 @@
   "private": true,
   "workspaces": {
     "packages": [
+      "apps/*",
       "packages/*"
     ],
     "catalog": {
@@ -19,8 +20,8 @@
     "test": "bun run --filter '*' --if-present test",
     "typecheck": "bun run --filter '*' --if-present typecheck",
     "build": "bun run --filter '*' --if-present build",
-    "stories": "bun run --cwd packages/web stories",
-    "stories:list": "bun run --cwd packages/web stories:list",
+    "stories": "bun run --cwd apps/web stories",
+    "stories:list": "bun run --cwd apps/web stories:list",
     "release:build": "bun packages/release/src/main.ts build",
     "release:build:host": "bun packages/release/src/main.ts build --host",
     "lint": "oxlint --deny-warnings --no-error-on-unmatched-pattern --disable-nested-config",

@@ -1,7 +1,8 @@
 # AGENTS.md
 
 Effect v4 TypeScript monorepo boilerplate. Toolchain, lint rules, conventions — no product code.
-Members live in `packages/*`. `packages/tsconfig` holds the shared TS base every member extends.
+Members live in `apps/*` (what ships) and `packages/*` (what it is built from). `packages/tsconfig`
+holds the shared TS base every member extends.
 
 Toolchain is oxc + TypeScript 7: `oxlint` (lint), `oxfmt` (format), `typescript@7` with
 `@effect/tsgo`. No ESLint, no dprint, no Prettier.
@@ -106,6 +107,13 @@ reads the file for its area before it starts.
 
 ## Layout
 
+- An app is a member that ships: the agent, the hub, the PWA. It lives in `apps/*`. A library, and
+  tooling run from the repo such as the release build and the frame tool, lives in `packages/*`.
+  Bun treats both folders alike, so the split is a promise: an app depends on packages, and nothing
+  depends on an app. Two leaves of the PWA break it, the build's directory names and the CSP, since
+  the hub and the release build must agree with the PWA on them; ARCHITECTURE.md says why.
+- The herdr plugin installs from its path in the repo, so moving the agent moves a command people
+  have already copied. herdr clones the whole repo, and GitHub serves no redirect for a moved path.
 - Shared code goes in a `packages/*` member, reached by package specifier — never a relative path
   across members. Not lintable in a flat layout (a sibling climb spells `../../other`, naming no
   directory), so it is on you. If the import you want is not exported, export it.
@@ -116,16 +124,16 @@ reads the file for its area before it starts.
 A member that extends the shared base must depend on it, or the extends does not resolve:
 
 ```jsonc
-// packages/<member>/package.json
+// <apps|packages>/<member>/package.json
 { "devDependencies": { "@crook/tsconfig": "workspace:*" } }
 ```
 
 ```jsonc
-// packages/<member>/tsconfig.json
+// <apps|packages>/<member>/tsconfig.json
 { "extends": "@crook/tsconfig/base.json", "include": ["src/**/*.ts"] }
 ```
 
-Bun links a workspace member into `packages/<member>/node_modules` only where something declares it,
+Bun links a workspace member into `<member>/node_modules` only where something declares it,
 and nothing hoists it to the root — so without that dependency the compiler reports
 `File '@crook/tsconfig/base.json' not found` (measured). The second hop needs nothing: the
 base reaches `@jliocsar/begone-slop/tsconfig` through the root install. TypeScript's `extends`

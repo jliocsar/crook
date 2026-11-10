@@ -48,7 +48,7 @@ const hookSettings = Command.make(
   {
     command: Flag.String('command').pipe(
       Flag.withDescription(
-        'The command Claude runs for each hook, the hook subcommand of this program included, such as "bun /path/to/crook/packages/agent/src/main.ts hook".',
+        'The command Claude runs for each hook, the hook subcommand of this program included, such as "bun /path/to/crook/apps/agent/src/main.ts hook".',
       ),
     ),
   },

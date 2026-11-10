@@ -8,6 +8,7 @@ import { ChildProcessSpawner } from 'effect/process/ChildProcessSpawner'
 
 import {
   type Artifact,
+  type ReleaseApp,
   type ReleaseTarget,
   artifactName,
   artifactsFor,
@@ -41,7 +42,7 @@ export class CompileFailed extends Schema.TaggedError<CompileFailed>()('CompileF
   }
 }
 
-const webBuildOf = (workspace: Workspace) => `${workspace.root}/packages/web/${WEB_BUILD_DIRECTORY}`
+const webBuildOf = (workspace: Workspace) => `${workspace.root}/apps/web/${WEB_BUILD_DIRECTORY}`
 
 const outfileOf = (artifact: Artifact, workspace: Workspace) =>
   `${workspace.output}/${artifactName(artifact)}`
@@ -61,7 +62,7 @@ export const compileArguments = (artifact: Artifact, workspace: Workspace): read
   `--target=${bunCompileTarget(artifact.target)}`,
   `--outfile=${outfileOf(artifact, workspace)}`,
   ...flagsOfApp(artifact, workspace),
-  `${workspace.root}/packages/${artifact.app}/src/main.ts`,
+  `${workspace.root}/apps/${artifact.app}/src/main.ts`,
 ]
 
 export const thisWorkspace = Effect.gen(function* () {
@@ -86,7 +87,7 @@ const runBun = Effect.fn('Build.runBun')(function* <Failure>(
 const buildWeb = (workspace: Workspace) =>
   runBun(
     ['run', 'build'],
-    `${workspace.root}/packages/web`,
+    `${workspace.root}/apps/web`,
     (exitCode) => new WebBuildFailed({ exitCode }),
   )
 
@@ -114,14 +115,12 @@ export const build = Effect.fn('Build.build')(function* (targets: readonly Relea
   })
 })
 
-export const versionOfMember = Effect.fn('Build.versionOfMember')(function* (
+export const versionOfApp = Effect.fn('Build.versionOfApp')(function* (
   workspace: Workspace,
-  member: string,
+  app: ReleaseApp,
 ) {
   const fileSystem = yield* FileSystem.FileSystem
-  const manifest = yield* fileSystem.readFileString(
-    `${workspace.root}/packages/${member}/package.json`,
-  )
+  const manifest = yield* fileSystem.readFileString(`${workspace.root}/apps/${app}/package.json`)
   const { version } = yield* Schema.decodeEffect(PackageVersion)(manifest)
 
   return version
@@ -129,8 +128,8 @@ export const versionOfMember = Effect.fn('Build.versionOfMember')(function* (
 
 export const checkVersion = Effect.fn('Build.checkVersion')(function* (tag: string) {
   const workspace = yield* thisWorkspace
-  const agent = yield* versionOfMember(workspace, 'agent')
-  const hub = yield* versionOfMember(workspace, 'hub')
+  const agent = yield* versionOfApp(workspace, 'agent')
+  const hub = yield* versionOfApp(workspace, 'hub')
   const version = yield* releasedVersion(tag, { agent, hub })
 
   yield* Effect.logInfo(`Releasing ${version}: the agent and the hub are both at it.`)

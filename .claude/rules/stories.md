@@ -1,8 +1,8 @@
 ---
 paths:
-  - "packages/web/stories/**"
-  - "packages/web/test/stories/**"
-  - "packages/web/vite.stories.config.ts"
+  - "apps/web/stories/**"
+  - "apps/web/test/stories/**"
+  - "apps/web/vite.stories.config.ts"
 ---
 
 # Stories

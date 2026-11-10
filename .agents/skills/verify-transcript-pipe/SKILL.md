@@ -27,15 +27,15 @@ packages/domain/src/Transcript.ts           positionAfter continuesFrom reachesP
 packages/protocol/src/TranscriptBatch.ts    batchWith withChunk withOpened intoSession eventsOf updatesOf isFull awaitsCatchUp isCaughtUp takeWhen
 packages/protocol/src/Transcripts.ts        TranscriptOutOfStep TranscriptWatchFailed
 packages/claude/src/TranscriptTail.ts       open available follow tailStart
-packages/agent/src/TranscriptStreams.ts     fromLineNearEnd openSession sessionsOf followPane publishAll runWatch serve
-packages/agent/src/HubLink.ts               session transcriptLinkOf
-packages/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append passOnCaughtUp fail deliver publish
-packages/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript TranscriptDemands PublishTranscriptBatch
-packages/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines resumeOf isOpened withOneHole
-packages/web/src/chat/TranscriptMachine.ts  transition arrived watchEnded resumed landed leftSession startedOver earlierAsked
-packages/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
-packages/web/src/rpc/HubLink.ts             whileDialed transcriptWhileDialed
-packages/web/src/cache/TranscriptCache.ts   remember load
+apps/agent/src/TranscriptStreams.ts     fromLineNearEnd openSession sessionsOf followPane publishAll runWatch serve
+apps/agent/src/HubLink.ts               session transcriptLinkOf
+apps/hub/src/TranscriptRelay.ts         watch linkFor askedForDemands stillCounts publishOver demandOf forward forwardInSession append passOnCaughtUp fail deliver publish
+apps/hub/src/HttpRoutes.ts              serveAgentAs WatchTranscript TranscriptDemands PublishTranscriptBatch
+apps/web/src/chat/TranscriptState.ts    applyTranscriptEvent freshLines resumeOf isOpened withOneHole
+apps/web/src/chat/TranscriptMachine.ts  transition arrived watchEnded resumed landed leftSession startedOver earlierAsked
+apps/web/src/atoms/Transcript.ts        transcriptViews settle resume apply watchOnce
+apps/web/src/rpc/HubLink.ts             whileDialed transcriptWhileDialed
+apps/web/src/cache/TranscriptCache.ts   remember load
 ```
 
 An `effect` bump touches it too: the model's `SwitchMapSwitches` rests on `Channel.mergeAll`

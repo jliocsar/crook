@@ -81,7 +81,7 @@ app as it is.
 
 ## A state with no story
 
-The tool plays what the catalog can show. Add a timeline story to `packages/web/stories/` when a
+The tool plays what the catalog can show. Add a timeline story to `apps/web/stories/` when a
 state has none, declare what it allows in `packages/frames/src/Expectations.ts` (a test holds the
 two lists equal), and add a mark to `packages/frames/src/Marks.ts` for a state nothing names. A
 state story without a timeline runs too, with no declared order: blank, empty, flash and shift

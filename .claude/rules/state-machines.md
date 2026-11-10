@@ -1,10 +1,10 @@
 ---
 paths:
   - "packages/state-machine/**"
-  - "packages/web/src/**/*Machine*.ts"
-  - "packages/hub/src/*Machine*.ts"
-  - "packages/web/charts/**"
-  - "packages/hub/charts/**"
+  - "apps/web/src/**/*Machine*.ts"
+  - "apps/hub/src/*Machine*.ts"
+  - "apps/web/charts/**"
+  - "apps/hub/charts/**"
 ---
 
 # State machines

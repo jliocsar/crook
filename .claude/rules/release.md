@@ -2,7 +2,7 @@
 paths:
   - "packages/release/**"
   - ".github/**"
-  - "packages/agent/plugin/**"
+  - "apps/agent/plugin/**"
 ---
 
 # Release

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/hub/**"
+  - "apps/hub/**"
 ---
 
 # Hub

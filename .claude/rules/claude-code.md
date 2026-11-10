@@ -1,7 +1,7 @@
 ---
 paths:
   - "packages/claude/**"
-  - "packages/agent/**"
+  - "apps/agent/**"
 ---
 
 # Claude Code

@@ -60,7 +60,7 @@ Before writing any code, list the set: a name and an axis for each. Names descri
 In crook, a prototype of the web app is a folder in the stories catalog's kitchen:
 
 ```
-packages/web/stories/kitchen/<slug>/
+apps/web/stories/kitchen/<slug>/
   Prototype.tsx      exports `prototype`, the harness
   <Variant>.tsx      one file per variant
 ```
@@ -83,7 +83,7 @@ The catalog finds the folder by itself: `bun run stories`, then `http://localhos
 
 A variant runs inside the real root, gates and shell, with the tab bar, banner and toast host around it, on the real tokens and fonts, over the same fake hub the stories use. It may import any real component or atom through `@crook/web/…`, and fixtures from `../../../test/…`. Its `link` sets the hub state (the full team, live, by default) and its `arrange` feeds the fake link, such as a transcript for a chat. Tailwind sees the folder through the catalog's stylesheet, so arbitrary classes work, in the catalog only.
 
-`stories/kitchen/` is gitignored and stays out of every commit, and out of the gate: oxlint skips ignored files, `tsc` excludes the folder, and the catalog's own tests do not run it. Check your own with `bun run --cwd packages/web typecheck:kitchen`. A prototype that fails to load fails only its own story. Nothing outside the catalog imports from the kitchen, and a test holds that. Removing the prototype is deleting its folder.
+`stories/kitchen/` is gitignored and stays out of every commit, and out of the gate: oxlint skips ignored files, `tsc` excludes the folder, and the catalog's own tests do not run it. Check your own with `bun run --cwd apps/web typecheck:kitchen`. A prototype that fails to load fails only its own story. Nothing outside the catalog imports from the kitchen, and a test holds that. Removing the prototype is deleting its folder.
 
 Anywhere else (no project, or not this web app), a single self-contained HTML file (inline CSS/JS) the user can open directly in a browser, with the picker's markup, styles, and keyboard wiring from [PICKER.md](PICKER.md), verbatim.
 

@@ -71,7 +71,7 @@ export class RouteTreeNotGenerated extends Schema.TaggedError<RouteTreeNotGenera
   { exitCode: Schema.Int },
 ) {
   override get message(): string {
-    return `tsr generate exited with ${this.exitCode}, so the catalog cannot load. Run it in packages/web to see why.`
+    return `tsr generate exited with ${this.exitCode}, so the catalog cannot load. Run it in apps/web to see why.`
   }
 }
 
@@ -117,7 +117,7 @@ const storiesAnswer = Effect.gen(function* () {
 
 const keepStoriesServer = Effect.fn('frames.keepStoriesServer')(function* (root: string) {
   const spawner = yield* ChildProcessSpawner
-  const web = `${root}/packages/web`
+  const web = `${root}/apps/web`
 
   yield* spawner
     .exitCode(

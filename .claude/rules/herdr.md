@@ -1,7 +1,7 @@
 ---
 paths:
   - "packages/herdr/**"
-  - "packages/agent/**"
+  - "apps/agent/**"
 ---
 
 # herdr

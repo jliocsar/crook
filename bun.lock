@@ -17,7 +17,7 @@
         "vitest": "^5.0.5",
       },
     },
-    "packages/agent": {
+    "apps/agent": {
       "name": "@crook/agent",
       "version": "0.0.13",
       "dependencies": {
@@ -32,52 +32,7 @@
         "@crook/tsconfig": "workspace:*",
       },
     },
-    "packages/claude": {
-      "name": "@crook/claude",
-      "version": "0.0.13",
-      "dependencies": {
-        "@crook/domain": "workspace:*",
-        "diff": "8.0.4",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@crook/tsconfig": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-      },
-    },
-    "packages/domain": {
-      "name": "@crook/domain",
-      "version": "0.0.13",
-      "dependencies": {
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@crook/tsconfig": "workspace:*",
-      },
-    },
-    "packages/frames": {
-      "name": "@crook/frames",
-      "version": "0.0.13",
-      "dependencies": {
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@crook/tsconfig": "workspace:*",
-      },
-    },
-    "packages/herdr": {
-      "name": "@crook/herdr",
-      "version": "0.0.13",
-      "dependencies": {
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@crook/tsconfig": "workspace:*",
-      },
-    },
-    "packages/hub": {
+    "apps/hub": {
       "name": "@crook/hub",
       "version": "0.0.13",
       "dependencies": {
@@ -96,45 +51,7 @@
         "@crook/tsconfig": "workspace:*",
       },
     },
-    "packages/protocol": {
-      "name": "@crook/protocol",
-      "version": "0.0.13",
-      "dependencies": {
-        "@crook/domain": "workspace:*",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@crook/tsconfig": "workspace:*",
-      },
-    },
-    "packages/release": {
-      "name": "@crook/release",
-      "version": "0.0.13",
-      "dependencies": {
-        "@crook/domain": "workspace:*",
-        "@crook/web": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@crook/tsconfig": "workspace:*",
-      },
-    },
-    "packages/state-machine": {
-      "name": "@crook/state-machine",
-      "version": "0.0.13",
-      "dependencies": {
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@crook/tsconfig": "workspace:*",
-      },
-    },
-    "packages/tsconfig": {
-      "name": "@crook/tsconfig",
-      "version": "0.0.13",
-    },
-    "packages/web": {
+    "apps/web": {
       "name": "@crook/web",
       "version": "0.0.13",
       "dependencies": {
@@ -191,6 +108,89 @@
         "workbox-build": "^7.4.1",
         "workbox-window": "^7.4.1",
       },
+    },
+    "packages/claude": {
+      "name": "@crook/claude",
+      "version": "0.0.13",
+      "dependencies": {
+        "@crook/domain": "workspace:*",
+        "diff": "8.0.4",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+      },
+    },
+    "packages/domain": {
+      "name": "@crook/domain",
+      "version": "0.0.13",
+      "dependencies": {
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
+    "packages/frames": {
+      "name": "@crook/frames",
+      "version": "0.0.13",
+      "dependencies": {
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
+    "packages/herdr": {
+      "name": "@crook/herdr",
+      "version": "0.0.13",
+      "dependencies": {
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
+    "packages/protocol": {
+      "name": "@crook/protocol",
+      "version": "0.0.13",
+      "dependencies": {
+        "@crook/domain": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
+    "packages/release": {
+      "name": "@crook/release",
+      "version": "0.0.13",
+      "dependencies": {
+        "@crook/domain": "workspace:*",
+        "@crook/web": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
+    "packages/state-machine": {
+      "name": "@crook/state-machine",
+      "version": "0.0.13",
+      "dependencies": {
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@crook/tsconfig": "workspace:*",
+      },
+    },
+    "packages/tsconfig": {
+      "name": "@crook/tsconfig",
+      "version": "0.0.13",
     },
   },
   "catalog": {
@@ -399,7 +399,7 @@
 
     "@canvas/image-data": ["@canvas/image-data@1.1.0", "", {}, "sha512-QdObRRjRbcXGmM1tmJ+MrHcaz1MftF2+W7YI+MsphnsCrmtyfS0d5qJbk0MeSbUeyM/jCb0hmnkXPsy026L7dA=="],
 
-    "@crook/agent": ["@crook/agent@workspace:packages/agent"],
+    "@crook/agent": ["@crook/agent@workspace:apps/agent"],
 
     "@crook/claude": ["@crook/claude@workspace:packages/claude"],
 
@@ -409,7 +409,7 @@
 
     "@crook/herdr": ["@crook/herdr@workspace:packages/herdr"],
 
-    "@crook/hub": ["@crook/hub@workspace:packages/hub"],
+    "@crook/hub": ["@crook/hub@workspace:apps/hub"],
 
     "@crook/protocol": ["@crook/protocol@workspace:packages/protocol"],
 
@@ -419,7 +419,7 @@
 
     "@crook/tsconfig": ["@crook/tsconfig@workspace:packages/tsconfig"],
 
-    "@crook/web": ["@crook/web@workspace:packages/web"],
+    "@crook/web": ["@crook/web@workspace:apps/web"],
 
     "@dotenvx/dotenvx": ["@dotenvx/dotenvx@1.75.1", "", { "dependencies": { "@dotenvx/primitives": "^0.8.0", "commander": "^11.1.0", "conf": "^10.2.0", "dotenv": "^17.2.1", "enquirer": "^2.4.1", "env-paths": "^2.2.1", "execa": "^5.1.1", "fdir": "^6.2.0", "ignore": "^5.3.0", "object-treeify": "1.1.33", "open": "^8.4.2", "picomatch": "^4.0.4", "systeminformation": "^5.22.11", "undici": "^7.11.0", "which": "^4.0.0", "yocto-spinner": "^1.1.0" }, "bin": { "dotenvx": "src/cli/dotenvx.js" } }, "sha512-/BITOC9dmS/edY2zQwZNicQ059O6RKabtQfyEafV0nGtfYRNHYy1DIPiYVcov40+tob9hfmBnbR963dS+EQ1DQ=="],
 

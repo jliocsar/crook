@@ -1,11 +1,11 @@
 ---
 paths:
-  - "packages/web/src/chat/**"
-  - "packages/web/test/chat/**"
-  - "packages/web/src/atoms/Chat.ts"
-  - "packages/web/src/atoms/Transcript.ts"
-  - "packages/web/src/cache/TranscriptCache.ts"
-  - "packages/web/src/highlight/**"
+  - "apps/web/src/chat/**"
+  - "apps/web/test/chat/**"
+  - "apps/web/src/atoms/Chat.ts"
+  - "apps/web/src/atoms/Transcript.ts"
+  - "apps/web/src/cache/TranscriptCache.ts"
+  - "apps/web/src/highlight/**"
 ---
 
 # Web: the chat

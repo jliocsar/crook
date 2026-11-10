@@ -2,7 +2,7 @@
 set -eu
 
 plugin_root="$(cd "$(dirname "$0")" && pwd)"
-installer="$plugin_root/../../release/install.sh"
+installer="$plugin_root/../../../packages/release/install.sh"
 install_directory="${CROOK_INSTALL_DIR:-$HOME/.local/bin}"
 report_directory="${HERDR_PLUGIN_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/crook}"
 terminal_settings=''

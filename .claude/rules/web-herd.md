@@ -1,19 +1,19 @@
 ---
 paths:
-  - "packages/web/src/herd/**"
-  - "packages/web/src/machines/**"
-  - "packages/web/src/machine/**"
-  - "packages/web/src/navigation/**"
-  - "packages/web/src/motion/**"
-  - "packages/web/src/components/**"
-  - "packages/web/test/herd/**"
-  - "packages/web/test/machines/**"
-  - "packages/web/test/machine/**"
-  - "packages/web/test/navigation/**"
-  - "packages/web/test/motion/**"
-  - "packages/web/test/components/**"
-  - "packages/web/src/atoms/Herd.ts"
-  - "packages/web/src/atoms/Machines.ts"
+  - "apps/web/src/herd/**"
+  - "apps/web/src/machines/**"
+  - "apps/web/src/machine/**"
+  - "apps/web/src/navigation/**"
+  - "apps/web/src/motion/**"
+  - "apps/web/src/components/**"
+  - "apps/web/test/herd/**"
+  - "apps/web/test/machines/**"
+  - "apps/web/test/machine/**"
+  - "apps/web/test/navigation/**"
+  - "apps/web/test/motion/**"
+  - "apps/web/test/components/**"
+  - "apps/web/src/atoms/Herd.ts"
+  - "apps/web/src/atoms/Machines.ts"
 ---
 
 # Web: herd, machines and navigation

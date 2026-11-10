@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/agent/**"
+  - "apps/agent/**"
   - "packages/claude/**"
 ---
 

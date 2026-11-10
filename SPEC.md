@@ -182,7 +182,7 @@ The Herdr plugin (`herdr-plugin.toml`)
 - `[[startup]]`: ensure the user service is running (`crook-agent start`: `systemctl --user start …` / `launchctl` on macOS, unless an agent already answers), then exit.
 - `[[actions]]`: "Connect to hub" (asks for hub URL + token, writes config + service unit), "Status", "Restart", and "Update" (runs the checked installer for the version the user picks; nothing updates on its own). Writing them is `crook-agent install-service` with `CROOK_HUB_URL`, `CROOK_HUB_TOKEN` and `CROOK_MACHINE_ID` in its environment: it writes the token to an owner-only `$XDG_CONFIG_HOME/crook/agent.env` the unit reads, never into the unit, enables and starts the service, and prints the Claude hooks block for the user to merge. `crook-agent uninstall-service` stops it and removes both files.
 - `[[panes]]`: one popup per action, since an action's own output only reaches herdr's plugin log.
-- Install path: `herdr plugin install jliocsar/crook/packages/agent/plugin` → run "Connect to hub".
+- Install path: `herdr plugin install jliocsar/crook/apps/agent/plugin` → run "Connect to hub".
 - Open question: whether to skip the plugin entirely and ship a one-liner installer. Plugin wins on discoverability inside the TUI; costs little.
 
 ### 5.3 PWA (iPhone)
@@ -249,7 +249,7 @@ Accepted risks (v1): the hub sees everything agents send (transcripts, screens).
 
 TypeScript + Bun throughout so the protocol types are shared. Monorepo with Bun workspaces. Package layout and design patterns: see `ARCHITECTURE.md`.
 
-### 8.1 PWA (`packages/web`) — decided except state
+### 8.1 PWA (`apps/web`) — decided except state
 
 - React 19 + Vite + TypeScript, Tailwind v4.
 - **UI: Mischief UI** (ui.tinkererslabs.com, MIT). shadcn registry on Base UI + Tailwind tokens. Install components with the shadcn CLI so the source is **copied into the repo** (we own it). Don't depend on the `mischief-ui` npm package: the project is small and young (4 stars, created 2026-08, last push 2026-09).

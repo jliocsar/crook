@@ -22,7 +22,7 @@ import {
   TranscriptTailBytes,
 } from '@crook/domain/Transcript'
 
-import { agentRow, machineStateWith } from '../../../packages/agent/test/Fixtures'
+import { agentRow, machineStateWith } from '../../../apps/agent/test/Fixtures'
 
 const PROJECT = '-verify-transcript-pipe'
 const LINE = '{"type":"verify","pad":"replaying the transcript model"}\n'

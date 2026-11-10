@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/web/**"
+  - "apps/web/**"
 ---
 
 # Web

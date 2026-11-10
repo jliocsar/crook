@@ -1,9 +1,9 @@
 ---
 paths:
-  - "packages/web/**/*Skeleton*"
-  - "packages/web/src/chat/SkeletonHold.ts"
-  - "packages/web/src/csp/**"
-  - "packages/web/test/csp/**"
+  - "apps/web/**/*Skeleton*"
+  - "apps/web/src/chat/SkeletonHold.ts"
+  - "apps/web/src/csp/**"
+  - "apps/web/test/csp/**"
 ---
 
 # Skeletons

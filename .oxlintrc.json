@@ -115,7 +115,7 @@
 
   "overrides": [
     {
-      "files": ["packages/*/*.config.ts"],
+      "files": ["apps/*/*.config.ts"],
       "rules": {
         "effecttsgo/async-function": "off",
         "effecttsgo/node-builtin-import": "off"

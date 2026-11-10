@@ -5,14 +5,14 @@ import * as Str from 'effect/String'
 import * as Stream from 'effect/Stream'
 import * as ChildProcess from 'effect/process/ChildProcess'
 
-import { thisWorkspace, versionOfMember } from '@crook/release/Build'
+import { thisWorkspace, versionOfApp } from '@crook/release/Build'
 import { type ReleaseApp } from '@crook/release/Targets'
 
 const reportedVersion = Effect.fn('reportedVersion')(function* (app: ReleaseApp) {
   const workspace = yield* thisWorkspace
   const handle = yield* ChildProcess.make(
     'bun',
-    [`${workspace.root}/packages/${app}/src/main.ts`, '--version'],
+    [`${workspace.root}/apps/${app}/src/main.ts`, '--version'],
     { cwd: workspace.root },
   )
   const output = yield* handle.stdout.pipe(Stream.decodeText(), Stream.mkString)
@@ -25,8 +25,8 @@ layer(BunServices.layer, { excludeTestServices: true })('--version', (it) => {
   it.effect('names the app and its version, the line install.sh compares', () =>
     Effect.gen(function* () {
       const workspace = yield* thisWorkspace
-      const agentVersion = yield* versionOfMember(workspace, 'agent')
-      const hubVersion = yield* versionOfMember(workspace, 'hub')
+      const agentVersion = yield* versionOfApp(workspace, 'agent')
+      const hubVersion = yield* versionOfApp(workspace, 'hub')
       const agent = yield* reportedVersion('agent')
       const hub = yield* reportedVersion('hub')
 

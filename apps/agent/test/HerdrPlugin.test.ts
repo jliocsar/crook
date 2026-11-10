@@ -98,7 +98,7 @@ const sandboxWith = Effect.fn('sandboxWith')(function* (run: Run) {
   const root = yield* fileSystem.makeTempDirectoryScoped()
   const sandbox: Sandbox = {
     root,
-    plugin: `${root}/packages/agent/plugin`,
+    plugin: `${root}/apps/agent/plugin`,
     installDirectory: `${root}/bin`,
     agentCalls: `${root}/agent-calls`,
     installerCalls: `${root}/installer-calls`,

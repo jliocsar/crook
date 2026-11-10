@@ -3,7 +3,7 @@ paths:
   - "tmp/**"
   - "**/tmp/**"
   - "packages/herdr/**"
-  - "packages/agent/**"
+  - "apps/agent/**"
 ---
 
 # Probing against real data

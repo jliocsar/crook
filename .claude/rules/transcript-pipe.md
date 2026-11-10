@@ -1,5 +1,6 @@
 ---
 paths:
+  - "apps/**/*Transcript*"
   - "packages/**/*Transcript*"
   - ".claude/skills/verify-transcript-pipe/**"
 ---

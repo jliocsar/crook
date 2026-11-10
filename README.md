@@ -78,7 +78,7 @@ Then open the hub's address on your phone, sign in to exe.dev, and add it to you
 Install the herdr plugin on the machine, then run its connect action from inside herdr:
 
 ```sh
-herdr plugin install jliocsar/crook/packages/agent/plugin
+herdr plugin install jliocsar/crook/apps/agent/plugin
 ```
 
 "crook: connect to hub" asks for the hub's address, an exe.dev token for the hub VM minted with
@@ -103,18 +103,20 @@ Policy, and conversation text is never rendered as HTML.
 
 ## Development
 
-crook is a Bun and TypeScript monorepo built on [Effect](https://effect.website) v4.
+crook is a Bun and TypeScript monorepo built on [Effect](https://effect.website) v4. What ships
+lives in `apps/`, and the libraries and tooling it's built from live in `packages/`.
 
 ```
+apps/
+  agent/           the per-machine daemon and its herdr plugin
+  hub/             the server, which embeds the web build
+  web/             the PWA: React, Vite, TanStack Router, Effect atoms
 packages/
   domain/          ids, entities and statuses, as schemas
   protocol/        the RPC groups between agent, hub and phone
   herdr/           a client for herdr's socket API
   claude/          Claude Code transcripts, hooks and screens
   state-machine/   the shape every state machine follows, and the walker that tests them
-  agent/           the per-machine daemon and its herdr plugin
-  hub/             the server, which embeds the web build
-  web/             the PWA: React, Vite, TanStack Router, Effect atoms
   release/         per-target compiles, the version check and the installer
   frames/          frame-by-frame checks of the app's stories, run by hand
   tsconfig/        the shared TypeScript base
