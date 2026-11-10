@@ -116,9 +116,7 @@ it('writes one double-quoted assignment per line', () => {
       { name: 'CROOK_HUB_URL', value: 'wss://my-hub.exe.xyz/rpc/agent' },
       { name: 'CROOK_HUB_TOKEN', value: 'a"b$c`d\\e' },
     ]),
-  ).toBe(
-    'CROOK_HUB_URL="wss://my-hub.exe.xyz/rpc/agent"\nCROOK_HUB_TOKEN="a\\"b\\$c\\`d\\\\e"\n',
-  )
+  ).toBe('CROOK_HUB_URL="wss://my-hub.exe.xyz/rpc/agent"\nCROOK_HUB_TOKEN="a\\"b\\$c\\`d\\\\e"\n')
 })
 
 layer(BunServices.layer, { excludeTestServices: true })('the environment file', (onDisk) => {
