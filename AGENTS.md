@@ -162,7 +162,7 @@ writes `@crook/domain/Ids`, the same leaf-only rule the `effect` imports follow.
 tests import it through that specifier too; the package resolves itself through its `exports`
 (measured).
 
-A helper only tests import is a fixture of the member that owns it, not a module under `src`. A test reads a transcript through the follow the agent runs, up to its caught-up mark, so a read the app never made did not have to stay on the service for them.
+A helper only tests import is a fixture of the member that owns it, not a module under `src`. A test reads a transcript the way the agent does, by following it up to its caught-up mark, so it runs the path that ships and the transcript tail keeps no reads only tests made.
 
 A fixture that another member's tests read stays in the member that owns it, exported as
 `"./fixtures/*": "./test/fixtures/*"`, and the reader turns it into a path with
