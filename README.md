@@ -1,76 +1,140 @@
-# agents-boilerplate
+# crook
 
-An Effect v4 TypeScript monorepo starting point: toolchain, lint rules and conventions, no product
-code. Clone it, add a package under `packages/`, and the gate is already wired.
+Drive the Claude Code agents running on your machines from your phone.
 
-`AGENTS.md` is the full spec and the thing agents read. This file is the short human version.
+crook turns the Claude Code panes inside [herdr](https://herdr.dev) into a mobile chat app. You see
+every agent on every machine in one list, sorted by who needs you. You open one to read its
+conversation as a chat rather than a scraped terminal, send it a prompt, answer its permission
+prompts and questions with a tap, and hit Esc when it goes off the rails. When the app is closed,
+an agent that blocks or finishes reaches your lock screen, and a permission prompt can be approved
+from there.
 
-## Toolchain
+It is a personal tool, built for one person driving their own agents. It is not a hosted service,
+and it has no accounts or teams.
 
-Everything is oxc + TypeScript 7. No ESLint, no dprint, no Prettier.
+## How it fits together
 
-| Tool                                                                                                             | Job                                           |
-| ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| [oxlint](https://oxc.rs)                                                                                         | Lint, including the type-aware pass           |
-| [oxfmt](https://oxc.rs)                                                                                          | Format                                        |
-| [typescript@7](https://github.com/microsoft/typescript-go) + [`@effect/tsgo`](https://github.com/Effect-TS/tsgo) | Typecheck, and the Effect-specific lint rules |
-| [`@jliocsar/begone-slop`](https://github.com/jliocsar/begone-slop)                                               | The house lint rules                          |
-| [Bun](https://bun.sh)                                                                                            | Runtime, package manager, test runner         |
-
-## Getting started
-
-```sh
-bun install
+```
+ iPhone (installed PWA)
+   │  HTTPS + WebSocket, behind exe.dev's login
+   ▼
+ hub            one small server on an exe.dev VM: serves the app,
+   │            merges the machines, relays commands, sends notifications
+   ▲
+   │  each machine dials out to the hub, so none needs an open port
+   │
+ agent ── herdr ── Claude Code panes        one agent per machine:
+ agent ── herdr ── Claude Code panes        a laptop, a dev VM, …
 ```
 
-`prepare` points git at `.githooks` and runs `effect-tsgo patch --oxlint`. That patch is what makes the Effect rules run
-at all, so an install you skip is an install whose lint is quietly weaker. It re-runs on every
-install and validates that `oxlint`, `oxlint-tsgolint` and `@effect/tsgo` are a supported triple.
+- **agent** runs on every machine with agents on it. It follows herdr's socket for panes and
+  statuses, tails Claude's transcript files, reads permission prompts from a Claude Code hook, and
+  types into panes when you ask it to. It runs as a user service and is managed from a herdr
+  plugin.
+- **hub** runs on its own [exe.dev](https://exe.dev) VM. exe.dev's private proxy is the outer wall:
+  the phone signs in with your exe.dev login, each agent with a VM token, and the hub also checks
+  the signed-in email against yours. It embeds the web app and keeps a small SQLite file.
+- **web** is the app itself, a React PWA you add to your home screen.
+- Lock-screen notifications and the Live Activity go through [Hark](https://hark.ryan.ceo), and
+  carry labels only, never a conversation's text. Without a Hark token the hub runs without them.
 
-Then gate a change with all four:
+## Requirements
+
+- herdr 0.9.5 or newer on each machine, with Claude Code running in its panes.
+- Linux or macOS for the agent (x64 or arm64 on Linux, arm64 on macOS).
+- An exe.dev account and a VM for the hub.
+- An iPhone for the app. Any phone browser loads it, but it is designed and tested for iOS.
+- Optionally, a Hark account for notifications.
+
+## Install
+
+Releases are compiled binaries, signed in CI with cosign. The installer checks the signature
+before it installs anything and puts the binaries in `~/.local/bin` (set `CROOK_INSTALL_DIR` to
+change that). Nothing updates on its own: run it again to update.
 
 ```sh
+curl -fsSLO https://github.com/jliocsar/crook/releases/latest/download/install.sh
+sh install.sh            # the agent
+sh install.sh hub        # the hub
+sh install.sh --version 0.0.13 agent hub
+```
+
+### The hub
+
+Run `crook-hub` on the hub VM, configured through its environment:
+
+| Variable                  | What it is                                                |
+| ------------------------- | --------------------------------------------------------- |
+| `CROOK_HUB_PORT`          | The port exe.dev proxies to the hub                       |
+| `CROOK_HUB_ORIGIN`        | The hub's https origin, such as `https://my-hub.exe.xyz`  |
+| `CROOK_OWNER_EMAIL`       | Your exe.dev email; every other signed-in user is refused |
+| `CROOK_HUB_DATABASE_PATH` | Where the hub keeps its SQLite file                       |
+| `CROOK_HUB_HARK_TOKEN`    | Optional. Turns on lock-screen notifications through Hark |
+
+Then open the hub's address on your phone, sign in to exe.dev, and add it to your home screen.
+
+### An agent
+
+Install the herdr plugin on the machine, then run its connect action from inside herdr:
+
+```sh
+herdr plugin install jliocsar/crook/packages/agent/plugin
+```
+
+"crook: connect to hub" asks for the hub's address, an exe.dev token for the hub VM minted with
+this machine's name, and the name itself. It installs and starts the agent as a systemd user
+service, or a launchd agent on macOS, and keeps the token in an owner-only file. The plugin also has
+status, restart and update actions.
+
+To answer permission prompts from the phone with the call's full details, add the Claude Code hook
+that `crook-agent hook-settings` prints to your Claude settings. crook never edits them itself.
+Without it, crook reads prompts off the screen and the transcript, which works for most of them.
+
+The agent reads `~/.claude` by default. Set `CROOK_CLAUDE_ROOTS` to a comma-separated list of
+absolute paths if you keep Claude Code in more than one config directory.
+
+## Security
+
+The hub can type into every Claude pane on every connected machine, so it is only as safe as your
+exe.dev account. Each agent refuses anything but prompts and keys to panes that currently run a
+recognised agent, and keeps an audit log of every command it ran. The hub keeps its own audit
+trail, with prompt text redacted by default. The app is served under a strict Content Security
+Policy, and conversation text is never rendered as HTML.
+
+## Development
+
+crook is a Bun and TypeScript monorepo built on [Effect](https://effect.website) v4.
+
+```
+packages/
+  domain/          ids, entities and statuses, as schemas
+  protocol/        the RPC groups between agent, hub and phone
+  herdr/           a client for herdr's socket API
+  claude/          Claude Code transcripts, hooks and screens
+  state-machine/   the shape every state machine follows, and the walker that tests them
+  agent/           the per-machine daemon and its herdr plugin
+  hub/             the server, which embeds the web build
+  web/             the PWA: React, Vite, TanStack Router, Effect atoms
+  release/         per-target compiles, the version check and the installer
+  frames/          frame-by-frame checks of the app's stories, run by hand
+  tsconfig/        the shared TypeScript base
+```
+
+```sh
+bun install          # also points git at .githooks and patches the lint binaries
 bun run typecheck && bun run lint && bun run test && bun run fmt:check
+bun run stories      # every screen and state of the real app, at phone width
 ```
 
-Auto-fix with `bun run lint:fix && bun run fmt` — run `fmt` first, since formatting moves the line
-breaks the spacing rules judge.
+Linting is oxlint with the type-aware Effect rules from `@effect/tsgo` and the house rules from
+[`@jliocsar/begone-slop`](https://github.com/jliocsar/begone-slop); formatting is oxfmt; the
+compiler is TypeScript 7. The git hooks format, lint and typecheck on commit, and on push run the
+whole lint and the tests your commits can reach.
 
-## Layout
+Further reading:
 
-```
-packages/           workspace members; packages/tsconfig holds the shared TS base
-.oxlintrc.json      every rule, commented where the behaviour is surprising
-AGENTS.md           conventions, invariants and measured facts (CLAUDE.md symlinks to it)
-```
-
-Every member with source needs a `test` script: the gate runs
-`bun run --filter '*' --if-present test`, so a member without one is skipped in silence.
-
-## What's enforced
-
-Beyond oxlint's `correctness`, `suspicious` and `pedantic` categories and the `effecttsgo` preset:
-
-- **Leaf imports only.** `effect/Effect`, not `effect`; `effect/rpc/Rpc`, not `effect/rpc`.
-- **`begone-slop/no-tag-access`** — never read `_tag`; use `Match.tag`/`Match.tags`/
-  `Match.tagsExhaustive` or a library guard, so a new variant fails to compile instead of falling
-  through.
-- **`begone-slop/no-shadowed-error-field`** — no `name`/`stack` field on a `Schema.TaggedError`, which
-  would overwrite what identifies the error as an error.
-- **`begone-slop/no-comments`** — a name needing a sentence beside it is the wrong name; durable
-  knowledge belongs in `AGENTS.md`. `SAFETY:` comments and tooling directives are exempt.
-- **`begone-slop/statement-order`** — imports > type-defs > constants > functions > variables >
-  modules > exports.
-- **`begone-slop/padding-line-between-statements`** and **`begone-slop/expect-padding`** — vertical
-  spacing, both auto-fixable.
-
-The full rule list is the plugin's `preset.json`, and its `README.md` describes each one.
-
-Lint invocations pass `--deny-warnings`: the Effect preset ships most of its rules as warnings, and a
-warning that cannot fail the gate is one nobody fixes.
-
-## Changing a rule
-
-The house rules live in [their own repository](https://github.com/jliocsar/begone-slop) and arrive
-here as an ordinary dependency, compiled. There is nothing rule-shaped to edit in this repo — fix it
-there, publish, and bump the version here.
+- [`SPEC.md`](SPEC.md): what crook is for, the decisions behind it and what was measured first.
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): how the code is laid out and the patterns it follows.
+- [`DESIGN.md`](DESIGN.md): how the app looks and moves.
+- [`AGENTS.md`](AGENTS.md) and [`.claude/rules`](.claude/rules): the conventions, invariants and
+  measured facts that coding agents work from.
