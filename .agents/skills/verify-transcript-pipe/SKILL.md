@@ -143,7 +143,7 @@ to B and back, so `Ref` still says A@0 and the return reads chunk 0-1 again. The
 `[opened A, chunk 0-1, chunk 0-1]` reaches the relay, `continuesFrom` refuses the second, and the
 agent restarts from A@1. It costs one round trip, and the phone sees no repeat.
 
-What this settles: CLAUDE.md records the position moving in the same transaction as the inbox
+What this settles: `.claude/rules/transcript-pipe.md` records the position moving in the same transaction as the inbox
 offer as reasoned, not measured. `can-fail/forward-two-steps` shows it in the model: split the two,
 interrupt between them, and the resend reaches the phone twice.
 

@@ -1,0 +1,23 @@
+---
+paths:
+  - "packages/web/**/*Skeleton*"
+  - "packages/web/src/chat/SkeletonHold.ts"
+  - "packages/web/src/csp/**"
+  - "packages/web/test/csp/**"
+---
+
+# Skeletons
+
+Every skeleton is skullet's engine measuring a sample rendered by the real components, hidden and inert, in the slot the real screen will fill. The sample is built when it shows, with nothing remembered, so a first visit and a return visit look alike and logging out has nothing to forget. A return visit shows a skeleton only when nothing is cached, since cached data is what a return visit normally shows. The sweep holds each skeleton's boxes to the screen it stands for: the first herd card and machine card edge for edge, and the last row of the thread on its bottom and sides, at 390 and at 430 wide, where all of them landed within a pixel, except the machine card, whose sample had no versions until the check said so (measured).
+
+:::warning
+skullet is pinned exactly and its engine is reached through its internal entry: a release is young, and that entry carries no compatibility promise. A bump needs, on a real build under `vite preview`, which sends the real policy: no `securitypolicyviolation` event and no log entry over a herd, machines and chat skeleton; no `style` element added; `--skullet-animation` still honoured; no running animation under emulated reduced motion; and the fit check in the sweep. Emulated reduced motion is safe on a preview, since only the dev server's reload loops on it.
+:::
+
+- The policy stays `style-src 'self'`. skullet's React wrapper hoists an inline `style`, which the policy refuses on every load, and its remembered shapes restore through markup carrying `style` attributes, 3 refusals per shape. The engine draws its bones through CSSOM, which the policy allows, and skips its own stylesheet once it reads `--skullet` from the root, which the stylesheet served from this origin sets. Exact mode turns memory off, so nothing is written to local storage. That gave 0 violations on a production build under the real header, on the real app's herd skeleton and the catalog's chat and machines (measured).
+- A painted element holding at most one label is drawn as a solid block. An empty `span` counts as text with a rect, so a press highlight covering a card turned the whole card into one grey block, and it merged every label inside it. Text truncated in a narrow row reports rects past its clip, which merge with their neighbours the same way, so sample paths stay short (both measured). The sample hides highlights and swipe actions with `display: none` in an unlayered rule, since a layered one loses to a utility class.
+- `pulse` animates opacity on the compositor; the default `shimmer` animates a background position on the main thread (read in its source). On screen the bones cost 16 ms (13 to 22) of main-thread work per 2 s on the herd against 12 (9 to 19) for the skeleton before them, and 31 (26 to 171) against 22 (12 to 70) on a thread. The first skeleton cost more: load to skeleton 324 ms (291 to 378) against 213 (189 to 226) on the herd, 366 (331 to 398) against 289 (280 to 357) on a thread, and a tap to a thread's skeleton 137 (131 to 153) against 80 (75 to 93) (production catalog, 390x844, 4x CPU throttling, five runs, medians).
+- A `requestAnimationFrame` loop in the page being measured is most of what it measures. The same production build read 618 ms and 650 ms of main-thread work per 2 s with a probe polling for the skeleton every frame, and 16 ms and 31 ms without it (measured), since the loop forces a frame the idle page would not draw.
+- The engine sits in a route chunk of 8881 bytes gzipped, outside the initial load, and the sample adds 4824. The initial load grew by 1642 bytes and all JavaScript by 11781 (measured on a production build). The service worker's precache went from 40 entries and 2710.81 KiB to 41 and 2741.39 KiB. Loading it lazily would add a state between the screen and its skeleton, for bytes the service worker precaches either way.
+- A skeleton's hold spends at least 400 ms of a DOM test's wait for the rows, out of testing-library's default of 1000 ms, so a chat's first test in its file failed its find in 1 of 8 runs beside sixteen busy loops, and in a loaded gate. The DOM setup raises the limit to 3000 ms, a guard and not a measurement: 0 of 16 runs under the same load (measured).
+- A cold thread's skeleton sits at the bottom of the thread, because the phone does not yet know how long the chat is and a long chat rests at its end. A short chat's rows therefore jump to the top when they land. The user chose that over matching short chats, which would make every long chat jump instead.
