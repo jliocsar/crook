@@ -23,7 +23,7 @@ export function Swap({
       <AnimatePresence initial={false} mode="popLayout">
         <motion.span
           key={id}
-          className="inline-flex items-center gap-1.5 whitespace-nowrap"
+          className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap"
           initial={{ opacity: 0, transform: transform.translate('Y', SWAP_TRAVEL_PERCENT, '%') }}
           animate={{ opacity: 1, transform: translate('Y', 0, '%') }}
           exit={{ opacity: 0, transform: transform.translate('Y', -SWAP_TRAVEL_PERCENT, '%') }}

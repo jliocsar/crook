@@ -106,6 +106,10 @@ The PWA is a Vite app, so it carries a few things the Bun members do not.
   min-content, so a `truncate` inside it never truncates and a long agent title pushed its card
   past the screen on real data (measured). A grid whose items must shrink takes `grid-cols-1`,
   whose `minmax(0, 1fr)` lets them.
+- A flex item's minimum width is its min-content too, and that holds at every level between the
+  row and the `truncate`. The swapped text kept its own nowrap width inside a `min-w-0` slot, so a
+  background run's line ran under its dot and off the row at 320 and 390 wide; with `min-w-0` on
+  the swapped span as well it ends in an ellipsis (measured).
 - A production build minifies the CSS, so a custom property read back at runtime is not what
   `index.css` spells: `180ms` comes back as `.18s` and `cubic-bezier(0.22, …)` as
   `cubic-bezier(.22, …)` (measured). The dev server and the tests serve the source, so only
