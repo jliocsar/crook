@@ -35,7 +35,7 @@ const WORK = MachineId.make('work')
 const PANE = PaneId.make('w1:p1')
 const ACTION = IdempotencyKey.make('3f1c8a52-0b7e-4d0a-9a51-6f3f0d2f8e11')
 
-const continuePrompt = new Prompt({ pane: PANE, text: 'continue' })
+const continuePrompt = new Prompt({ pane: PANE, text: 'continue', attachments: [] })
 const delivered = new InputDelivered({
   pane: PANE,
   terminal: TerminalId.make('term_1'),

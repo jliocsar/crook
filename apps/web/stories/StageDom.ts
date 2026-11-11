@@ -137,6 +137,23 @@ const textFieldOf = (found: HTMLElement, what: string) =>
     ? Effect.succeed(found)
     : Effect.fail(new StoryStepFailed({ step: what, detail: 'It is not a text field.' }))
 
+export const pastes = (name: string | RegExp, files: readonly File[]) =>
+  role(name, 'textbox').pipe(
+    Effect.flatMap((target) =>
+      Effect.sync(() => {
+        target.focus()
+        const transfer = new DataTransfer()
+
+        files.forEach((file) => {
+          transfer.items.add(file)
+        })
+        target.dispatchEvent(
+          new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }),
+        )
+      }),
+    ),
+  )
+
 export const types = (name: string | RegExp, text: string, matcher: ByRoleMatcher = 'textbox') =>
   role(name, matcher).pipe(
     Effect.flatMap((found) => textFieldOf(found, `types into ${String(name)}`)),

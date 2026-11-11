@@ -3,7 +3,7 @@ import * as Exit from 'effect/Exit'
 import * as Ref from 'effect/Ref'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
-import { Prompt } from '@crook/domain/Command'
+import { FIRST_AGENT_WITH_ATTACHMENTS, Prompt } from '@crook/domain/Command'
 import type { TranscriptEvent, TranscriptSource } from '@crook/domain/Transcript'
 
 import { liveWith } from '../test/AppWiring.tsx'
@@ -24,7 +24,7 @@ export const chatHerd = (row: AgentRow = chatAgent(), connection: MachineConnect
   herd([
     machine(LAPTOP, [row], {
       connection,
-      agentVersion: '0.0.2',
+      agentVersion: FIRST_AGENT_WITH_ATTACHMENTS,
       herdrVersion: '0.9.5',
     }),
   ])
@@ -35,7 +35,10 @@ export const shellOnlyHerd = (pane = 'w1:p1') =>
   herd([machine(LAPTOP, [], { shellPanes: [pane], agentVersion: '0.0.2' })])
 
 export const delivered = ({ link }: LinkStage, text: string) =>
-  Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text }))))
+  Ref.set(
+    link.commandAnswer,
+    Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text, attachments: [] }))),
+  )
 
 export const opensWith = (messages: readonly TranscriptMessage[]): readonly TranscriptEvent[] => [
   opened(),

@@ -419,6 +419,10 @@ const make = Effect.gen(function* () {
     yield* visibleNow(id)
   })
 
+  const agentVersionOf = Effect.fn('Herd.agentVersionOf')(function* (id: MachineId) {
+    return (yield* visibleNow(id)).agentVersion
+  })
+
   const requirePane = Effect.fn('Herd.requirePane')(function* (id: MachineId, pane: PaneId) {
     yield* agentIn(id, yield* visibleNow(id), pane)
   })
@@ -431,6 +435,7 @@ const make = Effect.gen(function* () {
     setPinned,
     requireMachine,
     requirePane,
+    agentVersionOf,
     subscribeChanges: Effect.map(PubSub.subscribe(changes), Stream.fromSubscription),
     view: SubscriptionRef.changes(entries).pipe(
       Stream.buffer({ capacity: 1, strategy: 'sliding' }),
@@ -461,6 +466,9 @@ export class Herd extends Context.Service<
       id: MachineId,
       pane: PaneId,
     ) => Effect.Effect<void, MachineNotInHerd | PaneNotInHerd>
+    readonly agentVersionOf: (
+      id: MachineId,
+    ) => Effect.Effect<Option.Option<CrookVersion>, MachineNotInHerd>
     readonly subscribeChanges: Effect.Effect<Stream.Stream<HerdChange>, never, Scope.Scope>
     readonly view: Stream.Stream<HerdView>
   }

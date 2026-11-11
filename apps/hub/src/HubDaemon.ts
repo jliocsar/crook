@@ -18,6 +18,7 @@ import { HerdStore } from '@crook/hub/HerdStore'
 import * as HttpRoutes from '@crook/hub/HttpRoutes'
 import { NotificationStore } from '@crook/hub/NotificationStore'
 import { TranscriptRelay } from '@crook/hub/TranscriptRelay'
+import { Uploads } from '@crook/hub/Uploads'
 import { LINK_PING_INTERVAL } from '@crook/protocol/LinkTiming'
 import { protocolSerialization } from '@crook/protocol/Serialization'
 
@@ -42,6 +43,7 @@ export const routesOver = (hark: Layer.Layer<HttpClient.HttpClient>) =>
   Layer.provide(HttpRoutes.layer, [
     Layer.provideMerge(notificationsOver(hark), herdServices),
     TranscriptRelay.layer,
+    Uploads.layer,
     ExeDevIdentity.layer,
     protocolSerialization,
   ])

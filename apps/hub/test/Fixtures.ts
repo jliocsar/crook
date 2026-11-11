@@ -24,6 +24,7 @@ import type * as Rpc from 'effect/rpc/Rpc'
 import type * as SqlClient from 'effect/sql/SqlClient'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
+import { AttachmentFiles } from '@crook/agent/AttachmentFiles'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
@@ -261,7 +262,7 @@ export const agentOver = Effect.fn('agentOver')(function* <Failure>(
         AgentDaemon.transcriptStreamingAt(claudeRoots),
         HubConnectionStatus.layer,
       ),
-      foundation,
+      Layer.mergeAll(foundation, Layer.mock(AttachmentFiles, {})),
     ),
   )
 })

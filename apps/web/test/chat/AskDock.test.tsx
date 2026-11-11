@@ -563,7 +563,7 @@ describe('the ask dock', () => {
           pane: PANE,
           reason: 'herdr did not confirm the prompt in time',
         })
-        const resent = new Prompt({ pane: PANE, text: 'Use both' })
+        const resent = new Prompt({ pane: PANE, text: 'Use both', attachments: [] })
 
         yield* link.commandAnswers.close
         const other = yield* Effect.promise(() => screen.findByPlaceholderText('Something else…'))

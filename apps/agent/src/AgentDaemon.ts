@@ -1,11 +1,13 @@
 import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import type * as Path from 'effect/Path'
 
 import * as StatusSocket from '@crook/agent/StatusSocket'
 import { AgentLauncher } from '@crook/agent/AgentLauncher'
 import { AskAnswers } from '@crook/agent/AskAnswers'
+import { AttachmentFiles } from '@crook/agent/AttachmentFiles'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CheckoutHeads } from '@crook/agent/CheckoutHeads'
 import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
@@ -66,6 +68,8 @@ const executorHelpers = Layer.provideMerge(
   PaneScreens.layer,
 )
 
+export const attachmentFiles = Layer.provide(AttachmentFiles.layer, FetchHttpClient.layer)
+
 export const commandExecution = Layer.provide(CommandExecutor.layer, executorHelpers)
 
 const transcriptReaders = Layer.unwrap(Effect.map(claudeRoots, transcriptReadersAt))
@@ -75,6 +79,7 @@ const machineHost = Layer.mergeAll(
   GitBranches.layer,
   CreatedPanes.layer,
   AuditLog.layer,
+  attachmentFiles,
 )
 
 const machineReaders = Layer.provideMerge(

@@ -341,7 +341,7 @@ layer(Layer.mergeAll(testHub, BunFileSystem.layer), { excludeTestServices: true 
         const receipt = yield* phone.SendCommand({
           machine,
           key: IdempotencyKey.make('1b7c3f0e-94e2-4e2e-8a7d-2c1f0e9b5a31'),
-          command: new Prompt({ pane: PANE, text: 'run the gate again' }),
+          command: new Prompt({ pane: PANE, text: 'run the gate again', attachments: [] }),
         })
 
         expect(receipt).toEqual(

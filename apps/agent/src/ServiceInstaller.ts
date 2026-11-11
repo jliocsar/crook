@@ -11,6 +11,7 @@ import * as Redacted from 'effect/Redacted'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 
+import { CrookUploadsPath } from '@crook/agent/AttachmentFiles'
 import { CrookStatusSocketPath } from '@crook/agent/StatusSocket'
 import { CrookAuditLogPath, CrookAuditPolicy } from '@crook/agent/AuditLog'
 import { hooksBlock } from '@crook/agent/ClaudeHookSettings'
@@ -133,6 +134,7 @@ const carriedSettings: readonly CarriedSetting[] = [
   { variables: ['CROOK_AUDIT_ARGUMENT_LIMIT', 'CROOK_AUDIT_REDACT'], readAs: CrookAuditPolicy },
   { variables: ['CROOK_CREATED_PANES_PATH'], readAs: CrookCreatedPanesPath },
   { variables: ['CROOK_RECENT_PLACES_PATH'], readAs: CrookRecentPlacesPath },
+  { variables: ['CROOK_UPLOADS_PATH'], readAs: CrookUploadsPath },
 ]
 
 const carriedEntry = (name: string) =>

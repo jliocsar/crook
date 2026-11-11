@@ -13,6 +13,7 @@ import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/Agent
 import { linkAnsweredAtom } from '@crook/web/atoms/Connection'
 import { PaneTranscriptKey } from '@crook/web/atoms/Transcript'
 import { askAnswerNotice, AskDock } from '@crook/web/chat/AskDock'
+import type { DraftAttachment } from '@crook/web/chat/Attachments'
 import { useFocusAfterAsk } from '@crook/web/chat/AskFocus'
 import { activityMachine, activityView } from '@crook/web/chat/ActivityMachine'
 import {
@@ -97,6 +98,10 @@ interface DockProps {
   readonly restart: Option.Option<Restart>
   readonly draft: string
   readonly onDraftChange: (draft: string) => void
+  readonly attachments: readonly DraftAttachment[]
+  readonly onAttachmentsChange: (attachments: readonly DraftAttachment[]) => void
+  readonly attachNote: Option.Option<string>
+  readonly onAttachNote: (note: Option.Option<string>) => void
   readonly onBack: () => void
   readonly backLabel: string
 }
@@ -112,8 +117,14 @@ const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly Threa
 const composerNotices = (
   status: ComposerStatus,
   ask: Option.Option<AskDockCommands>,
+  attachNote: Option.Option<string>,
 ): readonly FloatingNotice[] =>
   Arr.getSomes([
+    Option.map(attachNote, (text): FloatingNotice => ({
+      id: 'attach-note',
+      tone: 'failure',
+      text,
+    })),
     Option.flatMap(ask, (dock) => askAnswerNotice(dock.state)),
     Option.map(composerFailureMessage(status.failure), (text): FloatingNotice => ({
       id: 'composer-failure',
@@ -160,6 +171,10 @@ function ChatDock({
   restart,
   draft,
   onDraftChange,
+  attachments,
+  onAttachmentsChange,
+  attachNote,
+  onAttachNote,
   onBack,
   backLabel,
 }: DockProps) {
@@ -189,7 +204,7 @@ function ChatDock({
     >
       <div className="contents" {...stateMark(composerFailureMachine, status.failure)}>
         <FloatingNotices
-          notices={edgeShown ? restartNotices(restart) : composerNotices(status, ask)}
+          notices={edgeShown ? restartNotices(restart) : composerNotices(status, ask, attachNote)}
         />
       </div>
       <p role="status" className="sr-only">
@@ -223,6 +238,14 @@ function ChatDock({
             handle={askFocus.composer}
             value={draft}
             onValueChange={onDraftChange}
+            attachments={attachments}
+            onAttachmentsChange={(next) => {
+              onAttachNote(Option.none())
+              onAttachmentsChange(next)
+            }}
+            onAttachNote={(note) => {
+              onAttachNote(Option.some(note))
+            }}
             skills={skills}
             {...composer}
           />
@@ -270,6 +293,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
   const [draft, setDraft] = React.useState('')
+  const [attachments, setAttachments] = React.useState<readonly DraftAttachment[]>([])
+  const [attachNote, setAttachNote] = React.useState<Option.Option<string>>(Option.none())
   const cwd = cwdOf(model)
   const rosters = rostersOf(view)
   const lines = linesOf(view)
@@ -293,6 +318,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     skills: skillsOf(state),
     draft,
     setDraft,
+    attachments,
+    setAttachments,
     onPromptSent: scrollToEnd,
   })
   const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS
@@ -438,6 +465,10 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
         restart={commands.restart}
         draft={draft}
         onDraftChange={setDraft}
+        attachments={attachments}
+        onAttachmentsChange={setAttachments}
+        attachNote={attachNote}
+        onAttachNote={setAttachNote}
         onBack={back}
         backLabel={backLabel}
       />

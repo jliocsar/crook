@@ -16,7 +16,7 @@ import { inputDelivered } from '../HubFakes.ts'
 
 const PANE = PaneId.make('w1:p1')
 
-const receipt = inputDelivered(new Prompt({ pane: PANE, text: 'go' }))
+const receipt = inputDelivered(new Prompt({ pane: PANE, text: 'go', attachments: [] }))
 
 const herdWith = (seq: number) =>
   Option.some(herd([machine(LAPTOP, [agent('w1:p1', 'working', { seq })])]))

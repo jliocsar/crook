@@ -502,6 +502,18 @@ screen" on the Ask.
   - Screen readers hear "Needs you" and the title once per ask. An Ask that closes while it
     holds focus hands it to the composer.
 - **The composer** is Prompt Input at 16px, reading "Message Claude".
+  - A paperclip sits at the bottom left. It opens the system picker, which on iOS offers Photo
+    Library, Take Photo and Choose File. Pasting a picture or a file into the field attaches it,
+    and plain text pastes as before.
+  - Attachments show above the text as a strip that scrolls sideways: a 56px thumbnail for a
+    picture, a 56px card with the name and size for any other file, each with a × to remove it.
+    Send works with attachments and no words.
+  - Photos shrink on the phone to 2000px on the long edge as JPEG. A screenshot stays PNG, scaled
+    only when it is larger. A picture the browser can't open goes as a plain file.
+  - At most 10 files and 25 MB per message. Going past either says so above the composer, and
+    nothing is added.
+  - On a machine whose crook agent is too old to take them, the paperclip reads disabled and a tap
+    says to update the agent from the Machines tab.
   - Typing `/` lists what the session can run, grouped under This project, Yours, Plugins and
     Claude Code with sticky group headers: the name in mono, its argument hint beside it and a
     two-line description, in a list capped at 256px that scrolls. The Claude Code group holds

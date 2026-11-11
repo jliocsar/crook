@@ -14,6 +14,7 @@ import { SentBound } from '@crook/web/atoms/SentBound'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import { HubLink } from '@crook/web/rpc/HubLink'
+import type { HubUploads } from '@crook/web/rpc/HubUploads'
 import { COLD_START, HubLinkState } from '@crook/web/rpc/HubLinkState'
 
 import { appRegistry, appRouter, AppTree } from '../test/AppWiring.tsx'
@@ -179,7 +180,7 @@ const running = <Stage extends AppHandles>(spec: StorySpec<Stage>, stage: Stage)
   steps: (spec.timeline ?? []).map(({ run }) => Effect.suspend(() => run(stage))),
 })
 
-export const acquireRegistry = (hub: Layer.Layer<HubLink | TranscriptCache>) =>
+export const acquireRegistry = (hub: Layer.Layer<HubLink | TranscriptCache | HubUploads>) =>
   Effect.acquireRelease(
     Effect.sync(() => appRegistry(hub)),
     (registry) =>
@@ -226,9 +227,12 @@ export const browserStory =
       const browser = yield* makeFakeBrowser(spec.cached)
       const transcripts = yield* makeMemoryTranscriptStore()
       const registry = yield* acquireRegistry(
-        Layer.provide(
-          Layer.mergeAll(HubLink.layer, TranscriptCache.layerOver(transcripts.store)),
-          browser.layer,
+        Layer.mergeAll(
+          Layer.provide(
+            Layer.mergeAll(HubLink.layer, TranscriptCache.layerOver(transcripts.store)),
+            browser.layer,
+          ),
+          browser.uploads.layer,
         ),
       )
 

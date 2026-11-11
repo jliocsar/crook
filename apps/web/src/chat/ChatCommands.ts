@@ -13,11 +13,13 @@ import type { AgentRow } from '@crook/domain/AgentRow'
 import type { Ask } from '@crook/domain/Ask'
 import {
   AnswerAsk,
+  attachmentsOf,
   Decline,
   FolderPath,
   interrupt,
   Prompt,
   StartAgent,
+  takesAttachments,
 } from '@crook/domain/Command'
 import type { AskAnswer, Command, CommandReceipt } from '@crook/domain/Command'
 import type { ClaudeSessionId, IdempotencyKey, MachineId, PaneId } from '@crook/domain/Ids'
@@ -53,6 +55,9 @@ import { isPresent } from '@crook/web/chat/PresenceMachine'
 import type { ChatScreenModel } from '@crook/web/chat/ChatModel'
 import { isCommandSend, laptopOnlyNote, noAnswerNote } from '@crook/web/chat/SlashCommands'
 import { useCommandAction } from '@crook/web/chat/CommandAction'
+import { attachmentRefOf } from '@crook/web/chat/Attachments'
+import type { DraftAttachment } from '@crook/web/chat/Attachments'
+import type { HeldUpload } from '@crook/web/rpc/HubUploads'
 import type { CommandAction } from '@crook/web/chat/CommandAction'
 import type { AskDockProps } from '@crook/web/chat/AskDock'
 import type { ComposerProps, ComposerMode } from '@crook/web/chat/Composer'
@@ -73,7 +78,16 @@ import type { Restart } from '@crook/web/chat/EdgeCard'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
-export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
+export type ComposerCommands = Omit<
+  ComposerProps,
+  | 'value'
+  | 'onValueChange'
+  | 'skills'
+  | 'handle'
+  | 'attachments'
+  | 'onAttachmentsChange'
+  | 'onAttachNote'
+>
 
 export interface ComposerStatus {
   readonly failure: ComposerFailureState
@@ -117,6 +131,8 @@ interface ChatCommandsInput {
   readonly skills: readonly SkillListing[]
   readonly draft: string
   readonly setDraft: (draft: string) => void
+  readonly attachments: readonly DraftAttachment[]
+  readonly setAttachments: (attachments: readonly DraftAttachment[]) => void
   readonly onPromptSent: () => void
 }
 
@@ -144,7 +160,12 @@ export interface PromptSend {
 }
 
 const PENDING_PROMPT_KEY = 'pending prompt'
+const DIGEST_SEPARATOR = ','
+const ATTACHED_LABEL = 'Attached'
 const MANUAL_COMPACT = 'manual'
+
+const ATTACHED_COMMAND_NOTE =
+  'A command cannot carry attachments. Send the command on its own, or remove the attachments.'
 
 const NOTHING_AWAITED: PromptWait = {
   promptsAtSend: 0,
@@ -358,6 +379,45 @@ const useClearSentDraft = (
     }
   }, [sent])
 }
+
+const sentDigestsOf = (action: CommandAction): string =>
+  pipe(
+    Option.liftPredicate(action, (candidate) => isAcknowledged(candidate.state)),
+    Option.flatMap((kept) => kept.last),
+    Option.map((command) => attachmentsOf(command).map((attachment) => attachment.digest)),
+    Option.getOrElse((): readonly string[] => []),
+  ).join(DIGEST_SEPARATOR)
+
+const useClearSentAttachments = (
+  action: CommandAction,
+  attachments: readonly DraftAttachment[],
+  setAttachments: (attachments: readonly DraftAttachment[]) => void,
+) => {
+  const sent = sentDigestsOf(action)
+
+  React.useEffect(() => {
+    if (
+      sent !== '' &&
+      attachments.map((attachment) => attachment.digest).join(DIGEST_SEPARATOR) === sent
+    ) {
+      setAttachments([])
+    }
+  }, [sent])
+}
+
+const shownPromptText = (command: Command, text: string): string =>
+  text.length > 0
+    ? text
+    : `${ATTACHED_LABEL} ${attachmentsOf(command)
+        .map((attachment) => attachment.name)
+        .join(', ')}`
+
+const attachRefusalOf = (model: ChatScreenModel): Option.Option<string> =>
+  Option.map(
+    Option.filter(model.machine, (machine) => !takesAttachments(machine.agentVersion)),
+    (machine) =>
+      `The crook agent on ${machine.label} is too old to take attachments. Update it from the Machines tab, then attach again.`,
+  )
 
 const lastCommandOf = (rows: readonly PendingPromptRow[]): Option.Option<string> =>
   pipe(
@@ -609,6 +669,8 @@ export const useChatCommands = ({
   skills,
   draft,
   setDraft,
+  attachments,
+  setAttachments,
   onPromptSent,
 }: ChatCommandsInput): ChatCommands => {
   const { machine, pane } = opened
@@ -638,8 +700,15 @@ export const useChatCommands = ({
   )
   const [refused, setRefused] = React.useState('')
   const refusalOf = (text: string) =>
-    Option.orElse(laptopOnlyNote(text, skills), () =>
-      Option.liftPredicate(CLAUDE_WAITING_NOTE, () => isClaudeWaiting(model.row)),
+    pipe(
+      Option.liftPredicate(
+        ATTACHED_COMMAND_NOTE,
+        () => attachments.length > 0 && isCommandSend(text),
+      ),
+      Option.orElse(() => laptopOnlyNote(text, skills)),
+      Option.orElse(() =>
+        Option.liftPredicate(CLAUDE_WAITING_NOTE, () => isClaudeWaiting(model.row)),
+      ),
     )
   const refusal = Option.filter(
     refusalOf(draft.trim()),
@@ -657,17 +726,18 @@ export const useChatCommands = ({
   const answering = Option.isSome(openAsk) && isAnswerUnderway(askAnswer.state)
 
   useClearSentDraft(prompt, draft, setDraft)
+  useClearSentAttachments(prompt, attachments, setAttachments)
   useRestoreUndeliveredDraft(prompt, draft, setDraft)
   useRestartInPlace(machine, restart)
 
-  const sendPrompt = (command: Command) => {
+  const sendPrompt = (command: Command, uploads: readonly HeldUpload[] = []) => {
     composerFailure.onPromptSent()
     prompted.afterSend({
       replacesFailed: isFailed(prompt.state) && Option.exists(prompt.last, awaitsAnswer),
-      prompt: textOf(command),
+      prompt: Option.map(textOf(command), (text) => shownPromptText(command, text)),
       working,
     })
-    prompt.send(command)
+    prompt.send(command, uploads)
   }
 
   const send = (text: string) => {
@@ -681,7 +751,10 @@ export const useChatCommands = ({
         }
 
         onPromptSent()
-        sendPrompt(new Prompt({ pane, text }))
+        sendPrompt(
+          new Prompt({ pane, text, attachments: attachments.map(attachmentRefOf) }),
+          attachments.map(({ digest, bytes }) => ({ digest, bytes })),
+        )
       },
       onSome: ({ ask }) => {
         onPromptSent()
@@ -714,6 +787,7 @@ export const useChatCommands = ({
     alwaysNotes: always.notes,
     composer: {
       onSend: send,
+      attachRefusal: attachRefusalOf(model),
       onStop: () => {
         if (!stopping) {
           composerFailure.onStopPressed()

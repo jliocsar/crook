@@ -117,7 +117,7 @@ const stateAt = (version: number) =>
 const routed = (id: number, key: IdempotencyKey, command: RoutedCommand['command']) =>
   new RoutedCommand({ id: CommandId.make(id), key, command })
 
-const continuePrompt = new Prompt({ pane: AGENT_PANE, text: 'continue' })
+const continuePrompt = new Prompt({ pane: AGENT_PANE, text: 'continue', attachments: [] })
 
 const delivered = Result.succeed(
   new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 4 }),

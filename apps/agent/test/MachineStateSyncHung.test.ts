@@ -17,6 +17,7 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
+import { AttachmentFiles } from '@crook/agent/AttachmentFiles'
 import { CheckoutHeads } from '@crook/agent/CheckoutHeads'
 import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
@@ -136,6 +137,7 @@ const executorOverRealClient = Effect.fn('executorOverRealClient')(function* (so
     Layer.provideMerge(AgentDaemon.commandExecution, [
       yield* syncStageOverRealClient(socketPath),
       discardingAudit,
+      Layer.mock(AttachmentFiles, {}),
       BunFileSystem.layer,
       Path.layer,
     ]),
@@ -260,7 +262,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('Over a real herdr cli
         const failure = yield* executor
           .execute(
             IdempotencyKey.make('3f1c8a52-0b7e-4d0a-9a51-6f3f0d2f8e11'),
-            new Prompt({ pane: PaneId.make('w1:p1'), text: 'continue' }),
+            new Prompt({ pane: PaneId.make('w1:p1'), text: 'continue', attachments: [] }),
           )
           .pipe(Effect.flip)
         const lost = yield* firstStateWhere(sync, isHerdrLost)

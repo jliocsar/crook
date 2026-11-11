@@ -6,7 +6,7 @@ import * as React from 'react'
 import type { Command } from '@crook/domain/Command'
 import type { IdempotencyKey, MachineId } from '@crook/domain/Ids'
 import { remembersOutcome, settledError } from '@crook/web/atoms/ActionFailure'
-import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
+import type { CommandActionFailure } from '@crook/web/atoms/ActionFailure'
 import { isFailed, isIdle } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import {
@@ -15,14 +15,15 @@ import {
   PendingActionKey,
   sendCommandAtom,
 } from '@crook/web/atoms/Commands'
+import type { HeldUpload } from '@crook/web/rpc/HubUploads'
 import { mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
 
 export interface CommandAction {
   readonly state: CommandProgress
-  readonly refusal: Option.Option<SendCommandFailure>
+  readonly refusal: Option.Option<CommandActionFailure>
   readonly last: Option.Option<Command>
   readonly key: IdempotencyKey
-  readonly send: (command: Command) => IdempotencyKey
+  readonly send: (command: Command, uploads?: readonly HeldUpload[]) => IdempotencyKey
 }
 
 interface ActionKeys {
@@ -37,7 +38,7 @@ const freshKeys = (): ActionKeys => ({
 
 const sentAgainUnderSameKey = (
   state: CommandProgress,
-  refusal: Option.Option<SendCommandFailure>,
+  refusal: Option.Option<CommandActionFailure>,
   last: Option.Option<Command>,
   command: Command,
 ): boolean =>
@@ -55,8 +56,8 @@ export const useCommandAction = (machine: MachineId): CommandAction => {
   const sendCurrent = useAtomSet(sendCommandAtom(keys.current))
   const sendSpare = useAtomSet(sendCommandAtom(keys.spare))
 
-  const send = (command: Command) => {
-    const request = new CommandRequest({ machine, command })
+  const send = (command: Command, uploads: readonly HeldUpload[] = []) => {
+    const request = new CommandRequest({ machine, command, uploads })
     const retry = sentAgainUnderSameKey(state, refusal, last, command)
 
     setLast(Option.some(command))

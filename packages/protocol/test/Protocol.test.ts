@@ -287,7 +287,7 @@ layer(clientApiHandlers)('ClientApi', (rpc) => {
   rpc.effect('answers SendCommand with a receipt or a tagged failure', () =>
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(ClientApi)
-      const command = new Prompt({ pane, text: 'continue' })
+      const command = new Prompt({ pane, text: 'continue', attachments: [] })
       const key = IdempotencyKey.make('action-1')
       const receipt = yield* client.SendCommand({ machine: laptop, key, command })
       const offline = yield* client

@@ -64,7 +64,9 @@ describe('the chat thread following the end', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'Run the tests' }))),
+        Exit.succeed(
+          inputDelivered(new Prompt({ pane: PANE, text: 'Run the tests', attachments: [] })),
+        ),
       )
       yield* Queue.offer(transcript, opened())
 

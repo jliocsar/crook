@@ -4,6 +4,7 @@ import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
+import { interrupt } from '@crook/domain/Command'
 import { SkillListing } from '@crook/domain/Skill'
 import { SkillsChanged } from '@crook/domain/Transcript'
 import {
@@ -12,6 +13,7 @@ import {
   claudeWaitingRefusal,
 } from '@crook/protocol/Commands'
 import { REDIALING, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
+import { UploadUnreachable } from '@crook/web/rpc/HubUploads'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
 import {
@@ -25,8 +27,11 @@ import {
 } from '../../test/TranscriptFixtures.ts'
 import { TextBlock } from '@crook/domain/TranscriptMessage'
 import { chatHerd, chatStory, delivered, opensWith, SEND_READY } from '../ChatFixtures.ts'
-import { chatAgent, chatAgentSaying, CONVERSATION } from '../Fixtures.ts'
-import { clicks, seesText, types } from '../StageDom.ts'
+import { chatAgent, chatAgentSaying, CONVERSATION, PANE } from '../Fixtures.ts'
+import { inputDelivered } from '../../test/HubFakes.ts'
+import { herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
+import { buildLog, LOG_NAME, threeFiles } from '../AttachmentFixtures.ts'
+import { clicks, pastes, seesText, types } from '../StageDom.ts'
 import { step } from '../Story.tsx'
 import type { LinkStage, StoryMaker } from '../Story.tsx'
 
@@ -66,7 +71,60 @@ const SKILLS = new SkillsChanged({
   ],
 })
 
+const ATTACHMENT = '[data-slot="attachment"]'
+const OLD_AGENT = '0.0.13'
+const ATTACH_BUTTON = 'Attach a photo or file'
+
+const pastesFiles = (files: Effect.Effect<readonly File[]>) =>
+  Effect.flatMap(files, (pasted) => pastes(FIELD, pasted))
+
+const attachedThree = Effect.andThen(pastesFiles(threeFiles), seesText(LOG_NAME))
+
 export const COMPOSER_STORIES: readonly StoryMaker[] = [
+  chatStory({
+    slug: 'attached',
+    title: 'Composer, a photo, a screenshot and a file attached',
+    events: CONVERSATION,
+    shows: { all: [{ selector: ATTACHMENT }, { text: LOG_NAME }, { selector: SEND_READY }] },
+    settle: () => Effect.andThen(attachedThree, typesDraft(DRAFT)),
+  }),
+  chatStory({
+    slug: 'attached-sent',
+    title: 'Composer, a file sent with no words',
+    events: CONVERSATION,
+    arrange: ({ link }) =>
+      Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(interrupt(PANE)))),
+    shows: { text: `Attached ${LOG_NAME}` },
+    settle: () =>
+      Effect.andThen(
+        Effect.andThen(pastesFiles(Effect.sync(() => [buildLog()])), seesText(LOG_NAME)),
+        clicks(SEND),
+      ),
+  }),
+  chatStory({
+    slug: 'attached-upload-failed',
+    title: 'Composer, an attachment the hub could not take',
+    events: CONVERSATION,
+    arrange: ({ link }) =>
+      Ref.set(
+        link.uploads.uploadRefusal,
+        Option.some(new UploadUnreachable({ detail: 'offline' })),
+      ),
+    shows: { all: [{ selector: '[role="alert"]' }, { text: LOG_NAME }] },
+    settle: () =>
+      Effect.andThen(
+        Effect.andThen(pastesFiles(Effect.sync(() => [buildLog()])), seesText(LOG_NAME)),
+        clicks(SEND),
+      ),
+  }),
+  chatStory({
+    slug: 'attach-old-agent',
+    title: 'Composer, an agent too old to take attachments',
+    events: CONVERSATION,
+    link: liveWith(herd([machine(LAPTOP, [chatAgent()], { agentVersion: OLD_AGENT })])),
+    shows: { text: 'too old to take attachments' },
+    settle: () => clicks(ATTACH_BUTTON),
+  }),
   chatStory({
     slug: 'ready',
     title: 'Composer, ready',

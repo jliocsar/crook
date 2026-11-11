@@ -14,8 +14,8 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { InputDelivered, targetPane } from '@crook/domain/Command'
-import type { Command, CommandReceipt, PaneCommand } from '@crook/domain/Command'
+import { InputDelivered, Prompt, targetPane } from '@crook/domain/Command'
+import type { AttachmentDigest, Command, CommandReceipt, PaneCommand } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import { PaneId, TerminalId } from '@crook/domain/Ids'
 import type { ClaudeSessionId, IdempotencyKey, MachineId } from '@crook/domain/Ids'
@@ -36,6 +36,8 @@ import { StoredTranscript, TranscriptCache } from '@crook/web/cache/TranscriptCa
 import type { StoredKey, TranscriptStore } from '@crook/web/cache/TranscriptCache'
 import { applyTranscriptEvent, EMPTY_TRANSCRIPT } from '@crook/web/chat/TranscriptState'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
+import { HubUploads } from '@crook/web/rpc/HubUploads'
+import type { UploadFailed } from '@crook/web/rpc/HubUploads'
 import type {
   ForgetMachineRefused,
   HubCallDefected,
@@ -71,6 +73,11 @@ export interface FakeSession {
 export interface PrefWrite {
   readonly event: NotificationEvent
   readonly enabled: boolean
+}
+
+interface SentUpload {
+  readonly machine: MachineId
+  readonly digest: AttachmentDigest
 }
 
 export interface SeenCall {
@@ -121,12 +128,36 @@ export const sourceKey = (source: TranscriptSource): string =>
     }),
   )
 
+export const promptDelivered = (pane: PaneId, text: string) =>
+  inputDelivered(new Prompt({ pane, text, attachments: [] }))
+
 export const inputDelivered = (command: PaneCommand, stateChangeSeq = 1) =>
   new InputDelivered({
     pane: targetPane(command),
     terminal: TerminalId.make(`term_${targetPane(command)}`),
     stateChangeSeq,
   })
+
+export const makeFakeUploads = Effect.fn('makeFakeUploads')(function* () {
+  const uploaded = yield* Ref.make<readonly SentUpload[]>([])
+  const uploadRefusal = yield* Ref.make(Option.none<UploadFailed>())
+  const layer = Layer.succeed(
+    HubUploads,
+    HubUploads.of({
+      upload: (machine, held) =>
+        Effect.flatMap(
+          Ref.get(uploadRefusal),
+          Option.match({
+            onNone: () =>
+              Ref.update(uploaded, (sent) => [...sent, { machine, digest: held.digest }]),
+            onSome: Effect.fail,
+          }),
+        ),
+    }),
+  )
+
+  return { layer, uploaded, uploadRefusal }
+})
 
 export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   cached: Option.Option<HerdSnapshot>,
@@ -196,6 +227,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
     }
   })
 
+  const uploads = yield* makeFakeUploads()
   const layer = Layer.mergeAll(
     Layer.succeed(HubConnection, HubConnection.of({ open })),
     Layer.succeed(
@@ -242,6 +274,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
 
   return {
     layer,
+    uploads,
     sessions,
     opened,
     closed,
@@ -476,10 +509,12 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
     }),
   )
 
-  const layer = Layer.mergeAll(linkLayer, transcriptCacheLayer)
+  const uploads = yield* makeFakeUploads()
+  const layer = Layer.mergeAll(linkLayer, transcriptCacheLayer, uploads.layer)
 
   return {
     layer,
+    uploads,
     transcriptStore: transcriptStore.store,
     storedTranscripts: transcriptStore.entries,
     pageVisible,
