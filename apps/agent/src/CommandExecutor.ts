@@ -10,6 +10,7 @@ import * as Result from 'effect/Result'
 
 import { AgentLauncher } from '@crook/agent/AgentLauncher'
 import { AskAnswers } from '@crook/agent/AskAnswers'
+import { AttachmentFiles, promptText, type SaveAttachments } from '@crook/agent/AttachmentFiles'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { CommandPolicy } from '@crook/agent/CommandPolicy'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
@@ -25,6 +26,7 @@ import {
   PaneClosed,
   type PaneCommand,
   PaneRenamed,
+  Prompt,
   targetPane,
 } from '@crook/domain/Command'
 import type { IdempotencyKey } from '@crook/domain/Ids'
@@ -42,6 +44,7 @@ import {
 import { LAUNCH_HERDR_WAIT } from '@crook/protocol/AgentLink'
 import {
   type AgentCommandFailure,
+  type AttachmentUnavailable,
   CommandDeliveryUnknown,
   type DeclineMessageUndelivered,
   HerdrRefusedCommand,
@@ -93,6 +96,29 @@ const logWhatThePhoneIsNotTold = (failure: AgentCommandFailure) =>
     onSome: (line) => Effect.logWarning(line),
   })
 
+const withAttachmentsSaved = (save: SaveAttachments, prompt: Prompt) =>
+  prompt.attachments.length === 0
+    ? Effect.succeed(prompt)
+    : save(prompt.attachments).pipe(
+        Effect.map(
+          (saved) =>
+            new Prompt({
+              pane: prompt.pane,
+              text: promptText(saved, prompt.text),
+              attachments: [],
+            }),
+        ),
+      )
+
+const readyToType = (
+  save: SaveAttachments,
+  command: PaneCommand,
+): Effect.Effect<PaneCommand, AttachmentUnavailable> =>
+  Match.value(command).pipe(
+    Match.tag('Prompt', (prompt) => withAttachmentsSaved(save, prompt)),
+    Match.orElse((other) => Effect.succeed(other)),
+  )
+
 const make = Effect.gen(function* () {
   const herdr = yield* HerdrClient
   const policy = yield* CommandPolicy
@@ -101,6 +127,7 @@ const make = Effect.gen(function* () {
   const audit = yield* AuditLog
   const answers = yield* AskAnswers
   const launcher = yield* AgentLauncher
+  const attachmentFiles = yield* AttachmentFiles
 
   const afterDelivery = (
     command: PaneCommand,
@@ -220,7 +247,8 @@ const make = Effect.gen(function* () {
       onSome: (found) => answers.refuseAnswered(found, row),
     })
 
-    const [spent, outcome] = yield* Effect.timed(delivered(command, row))
+    const typed = yield* readyToType(attachmentFiles.save, command)
+    const [spent, outcome] = yield* Effect.timed(delivered(typed, row))
 
     yield* Option.match(answer, {
       onNone: () => Effect.void,

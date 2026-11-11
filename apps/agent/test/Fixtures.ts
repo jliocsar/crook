@@ -8,6 +8,7 @@ import * as Stream from 'effect/Stream'
 import type * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
+import { AttachmentFiles } from '@crook/agent/AttachmentFiles'
 import { AuditLog } from '@crook/agent/AuditLog'
 import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { CreatedPanes } from '@crook/agent/CreatedPanes'
@@ -32,6 +33,7 @@ export interface ExecutorOptions {
   readonly invalidate?: Effect.Effect<void>
   readonly audit?: Layer.Layer<AuditLog>
   readonly claudeWaiting?: Effect.Effect<Option.Option<boolean>>
+  readonly attachmentFiles?: Layer.Layer<AttachmentFiles>
 }
 
 export const LAPTOP = MachineId.make('laptop')
@@ -96,6 +98,7 @@ export const executorWith = (
     ClaudeSessionFiles.layerTest([], Stream.never, options.claudeWaiting),
     CreatedPanes.layerTest(options.created),
     options.audit ?? discardingAudit,
+    options.attachmentFiles ?? Layer.mock(AttachmentFiles, {}),
     herdr,
     gitBranchesOnDisk,
     BunFileSystem.layer,
@@ -114,6 +117,7 @@ export const linkedAgentWith = (
       ClaudeSessionFiles.layerTest([], Stream.never, options.claudeWaiting),
       CreatedPanes.layerTest(options.created),
       options.audit ?? discardingAudit,
+      options.attachmentFiles ?? Layer.mock(AttachmentFiles, {}),
       herdr,
       gitBranchesOnDisk,
       BunFileSystem.layer,

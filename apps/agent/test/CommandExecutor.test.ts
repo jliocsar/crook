@@ -14,10 +14,13 @@ import * as Schema from 'effect/Schema'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import * as TestClock from 'effect/testing/TestClock'
 
+import { AttachmentFiles } from '@crook/agent/AttachmentFiles'
 import { CommandExecutor, HERDR_DELIVERY_TIMEOUT } from '@crook/agent/CommandExecutor'
 import { type AgentAuditEntry, AuditLog } from '@crook/agent/AuditLog'
 import { AuditPolicy, REDACTED } from '@crook/domain/Audit'
 import {
+  AttachmentDigest,
+  AttachmentRef,
   ClosePane,
   InputDelivered,
   PaneClosed,
@@ -48,6 +51,7 @@ import { paneInfo } from '@crook/herdr/fixtures/Records.ts'
 import { COMMAND_TIMEOUT } from '@crook/protocol/AgentLink'
 import { HUB_RECONNECT_BASE } from '@crook/protocol/LinkTiming'
 import {
+  AttachmentUnavailable,
   CommandDeliveryUnknown,
   HerdrRefusedCommand,
   HerdrUnavailable,
@@ -77,6 +81,32 @@ const prompted = scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })
 const keysSent = scriptedResult(AgentSendKeysMethod, { type: 'ok' })
 const continuePrompt = new Prompt({ pane: AGENT_PANE, text: 'continue', attachments: [] })
 const delivered = new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 4 })
+
+const SHOT_DIGEST = AttachmentDigest.make('a'.repeat(64))
+const LOG_DIGEST = AttachmentDigest.make('b'.repeat(64))
+const SHOT_PATH = '/home/me/.local/state/crook/uploads/aaaa/shot.png'
+const LOG_PATH = '/home/me/.local/state/crook/uploads/bbbb/build.log'
+
+const promptWithFiles = new Prompt({
+  pane: AGENT_PANE,
+  text: 'what broke?',
+  attachments: [
+    new AttachmentRef({ name: 'shot.png', mediaType: 'image/png', size: 10, digest: SHOT_DIGEST }),
+    new AttachmentRef({ name: 'build.log', mediaType: 'text/plain', size: 20, digest: LOG_DIGEST }),
+  ],
+})
+
+const savedFiles = Layer.mock(AttachmentFiles, {
+  save: () =>
+    Effect.succeed([
+      { path: SHOT_PATH, picture: true },
+      { path: LOG_PATH, picture: false },
+    ]),
+})
+
+const hubLostFiles = Layer.mock(AttachmentFiles, {
+  save: () => Effect.fail(new AttachmentUnavailable({ reason: 'the hub did not hand over' })),
+})
 
 const SentLine = Schema.fromJsonString(
   Schema.Struct({ id: Schema.String, method: Schema.String, params: Schema.Unknown }),
@@ -121,6 +151,35 @@ it.effect('sends a prompt to the agent pane through agent.prompt', () =>
     expect(sentRequests(yield* sent)).toEqual([
       { id: 'agent.prompt', method: 'agent.prompt', params: { target: 'w1:p1', text: 'continue' } },
     ])
+  }),
+)
+
+it.effect('saves the attachments and types their paths ahead of the words', () =>
+  Effect.gen(function* () {
+    const { executor, sent } = yield* startExecutor([prompted], { attachmentFiles: savedFiles })
+    const receipt = yield* executor.execute(FIRST_ACTION, promptWithFiles)
+
+    expect(receipt).toEqual(delivered)
+    expect(sentRequests(yield* sent)).toEqual([
+      {
+        id: 'agent.prompt',
+        method: 'agent.prompt',
+        params: {
+          target: 'w1:p1',
+          text: `${SHOT_PATH}\nAttached file: ${LOG_PATH}\nwhat broke?`,
+        },
+      },
+    ])
+  }),
+)
+
+it.effect('types nothing when an attachment cannot be fetched', () =>
+  Effect.gen(function* () {
+    const { executor, sent } = yield* startExecutor([prompted], { attachmentFiles: hubLostFiles })
+    const failure = yield* executor.execute(FIRST_ACTION, promptWithFiles).pipe(Effect.flip)
+
+    expect(failure).toEqual(new AttachmentUnavailable({ reason: 'the hub did not hand over' }))
+    expect(yield* sent).toEqual([])
   }),
 )
 

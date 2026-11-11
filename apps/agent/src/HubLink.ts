@@ -32,7 +32,7 @@ export type AgentLinkClient = RpcClient.FromGroup<typeof AgentLink, RpcClientErr
 
 export type HubConnect = Effect.Effect<AgentLinkClient, never, Scope.Scope>
 
-const HUB_AUTHORIZATION_HEADER = 'X-Exedev-Authorization'
+export const HUB_AUTHORIZATION_HEADER = 'X-Exedev-Authorization'
 
 const isLaunch = Schema.is(LaunchCommand)
 

@@ -17,6 +17,7 @@ import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
 import * as AgentDaemon from '@crook/agent/AgentDaemon'
+import { AttachmentFiles } from '@crook/agent/AttachmentFiles'
 import { CheckoutHeads } from '@crook/agent/CheckoutHeads'
 import { ClaudeSessionFiles } from '@crook/agent/ClaudeSessionFiles'
 import { ClaudeSessions } from '@crook/agent/ClaudeSessions'
@@ -136,6 +137,7 @@ const executorOverRealClient = Effect.fn('executorOverRealClient')(function* (so
     Layer.provideMerge(AgentDaemon.commandExecution, [
       yield* syncStageOverRealClient(socketPath),
       discardingAudit,
+      Layer.mock(AttachmentFiles, {}),
       BunFileSystem.layer,
       Path.layer,
     ]),
