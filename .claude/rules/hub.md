@@ -28,6 +28,7 @@ The answer was already durable, and stays so without a new table: it lives at Ha
 This is a machine rather than one effect because it has six ways out, a delivery, a refusal, a state that moved on, a withdrawal, an age limit and a send that may not have landed going back to waiting, and the rules worth holding are about arrows: a send only from a hold on that hold's own open, one fate recorded on the way into the end, nothing after it. Whatever watches the link or the clock is one fiber per hold, in a scope that ends with the answer, inside the notifier's scope.
 :::
 
+- An upload lives in the hub's memory, for its machine only, for 15 minutes, and the hub holds at most four messages' worth, 100 MiB, before it refuses more. Both numbers are guards, not measurements: the agent downloads a prompt's files the moment the command reaches it, and nothing has measured how long that takes over a slow link. The agent's download has 60 s, also a guard, and a prompt with attachments gets that on top of the usual command timeout at the hub.
 - A publish from an agent connection that has died can still run at the hub after its successor's.
   The RPC server forks a handler for each request frame it reads, and nothing orders two sockets.
   With a proxy holding the client's bytes, the client dead by its own ping timeout and its successor

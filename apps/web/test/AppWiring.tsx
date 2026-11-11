@@ -13,6 +13,7 @@ import { remountWhenParamsChange } from '@crook/web/navigation/Pushed'
 import { ROUTE_FALLBACKS } from '@crook/web/router/RouteFallbacks'
 import { routeTree } from '@crook/web/routeTree.gen'
 import type { HubLink } from '@crook/web/rpc/HubLink'
+import type { HubUploads } from '@crook/web/rpc/HubUploads'
 import { HubLinkState, LIVE } from '@crook/web/rpc/HubLinkState'
 import type { LinkStatus } from '@crook/web/rpc/HubLinkState'
 
@@ -34,7 +35,7 @@ export const appRouter = (path: string) =>
     ...ROUTE_FALLBACKS,
   })
 
-export const appRegistry = (hub: Layer.Layer<HubLink | TranscriptCache>) =>
+export const appRegistry = (hub: Layer.Layer<HubLink | TranscriptCache | HubUploads>) =>
   AtomRegistry.make({
     initialValues: [Atom.initialValue(hubRuntime.layer, hub)],
     scheduleTask,

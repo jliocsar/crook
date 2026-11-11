@@ -3,6 +3,14 @@ import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 
+import {
+  ATTACHMENT_BYTES_LIMIT,
+  ATTACHMENT_COUNT_LIMIT,
+  type AttachmentDigest,
+  AttachmentRef,
+  attachmentDigestOf,
+} from '@crook/domain/Command'
+
 export type AttachmentKind = 'image' | 'file'
 
 export type AttachmentRefusal = AttachmentUnreadable | TooManyAttachments | AttachmentsTooLarge
@@ -15,7 +23,10 @@ export interface DraftAttachment {
   readonly mediaType: string
   readonly kind: AttachmentKind
   readonly bytes: Uint8Array<ArrayBuffer>
+  readonly digest: AttachmentDigest
 }
+
+type UndigestedAttachment = Omit<DraftAttachment, 'digest'>
 
 export interface ImageSize {
   readonly width: number
@@ -55,9 +66,9 @@ const PASTED_NAME = 'Pasted image'
 const UNNAMED_FILE = 'File'
 const JPEG_EXTENSION = /\.(?:jpe?g|heic|heif|webp|gif|avif)$/iu
 const PNG_EXTENSION = /\.png$/iu
+const ATTACHMENT_NAME_LIMIT = 255
+const CONTROL_CHARACTERS = /\p{Cc}+/gu
 
-export const ATTACHMENT_COUNT_LIMIT = 10
-export const ATTACHMENT_BYTES_LIMIT = 25 * MEBIBYTE
 export const IMAGE_LONG_EDGE = 2000
 export const JPEG_QUALITY = 0.85
 
@@ -170,7 +181,7 @@ const asFile = (
   name: string,
   mediaType: string,
   bytes: Uint8Array<ArrayBuffer>,
-): DraftAttachment => ({
+): UndigestedAttachment => ({
   id: attachmentId(),
   name,
   mediaType,
@@ -182,7 +193,7 @@ const asImage = (
   name: string,
   format: ImageFormat,
   bytes: Uint8Array<ArrayBuffer>,
-): DraftAttachment => ({
+): UndigestedAttachment => ({
   id: attachmentId(),
   name,
   mediaType: format,
@@ -211,10 +222,7 @@ const nameOf = (file: File): string => {
   return file.type.startsWith('image/') ? PASTED_NAME : UNNAMED_FILE
 }
 
-export const attachmentOf = Effect.fn('Attachments.attachmentOf')(function* (
-  codec: ImageCodec,
-  file: File,
-) {
+const draftOf = Effect.fn('Attachments.draftOf')(function* (codec: ImageCodec, file: File) {
   const name = nameOf(file)
   const bytes = yield* readBytes(file, name)
 
@@ -226,6 +234,30 @@ export const attachmentOf = Effect.fn('Attachments.attachmentOf')(function* (
     Effect.orElseSucceed(() => asFile(name, file.type, bytes)),
   )
 })
+
+const withDigest = (draft: UndigestedAttachment) =>
+  Effect.map(attachmentDigestOf(draft.bytes), (digest): DraftAttachment => ({ ...draft, digest }))
+
+export const attachmentOf = (codec: ImageCodec, file: File) =>
+  Effect.flatMap(draftOf(codec, file), withDigest)
+
+export const attachmentNameOf = (name: string): string => {
+  const cleaned = name
+    .replaceAll(CONTROL_CHARACTERS, ' ')
+    .trim()
+    .slice(0, ATTACHMENT_NAME_LIMIT)
+    .trim()
+
+  return cleaned.length > 0 ? cleaned : UNNAMED_FILE
+}
+
+export const attachmentRefOf = (attachment: DraftAttachment): AttachmentRef =>
+  new AttachmentRef({
+    name: attachmentNameOf(attachment.name),
+    mediaType: attachment.mediaType.replaceAll(CONTROL_CHARACTERS, ''),
+    size: attachment.bytes.byteLength,
+    digest: attachment.digest,
+  })
 
 export const totalBytes = (attachments: readonly DraftAttachment[]): number =>
   attachments.reduce((sum, attachment) => sum + attachment.bytes.byteLength, 0)

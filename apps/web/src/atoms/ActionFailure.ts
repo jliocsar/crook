@@ -7,8 +7,11 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import type { HubCallFailed } from '@crook/web/rpc/HubConnection'
 import type { HubNotConnected } from '@crook/web/rpc/HubLink'
+import type { UploadFailed } from '@crook/web/rpc/HubUploads'
 
 export type SendCommandFailure = CommandFailure | HubCallFailed | HubNotConnected
+
+export type CommandActionFailure = SendCommandFailure | UploadFailed
 
 export const UNEXPECTED_FAILURE_MESSAGE =
   'Something inside crook failed without saying why. Reload crook and try again.'
@@ -36,7 +39,7 @@ export const failureMessage = <Success, Failure extends { readonly message: stri
     }),
   )
 
-export const remembersOutcome = (failure: SendCommandFailure): boolean =>
+export const remembersOutcome = (failure: CommandActionFailure): boolean =>
   Match.value(failure).pipe(
     Match.tagsExhaustive({
       AgentNotStarted: () => true,
@@ -62,5 +65,7 @@ export const remembersOutcome = (failure: SendCommandFailure): boolean =>
       HubConnectionLost: () => false,
       HubCallDefected: () => false,
       HubNotConnected: () => false,
+      UploadRefused: () => false,
+      UploadUnreachable: () => false,
     }),
   )

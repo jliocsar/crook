@@ -6,6 +6,7 @@ import * as React from 'react'
 
 import type { SkillListing } from '@crook/domain/Skill'
 import { AttachmentStrip } from '@crook/web/chat/AttachmentStrip'
+import { Collapse } from '@crook/web/components/Collapse'
 import {
   attachmentOf,
   type DraftAttachment,
@@ -163,13 +164,15 @@ export function Composer({
         }
         sendsWithoutText={prompting && attachments.length > 0}
         above={
-          <AttachmentStrip
-            attachments={attachments}
-            disabled={disabled}
-            onRemove={(removed) => {
-              onAttachmentsChange(attachments.filter((attachment) => attachment !== removed))
-            }}
-          />
+          <Collapse open={attachments.length > 0}>
+            <AttachmentStrip
+              attachments={attachments}
+              disabled={disabled}
+              onRemove={(removed) => {
+                onAttachmentsChange(attachments.filter((attachment) => attachment !== removed))
+              }}
+            />
+          </Collapse>
         }
         leading={
           prompting ? (

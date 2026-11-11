@@ -46,6 +46,7 @@ Two identical calls in one message are the case the token cannot name. A Claude 
 A decline with a message stays out of the machine, on the composer's action, where a failure tells on the composer. The field holds the words it refused, and Esc may already have closed the ask, so only the composer is sure to outlive it. The buttons hold while that action is sending one, which needs no state of its own. An Always note waits on the action rather than the machine, since the grant holds even if the row moved on before the reply. Nothing marks this machine for the frame tool: an answer is out for one round trip, which can sit under the 24 frames a mark would hold it to (reasoned, not measured), and the dock's own state attribute names it in the log.
 :::
 
+- A prompt's attachments go to the hub first, each by its own PUT, and the command follows only once every upload answered, so the agent never asks for bytes the hub does not hold. They stay in the composer until the hub answers the command, as the draft does, and stay through a failed upload or a refused command, so a retry has them. Shrinking a photo to 2000px on its long edge at JPEG quality 0.85 is a decision the user made, not a measurement.
 - A live batch lands without a fade of its own: the lift that carries it into view is the one
   animation, and the Working row it replaces leaves as a ghost on the exit token.
 - A session can hold lines and no rows: of the real transcripts in the catalog, three hold only

@@ -122,6 +122,7 @@ What Claude Code writes and does, read off real transcripts, pid files and probe
   session opens, so only an open chat pays for it: crook's list read in about 13 ms (measured).
   Claude Code's bundled skills and claude.ai synced ones are not on disk and stay out; the
   composer adds only the built-ins that work over a PTY.
+- A pasted line that is only the absolute path to a PNG or JPEG becomes an image, `[Image #N]` in the input, and a path to any other file stays text (measured on a real Claude Code 2.1.322 through bracketed paste, one Claude). It holds for a path outside the working folder, for several pictures in one paste, and with words on other lines; the picture lines move ahead of the words and their newline goes. The transcript writes the user line with an image block, and an `isMeta` line naming the picture's source, which the parser already hides. Enter sent straight after the paste was lost; herdr's `agent.prompt`, which presses Enter about 300 ms after the paste, submitted a 3.9 MB 4000x3000 JPEG. That is why the agent types picture paths each on their own line and labels the other files.
 - Claude Code's Read tool result numbers its lines as `1	…` today and `     1→…` in older
   transcripts (measured in local transcripts). Strip either only when every line carries it.
 

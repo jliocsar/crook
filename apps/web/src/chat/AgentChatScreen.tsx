@@ -243,7 +243,6 @@ function ChatDock({
               onAttachNote(Option.none())
               onAttachmentsChange(next)
             }}
-            attachRefusal={Option.none()}
             onAttachNote={(note) => {
               onAttachNote(Option.some(note))
             }}
@@ -319,6 +318,8 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     skills: skillsOf(state),
     draft,
     setDraft,
+    attachments,
+    setAttachments,
     onPromptSent: scrollToEnd,
   })
   const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS

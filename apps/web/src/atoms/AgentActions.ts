@@ -20,7 +20,7 @@ import {
   sheetOutcome,
 } from '@crook/web/actions/PaneActions'
 import type { SheetOutcome } from '@crook/web/actions/PaneActions'
-import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
+import type { CommandActionFailure } from '@crook/web/atoms/ActionFailure'
 import { ActionProgress } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import {
@@ -86,7 +86,7 @@ export interface AgentActionsView {
 
 type CommandResultOf = (
   key: IdempotencyKey,
-) => AsyncResult.AsyncResult<CommandReceipt, SendCommandFailure>
+) => AsyncResult.AsyncResult<CommandReceipt, CommandActionFailure>
 
 type SessionsContext = Atom.WriteContext<readonly ActionsSession[]>
 
@@ -278,6 +278,7 @@ export const agentActionsAtom = Atom.writable(
             new CommandRequest({
               machine: session.agent.machine,
               command: new RenameAgent({ pane: session.agent.pane, label }),
+              uploads: [],
             }),
           )
         })
@@ -294,6 +295,7 @@ export const agentActionsAtom = Atom.writable(
             new CommandRequest({
               machine: session.agent.machine,
               command: new ClosePane({ pane: session.agent.pane, confirmed }),
+              uploads: [],
             }),
           )
         })

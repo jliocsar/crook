@@ -6,6 +6,9 @@ import * as Exit from 'effect/Exit'
 import {
   ATTACHMENT_BYTES_LIMIT,
   ATTACHMENT_COUNT_LIMIT,
+  AttachmentDigest,
+} from '@crook/domain/Command'
+import {
   attachmentOf,
   type DraftAttachment,
   type ImageCodec,
@@ -53,6 +56,7 @@ const attachment = (byteLength: number): DraftAttachment => ({
   mediaType: 'text/plain',
   kind: 'file',
   bytes: new Uint8Array(byteLength),
+  digest: AttachmentDigest.make('0'.repeat(64)),
 })
 
 describe('imagePlan', () => {

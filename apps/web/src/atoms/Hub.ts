@@ -7,6 +7,7 @@ import { HerdCache } from '@crook/web/cache/HerdCache'
 import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
 import { HubLink } from '@crook/web/rpc/HubLink'
+import { HubUploads } from '@crook/web/rpc/HubUploads'
 import { PageSignals } from '@crook/web/rpc/PageSignals'
 import { SessionCheck } from '@crook/web/rpc/SessionCheck'
 
@@ -19,8 +20,13 @@ const browserServices = Layer.mergeAll(
   sessionCheck,
 )
 
+const hubUploads = Layer.provide(HubUploads.layer, FetchHttpClient.layer)
+
 export const hubRuntime = Atom.runtime(
-  Layer.provide(Layer.mergeAll(HubLink.layer, TranscriptCache.layer), browserServices),
+  Layer.mergeAll(
+    Layer.provide(Layer.mergeAll(HubLink.layer, TranscriptCache.layer), browserServices),
+    hubUploads,
+  ),
 )
 
 export const linkStateAtom = hubRuntime

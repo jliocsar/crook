@@ -13,7 +13,7 @@ import type { PaneId } from '@crook/domain/Ids'
 import { panePresence } from '@crook/domain/MachineState'
 import type { PanePresence } from '@crook/domain/MachineState'
 import { remembersOutcome, settledError } from '@crook/web/atoms/ActionFailure'
-import type { SendCommandFailure } from '@crook/web/atoms/ActionFailure'
+import type { CommandActionFailure } from '@crook/web/atoms/ActionFailure'
 import {
   ActionProgress,
   failureMessageOf,
@@ -84,11 +84,11 @@ export const closeNeedsConfirmation = (
   isConfirmationAsked(close) ||
   Option.exists(lastClose, (attempt) => attempt.confirmed)
 
-export const isRetriableFailure = <Success, Failure extends SendCommandFailure>(
+export const isRetriableFailure = <Success, Failure extends CommandActionFailure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
 ): boolean => Option.exists(settledError(result), (error) => !remembersOutcome(error))
 
-export const isCommandUnderway = <Success, Failure extends SendCommandFailure>(
+export const isCommandUnderway = <Success, Failure extends CommandActionFailure>(
   result: AsyncResult.AsyncResult<Success, Failure>,
 ): boolean => AsyncResult.isWaiting(result) || AsyncResult.isSuccess(result)
 
