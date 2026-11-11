@@ -28,11 +28,14 @@ export const SHELL_START_WAIT = Duration.sum(SHELL_READY_TIMEOUT, PANE_BUSY_RETR
 export const AGENT_START_WAIT = Duration.sum(SHELL_START_WAIT, AGENT_READY_TIMEOUT)
 export const LAUNCH_HERDR_WAIT = Duration.sum(AGENT_START_WAIT, PROMPT_START_WINDOW)
 export const LAUNCH_COMMAND_TIMEOUT = Duration.sum(LAUNCH_HERDR_WAIT, COMMAND_TIMEOUT)
+export const ATTACHMENT_FETCH_TIMEOUT = Duration.seconds(60)
+export const ATTACHMENT_COMMAND_TIMEOUT = Duration.sum(ATTACHMENT_FETCH_TIMEOUT, COMMAND_TIMEOUT)
 
 export const commandTimeout = (command: Command): Duration.Duration =>
   Match.value(command).pipe(
     Match.tagsExhaustive({
-      Prompt: () => COMMAND_TIMEOUT,
+      Prompt: (prompt) =>
+        prompt.attachments.length === 0 ? COMMAND_TIMEOUT : ATTACHMENT_COMMAND_TIMEOUT,
       SendKeys: () => COMMAND_TIMEOUT,
       RenameAgent: () => COMMAND_TIMEOUT,
       ClosePane: () => COMMAND_TIMEOUT,

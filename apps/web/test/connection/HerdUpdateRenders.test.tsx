@@ -213,7 +213,9 @@ describe('a herd update from another machine', () => {
       yield* Ref.set(
         link.commandAnswer,
         Exit.succeed(
-          inputDelivered(new Prompt({ pane: PaneId.make('w1:p1'), text: '/rename made up' })),
+          inputDelivered(
+            new Prompt({ pane: PaneId.make('w1:p1'), text: '/rename made up', attachments: [] }),
+          ),
         ),
       )
       yield* Queue.offerAll(transcript, [

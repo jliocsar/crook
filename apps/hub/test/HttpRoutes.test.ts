@@ -315,7 +315,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
       const receipt = yield* phone.SendCommand({
         machine,
         key,
-        command: new Prompt({ pane, text: 'continue' }),
+        command: new Prompt({ pane, text: 'continue', attachments: [] }),
       })
       const refused = yield* phone
         .SendCommand({ machine, key, command: new SendKeys({ pane, keys: ['esc'] }) })
@@ -361,7 +361,7 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         yield* Layer.build(yield* realAgent(machine, state, herdr, []))
         yield* machineShows(machine, 'online')
         const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
-        const command = new Prompt({ pane, text: 'continue' })
+        const command = new Prompt({ pane, text: 'continue', attachments: [] })
         const receipt = yield* phone.SendCommand({ machine, key, command })
         const replayed = yield* phone.SendCommand({ machine, key, command })
 
@@ -413,7 +413,11 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
         const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
 
         yield* phone
-          .SendCommand({ machine, key, command: new Prompt({ pane, text: 'ship it' }) })
+          .SendCommand({
+            machine,
+            key,
+            command: new Prompt({ pane, text: 'ship it', attachments: [] }),
+          })
           .pipe(RpcClient.withHeaders({ 'X-ExeDev-Email': STRANGER }))
         yield* phone.SendCommand({
           machine,
@@ -513,7 +517,11 @@ layer(testHub, { excludeTestServices: true })('Commands through HttpRoutes', (li
       const machine = MachineId.make('command-nowhere')
       const phone = yield* connect(ClientApi, CLIENT_PATH, ownerLogin)
       const offline = yield* phone
-        .SendCommand({ machine, key, command: new Prompt({ pane, text: 'continue' }) })
+        .SendCommand({
+          machine,
+          key,
+          command: new Prompt({ pane, text: 'continue', attachments: [] }),
+        })
         .pipe(Effect.flip)
 
       expect(offline).toEqual(new MachineOffline({ machine }))

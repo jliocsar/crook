@@ -40,7 +40,7 @@ const keepEverything = new AuditPolicy({ argumentLimit: 200, redactedArguments: 
 
 describe('commandAudit', () => {
   it('names every command and lists its arguments', () => {
-    expect(commandAudit(new Prompt({ pane, text: 'continue' }))).toEqual({
+    expect(commandAudit(new Prompt({ pane, text: 'continue', attachments: [] }))).toEqual({
       operation: 'Prompt',
       arguments: { pane: 'w1:p1', text: 'continue' },
     })

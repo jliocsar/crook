@@ -271,7 +271,8 @@ describe('the Working row', () => {
 })
 
 describe('the queued label', () => {
-  const delivered = (text: string) => Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text })))
+  const delivered = (text: string) =>
+    Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text, attachments: [] })))
 
   it.effect('reads Queued while the row holds past herdr going idle', () =>
     Effect.gen(function* () {

@@ -75,7 +75,7 @@ const MISSING_HERDR_SOCKET = `${import.meta.dirname}/missing-herdr.sock`
 
 const prompted = scriptedResult(AgentPromptMethod, { type: 'agent_prompted' })
 const keysSent = scriptedResult(AgentSendKeysMethod, { type: 'ok' })
-const continuePrompt = new Prompt({ pane: AGENT_PANE, text: 'continue' })
+const continuePrompt = new Prompt({ pane: AGENT_PANE, text: 'continue', attachments: [] })
 const delivered = new InputDelivered({ pane: AGENT_PANE, terminal: TERMINAL, stateChangeSeq: 4 })
 
 const SentLine = Schema.fromJsonString(
@@ -188,7 +188,7 @@ it.effect('refuses input to a pane that hosts no agent, and sends nothing', () =
 it.effect('forgets a refusal, so the same key runs once the pane hosts an agent', () =>
   Effect.gen(function* () {
     const { executor, sent, state } = yield* startExecutor([prompted])
-    const shellPrompt = new Prompt({ pane: SHELL_PANE, text: 'continue' })
+    const shellPrompt = new Prompt({ pane: SHELL_PANE, text: 'continue', attachments: [] })
 
     yield* executor.execute(FIRST_ACTION, shellPrompt).pipe(Effect.flip)
     yield* SubscriptionRef.set(

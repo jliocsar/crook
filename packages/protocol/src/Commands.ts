@@ -199,6 +199,24 @@ export class CommandTimedOut extends Schema.TaggedError<CommandTimedOut>()('Comm
   }
 }
 
+export class AttachmentUnavailable extends Schema.TaggedError<AttachmentUnavailable>()(
+  'AttachmentUnavailable',
+  { reason: Schema.String },
+) {
+  override get message(): string {
+    return 'The machine could not fetch an attachment from the hub, so nothing was typed. Send the message again; if it keeps failing, attach the file again.'
+  }
+}
+
+export class AttachmentsUnsupported extends Schema.TaggedError<AttachmentsUnsupported>()(
+  'AttachmentsUnsupported',
+  { machine: MachineId },
+) {
+  override get message(): string {
+    return `The crook agent on "${this.machine}" is too old to take attachments, so nothing was sent. Update it from the Machines tab, then send again.`
+  }
+}
+
 export const AgentCommandFailure = Schema.Union([
   PaneNotAgent,
   PaneNotCreatedByCrook,
@@ -216,6 +234,7 @@ export const AgentCommandFailure = Schema.Union([
   FolderNotCheckout,
   AgentNotStarted,
   TaskNotDelivered,
+  AttachmentUnavailable,
 ])
 export type AgentCommandFailure = typeof AgentCommandFailure.Type
 
@@ -241,6 +260,7 @@ export const commandFailureForTheLog = (failure: AgentCommandFailure): Option.Op
         withItsOwnWords(unreadable, `${unreadable.method}: ${unreadable.issue}`),
       DeclineMessageUndelivered: (undelivered) => withItsOwnWords(undelivered, undelivered.reason),
       FolderUnreadable: (unreadable) => withItsOwnWords(unreadable, unreadable.reason),
+      AttachmentUnavailable: (unavailable) => withItsOwnWords(unavailable, unavailable.reason),
       PaneNotAgent: nothingLeftOut,
       PaneNotCreatedByCrook: nothingLeftOut,
       HerdrUnavailable: nothingLeftOut,
@@ -257,6 +277,7 @@ export const commandFailureForTheLog = (failure: AgentCommandFailure): Option.Op
 export const CommandFailure = Schema.Union([
   MachineOffline,
   CommandTimedOut,
+  AttachmentsUnsupported,
   ...AgentCommandFailure.members,
 ])
 export type CommandFailure = typeof CommandFailure.Type

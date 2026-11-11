@@ -14,7 +14,7 @@ import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { InputDelivered, targetPane } from '@crook/domain/Command'
+import { InputDelivered, Prompt, targetPane } from '@crook/domain/Command'
 import type { Command, CommandReceipt, PaneCommand } from '@crook/domain/Command'
 import type { HerdView } from '@crook/domain/HerdView'
 import { PaneId, TerminalId } from '@crook/domain/Ids'
@@ -120,6 +120,9 @@ export const sourceKey = (source: TranscriptSource): string =>
       SubagentTranscript: ({ session, subagent }) => `subagent ${session} ${subagent}`,
     }),
   )
+
+export const promptDelivered = (pane: PaneId, text: string) =>
+  inputDelivered(new Prompt({ pane, text, attachments: [] }))
 
 export const inputDelivered = (command: PaneCommand, stateChangeSeq = 1) =>
   new InputDelivered({

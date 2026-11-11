@@ -43,6 +43,8 @@ export const remembersOutcome = (failure: SendCommandFailure): boolean =>
       TaskNotDelivered: () => true,
       CommandDeliveryUnknown: () => true,
       DeclineMessageUndelivered: () => true,
+      AttachmentUnavailable: () => false,
+      AttachmentsUnsupported: () => false,
       FolderNotFound: () => false,
       FolderUnreadable: () => false,
       FolderNotCheckout: () => false,

@@ -518,7 +518,9 @@ describe('a chat catching up', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'Run the tests' }))),
+        Exit.succeed(
+          inputDelivered(new Prompt({ pane: PANE, text: 'Run the tests', attachments: [] })),
+        ),
       )
       yield* Queue.offerAll(transcript, [
         opened(),

@@ -57,7 +57,7 @@ describe('prompts sent while Claude has others to read', () => {
       yield* Effect.promise(() => screen.findByText('second'))
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'third' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'third', attachments: [] }))),
       )
       yield* Effect.promise(() => userEvent.type(field(), 'third{Enter}'))
       yield* eventually(() => {
@@ -85,7 +85,7 @@ describe('prompts sent while Claude has others to read', () => {
       yield* Effect.promise(() => screen.findByText('first'))
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'second' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'second', attachments: [] }))),
       )
       yield* Effect.promise(() => userEvent.type(field(), 'second{Enter}'))
       yield* eventually(() => {
@@ -93,7 +93,7 @@ describe('prompts sent while Claude has others to read', () => {
       })
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'third' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'third', attachments: [] }))),
       )
       yield* Effect.promise(() => userEvent.type(field(), 'third{Enter}'))
       yield* eventually(() => {
@@ -131,7 +131,9 @@ describe('prompts sent while Claude has others to read', () => {
       yield* Effect.promise(() => screen.findByText('Write the docs'))
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'Also the tests' }))),
+        Exit.succeed(
+          inputDelivered(new Prompt({ pane: PANE, text: 'Also the tests', attachments: [] })),
+        ),
       )
       yield* Effect.promise(() => userEvent.type(field(), 'Also the tests{Enter}'))
       yield* eventually(() => {
@@ -139,7 +141,9 @@ describe('prompts sent while Claude has others to read', () => {
       })
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'And the changelog' }))),
+        Exit.succeed(
+          inputDelivered(new Prompt({ pane: PANE, text: 'And the changelog', attachments: [] })),
+        ),
       )
       yield* Effect.promise(() => userEvent.type(field(), 'And the changelog{Enter}'))
       yield* eventually(() => {

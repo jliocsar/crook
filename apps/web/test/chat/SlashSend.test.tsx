@@ -105,7 +105,7 @@ describe('a prompt while Claude waits on the laptop', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'carry on' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'carry on', attachments: [] }))),
       )
       fireEvent.change(field(), { target: { value: 'carry on' } })
       yield* click(yield* findByRole('button', 'Send'))
@@ -123,7 +123,7 @@ describe('a prompt while Claude waits on the laptop', () => {
       yield* click(yield* findByRole('button', 'Send'))
       yield* eventually(() => {
         expect(Ref.getUnsafe(link.sent).map((sent) => sent.command)).toEqual([
-          new Prompt({ pane: PANE, text: 'carry on' }),
+          new Prompt({ pane: PANE, text: 'carry on', attachments: [] }),
         ])
       })
     }),
@@ -149,7 +149,7 @@ describe('a prompt while Claude waits on the laptop', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'carry on' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'carry on', attachments: [] }))),
       )
       fireEvent.change(field(), { target: { value: 'carry on' } })
       yield* click(yield* findByRole('button', 'Send'))
@@ -277,7 +277,7 @@ describe('a slash send', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/compact' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/compact', attachments: [] }))),
       )
       yield* Queue.offerAll(transcript, [opened(), caughtUp(0)])
       yield* Effect.promise(() => screen.findByText('No messages yet'))
@@ -314,7 +314,7 @@ describe('a slash send', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/login' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/login', attachments: [] }))),
       )
       yield* Queue.offerAll(transcript, [opened(), caughtUp(0)])
       yield* Effect.promise(() => screen.findByText('No messages yet'))
@@ -350,7 +350,7 @@ describe('a slash send', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/login' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/login', attachments: [] }))),
       )
       yield* Queue.offerAll(transcript, [opened(), caughtUp(0)])
       yield* Effect.promise(() => screen.findByText('No messages yet'))
@@ -378,7 +378,7 @@ describe('a slash send', () => {
 
     yield* Ref.set(
       link.commandAnswer,
-      Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: command }))),
+      Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: command, attachments: [] }))),
     )
     yield* Queue.offerAll(transcript, [opened(), caughtUp(0)])
     yield* Effect.promise(() => screen.findByText('No messages yet'))
@@ -502,7 +502,9 @@ describe('a slash send', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: '/effort high' }))),
+        Exit.succeed(
+          inputDelivered(new Prompt({ pane: PANE, text: '/effort high', attachments: [] })),
+        ),
       )
       yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'Run the tests')])])
       yield* Effect.promise(() => screen.findByText('Run the tests'))

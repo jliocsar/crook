@@ -8,7 +8,12 @@ import * as Option from 'effect/Option'
 import * as Record from 'effect/Record'
 import * as Schema from 'effect/Schema'
 
-import type { AskAnswer, Command } from '@crook/domain/Command'
+import {
+  type AskAnswer,
+  type AttachmentRef,
+  attachmentBytes,
+  type Command,
+} from '@crook/domain/Command'
 
 export interface AuditedOperation {
   readonly operation: string
@@ -39,6 +44,7 @@ const AuditArgumentName = Schema.Literals([
   'kind',
   'folder',
   'branch',
+  'attachments',
 ])
 type AuditArgumentName = typeof AuditArgumentName.Type
 
@@ -136,12 +142,21 @@ const answerAudit = (answer: AskAnswer): AuditArguments =>
     }),
   )
 
+const attachmentsAudit = (attachments: readonly AttachmentRef[]) =>
+  Arr.isReadonlyArrayNonEmpty(attachments)
+    ? { attachments: `${attachments.length} attached, ${attachmentBytes(attachments)} bytes` }
+    : {}
+
 export const commandAudit = (command: Command): AuditedOperation =>
   Match.value(command).pipe(
     Match.tagsExhaustive({
       Prompt: (prompt) => ({
         operation: 'Prompt',
-        arguments: { pane: prompt.pane, text: prompt.text },
+        arguments: {
+          pane: prompt.pane,
+          text: prompt.text,
+          ...attachmentsAudit(prompt.attachments),
+        },
       }),
       SendKeys: (sendKeys) => ({
         operation: 'SendKeys',

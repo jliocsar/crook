@@ -1,4 +1,6 @@
 export const AGENT_PATH = '/rpc/agent'
 export const CLIENT_PATH = '/rpc/client'
 export const HEALTH_PATH = '/health'
+export const UPLOADS_PATH = '/uploads'
+export const UPLOAD_MACHINE_PARAMETER = 'machine'
 export const SERVICE_WORKER_PATH = '/ServiceWorker.js'

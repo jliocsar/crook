@@ -260,7 +260,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('Over a real herdr cli
         const failure = yield* executor
           .execute(
             IdempotencyKey.make('3f1c8a52-0b7e-4d0a-9a51-6f3f0d2f8e11'),
-            new Prompt({ pane: PaneId.make('w1:p1'), text: 'continue' }),
+            new Prompt({ pane: PaneId.make('w1:p1'), text: 'continue', attachments: [] }),
           )
           .pipe(Effect.flip)
         const lost = yield* firstStateWhere(sync, isHerdrLost)

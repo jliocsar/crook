@@ -7,7 +7,6 @@ import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { Prompt } from '@crook/domain/Command'
 import { TranscriptOffset } from '@crook/domain/Ids'
 import { omittedBetween, omittedUpTo } from '@crook/domain/Transcript'
 import type { TranscriptEvent } from '@crook/domain/Transcript'
@@ -19,7 +18,7 @@ import { HubConnectionLost } from '@crook/web/rpc/HubConnection'
 
 import { liveWith } from '../../test/AppWiring.tsx'
 import { herd, LAPTOP, machine, START } from '../../test/HerdFixtures.ts'
-import { dropSession, inputDelivered } from '../../test/HubFakes.ts'
+import { dropSession, promptDelivered } from '../../test/HubFakes.ts'
 import {
   answered,
   caughtUp,
@@ -523,7 +522,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
 
         yield* Ref.set(
           stage.browser.commandAnswer,
-          Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: HELD_PROMPT }))),
+          Exit.succeed(promptDelivered(PANE, HELD_PROMPT)),
         )
         yield* Queue.offer(session.views, chatHerd())
 
@@ -813,7 +812,7 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
 
         yield* Ref.set(
           stage.browser.commandAnswer,
-          Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: HELD_PROMPT }))),
+          Exit.succeed(promptDelivered(PANE, HELD_PROMPT)),
         )
         yield* Queue.offer(session.views, chatHerd())
 
@@ -899,10 +898,9 @@ export const TRANSITION_STORIES: readonly StoryMaker[] = [
     ends: { all: [{ text: 'The toast is fine.' }, { selector: STILL_ACTIVITY }] },
     events: CONVERSATION,
     arrange: ({ link }) =>
-      Ref.set(
-        link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: QUESTION }))),
-      ).pipe(Effect.andThen(link.commandAnswers.close)),
+      Ref.set(link.commandAnswer, Exit.succeed(promptDelivered(PANE, QUESTION))).pipe(
+        Effect.andThen(link.commandAnswers.close),
+      ),
     settle: () => types(COMPOSER, QUESTION),
     timeline: [
       step<LinkStage>(500, 'Tap Send, Sending', () => clicks(SEND)),

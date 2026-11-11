@@ -203,7 +203,9 @@ describe('AgentChatScreen', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'Run the tests' }))),
+        Exit.succeed(
+          inputDelivered(new Prompt({ pane: PANE, text: 'Run the tests', attachments: [] })),
+        ),
       )
       yield* Queue.offer(transcript, opened())
       yield* Effect.promise(() => userEvent.type(field(), 'Run the tests{Enter}'))
@@ -706,7 +708,7 @@ describe('AgentChatScreen', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'Run it' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'Run it', attachments: [] }))),
       )
       yield* Effect.promise(() => screen.findByRole('textbox'))
       yield* Effect.promise(() => userEvent.type(field(), 'Run it{Control>}{Enter}{/Control}'))
@@ -725,7 +727,7 @@ describe('AgentChatScreen', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'continue' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'continue', attachments: [] }))),
       )
       yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'continue')])])
       yield* Effect.promise(() => screen.findByText('continue'))
@@ -825,7 +827,7 @@ describe('AgentChatScreen', () => {
 
       yield* Ref.set(
         link.commandAnswer,
-        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'second' }))),
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: 'second', attachments: [] }))),
       )
       yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'first')])])
       yield* Effect.promise(() => screen.findByText('first'))

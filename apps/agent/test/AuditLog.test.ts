@@ -53,7 +53,11 @@ layer(Layer.mergeAll(BunFileSystem.layer, BunPath.layer), { excludeTestServices:
         const file = `${yield* fileSystem.makeTempDirectoryScoped()}/state/crook/audit.jsonl`
         const audit = yield* auditLogAt(file)
 
-        yield* audit.record(ACTION, new Prompt({ pane: PANE, text: 'deploy it' }), Exit.void)
+        yield* audit.record(
+          ACTION,
+          new Prompt({ pane: PANE, text: 'deploy it', attachments: [] }),
+          Exit.void,
+        )
         yield* audit.record(
           ACTION,
           new ClosePane({ pane: PANE, confirmed: false }),

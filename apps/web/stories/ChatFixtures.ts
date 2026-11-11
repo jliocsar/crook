@@ -35,7 +35,10 @@ export const shellOnlyHerd = (pane = 'w1:p1') =>
   herd([machine(LAPTOP, [], { shellPanes: [pane], agentVersion: '0.0.2' })])
 
 export const delivered = ({ link }: LinkStage, text: string) =>
-  Ref.set(link.commandAnswer, Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text }))))
+  Ref.set(
+    link.commandAnswer,
+    Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text, attachments: [] }))),
+  )
 
 export const opensWith = (messages: readonly TranscriptMessage[]): readonly TranscriptEvent[] => [
   opened(),

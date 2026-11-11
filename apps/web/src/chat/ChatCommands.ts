@@ -691,7 +691,7 @@ export const useChatCommands = ({
         }
 
         onPromptSent()
-        sendPrompt(new Prompt({ pane, text }))
+        sendPrompt(new Prompt({ pane, text, attachments: [] }))
       },
       onSome: ({ ask }) => {
         onPromptSent()
