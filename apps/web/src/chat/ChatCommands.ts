@@ -73,7 +73,17 @@ import type { Restart } from '@crook/web/chat/EdgeCard'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
 import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
 
-export type ComposerCommands = Omit<ComposerProps, 'value' | 'onValueChange' | 'skills' | 'handle'>
+export type ComposerCommands = Omit<
+  ComposerProps,
+  | 'value'
+  | 'onValueChange'
+  | 'skills'
+  | 'handle'
+  | 'attachments'
+  | 'onAttachmentsChange'
+  | 'attachRefusal'
+  | 'onAttachNote'
+>
 
 export interface ComposerStatus {
   readonly failure: ComposerFailureState

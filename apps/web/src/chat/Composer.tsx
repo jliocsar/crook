@@ -1,8 +1,18 @@
+import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import { Paperclip } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import * as React from 'react'
 
 import type { SkillListing } from '@crook/domain/Skill'
+import { AttachmentStrip } from '@crook/web/chat/AttachmentStrip'
+import {
+  attachmentOf,
+  type DraftAttachment,
+  filesOfTransfer,
+  withAdded,
+} from '@crook/web/chat/Attachments'
+import { browserImageCodec } from '@crook/web/chat/BrowserImageCodec'
 import { slashSuggestions } from '@crook/web/chat/SlashCommands'
 import { keepFocus } from '@crook/web/components/KeepFocus'
 import { PromptInput } from '@crook/web/components/ui/prompt-input'
@@ -30,9 +40,14 @@ export interface ComposerProps {
   readonly label: string
   readonly skills: readonly SkillListing[]
   readonly handle?: React.Ref<ComposerHandle>
+  readonly attachments: readonly DraftAttachment[]
+  readonly onAttachmentsChange: (attachments: readonly DraftAttachment[]) => void
+  readonly attachRefusal: Option.Option<string>
+  readonly onAttachNote: (note: string) => void
 }
 
 const SUGGESTION_RISE = 6
+const ATTACH_ICON_SIZE = 18
 
 const suggestionGroups = (text: string, skills: readonly SkillListing[]): SuggestionGroup[] =>
   slashSuggestions(text, skills).map((group) => ({
@@ -60,8 +75,48 @@ export function Composer({
   label,
   skills,
   handle,
+  attachments,
+  onAttachmentsChange,
+  attachRefusal,
+  onAttachNote,
 }: ComposerProps) {
   const field = React.useRef<HTMLTextAreaElement>(null)
+  const picker = React.useRef<HTMLInputElement>(null)
+  const latest = React.useRef(attachments)
+  const prompting = mode === 'prompt'
+
+  latest.current = attachments
+
+  const attach = (files: readonly File[]) => {
+    if (files.length === 0) {
+      return
+    }
+
+    Effect.runFork(
+      Effect.forEach(files, (file) => attachmentOf(browserImageCodec, file)).pipe(
+        Effect.flatMap((added) => withAdded(latest.current, added)),
+        Effect.match({
+          onFailure: (refusal) => {
+            onAttachNote(refusal.message)
+          },
+          onSuccess: (next) => {
+            latest.current = next
+            onAttachmentsChange(next)
+          },
+        }),
+      ),
+    )
+  }
+
+  const openPicker = () => {
+    Option.match(attachRefusal, {
+      onNone: () => {
+        picker.current?.click()
+      },
+      onSome: onAttachNote,
+    })
+  }
+
   const transform = useTransformString()
   const groups = suggestionGroups(value, skills)
 
@@ -101,7 +156,63 @@ export function Composer({
         onValueChange={onValueChange}
         onSubmit={onSend}
         onStop={onStop}
-        status={working && mode === 'prompt' && value.trim() === '' ? 'working' : 'ready'}
+        status={
+          working && prompting && value.trim() === '' && attachments.length === 0
+            ? 'working'
+            : 'ready'
+        }
+        sendsWithoutText={prompting && attachments.length > 0}
+        above={
+          <AttachmentStrip
+            attachments={attachments}
+            disabled={disabled}
+            onRemove={(removed) => {
+              onAttachmentsChange(attachments.filter((attachment) => attachment !== removed))
+            }}
+          />
+        }
+        leading={
+          prompting ? (
+            <>
+              <button
+                type="button"
+                data-slot="composer-attach"
+                aria-label="Attach a photo or file"
+                aria-disabled={Option.isSome(attachRefusal) || undefined}
+                disabled={disabled}
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-11 shrink-0 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:outline-none disabled:opacity-40 aria-disabled:opacity-40"
+                onPointerDown={keepFocus}
+                onClick={openPicker}
+              >
+                <Paperclip aria-hidden="true" size={ATTACH_ICON_SIZE} />
+              </button>
+              <input
+                ref={picker}
+                type="file"
+                multiple
+                hidden
+                tabIndex={-1}
+                onChange={(event) => {
+                  attach(Array.from(event.target.files ?? []))
+                  event.target.value = ''
+                }}
+              />
+            </>
+          ) : null
+        }
+        onPaste={(event) => {
+          const files = filesOfTransfer(event.clipboardData)
+
+          if (files.length > 0 && prompting) {
+            event.preventDefault()
+            Option.match(attachRefusal, {
+              onNone: () => {
+                attach(files)
+              },
+              onSome: onAttachNote,
+            })
+          }
+        }}
         placeholder={placeholder}
         label={label}
         disabled={disabled}

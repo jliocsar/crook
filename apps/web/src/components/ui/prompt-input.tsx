@@ -23,6 +23,10 @@ type PromptInputProps = Omit<React.HTMLAttributes<HTMLFormElement>, 'onSubmit' |
   fieldRef: React.RefObject<HTMLTextAreaElement | null>
   submitLabel?: string
   stopLabel?: string
+  above?: React.ReactNode
+  leading?: React.ReactNode
+  sendsWithoutText?: boolean
+  onPaste?: React.ClipboardEventHandler<HTMLTextAreaElement>
 }
 
 const FIELD_TEXT = 'px-3.5 py-3 text-base leading-6'
@@ -47,11 +51,15 @@ export function PromptInput({
   fieldRef,
   submitLabel = 'Send',
   stopLabel = 'Stop',
+  above,
+  leading,
+  sendsWithoutText = false,
+  onPaste,
   className,
   ...formProps
 }: PromptInputProps) {
   const fieldId = React.useId()
-  const canSend = value.trim().length > 0 && !disabled && !sending
+  const canSend = (sendsWithoutText || value.trim().length > 0) && !disabled && !sending
 
   const submit = () => {
     if (canSend) {
@@ -76,6 +84,7 @@ export function PromptInput({
       <label className="sr-only" htmlFor={fieldId}>
         {label}
       </label>
+      {above}
       <FitsItsText text={value} textClass={cn(FIELD_TEXT, FIELD_ROWS_HEIGHT)}>
         <textarea
           ref={fieldRef}
@@ -94,6 +103,7 @@ export function PromptInput({
           onChange={(event) => {
             onValueChange(event.target.value)
           }}
+          onPaste={onPaste}
           onKeyDown={(event) => {
             if (isSendKey(event)) {
               event.preventDefault()
@@ -103,6 +113,7 @@ export function PromptInput({
         />
       </FitsItsText>
       <div data-slot="prompt-input-toolbar" className="flex items-center gap-2 px-2 pb-2">
+        {leading}
         {status === 'working' ? (
           <button
             key="stop"
