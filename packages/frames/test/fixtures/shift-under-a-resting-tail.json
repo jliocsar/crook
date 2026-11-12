@@ -1,0 +1,458 @@
+{
+  "timeOrigin": 1794498997777.5,
+  "frames": [
+    {
+      "frame": 72,
+      "at": 3666.7,
+      "vsync": 3655.9,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cover": 1,
+      "cards": [
+        "Port the herd screen|working|123",
+        "Wire the hub link|idle|231",
+        "Tidy the notes|idle|339"
+      ],
+      "marks": {
+        "thread-skeleton": {
+          "x": 1,
+          "y": 57,
+          "width": 389,
+          "height": 660,
+          "opacity": 1
+        },
+        "herd-list": {
+          "x": 0,
+          "y": 56,
+          "width": 390,
+          "height": 372,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 53,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 326,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 1,
+          "y": 717,
+          "width": 389,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "NoView",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 9
+    },
+    {
+      "frame": 73,
+      "at": 3688.9,
+      "vsync": 3672.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cover": 0.7,
+      "cards": [
+        "Port the herd screen|working|123",
+        "Wire the hub link|idle|231",
+        "Tidy the notes|idle|339"
+      ],
+      "marks": {
+        "thread-skeleton": {
+          "x": 0.7,
+          "y": 57,
+          "width": 389.3,
+          "height": 660,
+          "opacity": 1
+        },
+        "herd-list": {
+          "x": 0,
+          "y": 56,
+          "width": 390,
+          "height": 372,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52.7,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325.7,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0.7,
+          "y": 717,
+          "width": 389.3,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "NoView",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 9.2
+    },
+    {
+      "frame": 74,
+      "at": 3709.4,
+      "vsync": 3705.9,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cover": 0.5,
+      "cards": [
+        "Port the herd screen|working|123",
+        "Wire the hub link|idle|231",
+        "Tidy the notes|idle|339"
+      ],
+      "marks": {
+        "thread-skeleton": {
+          "x": 0.5,
+          "y": 57,
+          "width": 389.5,
+          "height": 660,
+          "opacity": 1
+        },
+        "herd-list": {
+          "x": 0,
+          "y": 56,
+          "width": 390,
+          "height": 372,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52.5,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325.5,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0.5,
+          "y": 717,
+          "width": 389.5,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "NoView",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 9.1
+    },
+    {
+      "frame": 75,
+      "at": 4289,
+      "vsync": 3722.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cover": 0,
+      "cards": [
+        "Tidy the notes|idle|339",
+        "Port the herd screen|working|123",
+        "Wire the hub link|idle|231"
+      ],
+      "marks": {
+        "thread-skeleton": {
+          "x": 0,
+          "y": 57,
+          "width": 390,
+          "height": 660,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 52,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "send-button": {
+          "x": 325,
+          "y": 779,
+          "width": 44,
+          "height": 44,
+          "opacity": 0.4
+        },
+        "composer": {
+          "x": 0,
+          "y": 717,
+          "width": 390,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "NoView",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": ["li", "li"],
+      "removed": ["li", "li"],
+      "readMs": 10.8
+    },
+    {
+      "frame": 76,
+      "at": 4342.7,
+      "vsync": 4322.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cover": 68.6,
+      "cards": [
+        "Tidy the notes|idle|123",
+        "Port the herd screen|working|231",
+        "Wire the hub link|idle|339"
+      ],
+      "marks": {
+        "thread-skeleton": {
+          "x": 68.6,
+          "y": 57,
+          "width": 321.4,
+          "height": 660,
+          "opacity": 1
+        },
+        "herd-list": {
+          "x": 0,
+          "y": 56,
+          "width": 390,
+          "height": 372,
+          "opacity": 1
+        },
+        "agent-card": {
+          "x": 27,
+          "y": 123,
+          "width": 336,
+          "height": 76,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 120.6,
+          "y": 34,
+          "width": 151.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "composer": {
+          "x": 68.6,
+          "y": 717,
+          "width": 321.4,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "NoView",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 5.1
+    },
+    {
+      "frame": 77,
+      "at": 4379.5,
+      "vsync": 4372.6,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cover": 190.7,
+      "cards": [
+        "Tidy the notes|idle|123",
+        "Port the herd screen|working|231",
+        "Wire the hub link|idle|339"
+      ],
+      "marks": {
+        "thread-skeleton": {
+          "x": 190.7,
+          "y": 57,
+          "width": 199.3,
+          "height": 660,
+          "opacity": 1
+        },
+        "herd-list": {
+          "x": 0,
+          "y": 56,
+          "width": 390,
+          "height": 372,
+          "opacity": 1
+        },
+        "agent-card": {
+          "x": 27,
+          "y": 123,
+          "width": 336,
+          "height": 76,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 242.7,
+          "y": 34,
+          "width": 147.3,
+          "height": 16,
+          "opacity": 1
+        },
+        "composer": {
+          "x": 190.7,
+          "y": 717,
+          "width": 199.3,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "NoView",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 7.6
+    },
+    {
+      "frame": 78,
+      "at": 4395.6,
+      "vsync": 4389.2,
+      "phase": "playing",
+      "mounted": true,
+      "blank": false,
+      "rows": 0,
+      "cover": 268.2,
+      "cards": [
+        "Tidy the notes|idle|123",
+        "Port the herd screen|working|231",
+        "Wire the hub link|idle|339"
+      ],
+      "marks": {
+        "thread-skeleton": {
+          "x": 268.2,
+          "y": 57,
+          "width": 121.8,
+          "height": 660,
+          "opacity": 1
+        },
+        "herd-list": {
+          "x": 0,
+          "y": 56,
+          "width": 390,
+          "height": 372,
+          "opacity": 1
+        },
+        "agent-card": {
+          "x": 27,
+          "y": 123,
+          "width": 336,
+          "height": 76,
+          "opacity": 1
+        },
+        "activity-quiet": {
+          "x": 320.2,
+          "y": 34,
+          "width": 69.8,
+          "height": 16,
+          "opacity": 1
+        },
+        "composer": {
+          "x": 268.2,
+          "y": 717,
+          "width": 121.8,
+          "height": 127,
+          "opacity": 1
+        }
+      },
+      "states": {
+        "link": "Live",
+        "activity": "Still",
+        "transcript": "NoView",
+        "presence": "Live",
+        "composer-failure": "NoFailure"
+      },
+      "added": [],
+      "removed": [],
+      "readMs": 7.8
+    }
+  ],
+  "shifts": [
+    {
+      "at": 4315.5,
+      "value": 0.05691350494926335,
+      "hadRecentInput": false,
+      "behindCover": true,
+      "sources": [
+        {
+          "element": "div[swipe-card]",
+          "from": {
+            "x": 12,
+            "y": 328,
+            "width": 366,
+            "height": 100
+          },
+          "to": {
+            "x": 12,
+            "y": 112,
+            "width": 366,
+            "height": 100
+          }
+        }
+      ]
+    }
+  ],
+  "steps": []
+}

@@ -134,6 +134,7 @@ the screen once per animation frame and fails on what a settled screenshot canno
   recordings before the fix had one such frame, 9 px with the content still. A landing can lift
   more than it grew, by what a nudge left, and passes: the check asks only that something landed.
   Stories drive no finger, so a thread's unit tests hold the fix and recorded fixtures hold the check.
+- A layout shift behind a pushed screen counts only once the screen has stopped over it, and stopped means the frame before the shift's own frame read the cover under the 2 px guard, not at exactly 0. Motion reports a slide over within its rest delta, the recorder reads ahead of Motion, and so the last read before the snap holds a tail: 0.4 to 0.8 px in the four `herd-order/opened-goes-first` logs that failed on the list reordering behind the chat, with that frame running 329 to 580 ms long under load. The same check over 63 recorded logs with a covered shift changed nothing else (measured). A leaving slide's first read in those logs sat 19 to 69 px off, far past the guard, so the first paint after it starts to leave still counts.
 - A baseline entry lists what a story always shows and what it only sometimes shows. A new key
   fails the story, an always key that did not happen fails it too and says to remove it, and a
   sometimes key does neither.
