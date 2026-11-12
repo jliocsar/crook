@@ -157,10 +157,22 @@ describe('prompts sent while Claude has others to read', () => {
         chunk(10, 20, [user(10, [new TextBlock({ text: 'Also the tests' })], { queued: true })]),
       )
       yield* eventually(() => {
-        expect(screen.getAllByText('Also the tests')).toHaveLength(1)
+        expect(screen.getAllByText('Queued')).toHaveLength(1)
       })
 
-      expect(screen.getAllByText('Queued')).toHaveLength(2)
+      const taken = present(
+        screen.getByText('Also the tests').closest('[data-slot="message"]'),
+        'The prompt Claude took',
+      )
+      const waiting = present(
+        screen.getByText('And the changelog').closest('[data-slot="message"]'),
+        'The prompt still queued',
+      )
+
+      expect(screen.getAllByText('Also the tests')).toHaveLength(1)
+      expect(taken.querySelector('[data-slot="message-meta"]')).toBeNull()
+      expect(waiting.textContent).toContain('Queued')
+      expect(taken.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
 
       yield* Queue.offer(transcript, chunk(20, 30, [prompt(20, 'And the changelog')]))
       yield* eventually(() => {

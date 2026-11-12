@@ -55,7 +55,6 @@ export type ChatItem = Data.TaggedEnum<{
     readonly key: string
     readonly text: string
     readonly images: readonly ImageBlock[]
-    readonly queued: boolean
   }
   ForeignPrompt: { readonly key: string; readonly sender: PromptSender; readonly words: string }
   AssistantText: { readonly key: string; readonly text: string; readonly failed: boolean }
@@ -598,7 +597,7 @@ const promptDraft = (message: UserMessage, key: string): readonly Draft[] => {
     : [
         draft(
           Option.match(senderOf(message), {
-            onNone: () => ChatItem.UserPrompt({ key, text, images, queued: message.queued }),
+            onNone: () => ChatItem.UserPrompt({ key, text, images }),
             onSome: (sender) => ChatItem.ForeignPrompt({ key, sender, words: text }),
           }),
         ),

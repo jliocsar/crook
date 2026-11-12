@@ -23,7 +23,6 @@ const prompts = (count: number): readonly ChatItem[] =>
       key: `prompt ${index}`,
       text: `prompt ${index}`,
       images: [],
-      queued: false,
     }),
   )
 
