@@ -388,7 +388,9 @@ describe('AgentChatScreen', () => {
       )
 
       expect(fitted.dataset['slot']).toBe('pushed-screen')
-      expect(fitted.style.height).toBe(`${window.innerHeight / 2}px`)
+      expect(fitted.querySelector<HTMLElement>('[data-slot="pushed-content"]')?.style.height).toBe(
+        `${window.innerHeight / 2}px`,
+      )
       expect(within(fitted).getByRole('heading', { level: 1 })).toBeDefined()
       expect(dock.querySelector('[data-slot="ask-dock"]')).not.toBeNull()
       expect(within(dock).getByRole('button', { name: '/compact' })).toBeDefined()

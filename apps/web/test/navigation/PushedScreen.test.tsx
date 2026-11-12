@@ -93,6 +93,7 @@ const renderAt = Effect.fn('renderAt')(function* (initialPath: string) {
 })
 
 const pushedScreen = () => document.querySelector<HTMLElement>('[data-slot="pushed-screen"]')
+const pushedContent = () => document.querySelector<HTMLElement>('[data-slot="pushed-content"]')
 
 function Agents() {
   const router = useRouter()
@@ -413,7 +414,7 @@ describe('PushedScreen', () => {
   )
 
   it.effect(
-    'fits the visible part of the viewport while the keyboard is up, and lets go after',
+    'fits its content to the visible part of the viewport while the keyboard is up, keeps its surface the whole window, and lets go after',
     () =>
       Effect.gen(function* () {
         const viewport = emulateVisualViewport()
@@ -428,17 +429,19 @@ describe('PushedScreen', () => {
           expect(pushedScreen()?.dataset['keyboard']).toBe('open')
         })
 
-        expect(pushedScreen()?.style.top).toBe(`${window.innerHeight / 4}px`)
-        expect(pushedScreen()?.style.height).toBe(`${window.innerHeight / 2}px`)
-        expect(pushedScreen()?.style.bottom).toBe('auto')
+        expect(pushedContent()?.style.top).toBe(`${window.innerHeight / 4}px`)
+        expect(pushedContent()?.style.height).toBe(`${window.innerHeight / 2}px`)
+        expect(pushedContent()?.style.bottom).toBe('auto')
+        expect(pushedScreen()?.style.top).toBe('')
+        expect(pushedScreen()?.style.height).toBe('')
 
         moveVisualViewport(viewport, { height: window.innerHeight, offsetTop: 0 })
         yield* eventually(() => {
           expect(pushedScreen()?.dataset['keyboard']).toBeUndefined()
         })
 
-        expect(pushedScreen()?.style.top).toBe('')
-        expect(pushedScreen()?.style.height).toBe('')
+        expect(pushedContent()?.style.top).toBe('')
+        expect(pushedContent()?.style.height).toBe('')
       }),
   )
 
@@ -487,7 +490,7 @@ describe('PushedScreen', () => {
       moveVisualViewport(viewport, { height: window.innerHeight / 2, scale: 2 })
 
       expect(pushedScreen()?.dataset['keyboard']).toBeUndefined()
-      expect(pushedScreen()?.style.height).toBe('')
+      expect(pushedContent()?.style.height).toBe('')
     }),
   )
 })

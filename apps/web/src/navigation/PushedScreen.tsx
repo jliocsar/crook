@@ -249,15 +249,21 @@ export function PushedScreen({ children }: { children: React.ReactNode }) {
       data-slot="pushed-screen"
       inert={covered || leaving}
       data-keyboard={Option.isSome(keyboardFit) ? 'open' : undefined}
-      className="bg-background fixed inset-y-0 z-30 flex flex-col shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.25)]"
-      style={{ ...COLUMN_STYLE, ...keyboardFitStyle(keyboardFit), x: offsetX }}
+      className="bg-background fixed inset-y-0 z-30 shadow-[-8px_0_24px_-12px_rgb(0_0_0/0.25)]"
+      style={{ ...COLUMN_STYLE, x: offsetX }}
     >
-      <PushedPositionContext value={constVoid}>
-        <PushedScreenContext value={Option.some({ back, edge })}>
-          <EdgeBack />
-          {children}
-        </PushedScreenContext>
-      </PushedPositionContext>
+      <div
+        data-slot="pushed-content"
+        className="absolute inset-x-0 inset-y-0 flex flex-col"
+        style={keyboardFitStyle(keyboardFit)}
+      >
+        <PushedPositionContext value={constVoid}>
+          <PushedScreenContext value={Option.some({ back, edge })}>
+            <EdgeBack />
+            {children}
+          </PushedScreenContext>
+        </PushedPositionContext>
+      </div>
     </motion.div>
   )
 }
