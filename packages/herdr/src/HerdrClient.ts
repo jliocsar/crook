@@ -16,6 +16,7 @@ import * as Schema from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
 import * as Socket from 'effect/socket/Socket'
 import * as Stream from 'effect/Stream'
+import * as Net from 'node:net'
 
 import { HerdrEvent, type Subscription } from '@crook/herdr/Events'
 import {
@@ -266,10 +267,36 @@ const fromSocketError = (socketPath: string, method: string) => (error: Socket.S
     }),
   )
 
+const connectionFailed = (cause: Error) =>
+  new Socket.SocketError({ reason: new Socket.SocketOpenError({ kind: 'Unknown', cause }) })
+
+const connectWriting = (socketPath: string, line: string) =>
+  Effect.acquireRelease(
+    Effect.callback<Net.Socket, Socket.SocketError>((resume) => {
+      const connection = Net.createConnection({ path: socketPath })
+
+      connection.once('connect', () => {
+        connection.write(line)
+        resume(Effect.succeed(connection))
+      })
+      connection.on('error', (cause) => {
+        resume(Effect.fail(connectionFailed(cause)))
+      })
+
+      return Effect.sync(() => {
+        connection.destroy()
+      })
+    }),
+    (connection) =>
+      Effect.sync(() => {
+        connection.destroy()
+      }),
+  )
+
 const exchange = (socketPath: string, method: string, line: string) =>
   Stream.unwrap(
-    Effect.map(BunSocket.makeNet({ path: socketPath }), (socket) =>
-      Stream.concat(Stream.make(`${line}\n`), Stream.never).pipe(
+    Effect.map(BunSocket.fromDuplex(connectWriting(socketPath, `${line}\n`)), (socket) =>
+      Stream.never.pipe(
         Stream.pipeThroughChannel(Socket.toChannelString(socket)),
         Stream.splitLines,
       ),
