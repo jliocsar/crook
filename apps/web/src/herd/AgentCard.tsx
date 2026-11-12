@@ -6,7 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type * as React from 'react'
 
 import { agentTitleOrChat } from '@crook/domain/AgentRow'
-import { AgentStatusIcon } from '@crook/web/herd/AgentStatusIcon'
+import { AgentAvatar } from '@crook/web/herd/AgentAvatar'
 import { AgentStatusPill } from '@crook/web/herd/AgentStatusPill'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { motionTokens } from '@crook/web/motion/MotionTokens'
@@ -111,28 +111,28 @@ export function AgentCard({ card }: { card: AgentCardModel }) {
     <span
       data-slot="agent-card"
       data-kept={kept ? '' : undefined}
-      className={cn('flex min-w-0 flex-1 flex-col gap-1.5', kept && KEPT_ROW_TONE)}
+      className={cn('flex min-w-0 flex-1 items-center gap-3', kept && KEPT_ROW_TONE)}
     >
-      <span
-        data-slot="agent-place"
-        className="text-muted-foreground flex min-w-0 items-center gap-1 text-[12px] leading-4"
-      >
-        <span className="text-foreground/70 truncate font-medium">{card.workspace}</span>
-        <span aria-hidden="true" className="opacity-50">
-          /
+      <AgentAvatar row={row} status={row.status} kept={kept} />
+      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <span
+          data-slot="agent-place"
+          className="text-muted-foreground flex min-w-0 items-center gap-1 text-[12px] leading-4"
+        >
+          <span className="text-foreground/70 truncate font-medium">{card.workspace}</span>
+          <span aria-hidden="true" className="opacity-50">
+            /
+          </span>
+          <span className="truncate">{card.tab}</span>
+          {card.pinned ? (
+            <Pin
+              role="img"
+              aria-label="Pinned"
+              data-slot="pin-marker"
+              className="ms-auto size-3.5 shrink-0"
+            />
+          ) : null}
         </span>
-        <span className="truncate">{card.tab}</span>
-        {card.pinned ? (
-          <Pin
-            role="img"
-            aria-label="Pinned"
-            data-slot="pin-marker"
-            className="ms-auto size-3.5 shrink-0"
-          />
-        ) : null}
-      </span>
-      <span className="flex min-w-0 items-center gap-2">
-        <AgentStatusIcon status={row.status} still={kept} />
         <span
           data-slot="agent-title"
           className={cn(
@@ -142,19 +142,19 @@ export function AgentCard({ card }: { card: AgentCardModel }) {
         >
           {agentTitleOrChat(row)}
         </span>
+        {Option.match(card.askSummary, {
+          onNone: () => (
+            <Reveal id="meta">
+              <AgentMeta card={card} />
+            </Reveal>
+          ),
+          onSome: (summary) => (
+            <Reveal id="ask">
+              <AgentAsk card={card} summary={summary} />
+            </Reveal>
+          ),
+        })}
       </span>
-      {Option.match(card.askSummary, {
-        onNone: () => (
-          <Reveal id="meta">
-            <AgentMeta card={card} />
-          </Reveal>
-        ),
-        onSome: (summary) => (
-          <Reveal id="ask">
-            <AgentAsk card={card} summary={summary} />
-          </Reveal>
-        ),
-      })}
     </span>
   )
 }

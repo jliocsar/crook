@@ -55,14 +55,16 @@ const STATUS_ICON_TONE = {
 export function AgentStatusIcon({
   status,
   still = false,
+  sizeClass = 'size-5',
 }: {
   status: AgentStatus
   still?: boolean
+  sizeClass?: string
 }) {
   const transform = useTransformString()
 
   return (
-    <span aria-hidden="true" data-slot="status-icon" className="relative size-5 shrink-0">
+    <span aria-hidden="true" data-slot="status-icon" className={cn('relative shrink-0', sizeClass)}>
       <AnimatePresence initial={false}>
         <motion.span
           key={status}

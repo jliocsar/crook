@@ -30,6 +30,7 @@
     "@tanstack/history": "1.162.5",
     "@tanstack/react-router": "1.170.45",
     "@tanstack/react-virtual": "^3.14.21",
+    "blobatar": "2.7.0",
     "cn": "^0.5.0",
     "effect": "catalog:",
     "idb-keyval": "^6.3.0",
