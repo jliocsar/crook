@@ -28,6 +28,7 @@ export function SettingsScreen() {
           status={hubStatus(connection)}
           address={window.location.host}
           version={version}
+          unavailable={dimsContent(connection)}
         />
       </div>
     </TabScreen>

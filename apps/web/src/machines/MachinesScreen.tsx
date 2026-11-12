@@ -6,6 +6,7 @@ import * as React from 'react'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
+import { NothingOnThisPhone } from '@crook/web/connection/NothingOnThisPhone'
 import { machinesLayoutAtom } from '@crook/web/atoms/Machines'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { AddMachineButton, AddMachineSheet } from '@crook/web/machines/AddMachineSheet'
@@ -35,7 +36,12 @@ const MachinesContent = React.memo(function MachinesContent({
   return (
     <StillUnderCover>
       {Option.match(layout, {
-        onNone: () => <MachinesSkeleton />,
+        onNone: () =>
+          dimsContent(connection) ? (
+            <NothingOnThisPhone title="No machines on this phone yet" />
+          ) : (
+            <MachinesSkeleton />
+          ),
         onSome: (machines) => (
           <Dimmed dimmed={dimsContent(connection)}>
             {Arr.isReadonlyArrayEmpty(machines.machines) ? (

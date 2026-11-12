@@ -1,5 +1,6 @@
 import { useAtomValue } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
@@ -14,6 +15,7 @@ import { useOpenRow } from '@crook/web/components/swipe/SwipeRow'
 import { BannerRoom } from '@crook/web/connection/ConnectionBanner'
 import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
+import { NothingOnThisPhone } from '@crook/web/connection/NothingOnThisPhone'
 import { SectionBody } from '@crook/web/herd/HerdLayout'
 import { AgentCards } from '@crook/web/herd/HerdList'
 import { AGENTS_UNSEEN } from '@crook/web/herd/HerdNotices'
@@ -29,7 +31,17 @@ import { SectionLabel } from '@crook/web/machines/SectionLabel'
 import { openedFromMachine } from '@crook/web/navigation/ChatOrigin'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
 
+type UnknownBody = 'loading' | 'away' | 'unknown'
+
 const BACK_LABEL = 'Back to machines'
+
+const unknownBodyOf = (herdKnown: boolean, connection: ConnectionView): UnknownBody => {
+  if (herdKnown) {
+    return 'unknown'
+  }
+
+  return dimsContent(connection) ? 'away' : 'loading'
+}
 
 function MachineAgents({
   model,
@@ -79,18 +91,26 @@ function MachineAgents({
   )
 }
 
-function UnknownMachine({ title, loading }: { title: string; loading: boolean }) {
+function UnknownMachine({ title, body }: { title: string; body: UnknownBody }) {
   return (
     <>
       <PushedHeader title={title} backLabel={BACK_LABEL} />
       <div className="pt-4">
-        {loading ? (
-          <HerdSkeleton label="Loading the machine" />
-        ) : (
-          <p className="text-muted-foreground px-4 text-sm">
-            crook doesn't know this machine. A forgotten machine comes back once its agent connects
-            again.
-          </p>
+        {Match.value(body).pipe(
+          Match.when('loading', () => <HerdSkeleton label="Loading the machine" />),
+          Match.when('away', () => (
+            <NothingOnThisPhone
+              title="Nothing about this machine on this phone yet"
+              description="It shows once crook reconnects."
+            />
+          )),
+          Match.when('unknown', () => (
+            <p className="text-muted-foreground px-4 text-sm">
+              crook doesn't know this machine. A forgotten machine comes back once its agent
+              connects again.
+            </p>
+          )),
+          Match.exhaustive,
         )}
       </div>
     </>
@@ -122,7 +142,7 @@ function MachineDetail({
   }, [forgetting.forgotten])
 
   if (!model.inHerd && !forgetting.pending && !forgetting.forgotten) {
-    return <UnknownMachine title={card.machine.label} loading={false} />
+    return <UnknownMachine title={card.machine.label} body="unknown" />
   }
 
   return (
@@ -181,7 +201,9 @@ export function MachineScreen({ machine }: { machine: MachineId }) {
   return (
     <PushedScreen>
       {Option.match(model, {
-        onNone: () => <UnknownMachine title={machine} loading={!herdKnown} />,
+        onNone: () => (
+          <UnknownMachine title={machine} body={unknownBodyOf(herdKnown, connection)} />
+        ),
         onSome: (found) => (
           <MachineDetail
             model={found}

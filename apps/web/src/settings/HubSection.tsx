@@ -7,14 +7,18 @@ import { StatusPill } from '@crook/web/components/ui/status-pill'
 import type { HubStatus } from '@crook/web/settings/SettingsLayout'
 import { SettingsSection } from '@crook/web/settings/SettingsSection'
 
+const VERSION_UNAVAILABLE = 'Shows once crook reconnects'
+
 export function HubSection({
   status,
   address,
   version,
+  unavailable,
 }: {
   status: HubStatus
   address: string
   version: Option.Option<CrookVersion>
+  unavailable: boolean
 }) {
   return (
     <SettingsSection title="Hub">
@@ -32,7 +36,12 @@ export function HubSection({
           {
             label: 'Version',
             value: Option.match(version, {
-              onNone: () => <Skeleton className="ml-auto w-12" />,
+              onNone: () =>
+                unavailable ? (
+                  <span className="text-muted-foreground font-sans">{VERSION_UNAVAILABLE}</span>
+                ) : (
+                  <Skeleton className="ml-auto w-12" />
+                ),
               onSome: (known) => known,
             }),
           },

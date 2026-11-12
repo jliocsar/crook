@@ -192,6 +192,32 @@ describe('MachinesScreen', () => {
     }),
   )
 
+  it.effect(
+    'stops standing in for the machines once the hub is unreachable with nothing cached',
+    () =>
+      Effect.gen(function* () {
+        yield* renderApp('/machines', stateWith(UNREACHABLE, Option.none()))
+
+        expect(
+          yield* Effect.promise(() => screen.findByText('No machines on this phone yet')),
+        ).toBeDefined()
+        expect(screen.queryByText('Loading your machines')).toBeNull()
+      }),
+  )
+
+  it.effect('stops standing in for a machine once the hub is unreachable with nothing cached', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/machines/laptop', stateWith(UNREACHABLE, Option.none()))
+
+      expect(
+        yield* Effect.promise(() =>
+          screen.findByText('Nothing about this machine on this phone yet'),
+        ),
+      ).toBeDefined()
+      expect(screen.queryByText('Loading the machine')).toBeNull()
+    }),
+  )
+
   it.effect('shows skeleton cards on a first load', () =>
     Effect.gen(function* () {
       yield* renderApp('/machines', stateWith(ANNOUNCED, Option.none()))

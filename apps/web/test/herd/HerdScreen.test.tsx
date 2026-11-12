@@ -204,6 +204,19 @@ describe('HerdScreen', () => {
     }),
   )
 
+  it.effect('stops standing in for a herd once the hub is unreachable with nothing cached', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/', stateWith(UNREACHABLE, Option.none()))
+
+      expect(
+        yield* Effect.promise(() => screen.findByText('No agents on this phone yet')),
+      ).toBeDefined()
+      expect(screen.getByText('They show once crook reconnects.')).toBeDefined()
+      expect(screen.queryByText('Loading your agents')).toBeNull()
+      expect(document.querySelector('[data-slot="herd-skeleton"]')).toBeNull()
+    }),
+  )
+
   it.effect('says nothing is running and offers a new agent', () =>
     Effect.gen(function* () {
       const { router } = yield* renderApp('/', liveWith(herd([machine(LAPTOP, [])])))
