@@ -150,4 +150,69 @@ describe('a chat draft', () => {
       expect(headOf(link)).toEqual({ text: KEPT_TEXT, attachments: [] })
     }),
   )
+
+  it.effect('is dropped when the hub takes the prompt after the chat was left', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* openChat([
+        [KEY, new ComposerDraft({ text: KEPT_TEXT, attachments: [] })],
+      ])
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(new Prompt({ pane: PANE, text: KEPT_TEXT, attachments: [] }))),
+      )
+      yield* link.commandAnswers.close
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent)).toHaveLength(1)
+      })
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByRole('textbox')).toBeNull()
+      })
+      yield* link.commandAnswers.open
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.draftStore.entries).size).toBe(0)
+      })
+
+      yield* Effect.promise(() =>
+        router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+      )
+      yield* eventually(() => {
+        expect(field().value).toBe('')
+      })
+    }),
+  )
+
+  it.effect('stays when the prompt is refused after the chat was left', () =>
+    Effect.gen(function* () {
+      const { link, router } = yield* openChat([
+        [KEY, new ComposerDraft({ text: KEPT_TEXT, attachments: [] })],
+      ])
+      const timedOut = new CommandTimedOut({
+        machine: LAPTOP,
+        timeout: Duration.seconds(COMMAND_TIMEOUT_SECONDS),
+      })
+
+      yield* Ref.set(link.commandAnswer, Exit.fail(timedOut))
+      yield* link.commandAnswers.close
+      yield* click(yield* findByRole('button', 'Send'))
+      yield* eventually(() => {
+        expect(Ref.getUnsafe(link.sent)).toHaveLength(1)
+      })
+      yield* Effect.promise(() => router.navigate({ to: '/' }))
+      yield* eventually(() => {
+        expect(screen.queryByRole('textbox')).toBeNull()
+      })
+      yield* link.commandAnswers.open
+      yield* Effect.promise(() =>
+        router.navigate({ to: '/m/$machine/p/$pane', params: { machine: LAPTOP, pane: PANE } }),
+      )
+      yield* eventually(() => {
+        expect(field().value).toBe(KEPT_TEXT)
+      })
+
+      expect(headOf(link)).toEqual({ text: KEPT_TEXT, attachments: [] })
+    }),
+  )
 })

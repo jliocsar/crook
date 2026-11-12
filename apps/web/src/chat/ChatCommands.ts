@@ -1,4 +1,4 @@
-import { useAtom } from '@effect/atom-react/Hooks'
+import { useAtom, useAtomSet } from '@effect/atom-react/Hooks'
 import { useNavigate } from '@tanstack/react-router'
 import * as Arr from 'effect/Array'
 import * as Duration from 'effect/Duration'
@@ -36,6 +36,8 @@ import {
 } from '@crook/web/atoms/ActionProgress'
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { alwaysNotesAtom } from '@crook/web/atoms/Chat'
+import { clearSentDraftAtom, SentDraft } from '@crook/web/atoms/SentDrafts'
+import { DraftKey } from '@crook/web/cache/DraftCache'
 import type { OpenedAgent } from '@crook/web/atoms/Herd'
 import {
   answerHeard,
@@ -132,7 +134,6 @@ interface ChatCommandsInput {
   readonly draft: string
   readonly setDraft: (draft: string) => void
   readonly attachments: readonly DraftAttachment[]
-  readonly setAttachments: (attachments: readonly DraftAttachment[]) => void
   readonly onPromptSent: () => void
 }
 
@@ -160,7 +161,6 @@ export interface PromptSend {
 }
 
 const PENDING_PROMPT_KEY = 'pending prompt'
-const DIGEST_SEPARATOR = ','
 const ATTACHED_LABEL = 'Attached'
 const MANUAL_COMPACT = 'manual'
 
@@ -364,45 +364,6 @@ const useRestoreUndeliveredDraft = (
       setDraft(undelivered)
     }
   }, [undelivered])
-}
-
-const useClearSentDraft = (
-  action: CommandAction,
-  draft: string,
-  setDraft: (draft: string) => void,
-) => {
-  const sent = Option.getOrElse(lastTextWhen(action, isAcknowledged), () => '')
-
-  React.useEffect(() => {
-    if (sent !== '' && draft.trim() === sent) {
-      setDraft('')
-    }
-  }, [sent])
-}
-
-const sentDigestsOf = (action: CommandAction): string =>
-  pipe(
-    Option.liftPredicate(action, (candidate) => isAcknowledged(candidate.state)),
-    Option.flatMap((kept) => kept.last),
-    Option.map((command) => attachmentsOf(command).map((attachment) => attachment.digest)),
-    Option.getOrElse((): readonly string[] => []),
-  ).join(DIGEST_SEPARATOR)
-
-const useClearSentAttachments = (
-  action: CommandAction,
-  attachments: readonly DraftAttachment[],
-  setAttachments: (attachments: readonly DraftAttachment[]) => void,
-) => {
-  const sent = sentDigestsOf(action)
-
-  React.useEffect(() => {
-    if (
-      sent !== '' &&
-      attachments.map((attachment) => attachment.digest).join(DIGEST_SEPARATOR) === sent
-    ) {
-      setAttachments([])
-    }
-  }, [sent])
 }
 
 const shownPromptText = (command: Command, text: string): string =>
@@ -670,13 +631,13 @@ export const useChatCommands = ({
   draft,
   setDraft,
   attachments,
-  setAttachments,
   onPromptSent,
 }: ChatCommandsInput): ChatCommands => {
   const { machine, pane } = opened
   const prompt = useCommandAction(machine)
   const stop = useCommandAction(machine)
   const restart = useCommandAction(machine)
+  const clearSentDraft = useAtomSet(clearSentDraftAtom)
   const answer = useCommandAction(machine)
   const working = Option.isSome(activityView(activity).workingSince)
   const promptInFlight = isPromptInFlight(prompt)
@@ -725,8 +686,6 @@ export const useChatCommands = ({
   const mode: ComposerMode = Option.isSome(openAsk) ? 'decline' : 'prompt'
   const answering = Option.isSome(openAsk) && isAnswerUnderway(askAnswer.state)
 
-  useClearSentDraft(prompt, draft, setDraft)
-  useClearSentAttachments(prompt, attachments, setAttachments)
   useRestoreUndeliveredDraft(prompt, draft, setDraft)
   useRestartInPlace(machine, restart)
 
@@ -737,7 +696,14 @@ export const useChatCommands = ({
       prompt: Option.map(textOf(command), (text) => shownPromptText(command, text)),
       working,
     })
-    prompt.send(command, uploads)
+    clearSentDraft(
+      new SentDraft({
+        key: prompt.send(command, uploads),
+        draft: new DraftKey({ machine, pane }),
+        text: textOf(command),
+        digests: Arr.map(attachmentsOf(command), (attachment) => attachment.digest),
+      }),
+    )
   }
 
   const send = (text: string) => {
