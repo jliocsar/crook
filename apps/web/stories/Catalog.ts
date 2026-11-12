@@ -12,6 +12,7 @@ import { SUBAGENT_STORIES } from './catalog/Subagent.tsx'
 import { HERD_UNDER_CHAT_STORIES } from './catalog/HerdUnderChat.tsx'
 import { TRANSITION_STORIES } from './catalog/Transitions.tsx'
 import { GATE_STORIES } from './catalog/Gate.tsx'
+import { HERD_ORDER_STORIES } from './catalog/HerdOrder.tsx'
 import { HERD_STORIES } from './catalog/Herd.tsx'
 import { LINK_STORIES } from './catalog/Link.tsx'
 import { MACHINE_STORIES, MACHINES_STORIES } from './catalog/Machines.tsx'
@@ -26,6 +27,7 @@ const groupOf = (group: string, makers: readonly StoryMaker[]): readonly Story[]
 export const CATALOG_STORIES: readonly Story[] = [
   ...groupOf('gate', GATE_STORIES),
   ...groupOf('herd', HERD_STORIES),
+  ...groupOf('herd-order', HERD_ORDER_STORIES),
   ...groupOf('machines', MACHINES_STORIES),
   ...groupOf('machine', MACHINE_STORIES),
   ...groupOf('new-agent', NEW_AGENT_STORIES),

@@ -19,6 +19,7 @@ import type { HubUploads } from '@crook/web/rpc/HubUploads'
 import { COLD_START, HubLinkState } from '@crook/web/rpc/HubLinkState'
 
 import { appRegistry, appRouter, AppTree } from '../test/AppWiring.tsx'
+import type { PhoneMarks } from '../test/AppWiring.tsx'
 import {
   makeFakeBrowser,
   makeFakeHubLink,
@@ -111,6 +112,7 @@ export interface StorySpec<Stage> {
 export interface LinkStorySpec extends StorySpec<LinkStage> {
   readonly link: HubLinkState | typeof BEFORE_FIRST_VALUE
   readonly sentBound?: Duration.Duration
+  readonly marks?: PhoneMarks
 }
 
 export interface BrowserStorySpec extends StorySpec<BrowserStage> {
@@ -188,9 +190,10 @@ const running = <Stage extends AppHandles>(spec: StorySpec<Stage>, stage: Stage)
 
 export const acquireRegistry = (
   hub: Layer.Layer<HubLink | TranscriptCache | HubUploads | DraftCache>,
+  marks: PhoneMarks = {},
 ) =>
   Effect.acquireRelease(
-    Effect.sync(() => appRegistry(hub)),
+    Effect.sync(() => appRegistry(hub, marks)),
     (registry) =>
       Effect.sync(() => {
         registry.dispose()
@@ -221,6 +224,7 @@ export const linkStory =
         spec.sentBound === undefined
           ? link.layer
           : Layer.merge(link.layer, Layer.succeed(SentBound, spec.sentBound)),
+        spec.marks,
       )
 
       return yield* arranged(spec, { link, registry, router: appRouter(spec.path) })

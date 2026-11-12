@@ -245,6 +245,8 @@ export const TIMELINE_EXPECTATIONS = {
     cards: inSequence('agent-card'),
     herdr: inSequence('herdr-lost'),
   }),
+  'herd-order/steady-through-flips': story({ cards: inSequence('agent-card') }),
+  'herd-order/opened-goes-first': story(A_CHAT),
   'machine/herdr-lost-since-start-then-back': story({
     cards: inSequence('agent-card'),
     herdr: inSequence('herdr-lost'),

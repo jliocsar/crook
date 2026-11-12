@@ -5,6 +5,7 @@ import * as Duration from 'effect/Duration'
 import * as Option from 'effect/Option'
 import * as Struct from 'effect/Struct'
 
+import { noOrderHints } from '@crook/domain/AgentPriority'
 import { CrookVersion } from '@crook/domain/CrookVersion'
 import { HerdMachine, HerdView } from '@crook/domain/HerdView'
 import { HerdrLink } from '@crook/domain/HerdrLink'
@@ -115,7 +116,7 @@ describe('machine detail', () => {
     expect(agentVersionText(desk.machine, HUB)).toBe('0.1.0')
     expect(herdrVersionText(desk.machine)).toBe('unknown')
     expect(
-      Option.flatMap(machineDetail(viewOf([laptop]), LAPTOP), (detail) =>
+      Option.flatMap(machineDetail(viewOf([laptop]), LAPTOP, noOrderHints), (detail) =>
         Arr.get(aboutRows(detail, FIVE_MINUTES_LATER), 1),
       ),
     ).toEqual(Option.some({ label: 'crook agent', value: '0.0.9, hub has 0.1.0', warn: true }))
@@ -123,8 +124,10 @@ describe('machine detail', () => {
 
   it('says herdr is lost on a machine that is online, and only there', () => {
     const herdrRowOf = (herdMachine: HerdMachine) =>
-      Option.flatMap(machineDetail(viewOf([herdMachine]), herdMachine.machine.id), (detail) =>
-        Arr.findFirst(aboutRows(detail, FIVE_MINUTES_LATER), (row) => row.label === 'Herdr'),
+      Option.flatMap(
+        machineDetail(viewOf([herdMachine]), herdMachine.machine.id, noOrderHints),
+        (detail) =>
+          Arr.findFirst(aboutRows(detail, FIVE_MINUTES_LATER), (row) => row.label === 'Herdr'),
       )
 
     expect(cardOf(withHerdrLost(laptop)).herdrLostAt).toEqual(Option.some(START))
@@ -138,7 +141,7 @@ describe('machine detail', () => {
 
   it('says it cannot see the agents of a machine that lost herdr with none on record', () => {
     const unseen = machine(LAPTOP, [], { herdrLostAt: START })
-    const heading = Option.map(machineDetail(viewOf([unseen]), LAPTOP), (detail) =>
+    const heading = Option.map(machineDetail(viewOf([unseen]), LAPTOP, noOrderHints), (detail) =>
       agentsHeading(detail.body),
     )
 
@@ -150,18 +153,19 @@ describe('machine detail', () => {
 
   it('hides the agents of an offline machine and counts the rest', () => {
     const heading = (herdMachine: HerdMachine) =>
-      Option.map(machineDetail(viewOf([herdMachine]), herdMachine.machine.id), (detail) =>
-        agentsHeading(detail.body),
+      Option.map(
+        machineDetail(viewOf([herdMachine]), herdMachine.machine.id, noOrderHints),
+        (detail) => agentsHeading(detail.body),
       )
 
     expect(heading(laptop)).toEqual(Option.some('Agents · 3'))
     expect(heading(desk)).toEqual(Option.some('Agents'))
     expect(heading(machine(LAPTOP, []))).toEqual(Option.some('Agents · 0'))
-    expect(machineDetail(viewOf([laptop]), DESK)).toEqual(Option.none())
+    expect(machineDetail(viewOf([laptop]), DESK, noOrderHints)).toEqual(Option.none())
   })
 
   it('keeps showing a machine that just left the herd', () => {
-    const shown = keepWhileGone(machineDetail(viewOf([desk]), DESK), Option.none())
+    const shown = keepWhileGone(machineDetail(viewOf([desk]), DESK, noOrderHints), Option.none())
     const gone = keepWhileGone(Option.none(), shown)
 
     expect(Option.map(shown, (model) => model.inHerd)).toEqual(Option.some(true))

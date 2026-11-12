@@ -6,6 +6,7 @@ import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HubLinkState } from '@crook/web/rpc/HubLinkState'
 
 import { appRegistry, appRouter, AppTree, liveWith } from './AppWiring.tsx'
+import type { PhoneMarks } from './AppWiring.tsx'
 import { herd, LAPTOP, machine } from './HerdFixtures.ts'
 import { makeFakeHubLink } from './HubFakes.ts'
 import type { FakeHubLink } from './HubFakes.ts'
@@ -16,6 +17,7 @@ export const renderApp = Effect.fn('renderApp')(function* (
   path: string,
   initial: HubLinkState,
   arrange: (link: FakeHubLink) => Effect.Effect<void> = () => Effect.void,
+  marks: PhoneMarks = {},
 ) {
   const link = yield* makeFakeHubLink(initial)
 
@@ -24,7 +26,7 @@ export const renderApp = Effect.fn('renderApp')(function* (
   const router = appRouter(path)
   const { registry } = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const made = appRegistry(link.layer)
+      const made = appRegistry(link.layer, marks)
       const rendered = render(<AppTree registry={made} router={router} />)
 
       return { registry: made, rendered }

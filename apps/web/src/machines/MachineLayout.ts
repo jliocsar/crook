@@ -5,6 +5,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 
 import { needsYouCount } from '@crook/domain/AgentPriority'
+import type { OrderHints } from '@crook/domain/AgentPriority'
 import { isBehind } from '@crook/domain/CrookVersion'
 import type { CrookVersion } from '@crook/domain/CrookVersion'
 import { findMachine } from '@crook/domain/HerdView'
@@ -68,13 +69,14 @@ export const machinesLayout = (view: HerdView): MachinesLayout => ({
 export const machineDetail = (
   view: HerdView,
   machine: MachineId,
+  hints: OrderHints,
 ): Option.Option<MachineDetailModel> =>
   pipe(
     findMachine(view, machine),
     Option.map((herdMachine) => ({
       card: machineCard(herdMachine, view.hubVersion),
       hubVersion: view.hubVersion,
-      body: bodyFor(herdMachine, false),
+      body: bodyFor(herdMachine, false, hints),
     })),
   )
 

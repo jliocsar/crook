@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Option from 'effect/Option'
 
+import { noOrderHints } from '@crook/domain/AgentPriority'
 import { findAgent, herdLayout, SectionBody } from '@crook/web/herd/HerdLayout'
 import type { MachineSectionModel } from '@crook/web/herd/HerdLayout'
 
@@ -37,6 +38,7 @@ describe('herdLayout', () => {
           agent('w1:p4', 'done', { secondsAgo: 5 }),
         ]),
       ]),
+      noOrderHints,
     )
     const [laptop] = layout.sections
 
@@ -48,6 +50,7 @@ describe('herdLayout', () => {
   it('names the workspace and tab, and marks only the loud cards', () => {
     const [laptop] = herdLayout(
       herd([machine(LAPTOP, [agent('w1:p1', 'working'), agent('w1:p2', 'blocked')])]),
+      noOrderHints,
     ).sections
     const cards =
       laptop === undefined
@@ -66,14 +69,17 @@ describe('herdLayout', () => {
   })
 
   it('says nothing is running when no machine has an agent', () => {
-    const layout = herdLayout(herd([machine(LAPTOP, []), machine(DESK, [])]))
+    const layout = herdLayout(herd([machine(LAPTOP, []), machine(DESK, [])]), noOrderHints)
 
     expect(layout.notice).toEqual(Option.some('nothingRunning'))
     expect(layout.sections.map(bodyKind)).toEqual(['agents', 'agents'])
   })
 
   it('says no agents under an empty machine next to a busy one', () => {
-    const layout = herdLayout(herd([machine(LAPTOP, [agent('w1:p1', 'idle')]), machine(DESK, [])]))
+    const layout = herdLayout(
+      herd([machine(LAPTOP, [agent('w1:p1', 'idle')]), machine(DESK, [])]),
+      noOrderHints,
+    )
 
     expect(layout.notice).toEqual(Option.none())
     expect(layout.sections.map(bodyKind)).toEqual(['agents', 'noAgents'])
@@ -85,6 +91,7 @@ describe('herdLayout', () => {
         machine(LAPTOP, [agent('w1:p1', 'blocked')]),
         machine(DESK, [agent('w1:p1', 'blocked')], { connection: 'offline' }),
       ]),
+      noOrderHints,
     )
 
     expect(layout.sections.map(bodyKind)).toEqual(['agents', 'offline'])
@@ -92,10 +99,10 @@ describe('herdLayout', () => {
   })
 
   it('says when every machine is offline, and when there are none', () => {
-    expect(herdLayout(herd([machine(LAPTOP, [], { connection: 'offline' })])).notice).toEqual(
-      Option.some('allOffline'),
-    )
-    expect(herdLayout(herd([])).notice).toEqual(Option.some('noMachines'))
+    expect(
+      herdLayout(herd([machine(LAPTOP, [], { connection: 'offline' })]), noOrderHints).notice,
+    ).toEqual(Option.some('allOffline'))
+    expect(herdLayout(herd([]), noOrderHints).notice).toEqual(Option.some('noMachines'))
   })
 
   it('says nothing is running only when no machine with nothing to show has lost herdr', () => {
@@ -104,7 +111,7 @@ describe('herdLayout', () => {
     const offline = machine(DESK, [], { connection: 'offline' })
 
     const shape = (machines: Parameters<typeof herd>[0]) => {
-      const layout = herdLayout(herd(machines))
+      const layout = herdLayout(herd(machines), noOrderHints)
 
       return [layout.notice, layout.sections.map(bodyKind)]
     }
@@ -128,6 +135,7 @@ describe('herdLayout', () => {
   it('keeps a lost machine lost and unseen through a reconnect', () => {
     const [section] = herdLayout(
       herd([machine(LAPTOP, [], { connection: 'reconnecting', herdrLostAt: START })]),
+      noOrderHints,
     ).sections
 
     expect(bodyKind(section)).toBe('agentsUnseen')
@@ -140,6 +148,7 @@ describe('herdLayout', () => {
         machine(LAPTOP, [agent('w1:p1', 'working')], { herdrLostAt: START }),
         machine(DESK, [agent('w2:p1', 'working')]),
       ]),
+      noOrderHints,
     )
     const lostOnCards = layout.sections.map((section) =>
       SectionBody.$match(section.body, {

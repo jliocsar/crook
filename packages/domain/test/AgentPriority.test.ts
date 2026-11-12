@@ -1,14 +1,17 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
+import * as HashSet from 'effect/HashSet'
 import * as Option from 'effect/Option'
 
 import {
   herdNeedsYouCount,
   needsYou,
   needsYouCount,
+  noOrderHints,
   orderAgents,
 } from '@crook/domain/AgentPriority'
+import type { OrderHints } from '@crook/domain/AgentPriority'
 import { AgentRow } from '@crook/domain/AgentRow'
 import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { CrookVersion } from '@crook/domain/CrookVersion'
@@ -20,6 +23,7 @@ import {
   PaneId,
   TabId,
   TerminalId,
+  toGlobalPaneId,
   WorkspaceId,
 } from '@crook/domain/Ids'
 import { Machine, type MachineConnection } from '@crook/domain/Machine'
@@ -90,8 +94,27 @@ const machineWith = (
 
 const panesOf = (rows: readonly AgentRow[]) => rows.map((row) => row.pane)
 
+const LAPTOP = MachineId.make('laptop')
+
+const hintsWith = (options: {
+  readonly drafted?: readonly string[]
+  readonly openedMinutesIn?: Readonly<Record<string, number>>
+}): OrderHints => ({
+  drafted: HashSet.fromIterable(
+    (options.drafted ?? []).map((pane) => toGlobalPaneId(LAPTOP, PaneId.make(pane))),
+  ),
+  openedAt: {
+    [LAPTOP]: Object.fromEntries(
+      Object.entries(options.openedMinutesIn ?? {}).map(([pane, minutesIn]) => [
+        PaneId.make(pane),
+        DateTime.addDuration(START, Duration.minutes(minutesIn)),
+      ]),
+    ),
+  },
+})
+
 describe('orderAgents', () => {
-  it('puts blocked first, then unseen done, working, settled and unknown', () => {
+  it('puts blocked first, then unseen done, then the rest in the published order', () => {
     const machine = machineWith(
       [
         agent('unknown', 'unknown', 0),
@@ -104,13 +127,13 @@ describe('orderAgents', () => {
       { seen: ['seen-done'] },
     )
 
-    expect(panesOf(orderAgents(machine))).toEqual([
+    expect(panesOf(orderAgents(machine, noOrderHints))).toEqual([
       'blocked',
       'unseen-done',
-      'working',
-      'idle',
-      'seen-done',
       'unknown',
+      'idle',
+      'working',
+      'seen-done',
     ])
   })
 
@@ -122,7 +145,7 @@ describe('orderAgents', () => {
       agent('blocked-early', 'blocked', 2),
     ])
 
-    expect(panesOf(orderAgents(machine))).toEqual([
+    expect(panesOf(orderAgents(machine, noOrderHints))).toEqual([
       'blocked-early',
       'blocked-late',
       'done-late',
@@ -130,23 +153,34 @@ describe('orderAgents', () => {
     ])
   })
 
-  it('keeps the published order inside the working, settled and unknown tiers', () => {
-    const machine = machineWith(
-      [
-        agent('working-new', 'working', 9),
-        agent('idle-new', 'idle', 9),
-        agent('working-old', 'working', 1),
-        agent('done-seen-old', 'done', 1),
-      ],
-      { seen: ['done-seen-old'] },
-    )
-
-    expect(panesOf(orderAgents(machine))).toEqual([
-      'working-new',
-      'working-old',
-      'idle-new',
-      'done-seen-old',
+  it('lists the rest by when their chat was last opened, the never opened after in the published order', () => {
+    const machine = machineWith([
+      agent('never-a', 'working', 0),
+      agent('opened-early', 'idle', 0),
+      agent('never-b', 'unknown', 0),
+      agent('opened-late', 'working', 0),
     ])
+    const hints = hintsWith({ openedMinutesIn: { 'opened-early': 1, 'opened-late': 7 } })
+
+    expect(panesOf(orderAgents(machine, hints))).toEqual([
+      'opened-late',
+      'opened-early',
+      'never-a',
+      'never-b',
+    ])
+  })
+
+  it('keeps a card in place when its agent flips between working and settled', () => {
+    const statuses = (first: AgentStatus, second: AgentStatus) =>
+      machineWith(
+        [agent('first', first, 0), agent('second', second, 4), agent('third', 'idle', 9)],
+        { seen: ['first', 'second'] },
+      )
+    const hints = hintsWith({ openedMinutesIn: { first: 3, second: 2 } })
+
+    expect(panesOf(orderAgents(statuses('working', 'idle'), hints))).toEqual(
+      panesOf(orderAgents(statuses('done', 'working'), hints)),
+    )
   })
 
   it('puts pinned agents first, ordered among themselves like the rest', () => {
@@ -160,12 +194,45 @@ describe('orderAgents', () => {
       { pinned: ['pinned-idle', 'pinned-blocked'] },
     )
 
-    expect(panesOf(orderAgents(machine))).toEqual([
+    expect(panesOf(orderAgents(machine, noOrderHints))).toEqual([
       'pinned-blocked',
       'pinned-idle',
       'blocked',
       'working',
     ])
+  })
+
+  it('puts agents with a draft after the pinned ones and before everything else', () => {
+    const machine = machineWith(
+      [
+        agent('blocked', 'blocked', 0),
+        agent('drafted-idle', 'idle', 0),
+        agent('pinned-working', 'working', 0),
+        agent('drafted-blocked', 'blocked', 3),
+        agent('pinned-drafted', 'idle', 0),
+      ],
+      { pinned: ['pinned-working', 'pinned-drafted'] },
+    )
+    const hints = hintsWith({ drafted: ['drafted-idle', 'drafted-blocked', 'pinned-drafted'] })
+
+    expect(panesOf(orderAgents(machine, hints))).toEqual([
+      'pinned-drafted',
+      'pinned-working',
+      'drafted-blocked',
+      'drafted-idle',
+      'blocked',
+    ])
+  })
+
+  it('reads drafts and opened times for its own machine only', () => {
+    const machine = machineWith([agent('w1:p1', 'idle', 0), agent('w1:p2', 'idle', 0)])
+    const elsewhere = MachineId.make('desk')
+    const hints: OrderHints = {
+      drafted: HashSet.make(toGlobalPaneId(elsewhere, PaneId.make('w1:p2'))),
+      openedAt: { [elsewhere]: { [PaneId.make('w1:p2')]: START } },
+    }
+
+    expect(panesOf(orderAgents(machine, hints))).toEqual(['w1:p1', 'w1:p2'])
   })
 
   it('still counts a pinned agent that needs you, and never counts one for being pinned', () => {
@@ -179,7 +246,7 @@ describe('orderAgents', () => {
   it('has nothing to order before the machine has published a state', () => {
     const machine = machineWith([agent('blocked', 'blocked', 0)], { published: false })
 
-    expect(orderAgents(machine)).toEqual([])
+    expect(orderAgents(machine, noOrderHints)).toEqual([])
   })
 })
 

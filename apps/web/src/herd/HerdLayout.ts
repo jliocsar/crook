@@ -5,6 +5,7 @@ import { pipe } from 'effect/Function'
 import * as Option from 'effect/Option'
 
 import { isPinned, needsYou, needsYouCount, orderAgents } from '@crook/domain/AgentPriority'
+import type { OrderHints } from '@crook/domain/AgentPriority'
 import { type AgentRow, pendingAskSummary } from '@crook/domain/AgentRow'
 import { findMachine, isOnline } from '@crook/domain/HerdView'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
@@ -80,8 +81,8 @@ export const cardFor = (herdMachine: HerdMachine) => {
   })
 }
 
-const agentCards = (herdMachine: HerdMachine): AgentCardModel[] =>
-  Arr.map(orderAgents(herdMachine), cardFor(herdMachine))
+const agentCards = (herdMachine: HerdMachine, hints: OrderHints): AgentCardModel[] =>
+  Arr.map(orderAgents(herdMachine, hints), cardFor(herdMachine))
 
 const hasNoAgents = (herdMachine: HerdMachine) => agentsIn(herdMachine.state).length === 0
 
@@ -105,7 +106,11 @@ const noticeFor = (view: HerdView): Option.Option<HerdNotice> => {
     : Option.none()
 }
 
-export const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): SectionBody => {
+export const bodyFor = (
+  herdMachine: HerdMachine,
+  nothingRunning: boolean,
+  hints: OrderHints,
+): SectionBody => {
   if (isOffline(herdMachine.machine)) {
     return SectionBody.Offline()
   }
@@ -118,10 +123,10 @@ export const bodyFor = (herdMachine: HerdMachine, nothingRunning: boolean): Sect
     return SectionBody.NoAgents()
   }
 
-  return SectionBody.Agents({ agents: agentCards(herdMachine) })
+  return SectionBody.Agents({ agents: agentCards(herdMachine, hints) })
 }
 
-export const herdLayout = (view: HerdView): HerdLayout => {
+export const herdLayout = (view: HerdView, hints: OrderHints): HerdLayout => {
   const notice = noticeFor(view)
   const nothingRunning = Option.contains(notice, 'nothingRunning')
 
@@ -131,7 +136,7 @@ export const herdLayout = (view: HerdView): HerdLayout => {
       machine: herdMachine.machine,
       needsYou: needsYouCount(herdMachine),
       herdrLostAt: herdrLostAtOf(herdMachine),
-      body: bodyFor(herdMachine, nothingRunning),
+      body: bodyFor(herdMachine, nothingRunning, hints),
     })),
   }
 }

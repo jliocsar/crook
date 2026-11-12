@@ -3,13 +3,16 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import * as DateTime from 'effect/DateTime'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import { afterEach, beforeEach, vi } from 'vitest'
 
+import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { PermissionAsk, RunCommand } from '@crook/domain/Ask'
-import { AskId } from '@crook/domain/Ids'
+import { AskId, PaneId } from '@crook/domain/Ids'
+import { ComposerDraft, DraftKey } from '@crook/web/cache/DraftCache'
 import { ANNOUNCED, EXPIRED, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
@@ -26,6 +29,15 @@ const busyLaptop = machine(LAPTOP, [
   agent('w1:p3', 'done', { title: 'Write the banner', secondsAgo: 7200 }),
 ])
 
+const QUIET_TITLES = ['Port the herd screen', 'Wire the hub link', 'Tidy the notes']
+
+const quietLaptop = (first: AgentStatus, second: AgentStatus) =>
+  machine(LAPTOP, [
+    agent('w1:p1', first, { title: 'Port the herd screen' }),
+    agent('w1:p2', second, { title: 'Wire the hub link' }),
+    agent('w1:p3', 'idle', { title: 'Tidy the notes' }),
+  ])
+
 const cardTitles = () =>
   Array.from(document.querySelectorAll('[data-slot="agent-title"]'), (title) => title.textContent)
 
@@ -34,6 +46,16 @@ const visibleText = (element: Element | null | undefined) =>
     .filter((child) => !child.classList.contains('sr-only'))
     .map((child) => child.textContent)
     .join(' ')
+
+const statusIcons = () =>
+  Array.from(document.querySelectorAll('[data-slot="status-icon"] > *'), (icon) =>
+    icon.getAttribute('data-status'),
+  )
+
+const titlesOnceShown = Effect.map(
+  Effect.promise(() => screen.findByText('Port the herd screen')),
+  () => cardTitles(),
+)
 
 const statusPills = () =>
   Array.from(document.querySelectorAll('[data-slot="agent-status"]'), visibleText)
@@ -443,6 +465,82 @@ describe('HerdScreen', () => {
       yield* wait(0)
 
       expect(Ref.getUnsafe(link.seen)).toEqual([opened])
+    }),
+  )
+
+  it.effect('lists the agent whose chat you opened last first among the rest', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/', liveWith(herd([quietLaptop('working', 'idle')])))
+
+      expect(yield* titlesOnceShown).toEqual(QUIET_TITLES)
+
+      yield* click(screen.getByText('Tidy the notes'))
+      yield* click(yield* findByRole('button', 'Back to Agents'))
+      yield* eventually(() => {
+        expect(cardTitles()).toEqual([
+          'Tidy the notes',
+          'Port the herd screen',
+          'Wire the hub link',
+        ])
+      })
+    }),
+  )
+
+  it.effect('keeps every card in place when an agent flips between working and settled', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp('/', liveWith(herd([quietLaptop('working', 'idle')])))
+
+      expect(yield* titlesOnceShown).toEqual(QUIET_TITLES)
+
+      yield* SubscriptionRef.set(link.state, liveWith(herd([quietLaptop('idle', 'working')])))
+      yield* eventually(() => {
+        expect(statusIcons()[0]).toBe('idle')
+      })
+
+      expect(cardTitles()).toEqual(QUIET_TITLES)
+    }),
+  )
+
+  it.effect('remembers which chat was opened last after a restart', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/', liveWith(herd([quietLaptop('working', 'idle')])), undefined, {
+        opened: { [LAPTOP]: { [PaneId.make('w1:p2')]: START } },
+      })
+
+      expect(yield* titlesOnceShown).toEqual([
+        'Wire the hub link',
+        'Port the herd screen',
+        'Tidy the notes',
+      ])
+    }),
+  )
+
+  it.effect('puts an agent with a draft right after the pinned ones', () =>
+    Effect.gen(function* () {
+      const pinnedLaptop = machine(
+        LAPTOP,
+        [
+          agent('w1:p1', 'blocked', { title: 'Port the herd screen' }),
+          agent('w1:p2', 'idle', { title: 'Pinned to the top' }),
+          agent('w1:p3', 'working', { title: 'Half a prompt typed' }),
+        ],
+        { pinned: ['w1:p2'] },
+      )
+
+      yield* renderApp('/', liveWith(herd([pinnedLaptop])), (link) =>
+        link.draftStore.seed(
+          HashMap.make([
+            new DraftKey({ machine: LAPTOP, pane: PaneId.make('w1:p3') }),
+            new ComposerDraft({ text: 'And then check the', attachments: [] }),
+          ]),
+        ),
+      )
+
+      expect(yield* titlesOnceShown).toEqual([
+        'Pinned to the top',
+        'Half a prompt typed',
+        'Port the herd screen',
+      ])
     }),
   )
 

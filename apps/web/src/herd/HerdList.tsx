@@ -125,6 +125,7 @@ function AgentCardRow(props: AgentCardRowProps) {
   return (
     <motion.li
       layout="position"
+      data-agent={toGlobalPaneId(props.machine, props.card.row.pane)}
       transition={still ? INSTANT : SPRING}
       exit={motionTokens().exit}
       className={still && !present ? 'hidden' : 'grid grid-cols-1 gap-2'}

@@ -7,7 +7,7 @@ import * as React from 'react'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { chatScreenAtom } from '@crook/web/atoms/Chat'
 import { canActAtom, dimsContentAtom } from '@crook/web/atoms/Connection'
-import { OpenedAgent, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
+import { OpenedAgent, recordOpenedAtom, seenWhileOpenAtom } from '@crook/web/atoms/Herd'
 import {
   transcriptAtom,
   transcriptEarlierAtom,
@@ -74,7 +74,13 @@ export const useOpenedChat = (machine: MachineId, pane: PaneId) => {
   const canAct = useAtomValue(canActAtom)
   const connectionDims = useAtomValue(dimsContentAtom)
 
+  const recordOpened = useAtomSet(recordOpenedAtom)
+
   useAtomMount(seenWhileOpenAtom(opened))
+
+  React.useEffect(() => {
+    recordOpened(opened)
+  }, [opened, recordOpened])
 
   return {
     opened,

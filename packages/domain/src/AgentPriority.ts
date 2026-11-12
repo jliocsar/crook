@@ -4,52 +4,81 @@ import { pipe } from 'effect/Function'
 import * as HashSet from 'effect/HashSet'
 import * as Match from 'effect/Match'
 import { sumAll } from 'effect/Number'
+import * as Option from 'effect/Option'
 import * as Order from 'effect/Order'
+import * as Record from 'effect/Record'
 import * as Schema from 'effect/Schema'
 
 import type { AgentRow } from '@crook/domain/AgentRow'
 import type { HerdMachine, HerdView } from '@crook/domain/HerdView'
-import type { PaneId } from '@crook/domain/Ids'
+import { type GlobalPaneId, type PaneId, toGlobalPaneId } from '@crook/domain/Ids'
 import { isOffline } from '@crook/domain/Machine'
 import { agentsIn } from '@crook/domain/MachineState'
+import type { OpenedTimes } from '@crook/domain/OpenedTimes'
 
 interface RankedAgent {
   readonly row: AgentRow
   readonly pinned: boolean
+  readonly drafted: boolean
   readonly tier: PriorityTier
+  readonly openedAt: Option.Option<DateTime.Utc>
+}
+
+export interface OrderHints {
+  readonly drafted: HashSet.HashSet<GlobalPaneId>
+  readonly openedAt: OpenedTimes
 }
 
 const PriorityTier = Schema.Literals(['blocked', 'unseenDone', 'working', 'settled', 'unknown'])
 type PriorityTier = typeof PriorityTier.Type
 
+const PriorityRank = Schema.Literals(['blocked', 'unseenDone', 'rest'])
+type PriorityRank = typeof PriorityRank.Type
+
 const NEEDS_YOU_TIERS: readonly PriorityTier[] = ['blocked', 'unseenDone']
+
+export const noOrderHints: OrderHints = { drafted: HashSet.empty(), openedAt: {} }
+
+const rankOfTier = {
+  blocked: 'blocked',
+  unseenDone: 'unseenDone',
+  working: 'rest',
+  settled: 'rest',
+  unknown: 'rest',
+} satisfies Record.ReadonlyRecord<PriorityTier, PriorityRank>
 
 const byStatusAge = Order.mapInput(
   DateTime.Order,
   (ranked: RankedAgent) => ranked.row.statusChangedAt,
 )
 
-const withinTier = {
+const byLastOpened = Order.mapInput(Order.flip(Order.Number), (ranked: RankedAgent) =>
+  Option.match(ranked.openedAt, {
+    onNone: () => Number.NEGATIVE_INFINITY,
+    onSome: DateTime.toEpochMillis,
+  }),
+)
+
+const withinRank = {
   blocked: byStatusAge,
   unseenDone: Order.flip(byStatusAge),
-  working: Order.alwaysEqual(),
-  settled: Order.alwaysEqual(),
-  unknown: Order.alwaysEqual(),
-} satisfies Record<PriorityTier, Order.Order<RankedAgent>>
+  rest: byLastOpened,
+} satisfies Record.ReadonlyRecord<PriorityRank, Order.Order<RankedAgent>>
 
-const byTier = Order.mapInput(Order.Number, (ranked: RankedAgent) =>
-  PriorityTier.literals.indexOf(ranked.tier),
+const rankOf = (ranked: RankedAgent): PriorityRank => rankOfTier[ranked.tier]
+
+const byRank = Order.mapInput(Order.Number, (ranked: RankedAgent) =>
+  PriorityRank.literals.indexOf(rankOf(ranked)),
 )
 
-const byPinnedFirst = Order.mapInput(
-  Order.flip(Order.Boolean),
-  (ranked: RankedAgent) => ranked.pinned,
-)
+const firstWhen = (flag: (ranked: RankedAgent) => boolean) =>
+  Order.mapInput(Order.flip(Order.Boolean), flag)
 
 const byPriority: Order.Order<RankedAgent> = Order.combineAll([
-  byPinnedFirst,
-  byTier,
-  (self, that) => withinTier[self.tier](self, that),
+  firstWhen((ranked) => ranked.pinned),
+  firstWhen((ranked) => ranked.drafted),
+  byRank,
+  (self, that) => withinRank[rankOf(self)](self, that),
 ])
 
 const paneIn = (panes: readonly PaneId[]) => {
@@ -82,13 +111,30 @@ export const needsYou = (machine: HerdMachine) => {
   return (row: AgentRow): boolean => NEEDS_YOU_TIERS.includes(tierOf(row))
 }
 
-export const orderAgents = (machine: HerdMachine): AgentRow[] => {
+const isDrafted = (machine: HerdMachine, hints: OrderHints) => (row: AgentRow) =>
+  HashSet.has(hints.drafted, toGlobalPaneId(machine.machine.id, row.pane))
+
+const openedAtOf = (machine: HerdMachine, hints: OrderHints) => (row: AgentRow) =>
+  pipe(
+    Record.get(hints.openedAt, machine.machine.id),
+    Option.flatMap((panes) => Record.get(panes, row.pane)),
+  )
+
+export const orderAgents = (machine: HerdMachine, hints: OrderHints): AgentRow[] => {
   const tierOf = priorityTier(machine)
   const pinned = isPinned(machine)
+  const drafted = isDrafted(machine, hints)
+  const openedAt = openedAtOf(machine, hints)
 
   return pipe(
     agentsIn(machine.state),
-    Arr.map((row): RankedAgent => ({ row, pinned: pinned(row), tier: tierOf(row) })),
+    Arr.map((row): RankedAgent => ({
+      row,
+      pinned: pinned(row),
+      drafted: drafted(row),
+      tier: tierOf(row),
+      openedAt: openedAt(row),
+    })),
     Arr.sort(byPriority),
     Arr.map((ranked) => ranked.row),
   )

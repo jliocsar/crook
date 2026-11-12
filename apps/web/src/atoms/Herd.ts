@@ -6,9 +6,13 @@ import * as AsyncResult from 'effect/reactivity/AsyncResult'
 import * as Atom from 'effect/reactivity/Atom'
 
 import { herdNeedsYouCount, isSeen } from '@crook/domain/AgentPriority'
+import { findMachine } from '@crook/domain/HerdView'
 import type { MachineId, PaneId } from '@crook/domain/Ids'
 import { isConnectedAtom } from '@crook/web/atoms/Connection'
+import { draftPanesAtom } from '@crook/web/atoms/Drafts'
 import { hubRuntime, linkStateAtom } from '@crook/web/atoms/Hub'
+import { loadedOpenedTimesAtom, openedRuntime } from '@crook/web/atoms/Opened'
+import { OpenedAgents } from '@crook/web/cache/OpenedAgents'
 import { findAgent, herdLayout } from '@crook/web/herd/HerdLayout'
 import { HubLink } from '@crook/web/rpc/HubLink'
 
@@ -25,8 +29,16 @@ export const herdViewAtom = Atom.make((get) =>
   Option.map(get(herdAtom), (snapshot) => snapshot.view),
 )
 
+export const orderHintsAtom = Atom.make((get) =>
+  Option.all({ drafted: get(draftPanesAtom), openedAt: get(loadedOpenedTimesAtom) }),
+)
+
+export const orderedHerdAtom = Atom.make((get) =>
+  Option.all({ snapshot: get(herdAtom), hints: get(orderHintsAtom) }),
+)
+
 export const herdLayoutAtom = Atom.make((get) =>
-  Option.map(get(herdAtom), (snapshot) => herdLayout(snapshot.view)),
+  Option.map(get(orderedHerdAtom), ({ snapshot, hints }) => herdLayout(snapshot.view, hints)),
 )
 
 export const needsYouAtom = Atom.make((get) =>
@@ -63,3 +75,20 @@ export const seenWhileOpenAtom = Atom.family((opened: OpenedAgent) =>
       : Effect.void,
   ),
 )
+
+export const recordOpenedAtom = openedRuntime
+  .fn((opened: OpenedAgent, get) =>
+    OpenedAgents.use((agents) =>
+      agents.record({
+        machine: opened.machine,
+        pane: opened.pane,
+        listed: pipe(
+          get.registry.get(herdViewAtom),
+          Option.flatMap((view) => findMachine(view, opened.machine)),
+          Option.flatMap((herdMachine) => herdMachine.state),
+          Option.map((state) => state.agents.map((row) => row.pane)),
+        ),
+      }),
+    ),
+  )
+  .pipe(Atom.keepAlive)
