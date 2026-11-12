@@ -76,6 +76,9 @@ describe('MachineScreen', () => {
       ).toEqual(['Wire the hub link', 'Port the herd screen'])
       expect(valueOf('Online for')).toBe('5m')
       expect(valueOf('crook agent')).toBe('0.0.9, hub has 0.1.0')
+      expect(about().getByText(/crook: update agent/u).textContent).toBe(
+        'To update it, run the crook plugin\'s "crook: update agent" action in herdr on laptop, and enter 0.1.0.',
+      )
       expect(valueOf('Herdr')).toBe('0.9.5')
       expect(valueOf('Machine id')).toBe('laptop')
       expect(screen.queryByRole('button', { name: /Hold to forget/u })).toBeNull()

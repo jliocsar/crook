@@ -29,6 +29,14 @@ export function MachineAbout({ detail }: { detail: MachineDetailModel }) {
           value: <InfoValue row={row} />,
         }))}
       />
+      {detail.card.behindHub ? (
+        <p
+          data-slot="agent-update-note"
+          className="text-muted-foreground px-4 pt-2 text-xs leading-4"
+        >
+          {`To update it, run the crook plugin's "crook: update agent" action in herdr on ${detail.card.machine.label}, and enter ${detail.hubVersion}.`}
+        </p>
+      ) : null}
     </section>
   )
 }
