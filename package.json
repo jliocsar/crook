@@ -1,7 +1,7 @@
 {
   "$schema": "http://json.schemastore.org/package",
   "name": "crook",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "private": true,
   "workspaces": {
     "packages": [
