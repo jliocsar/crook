@@ -25,9 +25,9 @@ import {
   toolResult,
   toolUse,
 } from '../../test/TranscriptFixtures.ts'
-import { chatStory } from '../ChatFixtures.ts'
+import { chatStory, delivered } from '../ChatFixtures.ts'
 import { CHAT_SOURCE, chatAgent } from '../Fixtures.ts'
-import { clicks, seesText } from '../StageDom.ts'
+import { clicks, seesText, types } from '../StageDom.ts'
 import { step } from '../Story.tsx'
 import type { LinkStage, StoryMaker } from '../Story.tsx'
 
@@ -35,6 +35,8 @@ const NOW = DateTime.addDuration(START, Duration.minutes(5))
 const DOCK = '[data-slot="background-dock"]'
 const SHELL_BUTTON = 'bun run dev, running'
 const LONG_COMMAND = 'bun run --filter @crook/web dev -- --host 0.0.0.0 --port 5173 --strictPort'
+const FIELD = /Message|Reply|Tell Claude/u
+const FOUR_LINES = 'Check the dock\nthen the chips\nthen the field\nand send it'
 
 const ago = (seconds: number) => DateTime.subtract(NOW, { seconds })
 
@@ -243,6 +245,21 @@ export const BACKGROUND_STORIES: readonly StoryMaker[] = [
       step<LinkStage>(800, 'The pane closes', ({ link }) =>
         SubscriptionRef.set(link.state, liveWith(herd([machine(LAPTOP, [])]))),
       ),
+    ],
+  }),
+  chatStory({
+    slug: 'chips-under-a-growing-composer',
+    title: 'Background dock, the composer grows to four lines and empties on send',
+    shows: { selector: DOCK },
+    ends: { all: [{ text: 'Sent' }, { text: 'and send it' }] },
+    row: chatAgent('working'),
+    events: changed([shell(), monitor()]),
+    arrange: (stage) => delivered(stage, FOUR_LINES),
+    settle: () => seesText('3 running'),
+    timeline: [
+      step<LinkStage>(800, 'Type four lines', () => types(FIELD, FOUR_LINES)),
+      step<LinkStage>(800, 'Tap Send, and the field empties', () => clicks('Send')),
+      step<LinkStage>(800, 'The chips have settled', () => Effect.void),
     ],
   }),
   chatStory({

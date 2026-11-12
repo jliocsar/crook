@@ -10,6 +10,7 @@ import type { OpenAgentActions } from '@crook/web/actions/AgentActions'
 import { connectionAtom } from '@crook/web/atoms/Connection'
 import { allowsActions, dimsContent } from '@crook/web/connection/ConnectionView'
 import type { ConnectionView } from '@crook/web/connection/ConnectionView'
+import { NothingOnThisPhone } from '@crook/web/connection/NothingOnThisPhone'
 import { herdLayoutAtom, resyncAtom } from '@crook/web/atoms/Herd'
 import { Dimmed } from '@crook/web/components/Dimmed'
 import { Button } from '@crook/web/components/ui/button'
@@ -50,7 +51,12 @@ const HerdContent = React.memo(function HerdContent({
   return (
     <StillUnderCover>
       {Option.match(layout, {
-        onNone: () => <HerdSkeleton label="Loading your agents" />,
+        onNone: () =>
+          dimsContent(connection) ? (
+            <NothingOnThisPhone title="No agents on this phone yet" />
+          ) : (
+            <HerdSkeleton label="Loading your agents" />
+          ),
         onSome: (herdLayout) => (
           <PullToResync enabled={allowsActions(connection)} onResync={() => resync(undefined)}>
             <Dimmed dimmed={dimsContent(connection)}>

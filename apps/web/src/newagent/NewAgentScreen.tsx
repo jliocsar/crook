@@ -15,6 +15,7 @@ import { Swap } from '@crook/web/components/Swap'
 import { Button } from '@crook/web/components/ui/button'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { isOnlineMachine } from '@crook/web/herd/HerdLayout'
+import { AddMachineSheet } from '@crook/web/machines/AddMachineSheet'
 import { PushedHeader, PushedScreen } from '@crook/web/navigation/PushedScreen'
 import { useLaunch } from '@crook/web/newagent/Launch'
 import { LaunchSummary } from '@crook/web/newagent/LaunchSummary'
@@ -140,6 +141,7 @@ function NewAgentFlow() {
   const [picker, setPicker] = React.useState<Picker>('machine')
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [editedSinceStart, setEditedSinceStart] = React.useState(false)
+  const [addingMachine, setAddingMachine] = React.useState(false)
 
   const launch = useLaunch()
   const selection = Option.flatMap(view, (herdView) => currentSelection(herdView, chosen))
@@ -181,7 +183,12 @@ function NewAgentFlow() {
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="no-scrollbar flex h-full flex-col justify-center overflow-y-auto px-4 pb-4">
           <Dimmed dimmed={dimsContent(connection)}>
-            <LaunchSummary body={newAgentBody(view, selection, task)} />
+            <LaunchSummary
+              body={newAgentBody(view, selection, task)}
+              onAddMachine={() => {
+                setAddingMachine(true)
+              }}
+            />
           </Dimmed>
         </div>
       </div>
@@ -285,6 +292,12 @@ function NewAgentFlow() {
           </Sheet>
         ),
       })}
+      <AddMachineSheet
+        open={addingMachine}
+        onClose={() => {
+          setAddingMachine(false)
+        }}
+      />
     </>
   )
 }

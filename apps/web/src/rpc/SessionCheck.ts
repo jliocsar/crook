@@ -22,7 +22,7 @@ export class LogOutRefused extends Schema.TaggedError<LogOutRefused>()('LogOutRe
   status: Schema.Int,
 }) {
   override get message(): string {
-    return `exe.dev answered the logout with status ${this.status}, so this device may still be logged in. Try again; if crook is open without the exe.dev proxy in front of it, there is no exe.dev session to end.`
+    return `exe.dev did not end the session, so this device may still be logged in. Try again; if crook is open without the exe.dev proxy in front of it, there is no exe.dev session to end.`
   }
 }
 

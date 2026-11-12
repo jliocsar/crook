@@ -1,8 +1,10 @@
+const SCRIPT_FOCUS: FocusOptions = { preventScroll: true, focusVisible: false }
+
 export const SECTIONS_LABEL = 'Sections'
 export const SCREEN_TITLE_ATTRIBUTE = 'data-screen-title'
 
 export const focusScreenTitle = (screen: HTMLElement | null): void => {
-  screen?.querySelector<HTMLElement>(`[${SCREEN_TITLE_ATTRIBUTE}]`)?.focus({ preventScroll: true })
+  screen?.querySelector<HTMLElement>(`[${SCREEN_TITLE_ATTRIBUTE}]`)?.focus(SCRIPT_FOCUS)
 }
 
 export const focusTarget = (opener: Element | null): HTMLElement | null =>
@@ -16,5 +18,5 @@ export const focusTarget = (opener: Element | null): HTMLElement | null =>
       )
 
 export const restoreFocus = (opener: Element | null): void => {
-  focusTarget(opener)?.focus({ preventScroll: true })
+  focusTarget(opener)?.focus(SCRIPT_FOCUS)
 }

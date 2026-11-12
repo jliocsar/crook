@@ -262,6 +262,16 @@ describe('SettingsScreen', () => {
     }),
   )
 
+  it.effect('says the hub version waits for crook to reconnect rather than loading forever', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/settings', stateWith(UNREACHABLE, Option.none()))
+
+      yield* eventually(() => {
+        expect(valueOf('Hub', 'Version')).toBe('Shows once crook reconnects')
+      })
+    }),
+  )
+
   it.effect('logs out after the confirm sheet and lands on the logged-out screen', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp('/settings', liveWith(view))

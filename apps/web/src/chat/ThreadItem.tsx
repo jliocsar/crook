@@ -587,7 +587,7 @@ function CompactedDivider({ summary }: { summary: Option.Option<string> }) {
 function ThreadItemView({ item, environment }: { item: ChatItem; environment: ThreadEnvironment }) {
   return ChatItems.$match(item, {
     UserPrompt: (prompt) => (
-      <Message meta={prompt.queued ? 'Queued' : undefined}>
+      <Message>
         <Thumbs
           pictures={prompt.images.map((image) => ({ image, name: 'Pasted image' }))}
           place="message"

@@ -215,7 +215,7 @@ export const ROW_STORIES: readonly StoryMaker[] = [
     'prompt-queued',
     'Row, a prompt Claude took from its queue',
     [user(0, [new TextBlock({ text: 'Also the toast' })], { queued: true })],
-    { text: 'Queued' },
+    { all: [{ text: 'Also the toast' }, { absent: 'Queued' }] },
   ),
   rowStory(
     'prompt-image',

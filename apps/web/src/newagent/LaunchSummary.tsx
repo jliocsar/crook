@@ -1,6 +1,7 @@
 import * as Option from 'effect/Option'
 import { Bot, Folder, Server } from 'lucide-react'
 
+import { Button } from '@crook/web/components/ui/button'
 import { EmptyState } from '@crook/web/components/ui/empty-state'
 import { Spinner } from '@crook/web/components/ui/spinner'
 import { NewAgentBody, StartsOn } from '@crook/web/newagent/NewAgentLayout'
@@ -28,7 +29,13 @@ function StartsOnText({ on }: { on: Option.Option<StartsOn> }) {
   })
 }
 
-export function LaunchSummary({ body }: { body: NewAgentBody }) {
+export function LaunchSummary({
+  body,
+  onAddMachine,
+}: {
+  body: NewAgentBody
+  onAddMachine: () => void
+}) {
   const loading = NewAgentBody.$is('Loading')(body)
 
   return (
@@ -37,12 +44,12 @@ export function LaunchSummary({ body }: { body: NewAgentBody }) {
       size={LOADING_SPINNER_SIZE}
       label="Loading your machines"
       className="text-muted-foreground flex justify-center"
-      idle={loading ? null : <LaunchBody body={body} />}
+      idle={loading ? null : <LaunchBody body={body} onAddMachine={onAddMachine} />}
     />
   )
 }
 
-function LaunchBody({ body }: { body: NewAgentBody }) {
+function LaunchBody({ body, onAddMachine }: { body: NewAgentBody; onAddMachine: () => void }) {
   return NewAgentBody.$match(body, {
     Loading: () => null,
     NoMachines: () => (
@@ -50,7 +57,12 @@ function LaunchBody({ body }: { body: NewAgentBody }) {
         className={SUMMARY_CLASS}
         icon={<Server className="size-5" />}
         title="No machines yet"
-        description="Add one from Machines, then start Claude on it."
+        description="Add one, then start Claude on it."
+        actions={
+          <Button size="touch" className="text-base" onClick={onAddMachine}>
+            Add a machine
+          </Button>
+        }
       />
     ),
     AllOffline: () => (

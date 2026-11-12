@@ -112,6 +112,16 @@ describe('SessionCheck.logOut', () => {
     }),
   )
 
+  it.effect('says what a refusal means and keeps its status off the phone', () =>
+    Effect.gen(function* () {
+      const { check } = yield* start(answerWith(500))
+      const failure = yield* Effect.flip(check.logOut)
+
+      expect(failure.message).toContain('may still be logged in')
+      expect(failure.message).not.toMatch(/500|status/u)
+    }),
+  )
+
   it.effect('says exe.dev was unreachable when the request never got an answer', () =>
     Effect.gen(function* () {
       const { check } = yield* start(refuseTheConnection)
