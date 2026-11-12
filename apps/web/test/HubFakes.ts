@@ -5,6 +5,7 @@ import * as Deferred from 'effect/Deferred'
 import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as HashSet from 'effect/HashSet'
 import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
@@ -333,15 +334,20 @@ export const makeMemoryTranscriptStore = Effect.fn('makeMemoryTranscriptStore')(
 export const makeMemoryDraftStore = Effect.fn('makeMemoryDraftStore')(function* () {
   const entries = yield* Ref.make<ReadonlyMap<string, StoredDraftEntry>>(new Map())
   const written = yield* Ref.make<readonly DraftStoredKey[]>([])
+  const reads = yield* Latch.make(true)
   const idOf = (key: DraftStoredKey) => JSON.stringify(key)
 
   const store: DraftStore = {
-    keys: Effect.map(Ref.get(entries), (current) =>
-      Array.from(current.values(), (entry) => entry.key),
+    keys: Effect.andThen(
+      reads.await,
+      Effect.map(Ref.get(entries), (current) => Array.from(current.values(), (entry) => entry.key)),
     ),
     readMany: (wanted) =>
-      Effect.map(Ref.get(entries), (current) =>
-        wanted.map((key) => current.get(idOf(key))?.stored),
+      Effect.andThen(
+        reads.await,
+        Effect.map(Ref.get(entries), (current) =>
+          wanted.map((key) => current.get(idOf(key))?.stored),
+        ),
       ),
     writeMany: (pairs) =>
       Effect.andThen(
@@ -368,11 +374,11 @@ export const makeMemoryDraftStore = Effect.fn('makeMemoryDraftStore')(function* 
   const seed = (drafts: PaneDrafts) =>
     Effect.scoped(
       Effect.flatMap(Layer.build(DraftCache.layerOver(store)), (context) =>
-        Context.get(context, DraftCache).save(drafts),
+        Context.get(context, DraftCache).save({ edited: drafts, untouched: HashSet.empty() }),
       ),
     )
 
-  return { store, entries, written, seed }
+  return { store, entries, written, reads, seed }
 })
 
 export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: HubLinkState) {

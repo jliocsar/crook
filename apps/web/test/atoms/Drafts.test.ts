@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@effect/vitest'
 import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
+import * as Struct from 'effect/Struct'
 import * as HashMap from 'effect/HashMap'
 import * as Latch from 'effect/Latch'
 import * as Layer from 'effect/Layer'
@@ -11,18 +12,21 @@ import * as Schema from 'effect/Schema'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 import type * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 
+import { HerdMachine } from '@crook/domain/HerdView'
 import { type GlobalPaneId, PaneId, toGlobalPaneId } from '@crook/domain/Ids'
 import { draftAtom, draftPanesAtom } from '@crook/web/atoms/Drafts'
 import { ComposerDraft, DraftCache, DraftKey } from '@crook/web/cache/DraftCache'
 
 import { appRegistry, liveWith } from '../AppWiring.tsx'
-import { agent, herd, LAPTOP, machine } from '../HerdFixtures.ts'
+import { agent, DESK, herd, LAPTOP, machine } from '../HerdFixtures.ts'
 import { makeFakeHubLink } from '../HubFakes.ts'
 
 const FIRST = new DraftKey({ machine: LAPTOP, pane: PaneId.make('w1:p1') })
 const SECOND = new DraftKey({ machine: LAPTOP, pane: PaneId.make('w1:p2') })
 const FIRST_PANE = toGlobalPaneId(FIRST.machine, FIRST.pane)
 const SECOND_PANE = toGlobalPaneId(SECOND.machine, SECOND.pane)
+const ON_DESK = new DraftKey({ machine: DESK, pane: PaneId.make('w1:p1') })
+const DESK_PANE = toGlobalPaneId(ON_DESK.machine, ON_DESK.pane)
 const NO_PANES = Option.some([])
 const SETTLE_POLLS = 200
 const SETTLE_POLL_MS = 5
@@ -91,8 +95,10 @@ describe('drafts', () => {
         expect(seen.at(-1)).toEqual(Option.some([FIRST_PANE]))
       })
 
-      expect(registry.get(draftAtom(FIRST))).toEqual(kept)
-      expect(registry.get(draftAtom(SECOND)).text).toBe('')
+      expect(registry.get(draftAtom(FIRST))).toEqual(Option.some(kept))
+      expect(Option.map(registry.get(draftAtom(SECOND)), (draft) => draft.text)).toEqual(
+        Option.some(''),
+      )
     }),
   )
 
@@ -177,14 +183,30 @@ describe('drafts', () => {
     Effect.gen(function* () {
       const { link, registry } = yield* withRegistry(() => null)
 
-      yield* link.draftStore.seed(HashMap.make([FIRST, typed('first')]))
+      yield* SubscriptionRef.set(
+        link.state,
+        liveWith(
+          herd([
+            machine(LAPTOP, [agent('w1:p1', 'idle')]),
+            machine(DESK, [agent('w1:p1', 'idle')]),
+          ]),
+        ),
+      )
+      yield* link.draftStore.seed(
+        HashMap.make([FIRST, typed('first')], [ON_DESK, typed('on the desk')]),
+      )
 
       const seen = panesSeen(registry)
 
-      yield* SubscriptionRef.set(
-        link.state,
-        liveWith(herd([machine(LAPTOP, [], { connection: 'offline' })])),
+      yield* eventually(() => {
+        expect(seen.at(-1)).toEqual(Option.some([DESK_PANE, FIRST_PANE].toSorted()))
+      })
+
+      const unheard = new HerdMachine(
+        Struct.evolve(machine(LAPTOP, []), { state: () => Option.none() }),
       )
+
+      yield* SubscriptionRef.set(link.state, liveWith(herd([unheard, machine(DESK, [])])))
 
       yield* eventually(() => {
         expect(seen.at(-1)).toEqual(Option.some([FIRST_PANE]))

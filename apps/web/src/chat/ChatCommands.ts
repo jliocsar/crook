@@ -37,7 +37,7 @@ import {
 import type { CommandProgress } from '@crook/web/atoms/ActionProgress'
 import { alwaysNotesAtom } from '@crook/web/atoms/Chat'
 import { clearSentDraftAtom, SentDraft } from '@crook/web/atoms/SentDrafts'
-import { DraftKey } from '@crook/web/cache/DraftCache'
+import { ComposerDraft, DraftKey } from '@crook/web/cache/DraftCache'
 import type { OpenedAgent } from '@crook/web/atoms/Herd'
 import {
   answerHeard,
@@ -702,6 +702,7 @@ export const useChatCommands = ({
         draft: new DraftKey({ machine, pane }),
         text: textOf(command),
         digests: Arr.map(attachmentsOf(command), (attachment) => attachment.digest),
+        atSend: new ComposerDraft({ text: draft, attachments }),
       }),
     )
   }

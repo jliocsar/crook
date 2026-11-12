@@ -50,7 +50,10 @@ const logAttachment = Effect.map(
   }),
 )
 
-const openChat = Effect.fn('openChat')(function* (kept: readonly [DraftKey, ComposerDraft][] = []) {
+const openChat = Effect.fn('openChat')(function* (
+  kept: readonly [DraftKey, ComposerDraft][] = [],
+  arrange: (link: FakeHubLink) => Effect.Effect<void> = () => Effect.void,
+) {
   const rendered = yield* renderApp(
     CHAT,
     liveWith(
@@ -58,7 +61,7 @@ const openChat = Effect.fn('openChat')(function* (kept: readonly [DraftKey, Comp
         machine(LAPTOP, [agent('w1:p1', 'idle')], { agentVersion: FIRST_AGENT_WITH_ATTACHMENTS }),
       ]),
     ),
-    (link) => link.draftStore.seed(HashMap.fromIterable(kept)),
+    (link) => Effect.andThen(link.draftStore.seed(HashMap.fromIterable(kept)), arrange(link)),
   )
   const transcript = yield* rendered.link.transcriptFor(new PaneTranscript({ pane: PANE }))
 
@@ -91,6 +94,28 @@ describe('a chat draft', () => {
       yield* eventually(() => {
         expect(field().value).toBe(KEPT_TEXT)
         expect(screen.queryByRole('button', { name: `Remove ${LOG_NAME}` })).not.toBeNull()
+      })
+    }),
+  )
+
+  it.effect('keeps what the device holds when typing starts before it has answered', () =>
+    Effect.gen(function* () {
+      const attachment = yield* logAttachment
+      const { link } = yield* openChat(
+        [[KEY, new ComposerDraft({ text: KEPT_TEXT, attachments: [attachment] })]],
+        (held) => held.draftStore.reads.close,
+      )
+
+      fireEvent.change(field(), { target: { value: 'h' } })
+      yield* link.draftStore.reads.open
+      yield* eventually(() => {
+        expect(field().value).toBe(KEPT_TEXT)
+        expect(screen.queryByRole('button', { name: `Remove ${LOG_NAME}` })).not.toBeNull()
+      })
+
+      fireEvent.change(field(), { target: { value: `${KEPT_TEXT}!` } })
+      yield* eventually(() => {
+        expect(headOf(link)).toEqual({ text: `${KEPT_TEXT}!`, attachments: ['a1'] })
       })
     }),
   )

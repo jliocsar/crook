@@ -14,13 +14,28 @@ import { type GlobalPaneId, toGlobalPaneId } from '@crook/domain/Ids'
 import { agentsIn } from '@crook/domain/MachineState'
 import { hubRuntime, linkStateAtom } from '@crook/web/atoms/Hub'
 import {
-  type ComposerDraft,
+  ComposerDraft,
   DraftCache,
+  type DraftHeads,
   type DraftKey,
   EMPTY_DRAFT,
   isBlankDraft,
   type PaneDrafts,
+  type SavedDrafts,
 } from '@crook/web/cache/DraftCache'
+
+export interface AnsweredDraft {
+  readonly key: DraftKey
+  readonly atSend: ComposerDraft
+  readonly settle: (draft: ComposerDraft) => ComposerDraft
+}
+
+interface HeldDrafts {
+  readonly saved: SavedDrafts
+  readonly gone: readonly DraftKey[]
+}
+
+type Read = <Value>(atom: Atom.Atom<Value>) => Value
 
 const isKept = (herd: HerdView, key: DraftKey): boolean =>
   Option.exists(findMachine(herd, key.machine), (entry) =>
@@ -30,27 +45,75 @@ const isKept = (herd: HerdView, key: DraftKey): boolean =>
     }),
   )
 
-const herdOf = (get: Atom.AtomContext): Option.Option<HerdView> =>
+const herdOf = (read: Read): Option.Option<HerdView> =>
   pipe(
-    AsyncResult.value(get(linkStateAtom)),
+    AsyncResult.value(read(linkStateAtom)),
     Option.flatMap((state) => state.herd),
     Option.map((snapshot) => snapshot.view),
   )
 
-const storedDraftsAtom = hubRuntime.atom(DraftCache.use((cache) => cache.load)).pipe(Atom.keepAlive)
+const storedHeadsAtom = hubRuntime
+  .atom(DraftCache.use((cache) => cache.loadHeads))
+  .pipe(Atom.keepAlive)
+
+const loadedHeadsAtom = Atom.make((get): Option.Option<DraftHeads> =>
+  AsyncResult.value(get(storedHeadsAtom)),
+)
 
 const editedDraftsAtom = Atom.make<PaneDrafts>(HashMap.empty()).pipe(Atom.keepAlive)
 
-const keptDraftsAtom = Atom.make((get) =>
-  Option.map(AsyncResult.value(get(storedDraftsAtom)), (stored) => {
-    const herd = herdOf(get)
+const storedAttachmentsAtom = Atom.family((key: DraftKey) =>
+  hubRuntime.atom((get) =>
+    Effect.gen(function* () {
+      const heads = yield* get.result(storedHeadsAtom)
+      const cache = yield* DraftCache
 
-    return HashMap.filter(
-      HashMap.union(stored, get(editedDraftsAtom)),
-      (draft, key) =>
-        !isBlankDraft(draft) &&
-        Option.match(herd, { onNone: () => true, onSome: (shown) => isKept(shown, key) }),
-    )
+      return yield* Option.match(HashMap.get(heads, key), {
+        onNone: () => Effect.succeed([]),
+        onSome: (head) => cache.loadAttachments(key, head),
+      })
+    }),
+  ),
+)
+
+const storedDraftOf = (read: Read, key: DraftKey): Option.Option<ComposerDraft> =>
+  Option.flatMap(read(loadedHeadsAtom), (heads) =>
+    Option.match(HashMap.get(heads, key), {
+      onNone: () => Option.some(EMPTY_DRAFT),
+      onSome: (head) =>
+        Arr.isReadonlyArrayNonEmpty(head.attachments)
+          ? Option.map(
+              AsyncResult.value(read(storedAttachmentsAtom(key))),
+              (attachments) => new ComposerDraft({ text: head.text, attachments }),
+            )
+          : Option.some(new ComposerDraft({ text: head.text, attachments: [] })),
+    }),
+  )
+
+const currentDraftOf = (read: Read, key: DraftKey): Option.Option<ComposerDraft> =>
+  Option.orElse(HashMap.get(read(editedDraftsAtom), key), () => storedDraftOf(read, key))
+
+const heldDraftsAtom = Atom.make((get) =>
+  Option.map(get(loadedHeadsAtom), (heads): HeldDrafts => {
+    const herd = herdOf(get)
+    const kept = (key: DraftKey) =>
+      Option.match(herd, { onNone: () => true, onSome: (shown) => isKept(shown, key) })
+    const edited = get(editedDraftsAtom)
+
+    return {
+      saved: {
+        edited: HashMap.filter(edited, (_draft, key) => kept(key)),
+        untouched: pipe(
+          Arr.fromIterable(HashMap.keys(heads)),
+          Arr.filter((key) => kept(key) && !HashMap.has(edited, key)),
+          HashSet.fromIterable,
+        ),
+      },
+      gone: pipe(
+        Arr.fromIterable(HashMap.keys(edited)),
+        Arr.filter((key) => !kept(key)),
+      ),
+    }
   }),
 )
 
@@ -59,14 +122,21 @@ const draftWriterAtom = hubRuntime
     Effect.gen(function* () {
       const cache = yield* DraftCache
 
-      yield* get
-        .stream(keptDraftsAtom)
-        .pipe(
-          Stream.buffer({ capacity: 1, strategy: 'sliding' }),
-          Stream.runForEach(
-            Option.match({ onNone: () => Effect.void, onSome: (kept) => cache.save(kept) }),
-          ),
-        )
+      yield* get.stream(heldDraftsAtom).pipe(
+        Stream.buffer({ capacity: 1, strategy: 'sliding' }),
+        Stream.runForEach(
+          Option.match({
+            onNone: () => Effect.void,
+            onSome: (held) =>
+              Effect.andThen(
+                cache.save(held.saved),
+                Arr.isReadonlyArrayNonEmpty(held.gone)
+                  ? Atom.update(editedDraftsAtom, HashMap.removeMany(held.gone))
+                  : Effect.void,
+              ),
+          }),
+        ),
+      )
     }),
   )
   .pipe(Atom.keepAlive)
@@ -75,9 +145,12 @@ export const draftPanesAtom: Atom.Atom<Option.Option<HashSet.HashSet<GlobalPaneI
   (get) => {
     get.mount(draftWriterAtom)
 
-    return Option.map(get(keptDraftsAtom), (kept) =>
+    return Option.map(get(heldDraftsAtom), ({ saved }) =>
       pipe(
-        Arr.fromIterable(HashMap.keys(kept)),
+        Arr.fromIterable(
+          HashMap.keys(HashMap.filter(saved.edited, (draft) => !isBlankDraft(draft))),
+        ),
+        Arr.appendAll(saved.untouched),
         Arr.map((key) => toGlobalPaneId(key.machine, key.pane)),
         HashSet.fromIterable,
       ),
@@ -87,19 +160,27 @@ export const draftPanesAtom: Atom.Atom<Option.Option<HashSet.HashSet<GlobalPaneI
 
 export const draftAtom = Atom.family((key: DraftKey) =>
   Atom.writable(
-    (get): ComposerDraft => {
+    (get): Option.Option<ComposerDraft> => {
       get.mount(draftWriterAtom)
 
-      return pipe(
-        HashMap.get(get(editedDraftsAtom), key),
-        Option.orElse(() =>
-          Option.flatMap(AsyncResult.value(get(storedDraftsAtom)), HashMap.get(key)),
-        ),
-        Option.getOrElse(() => EMPTY_DRAFT),
-      )
+      return currentDraftOf(get, key)
     },
     (context, draft: ComposerDraft) => {
-      context.set(editedDraftsAtom, HashMap.set(context.get(editedDraftsAtom), key, draft))
+      const read: Read = (atom) => context.get(atom)
+
+      if (Option.isSome(currentDraftOf(read, key))) {
+        context.set(editedDraftsAtom, HashMap.set(context.get(editedDraftsAtom), key, draft))
+      }
     },
-  ),
+  ).pipe(Atom.withEquality(Equal.equals)),
+)
+
+export const answeredDraftAtom = Atom.writable(
+  (): void => undefined,
+  (context, answered: AnsweredDraft) => {
+    const edited = context.get(editedDraftsAtom)
+    const current = Option.getOrElse(HashMap.get(edited, answered.key), () => answered.atSend)
+
+    context.set(editedDraftsAtom, HashMap.set(edited, answered.key, answered.settle(current)))
+  },
 )

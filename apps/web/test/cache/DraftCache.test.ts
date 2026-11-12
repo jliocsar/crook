@@ -2,6 +2,7 @@ import { describe, expect, it } from '@effect/vitest'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
+import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
@@ -12,8 +13,11 @@ import {
   ComposerDraft,
   DraftCache,
   DraftCacheUnavailable,
+  DraftHead,
   DraftKey,
+  DraftNotSaved,
   type DraftStore,
+  type PaneDrafts,
 } from '@crook/web/cache/DraftCache'
 import type { DraftAttachment } from '@crook/web/chat/Attachments'
 
@@ -47,17 +51,19 @@ const cacheOver = Effect.fn('cacheOver')(function* (store: DraftStore) {
   return Context.get(context, DraftCache)
 })
 
+const edited = (drafts: PaneDrafts) => ({ edited: drafts, untouched: HashSet.empty<DraftKey>() })
+
 const keysIn = (entries: ReadonlyMap<string, unknown>) => [...entries.keys()].toSorted()
 
 const refusing: DraftStore = {
   keys: Effect.fail(new DraftCacheUnavailable({ cause: 'blocked' })),
   readMany: () => Effect.fail(new DraftCacheUnavailable({ cause: 'blocked' })),
-  writeMany: () => Effect.fail(new DraftCacheUnavailable({ cause: 'blocked' })),
-  remove: () => Effect.fail(new DraftCacheUnavailable({ cause: 'blocked' })),
+  writeMany: () => Effect.fail(new DraftNotSaved({ cause: 'blocked' })),
+  remove: () => Effect.fail(new DraftNotSaved({ cause: 'blocked' })),
 }
 
 describe('DraftCache', () => {
-  it.effect('loads back the text and the attachments it saved, bytes and all', () =>
+  it.effect('loads the words and the attachment ids first, and the bytes only when asked', () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { store } = yield* makeMemoryDraftStore()
@@ -66,11 +72,14 @@ describe('DraftCache', () => {
           attachments: [yield* log, yield* shot],
         })
 
-        yield* (yield* cacheOver(store)).save(HashMap.make([FIRST, draft]))
+        yield* (yield* cacheOver(store)).save(edited(HashMap.make([FIRST, draft])))
 
-        const loaded = yield* (yield* cacheOver(store)).load
+        const reopened = yield* cacheOver(store)
+        const heads = yield* reopened.loadHeads
+        const head = new DraftHead({ text: 'what broke?', attachments: ['a1', 'a2'] })
 
-        expect(HashMap.get(loaded, FIRST)).toEqual(Option.some(draft))
+        expect(HashMap.get(heads, FIRST)).toEqual(Option.some(head))
+        expect(yield* reopened.loadAttachments(FIRST, head)).toEqual(draft.attachments)
       }),
     ),
   )
@@ -82,9 +91,13 @@ describe('DraftCache', () => {
         const cache = yield* cacheOver(store)
         const attachments = [yield* log]
 
-        yield* cache.save(HashMap.make([FIRST, new ComposerDraft({ text: 'wh', attachments })]))
+        yield* cache.save(
+          edited(HashMap.make([FIRST, new ComposerDraft({ text: 'wh', attachments })])),
+        )
         yield* Ref.set(written, [])
-        yield* cache.save(HashMap.make([FIRST, new ComposerDraft({ text: 'what', attachments })]))
+        yield* cache.save(
+          edited(HashMap.make([FIRST, new ComposerDraft({ text: 'what', attachments })])),
+        )
 
         expect(Ref.getUnsafe(written)).toEqual([['draft', LAPTOP, FIRST.pane]])
       }),
@@ -98,9 +111,11 @@ describe('DraftCache', () => {
         const cache = yield* cacheOver(store)
         const both = new ComposerDraft({ text: '', attachments: [yield* log, yield* shot] })
 
-        yield* cache.save(HashMap.make([FIRST, both]))
+        yield* cache.save(edited(HashMap.make([FIRST, both])))
         yield* cache.save(
-          HashMap.make([FIRST, new ComposerDraft({ text: '', attachments: [yield* shot] })]),
+          edited(
+            HashMap.make([FIRST, new ComposerDraft({ text: '', attachments: [yield* shot] })]),
+          ),
         )
 
         expect(keysIn(Ref.getUnsafe(entries))).toEqual([FIRST_SHOT_ID, FIRST_HEAD_ID])
@@ -116,14 +131,43 @@ describe('DraftCache', () => {
         const kept = new ComposerDraft({ text: 'keep me', attachments: [] })
 
         yield* cache.save(
-          HashMap.make(
-            [FIRST, new ComposerDraft({ text: 'gone', attachments: [yield* log] })],
-            [SECOND, kept],
+          edited(
+            HashMap.make(
+              [FIRST, new ComposerDraft({ text: 'gone', attachments: [yield* log] })],
+              [SECOND, kept],
+            ),
           ),
         )
-        yield* cache.save(HashMap.make([SECOND, kept]))
+        yield* cache.save(edited(HashMap.make([SECOND, kept])))
 
         expect(keysIn(Ref.getUnsafe(entries))).toEqual([SECOND_HEAD_ID])
+      }),
+    ),
+  )
+
+  it.effect('keeps a draft nobody edited without reading or rewriting it', () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { store, entries, written } = yield* makeMemoryDraftStore()
+        const kept = new ComposerDraft({ text: 'kept', attachments: [yield* shot] })
+
+        yield* (yield* cacheOver(store)).save(edited(HashMap.make([FIRST, kept])))
+        yield* Ref.set(written, [])
+
+        const reopened = yield* cacheOver(store)
+
+        yield* reopened.loadHeads
+        yield* reopened.save({
+          edited: HashMap.make([SECOND, new ComposerDraft({ text: 'new', attachments: [] })]),
+          untouched: HashSet.make(FIRST),
+        })
+
+        expect(Ref.getUnsafe(written)).toEqual([['draft', LAPTOP, SECOND.pane]])
+        expect(keysIn(Ref.getUnsafe(entries))).toEqual([
+          FIRST_SHOT_ID,
+          FIRST_HEAD_ID,
+          SECOND_HEAD_ID,
+        ])
       }),
     ),
   )
@@ -139,10 +183,41 @@ describe('DraftCache', () => {
           [['draft', LAPTOP, SECOND.pane], { text: '   ', attachments: [] }],
         ])
 
-        const loaded = yield* (yield* cacheOver(store)).load
+        const loaded = yield* (yield* cacheOver(store)).loadHeads
 
         expect(HashMap.size(loaded)).toBe(0)
         expect(Ref.getUnsafe(entries).size).toBe(0)
+      }),
+    ),
+  )
+
+  it.effect('stops rewriting an attachment the device would not store', () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { store, written } = yield* makeMemoryDraftStore()
+        const full: DraftStore = {
+          ...store,
+          writeMany: (pairs) =>
+            Effect.andThen(
+              Ref.update(written, (keys) => [...keys, ...pairs.map(([key]) => key)]),
+              Effect.fail(new DraftNotSaved({ cause: 'QuotaExceededError' })),
+            ),
+        }
+        const cache = yield* cacheOver(full)
+        const attachments = [yield* shot]
+
+        yield* cache.save(
+          edited(HashMap.make([FIRST, new ComposerDraft({ text: 'a', attachments })])),
+        )
+        yield* cache.save(
+          edited(HashMap.make([FIRST, new ComposerDraft({ text: 'ab', attachments })])),
+        )
+
+        expect(Ref.getUnsafe(written)).toEqual([
+          ['attachment', LAPTOP, FIRST.pane, 'a2'],
+          ['draft', LAPTOP, FIRST.pane],
+          ['draft', LAPTOP, FIRST.pane],
+        ])
       }),
     ),
   )
@@ -152,9 +227,11 @@ describe('DraftCache', () => {
       Effect.gen(function* () {
         const cache = yield* cacheOver(refusing)
 
-        expect(HashMap.size(yield* cache.load)).toBe(0)
+        expect(HashMap.size(yield* cache.loadHeads)).toBe(0)
 
-        yield* cache.save(HashMap.make([FIRST, new ComposerDraft({ text: 'hi', attachments: [] })]))
+        yield* cache.save(
+          edited(HashMap.make([FIRST, new ComposerDraft({ text: 'hi', attachments: [] })])),
+        )
       }),
     ),
   )
