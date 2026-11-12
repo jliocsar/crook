@@ -15,10 +15,11 @@ import { MachineId, PaneId } from '@crook/domain/Ids'
 import { Checkout, Place } from '@crook/domain/Place'
 import { CommandTimedOut, FolderNotFound, TaskNotDelivered } from '@crook/protocol/Commands'
 
+import { PLUGIN_INSTALL_COMMAND } from '@crook/web/machines/AddMachineSheet'
 import { COLD_START } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, renderApp, stateWith } from '../AppRender.tsx'
-import { click, eventually, findByRole } from '../Dom.ts'
+import { click, eventually, findByRole, present } from '../Dom.ts'
 import { agent, DESK, herd, LAPTOP, machine, START } from '../HerdFixtures.ts'
 import { stubMediaQueries } from '../MediaQueries.ts'
 
@@ -292,6 +293,24 @@ describe('NewAgentScreen', () => {
       })
 
       expect(screen.getByRole('button', { name: 'Branch, master' })).toBeDefined()
+    }),
+  )
+
+  it.effect('offers to add a machine when there are none', () =>
+    Effect.gen(function* () {
+      yield* renderApp('/new', liveWith(herd([])))
+      yield* findByRole('heading', 'New agent')
+      const pushed = within(
+        present(document.querySelector<HTMLElement>('[data-slot="pushed-screen"]'), 'New agent'),
+      )
+
+      expect(yield* Effect.promise(() => pushed.findByText('No machines yet'))).toBeDefined()
+
+      yield* click(pushed.getByRole('button', { name: 'Add a machine' }))
+      const dialog = yield* Effect.promise(() => screen.findByRole('dialog'))
+
+      expect(within(dialog).getByText('Add a machine')).toBeDefined()
+      expect(dialog.textContent).toContain(PLUGIN_INSTALL_COMMAND)
     }),
   )
 
