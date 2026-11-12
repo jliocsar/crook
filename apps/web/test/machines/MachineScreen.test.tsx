@@ -83,14 +83,44 @@ describe('MachineScreen', () => {
     }),
   )
 
-  it.effect("opens an agent's chat from its card", () =>
+  it.effect("opens an agent's chat over this screen, and Back returns to its card", () =>
     Effect.gen(function* () {
       const { router } = yield* renderApp('/machines/laptop', liveWith(viewOf([laptop])))
+      const card = present(
+        (yield* Effect.promise(() => screen.findByText('Wire the hub link'))).closest('button'),
+        'The card',
+      )
 
-      yield* click(yield* Effect.promise(() => screen.findByText('Wire the hub link')))
+      yield* click(card)
       yield* eventually(() => {
-        expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap2')
+        expect(router.state.location.pathname).toBe('/machines/laptop/p/w1%3Ap2')
       })
+
+      expect(
+        screen.getByRole('heading', { name: 'laptop', hidden: true }).closest('[inert]'),
+      ).not.toBeNull()
+      expect(document.querySelector('[data-slot="herd-list"]')).toBeNull()
+
+      yield* click(yield* findByRole('button', 'Back to laptop'))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/machines/laptop')
+      })
+
+      expect(document.activeElement).toBe(card)
+    }),
+  )
+
+  it.effect('opens a chat linked under this machine over it, and Back lands here', () =>
+    Effect.gen(function* () {
+      const { router } = yield* renderApp('/machines/laptop/p/w1%3Ap2', liveWith(viewOf([laptop])))
+
+      yield* click(yield* findByRole('button', 'Back to laptop'))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/machines/laptop')
+      })
+
+      expect(router.history.canGoBack()).toBe(false)
+      expect(screen.getByRole('button', { name: 'Back to machines' })).toBeDefined()
     }),
   )
 
@@ -130,7 +160,7 @@ describe('MachineScreen', () => {
 
       yield* click(title)
       yield* eventually(() => {
-        expect(router.state.location.pathname).toBe('/m/laptop/p/w1%3Ap2')
+        expect(router.state.location.pathname).toBe('/machines/laptop/p/w1%3Ap2')
       })
     }),
   )

@@ -760,6 +760,37 @@ describe('the action sheet, while an action is out', () => {
       expect(yield* Effect.promise(() => screen.findByText('Pane closed'))).toBeDefined()
     }),
   )
+
+  it.effect('goes back to the machine screen the chat was opened from', () =>
+    Effect.gen(function* () {
+      const { router, link, registry } = yield* renderApp(
+        '/machines/laptop',
+        liveWith(herd([everyone])),
+      )
+
+      yield* Ref.set(link.commandAnswer, closedPane(porting))
+
+      yield* click(yield* Effect.promise(() => screen.findByText('Port the herd screen')))
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/machines/laptop/p/w1%3Ap1')
+      })
+      openFromChat(registry)
+      const sheet = yield* Effect.promise(() => screen.findByRole('dialog'))
+
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Hold to close agent' }))
+      yield* eventually(() => {
+        expect(sentCommands(link)).toHaveLength(1)
+      })
+      yield* SubscriptionRef.set(link.state, liveWith(herd([laptopWith([wiring, banner])])))
+
+      yield* eventually(() => {
+        expect(router.state.location.pathname).toBe('/machines/laptop')
+      })
+
+      expect(router.history.canGoBack()).toBe(false)
+      expect(yield* Effect.promise(() => screen.findByText('Pane closed'))).toBeDefined()
+    }),
+  )
 })
 
 describe('swiping a card', () => {

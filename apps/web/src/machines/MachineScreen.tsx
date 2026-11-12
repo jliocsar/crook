@@ -1,5 +1,4 @@
-import { useAtomValue } from '@effect/atom-react/Hooks'
-import { useNavigate } from '@tanstack/react-router'
+import { Outlet, useNavigate } from '@tanstack/react-router'
 import * as Option from 'effect/Option'
 import * as React from 'react'
 
@@ -26,10 +25,54 @@ import { MachineStatus } from '@crook/web/machines/MachineHeading'
 import { agentsHeading } from '@crook/web/machines/MachineLayout'
 import type { MachineScreenModel } from '@crook/web/machines/MachineLayout'
 import { SectionLabel } from '@crook/web/machines/SectionLabel'
-import { openedFromMachine } from '@crook/web/navigation/ChatOrigin'
+import {
+  coverPhaseOf,
+  CoveredScope,
+  PushedPositionContext,
+  StillUnderCover,
+  useShownAtomValue,
+} from '@crook/web/navigation/Covered'
+import type { PushedPosition } from '@crook/web/navigation/Covered'
+import { openedFrom } from '@crook/web/navigation/Opener'
+import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
 
+interface MachineBodyProps {
+  readonly machine: MachineId
+  readonly onOpenAgent: OpenAgent
+  readonly onOpenActions: OpenAgentActions
+}
+
 const BACK_LABEL = 'Back to machines'
+
+const MachineContent = React.memo(function MachineContent({
+  machine,
+  model,
+  connection,
+  herdKnown,
+  onOpenAgent,
+  onOpenActions,
+}: MachineBodyProps & {
+  readonly model: Option.Option<MachineScreenModel>
+  readonly connection: ConnectionView
+  readonly herdKnown: boolean
+}) {
+  return (
+    <StillUnderCover>
+      {Option.match(model, {
+        onNone: () => <UnknownMachine title={machine} loading={!herdKnown} />,
+        onSome: (found) => (
+          <MachineDetail
+            model={found}
+            connection={connection}
+            onOpenAgent={onOpenAgent}
+            onOpenActions={onOpenActions}
+          />
+        ),
+      })}
+    </StillUnderCover>
+  )
+})
 
 function MachineAgents({
   model,
@@ -163,34 +206,38 @@ function MachineDetail({
   )
 }
 
+function MachineBody(props: MachineBodyProps) {
+  const connection = useShownAtomValue(connectionAtom)
+  const herdKnown = useShownAtomValue(herdKnownAtom)
+  const model = useShownAtomValue(machineScreenAtom(props.machine))
+
+  return <MachineContent model={model} connection={connection} herdKnown={herdKnown} {...props} />
+}
+
 export function MachineScreen({ machine }: { machine: MachineId }) {
-  const connection = useAtomValue(connectionAtom)
-  const herdKnown = useAtomValue(herdKnownAtom)
-  const model = useAtomValue(machineScreenAtom(machine))
   const navigate = useNavigate()
   const openActions = useOpenAgentActions()
+  const covered = useCoveredByPushedScreen()
+  const [position, setPosition] = React.useState<PushedPosition>('arriving')
 
   const openAgent: OpenAgent = (agentMachine, card, opener) => {
     void navigate({
-      to: '/m/$machine/p/$pane',
+      to: '/machines/$machine/p/$pane',
       params: { machine: agentMachine, pane: card.row.pane },
-      state: openedFromMachine(opener),
+      state: openedFrom(opener),
     })
   }
 
   return (
-    <PushedScreen>
-      {Option.match(model, {
-        onNone: () => <UnknownMachine title={machine} loading={!herdKnown} />,
-        onSome: (found) => (
-          <MachineDetail
-            model={found}
-            connection={connection}
-            onOpenAgent={openAgent}
-            onOpenActions={openActions}
-          />
-        ),
-      })}
-    </PushedScreen>
+    <>
+      <PushedScreen>
+        <CoveredScope phase={coverPhaseOf(covered, position)}>
+          <MachineBody machine={machine} onOpenAgent={openAgent} onOpenActions={openActions} />
+        </CoveredScope>
+      </PushedScreen>
+      <PushedPositionContext value={setPosition}>
+        <Outlet />
+      </PushedPositionContext>
+    </>
   )
 }

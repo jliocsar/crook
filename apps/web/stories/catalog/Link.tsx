@@ -22,7 +22,9 @@ import {
   CHAT_PATH,
   CONVERSATION,
   feed,
+  MACHINE_CHAT_PATH,
   MACHINE_PATH,
+  MACHINE_SUBAGENT_PATH,
   MACHINES_PATH,
   NEW_AGENT_PATH,
   REVIEW_LAUNCH,
@@ -54,6 +56,7 @@ const NO_HERD = Option.none()
 const LOGGED_OUT_WITNESS: Witness = { text: 'Log in' }
 const SHELL_WITNESS: Witness = { selector: 'nav[aria-label="Sections"]' }
 const NO_PANE_ID: Witness = { absent: 'w1:p1' }
+const CHAT_SCREENS = ['chat', 'machine-chat']
 
 export const LINK_SCREENS: readonly LinkScreen[] = [
   { slug: 'agents', title: 'Agents', path: AGENTS_PATH, arrange: () => Effect.void },
@@ -71,6 +74,19 @@ export const LINK_SCREENS: readonly LinkScreen[] = [
     slug: 'subagent',
     title: 'Subagent',
     path: SUBAGENT_PATH,
+    arrange: ({ link }) =>
+      Effect.andThen(feed(link, REVIEW_LAUNCH), feed(link, REVIEW_LINES, SUBAGENT_SOURCE)),
+  },
+  {
+    slug: 'machine-chat',
+    title: 'Chat over its machine',
+    path: MACHINE_CHAT_PATH,
+    arrange: ({ link }) => feed(link, CONVERSATION),
+  },
+  {
+    slug: 'machine-subagent',
+    title: 'Subagent over its machine',
+    path: MACHINE_SUBAGENT_PATH,
     arrange: ({ link }) =>
       Effect.andThen(feed(link, REVIEW_LAUNCH), feed(link, REVIEW_LINES, SUBAGENT_SOURCE)),
   },
@@ -182,7 +198,9 @@ export const LINK_STORIES: readonly StoryMaker[] = Arr.flatMap(LINK_MOMENTS, (mo
       title: `${moment.title}, ${screen.title}`,
       path: screen.path,
       link: moment.seed,
-      shows: screen.slug === 'chat' ? { all: [moment.shows, NO_PANE_ID] } : moment.shows,
+      shows: CHAT_SCREENS.includes(screen.slug)
+        ? { all: [moment.shows, NO_PANE_ID] }
+        : moment.shows,
       arrange: screen.arrange,
     }),
   ),

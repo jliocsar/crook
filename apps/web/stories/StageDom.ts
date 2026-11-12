@@ -91,13 +91,16 @@ export const seesText = (text: string) => sees({ text })
 
 export const seesSelector = (selector: string) => sees({ selector })
 
-export const element = (selector: string) =>
+const findsElement = (
+  selector: string,
+  pick: (matches: readonly HTMLElement[]) => HTMLElement | undefined,
+) =>
   attempt(`finds ${selector}`, () =>
     waitFor(
       () => {
-        const found = document.querySelector<HTMLElement>(selector)
+        const found = pick(Array.from(document.querySelectorAll<HTMLElement>(selector)))
 
-        if (found === null) {
+        if (found === undefined) {
           throw new Error(`Nothing matches ${selector}.`)
         }
 
@@ -106,6 +109,10 @@ export const element = (selector: string) =>
       { timeout: FIND_TIMEOUT_MS },
     ),
   )
+
+export const element = (selector: string) => findsElement(selector, (matches) => matches.at(0))
+
+const topmostElement = (selector: string) => findsElement(selector, (matches) => matches.at(-1))
 
 export const role = (name: string | RegExp, matcher: ByRoleMatcher = 'button') =>
   attempt(`finds the ${String(matcher)} ${String(name)}`, () =>
@@ -206,7 +213,7 @@ export const pressesEvenIfHidden = (name: string | RegExp) =>
   )
 
 export const swipes = (selector: string, path: readonly number[], stepMs = SWIPE_STEP_MS) =>
-  Effect.flatMap(element(selector), (target) =>
+  Effect.flatMap(topmostElement(selector), (target) =>
     Effect.gen(function* () {
       const [first = 0, ...rest] = path
 

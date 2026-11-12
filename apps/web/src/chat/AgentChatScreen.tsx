@@ -7,7 +7,7 @@ import * as Option from 'effect/Option'
 import { Ellipsis } from 'lucide-react'
 import * as React from 'react'
 
-import type { ClaudeSessionId, MachineId, PaneId } from '@crook/domain/Ids'
+import type { ClaudeSessionId, MachineId, PaneId, SubagentId } from '@crook/domain/Ids'
 import type { SkillListing } from '@crook/domain/Skill'
 import { useClosedFromChat, useOpenAgentActions } from '@crook/web/actions/AgentActions'
 import { linkAnsweredAtom } from '@crook/web/atoms/Connection'
@@ -84,7 +84,8 @@ import { failureNotice, FloatingNotices } from '@crook/web/components/FloatingNo
 import type { FloatingNotice } from '@crook/web/components/FloatingNotices'
 import { Message } from '@crook/web/components/ui/message'
 import { stateMark } from '@crook/state-machine/Machine'
-import { useOpenedFromMachine } from '@crook/web/navigation/ChatOrigin'
+import { CHAT_ROUTES } from '@crook/web/navigation/ChatPlace'
+import type { ChatParent } from '@crook/web/navigation/ChatPlace'
 import { useCoveredByPushedScreen } from '@crook/web/navigation/Pushed'
 import { PushedHeader, PushedScreen, usePushedScreen } from '@crook/web/navigation/PushedScreen'
 import { shortElapsed } from '@crook/web/time/Elapsed'
@@ -108,6 +109,25 @@ interface DockProps {
 }
 
 const BACK_TO_AGENTS = 'Back to Agents'
+
+const BACK_LABELS = {
+  agents: () => BACK_TO_AGENTS,
+  machine: (model: ChatScreenModel) => `Back to ${machineLabelOf(model)}`,
+} satisfies Record<ChatParent, (model: ChatScreenModel) => string>
+
+const useOpenSubagent = (machine: MachineId, pane: PaneId, parent: ChatParent) => {
+  const navigate = useNavigate()
+
+  return React.useCallback(
+    (session: ClaudeSessionId, subagent: SubagentId) => {
+      void navigate({
+        to: CHAT_ROUTES[parent].subagent,
+        params: { machine, pane, session, subagent },
+      })
+    },
+    [navigate, machine, pane, parent],
+  )
+}
 
 const pendingPromptRows = (pending: readonly PendingPromptRow[]): readonly ThreadRow[] =>
   pending.map((prompt) => ({
@@ -275,8 +295,16 @@ function ChatDock({
   )
 }
 
-function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
-  const navigate = useNavigate()
+function ChatBody({
+  machine,
+  pane,
+  parent,
+}: {
+  machine: MachineId
+  pane: PaneId
+  parent: ChatParent
+}) {
+  const openSubagent = useOpenSubagent(machine, pane, parent)
   const { back } = usePushedScreen()
   const { opened, model, canAct, dimmed } = useOpenedChat(machine, pane)
   const transcriptKey = React.useMemo(
@@ -291,7 +319,6 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     away: dimmed,
     staleRows: isWatching(model) && showsStaleRows(state),
   })
-  const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
   const { draft, attachments, setDraft, setAttachments } = usePaneDraft(machine, pane)
   const [attachNote, setAttachNote] = React.useState<Option.Option<string>>(Option.none())
@@ -320,8 +347,9 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
     setDraft,
     attachments,
     onPromptSent: scrollToEnd,
+    parent,
   })
-  const backLabel = fromMachine ? `Back to ${machineLabelOf(model)}` : BACK_TO_AGENTS
+  const backLabel = BACK_LABELS[parent](model)
   const openActions = useOpenAgentActions()
   const closedHere = useClosedFromChat(machine, pane)
   const title = titleOf(model)
@@ -338,24 +366,18 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   const openRun = React.useCallback(
     (run: SubagentRun) => {
       if (Option.isSome(run.subagent)) {
-        void navigate({
-          to: '/m/$machine/p/$pane/sub/$session/$subagent',
-          params: { machine, pane, session: run.session, subagent: run.subagent.value },
-        })
+        openSubagent(run.session, run.subagent.value)
       }
     },
-    [navigate, machine, pane],
+    [openSubagent],
   )
   const openSubagentJob = React.useCallback(
     (job: BackgroundJob) => {
       if (Option.isSome(job.subagent) && Option.isSome(session)) {
-        void navigate({
-          to: '/m/$machine/p/$pane/sub/$session/$subagent',
-          params: { machine, pane, session: session.value, subagent: job.subagent.value },
-        })
+        openSubagent(session.value, job.subagent.value)
       }
     },
-    [navigate, machine, pane, session],
+    [openSubagent, session],
   )
   const backgroundWork = useBackgroundWork(view, items, paneClosed, openSubagentJob)
   const backgroundContext = React.useMemo(() => Option.some(backgroundWork), [backgroundWork])
@@ -475,11 +497,19 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   )
 }
 
-export function AgentChatScreen({ machine, pane }: { machine: MachineId; pane: PaneId }) {
+export function AgentChatScreen({
+  machine,
+  pane,
+  parent,
+}: {
+  machine: MachineId
+  pane: PaneId
+  parent: ChatParent
+}) {
   return (
     <PushedScreen>
       <ImageViewer>
-        <ChatBody machine={machine} pane={pane} />
+        <ChatBody machine={machine} pane={pane} parent={parent} />
       </ImageViewer>
     </PushedScreen>
   )

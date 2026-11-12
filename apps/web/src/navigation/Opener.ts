@@ -19,6 +19,9 @@ export const openedFrom = (opener: HTMLElement): HistoryState => ({
   openerKey: openerKeys.get(opener) ?? registerOpener(opener),
 })
 
+export const carriedOpener = ({ openerKey }: HistoryState): HistoryState =>
+  openerKey === undefined ? {} : { openerKey }
+
 export const findOpener = (openerKey: string | undefined): Option.Option<HTMLElement> =>
   pipe(
     Option.fromUndefinedOr(openerKey),

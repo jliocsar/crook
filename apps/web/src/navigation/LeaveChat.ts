@@ -1,9 +1,8 @@
 import type { RegisteredRouter } from '@tanstack/react-router'
 import * as Effect from 'effect/Effect'
 
-const HERD_PATH = '/'
-
-const isOnHerd = (router: RegisteredRouter): boolean => router.state.location.pathname === HERD_PATH
+const isOn = (router: RegisteredRouter, pathname: string): boolean =>
+  router.state.location.pathname === pathname
 
 const backThroughHistory = (router: RegisteredRouter) =>
   Effect.callback<void>((resume) => {
@@ -17,19 +16,21 @@ const backThroughHistory = (router: RegisteredRouter) =>
     return Effect.sync(stop)
   })
 
-export const leaveForHerd = (router: RegisteredRouter): Effect.Effect<void> =>
+export const leaveChatFor = (router: RegisteredRouter, parent: string): Effect.Effect<void> =>
   Effect.suspend(() => {
-    if (isOnHerd(router)) {
+    if (isOn(router, parent)) {
       return Effect.void
     }
 
     if (!router.history.canGoBack()) {
-      return Effect.promise(() => router.navigate({ to: HERD_PATH, replace: true }))
+      return Effect.promise(() => router.navigate({ href: parent, replace: true }))
     }
 
     return backThroughHistory(router).pipe(
       Effect.andThen(() =>
-        isOnHerd(router) ? Effect.void : Effect.promise(() => router.navigate({ to: HERD_PATH })),
+        isOn(router, parent)
+          ? Effect.void
+          : Effect.promise(() => router.navigate({ href: parent })),
       ),
     )
   })

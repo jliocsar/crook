@@ -17,7 +17,7 @@ function AgentChat() {
 
   return (
     <>
-      <AgentChatScreen machine={machine} pane={pane} />
+      <AgentChatScreen machine={machine} pane={pane} parent="agents" />
       <Outlet />
     </>
   )

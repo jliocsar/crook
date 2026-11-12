@@ -42,7 +42,8 @@ import { HoldButton } from '@crook/web/components/ui/hold-button'
 import { Input } from '@crook/web/components/ui/input'
 import type { AgentCardModel } from '@crook/web/herd/HerdLayout'
 import { restoreFocus } from '@crook/web/navigation/Focus'
-import { leaveForHerd } from '@crook/web/navigation/LeaveForHerd'
+import { parentOfShownChat } from '@crook/web/navigation/ChatPlace'
+import { leaveChatFor } from '@crook/web/navigation/LeaveChat'
 
 export type OpenAgentActions = (machine: MachineId, pane: PaneId, origin: ActionsOrigin) => void
 
@@ -350,16 +351,9 @@ export function AgentActions() {
     toast(ToastIntent.Show({ text: PANE_CLOSED_NOTICE }))
   }
 
-  const isOnChatOf = (agent: PaneAddress) =>
-    router.state.location.pathname ===
-    router.buildLocation({
-      to: '/m/$machine/p/$pane',
-      params: { machine: agent.machine, pane: agent.pane },
-    }).pathname
-
-  const goToHerd = () =>
+  const leaveChat = (parent: string) =>
     Effect.runCallback(
-      leaveForHerd(router).pipe(
+      leaveChatFor(router, parent).pipe(
         Effect.andThen(
           Effect.sync(() => {
             showPaneClosed()
@@ -388,11 +382,12 @@ export function AgentActions() {
             return
           }
 
-          if (isOnChatOf(current.session.agent)) {
-            goToHerd()
-          } else {
-            showPaneClosed()
-          }
+          const { agent } = current.session
+
+          Option.match(parentOfShownChat(router, agent.machine, agent.pane), {
+            onNone: showPaneClosed,
+            onSome: leaveChat,
+          })
         },
         Ended: ({ notice }) => {
           finish()

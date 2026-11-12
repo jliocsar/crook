@@ -231,6 +231,8 @@ crook's motion, through Motion (`motion/react`):
   sits under the header, so the back button keeps its whole 44px.
   - The header's back button names where it goes ("Back to laptop" when a chat was opened from
     that machine).
+  - A chat opened from a machine screen is pushed over that screen, so the machine screen shows
+    beneath it during the slide, both ways, and Back lands on it.
   - The new screen's title takes focus once it has arrived, and Back returns focus to whatever
     opened it, or to the active tab when that's gone. The opener is the element that was tapped,
     not the focused one: a WebKit tap doesn't focus a button.
@@ -353,8 +355,9 @@ The Agents tab: every agent on every machine, one section per machine.
   meanwhile goes last until the order thaws.
 - **An ended agent leaves the herd**, which lists only live agents. When it ends while its sheet
   is open, the sheet closes with a toast: "Pane closed" when its pane went, "Claude exited" when
-  the pane is still there. A close from the chat goes back to the herd with "Pane closed"; a
-  close from a card needs no toast, since the card leaves.
+  the pane is still there. A close from the chat goes back to where the chat was opened from,
+  the herd or the machine screen, with "Pane closed"; a close from a card needs no toast, since the
+  card leaves.
 - **The toast** is a pill in `bg-foreground text-background` above the tab bar. It rises 8px on
   the fade and stays 3s, both picked in the prototype rather than measured; settle them on the
   phone.
@@ -555,8 +558,8 @@ When the agent ends or its machine drops, the dock becomes a card in its place:
 - **A draft survives** the card: the composer stays mounted underneath it.
 - **Focus stays in the dock:** when the card replaces a focused composer, focus moves to its
   first button. Screen readers hear the card's title once.
-- **A close from the `…` sheet** goes back to the herd with a "Pane closed" toast, and never
-  shows the card, because you did it.
+- **A close from the `…` sheet** goes back to where the chat was opened from, the herd or the
+  machine screen, with a "Pane closed" toast, and never shows the card, because you did it.
 
 A subagent row pushes the subagent's own screen, "Back to" its agent:
 

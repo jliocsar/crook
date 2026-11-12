@@ -751,19 +751,6 @@ describe('AgentChatScreen', () => {
     }),
   )
 
-  it.effect('names the machine on Back when the chat was opened from it', () =>
-    Effect.gen(function* () {
-      yield* renderApp(
-        '/machines/laptop',
-        live([agent('w1:p1', 'idle', { title: 'Port the herd' })]),
-      )
-
-      yield* click(yield* Effect.promise(() => screen.findByText('Port the herd')))
-
-      expect(yield* findByRole('button', 'Back to laptop')).toBeDefined()
-    }),
-  )
-
   it.effect('keeps the image open while the live tail pushes its card out of the thread', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
