@@ -1,7 +1,7 @@
 import { cn } from 'cn'
 import type * as React from 'react'
 
-import { Spinner } from '@crook/web/components/ui/spinner'
+import { SpinnerGlyph } from '@crook/web/components/ui/spinner'
 
 type ThinkingStateProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
   label: React.ReactNode
@@ -22,7 +22,7 @@ export function ThinkingState({ label, elapsed, className, ...rootProps }: Think
       {...rootProps}
     >
       <div data-slot="thinking-state-header" className="flex items-center gap-2.5 px-3.5 py-2.5">
-        <Spinner holdsRoom size={ICON_SIZE} className="text-muted-foreground shrink-0" />
+        <SpinnerGlyph size={ICON_SIZE} className="text-muted-foreground shrink-0" />
         <span
           data-slot="thinking-state-label"
           className="animate-pulse text-sm font-semibold motion-reduce:animate-none"

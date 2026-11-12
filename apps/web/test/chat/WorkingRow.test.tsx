@@ -180,6 +180,21 @@ describe('the Working row', () => {
     }),
   )
 
+  it.effect('spins in the commit the row shows, with no notice delay of its own', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Queue.offerAll(transcript, [opened(), chunk(0, 10, [prompt(0, 'Fix the herd')])])
+      yield* Effect.promise(() => screen.findByText('Working', WORKING_ROW))
+
+      const row = present(lastRow(), 'the Working row')
+
+      expect(row.querySelector('[data-slot="spinner"]')).not.toBeNull()
+      expect(row.querySelector('[data-slot="spinner-slot"]')).toBeNull()
+    }),
+  )
+
   it.effect('keeps the same row element through every tool call of a turn', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, live([agent('w1:p1', 'working')]))
