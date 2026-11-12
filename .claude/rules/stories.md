@@ -62,6 +62,7 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   Raising the find limit would have hidden the first and done nothing for the second. A third
   tapped a card while the chat it had just left was still sliding out, so nothing reopened (measured:
   1 of 14 runs, the chat still mounted and current). A story that goes back waits for the chat to go.
+- A chat over a machine screen leaves two pushed screens in the page, each with its own back edge, and the one under the chat is inert. A story's swipe and its wait for a chat to arrive therefore take the last pushed screen in the page, which is the one on top.
 - The chat stays mounted under a subagent's screen, so the page's text still holds the chat's own rows, and a witness that a word is absent can only fail there (measured: `Working` from the covered chat). A story there names the state of the machine on top instead.
 - A working flip stamped before the transcript's last line reads as a turn already answered, so a fixture that means working now stamps its flip after its lines (measured: the composer's working stories read `done` with the fixtures' 42 s old flip).
 - A witness that a typed draft landed reads the send button, not the field. The field held the

@@ -5,13 +5,22 @@ import type { AgentRow } from '@crook/domain/AgentRow'
 
 import { liveWith } from '../../test/AppWiring.tsx'
 import { agent, DESK, herd, LAPTOP, machine } from '../../test/HerdFixtures.ts'
-import { AGENTS_PATH, CHAT_TITLE, chatAgent, CONVERSATION, feed } from '../Fixtures.ts'
+import {
+  AGENTS_PATH,
+  CHAT_TITLE,
+  chatAgent,
+  CONVERSATION,
+  feed,
+  MACHINE_PATH,
+} from '../Fixtures.ts'
 import { clicks, seesText, swipes, types, until } from '../StageDom.ts'
 import { linkStory, step } from '../Story.tsx'
 import type { LinkStage, StoryMaker, TimelineStep } from '../Story.tsx'
 
 const CARD_BUTTON = new RegExp(CHAT_TITLE, 'u')
 const BACK = 'Back to Agents'
+const BACK_TO_MACHINE = 'Back to laptop'
+const MACHINE_SCREEN_WITNESS = 'About'
 const COMPOSER = /Message|Reply/u
 const DRAFT = 'One more thing before you go'
 const ARRIVED_UNDER_CHAT = 'Sweep the release notes'
@@ -23,8 +32,9 @@ const FULL_SWIPE = [0, 60, 120, 180, 240, 300]
 const chatHasArrived = until(
   'the chat to arrive',
   () =>
-    document.querySelector('[data-slot="pushed-screen"]')?.contains(document.activeElement) ===
-    true,
+    Array.from(document.querySelectorAll('[data-slot="pushed-screen"]'))
+      .at(-1)
+      ?.contains(document.activeElement) === true,
 )
 
 const chatHasLeft = until(
@@ -96,6 +106,28 @@ const herdUnderChatStory = (
     ],
   })
 
+const chatFromMachineStory = (
+  slug: string,
+  title: string,
+  leaves: readonly TimelineStep<LinkStage>[],
+): StoryMaker =>
+  linkStory({
+    slug,
+    title,
+    shows: { text: CHAT_TITLE },
+    ends: { text: MACHINE_SCREEN_WITNESS },
+    path: MACHINE_PATH,
+    link: liveWith(BEFORE_MOVING_UNDER_CHAT),
+    settle: () => seesText(CHAT_TITLE),
+    timeline: [
+      step<LinkStage>(400, 'Tap the card, the chat slides over the machine screen', () =>
+        clicks(CARD_BUTTON),
+      ),
+      step<LinkStage>(1100, 'The transcript lands', ({ link }) => feed(link, CONVERSATION)),
+      ...leaves,
+    ],
+  })
+
 export const HERD_UNDER_CHAT_STORIES: readonly StoryMaker[] = [
   herdUnderChatStory(
     'herd-moves-under-chat-then-back',
@@ -134,6 +166,27 @@ export const HERD_UNDER_CHAT_STORIES: readonly StoryMaker[] = [
       typesInTheChat,
       othersMoveAfter(200),
       step<LinkStage>(200, 'Swipe while the list still holds', () =>
+        swipes(EDGE_BACK, FULL_SWIPE).pipe(Effect.andThen(chatHasLeft)),
+      ),
+    ],
+  ),
+  chatFromMachineStory(
+    'chat-from-machine-then-back',
+    'A chat opened from a machine screen slides over that screen, and a back tap reveals it',
+    [
+      step<LinkStage>(700, 'Tap back, the machine screen is under the chat as it leaves', () =>
+        clicks(BACK_TO_MACHINE).pipe(Effect.andThen(chatHasLeft)),
+      ),
+    ],
+  ),
+  chatFromMachineStory(
+    'chat-from-machine-then-swipe',
+    'A chat opened from a machine screen slides over that screen, and a swipe reveals it',
+    [
+      step<LinkStage>(700, 'Swipe part of the way and let go, the chat comes back', () =>
+        chatHasArrived.pipe(Effect.andThen(swipes(EDGE_BACK, SHORT_SWIPE, SLOW_SWIPE_STEP_MS))),
+      ),
+      step<LinkStage>(900, 'Swipe past the line, the chat leaves', () =>
         swipes(EDGE_BACK, FULL_SWIPE).pipe(Effect.andThen(chatHasLeft)),
       ),
     ],

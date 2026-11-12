@@ -24,6 +24,7 @@ import type { LaunchFailure } from '@crook/web/atoms/Launch'
 import { retryKey } from '@crook/web/newagent/LaunchKey'
 import type { StartedAgent } from '@crook/web/newagent/NewAgentLayout'
 import { mintIdempotencyKey } from '@crook/web/rpc/IdempotencyKeys'
+import { carriedOpener } from '@crook/web/navigation/Opener'
 
 export interface Launch {
   readonly pending: boolean
@@ -55,7 +56,7 @@ const useOpenChat = () => {
         to: '/m/$machine/p/$pane',
         params: { machine, pane },
         replace: true,
-        state: ({ openerKey }) => (openerKey === undefined ? {} : { openerKey }),
+        state: carriedOpener,
       })
     },
     [navigate],

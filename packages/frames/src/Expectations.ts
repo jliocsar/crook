@@ -46,6 +46,7 @@ const A_CHAT_WITH_ROWS = {
 }
 
 const A_REOPENED_CHAT = A_CHAT_WITH_ROWS
+const A_CHAT_OVER_A_MACHINE = { ...A_CHAT, herd: NOTHING_ALLOWED }
 
 export const NO_DECLARED_ORDER: Expectation = story({})
 
@@ -55,6 +56,8 @@ export const TIMELINE_EXPECTATIONS = {
   'transition/herd-moves-under-chat-then-swipe': story(A_CHAT),
   'transition/herd-moves-while-typing-then-back': story(A_CHAT),
   'transition/herd-moves-while-typing-then-swipe': story(A_CHAT),
+  'transition/chat-from-machine-then-back': story(A_CHAT_OVER_A_MACHINE),
+  'transition/chat-from-machine-then-swipe': story(A_CHAT_OVER_A_MACHINE),
   'transition/cached-reopen-catch-up': story(
     { thread: inSequence('thread-rows'), dock: inSequence('composer') },
     { watchFrom: 'first-step' },

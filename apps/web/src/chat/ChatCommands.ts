@@ -77,7 +77,9 @@ import type {
 } from '@crook/web/chat/ComposerFailureMachine'
 import type { Restart } from '@crook/web/chat/EdgeCard'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
-import { carriedOrigin } from '@crook/web/navigation/ChatOrigin'
+import { CHAT_ROUTES } from '@crook/web/navigation/ChatPlace'
+import type { ChatParent } from '@crook/web/navigation/ChatPlace'
+import { carriedOpener } from '@crook/web/navigation/Opener'
 
 export type ComposerCommands = Omit<
   ComposerProps,
@@ -134,6 +136,7 @@ interface ChatCommandsInput {
   readonly setDraft: (draft: string) => void
   readonly attachments: readonly DraftAttachment[]
   readonly onPromptSent: () => void
+  readonly parent: ChatParent
 }
 
 export interface PendingPrompt {
@@ -609,7 +612,7 @@ const useAskAnswer = (asking: Option.Option<string>, answer: CommandAction) => {
   }
 }
 
-const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
+const useRestartInPlace = (machine: MachineId, parent: ChatParent, action: CommandAction) => {
   const navigate = useNavigate()
   const target = pipe(
     Option.liftPredicate(action.state, (state) => isDone(state)),
@@ -620,13 +623,13 @@ const useRestartInPlace = (machine: MachineId, action: CommandAction) => {
   React.useEffect(() => {
     if (target !== undefined) {
       void navigate({
-        to: '/m/$machine/p/$pane',
+        to: CHAT_ROUTES[parent].chat,
         params: { machine, pane: target },
         replace: true,
-        state: carriedOrigin,
+        state: carriedOpener,
       })
     }
-  }, [target, machine, navigate])
+  }, [target, machine, parent, navigate])
 }
 
 export const useChatCommands = ({
@@ -642,6 +645,7 @@ export const useChatCommands = ({
   setDraft,
   attachments,
   onPromptSent,
+  parent,
 }: ChatCommandsInput): ChatCommands => {
   const { machine, pane } = opened
   const prompt = useCommandAction(machine)
@@ -697,7 +701,7 @@ export const useChatCommands = ({
   const answering = Option.isSome(openAsk) && isAnswerUnderway(askAnswer.state)
 
   useRestoreUndeliveredDraft(prompt, draft, setDraft)
-  useRestartInPlace(machine, restart)
+  useRestartInPlace(machine, parent, restart)
 
   const sendPrompt = (command: Command, uploads: readonly HeldUpload[] = []) => {
     composerFailure.onPromptSent()
