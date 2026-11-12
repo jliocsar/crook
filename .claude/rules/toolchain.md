@@ -56,6 +56,10 @@ Running `prepare` in a worktree whose branch has `.githooks` takes the hooks awa
 on a branch that doesn't, so while such a branch is out, install there with `--ignore-scripts` and
 run `bunx effect-tsgo patch --oxlint` by hand.
 
+`git stash` is shared the same way: the worktrees of a repo hold one stash list. A lane that stashed a file to see its test fail and popped it took the change another worktree had stashed in between, and that worktree popped this one's (measured, with three lanes at work). Set a change aside with a patch, `git diff > tmp/x.patch` then `git apply`, never with a stash.
+
+The push hook peels each pushed ref to its commit and skips a commit that a tracking ref of the remote it pushes to already contains, so a release tag pushed after its branch runs lint and the format check and no tests. An annotated tag's sha is the tag object, never `HEAD`, so before the peel a tag alone, or `main` and its tag together, ran the whole suite while git's SSH session sat idle. A dry harness, the hook run with stubs for `oxlint`, `bun` and `bunx` over the stdin git hands it, gave the same answer as before for every branch case: a ref at `HEAD` tests what changed since the remote's sha or, for a new branch, since its merge base with `origin/main`, and a ref other than `HEAD` with a new commit, a remote sha this clone lacks or two different bases run everything. Two answers moved: a ref other than `HEAD` whose commit the remote has runs nothing instead of everything, and a tag on a new `HEAD` tests what changed instead of everything (all measured). The check reads this clone's view of the remote, which only a fetch moves, so a commit believed pushed that was not would skip its tests. A push to a URL rather than a remote's name matches no tracking ref and skips nothing.
+
 Installs wait three days for a new release, set in `bunfig.toml`. A version an exact pin asks for
 fails too, and a young optional package is skipped with no error, which is how tsgo's platform
 binary goes missing. A lockfile's entries aren't re-checked: a frozen install from a clean copy found
