@@ -16,6 +16,7 @@ import {
 } from '@crook/web/chat/BackgroundModel'
 import type { ToolCallModel } from '@crook/web/chat/ChatItems'
 import { Swap } from '@crook/web/components/Swap'
+import { ChevronColumn, TOOL_ICON_SIZE, TOOL_ROW_CLASS } from '@crook/web/components/ui/tool-call'
 import { useNow } from '@crook/web/time/Now'
 
 const MONITOR_TOOL = 'Monitor'
@@ -102,12 +103,13 @@ function MarkerButton({
         onOpen(job)
       }}
       className={cn(
-        'flex min-h-11 w-full items-center gap-2.5 rounded-[var(--radius)] border px-3 text-left text-sm',
+        TOOL_ROW_CLASS,
+        'rounded-[var(--radius)] border text-sm',
         live ? 'border-border bg-card' : 'bg-muted/40 border-transparent',
         job.state === 'unconfirmed' && 'border-border border-dashed bg-transparent',
       )}
     >
-      <Icon aria-hidden="true" size={15} className="text-muted-foreground shrink-0" />
+      <Icon aria-hidden="true" size={TOOL_ICON_SIZE} className="text-muted-foreground shrink-0" />
       <Swap id={live ? 'live' : 'settled'} className="min-w-0 flex-1">
         {live ? (
           <span className="truncate">
@@ -121,10 +123,12 @@ function MarkerButton({
           </span>
         )}
       </Swap>
-      <span
-        aria-hidden="true"
-        className={cn('inline-block size-2 shrink-0 rounded-full', JOB_DOT[job.state])}
-      />
+      <ChevronColumn>
+        <span
+          aria-hidden="true"
+          className={cn('inline-block size-2 shrink-0 rounded-full', JOB_DOT[job.state])}
+        />
+      </ChevronColumn>
     </button>
   )
 }

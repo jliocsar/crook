@@ -25,15 +25,17 @@ const STATUS_TEXT = {
   stopped: 'stopped',
 } satisfies Record<ToolCallStatus, string>
 
-const ICON_SIZE = 15
 const CHEVRON_SIZE = 14
+
+export const TOOL_ICON_SIZE = 15
+export const TOOL_ROW_CLASS = 'flex min-h-11 w-full min-w-0 items-center gap-2.5 px-3.5 text-left'
 
 function StatusIcon({ status }: { status: ToolCallStatus }) {
   if (status === 'running') {
     return (
       <span
         className="inline-flex items-center justify-center"
-        style={{ width: ICON_SIZE, height: ICON_SIZE }}
+        style={{ width: TOOL_ICON_SIZE, height: TOOL_ICON_SIZE }}
       >
         <RunDot status="running" />
       </span>
@@ -41,18 +43,30 @@ function StatusIcon({ status }: { status: ToolCallStatus }) {
   }
 
   if (status === 'success') {
-    return <Check aria-hidden="true" size={ICON_SIZE} className="text-accent" />
+    return <Check aria-hidden="true" size={TOOL_ICON_SIZE} className="text-accent" />
   }
 
   if (status === 'error') {
-    return <TriangleAlert aria-hidden="true" size={ICON_SIZE} className="text-destructive" />
+    return <TriangleAlert aria-hidden="true" size={TOOL_ICON_SIZE} className="text-destructive" />
   }
 
   if (status === 'waiting') {
-    return <CircleDot aria-hidden="true" size={ICON_SIZE} className="text-primary" />
+    return <CircleDot aria-hidden="true" size={TOOL_ICON_SIZE} className="text-primary" />
   }
 
-  return <Circle aria-hidden="true" size={ICON_SIZE} className="text-muted-foreground" />
+  return <Circle aria-hidden="true" size={TOOL_ICON_SIZE} className="text-muted-foreground" />
+}
+
+export function ChevronColumn({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      data-slot="chevron-column"
+      className="inline-flex shrink-0 items-center justify-center"
+      style={{ width: CHEVRON_SIZE }}
+    >
+      {children}
+    </span>
+  )
 }
 
 export function ToolCall({
@@ -83,7 +97,10 @@ export function ToolCall({
         data-slot="tool-call-header"
         aria-expanded={open}
         aria-controls={panelId}
-        className="focus-visible:ring-ring flex min-h-11 w-full min-w-0 items-center gap-2.5 rounded-[inherit] px-3.5 text-left focus-visible:ring-2 focus-visible:outline-none"
+        className={cn(
+          TOOL_ROW_CLASS,
+          'focus-visible:ring-ring rounded-[inherit] focus-visible:ring-2 focus-visible:outline-none',
+        )}
         onClick={() => {
           setOpen(!open)
         }}
@@ -108,14 +125,16 @@ export function ToolCall({
           )}
           <StatusIcon status={status} />
           <span className="sr-only">{STATUS_TEXT[status]}</span>
-          <ChevronRight
-            aria-hidden="true"
-            size={CHEVRON_SIZE}
-            className={cn(
-              'text-muted-foreground transition-transform duration-200 motion-reduce:transition-none',
-              open && 'rotate-90',
-            )}
-          />
+          <ChevronColumn>
+            <ChevronRight
+              aria-hidden="true"
+              size={CHEVRON_SIZE}
+              className={cn(
+                'text-muted-foreground transition-transform duration-200 motion-reduce:transition-none',
+                open && 'rotate-90',
+              )}
+            />
+          </ChevronColumn>
         </span>
       </button>
       {Option.match(footer, {

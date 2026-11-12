@@ -34,6 +34,7 @@ import type { LinkStage, StoryMaker } from '../Story.tsx'
 const NOW = DateTime.addDuration(START, Duration.minutes(5))
 const DOCK = '[data-slot="background-dock"]'
 const SHELL_BUTTON = 'bun run dev, running'
+const LONG_COMMAND = 'bun run --filter @crook/web dev -- --host 0.0.0.0 --port 5173 --strictPort'
 
 const ago = (seconds: number) => DateTime.subtract(NOW, { seconds })
 
@@ -142,6 +143,25 @@ const dockStory = (
 
 const opensDock = () => clicks(/running, show details/u)
 
+const besideToolRow = (status: SubagentStatus) => {
+  const task = new ShellTask(
+    Struct.evolve(shell(status), { command: () => Option.some(LONG_COMMAND) }),
+  )
+
+  return [
+    opened(),
+    chunk(0, 50, [
+      prompt(0, 'Check the Vite config, then bring up the dev server'),
+      toolUse(10, 'toolu_read', 'Read', { file_path: 'apps/web/vite.config.ts' }),
+      toolResult(20, 'toolu_read', 'export default defineConfig({ server: { port: 5173 } })'),
+      toolUse(30, 'toolu_dev', 'Bash', { command: LONG_COMMAND, run_in_background: true }),
+      toolResult(40, 'toolu_dev', 'Command running in background with ID: bdev.'),
+    ]),
+    caughtUp(50),
+    new BackgroundChanged({ session: SESSION, tasks: [task], activity: [] }),
+  ]
+}
+
 export const BACKGROUND_STORIES: readonly StoryMaker[] = [
   dockStory('running', 'Background dock, everything running', [shell(), monitor()]),
   dockStory('expanded', 'Background dock, expanded', [shell(), monitor()], { settle: opensDock }),
@@ -186,6 +206,19 @@ export const BACKGROUND_STORIES: readonly StoryMaker[] = [
     slug: 'marker-stopped',
     title: 'Background marker, stopped by Claude',
     events: changed([shell('stopped')], 'stopped'),
+    shows: { selector: '[data-slot="background-marker"]' },
+  }),
+  chatStory({
+    slug: 'marker-beside-tool',
+    title: 'Background marker, live, under a tool row',
+    row: chatAgent('working'),
+    events: besideToolRow('running'),
+    shows: { selector: '[data-slot="background-marker"]' },
+  }),
+  chatStory({
+    slug: 'marker-beside-tool-finished',
+    title: 'Background marker, finished, under a tool row',
+    events: besideToolRow('completed'),
     shows: { selector: '[data-slot="background-marker"]' },
   }),
   chatStory({

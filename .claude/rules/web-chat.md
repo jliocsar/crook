@@ -56,6 +56,7 @@ A decline with a message stays out of the machine, on the composer's action, whe
 - A subagent run that started, with its session gone idle and no roster to say otherwise, has
   nothing vouching for it: the dock read "1 running 15d" on a real transcript. It reads as
   unconfirmed there, the word that work nothing said ended already has, and it leaves the count.
+- A background run's row sits on the tool rows' grid and takes their measurements from the tool row itself: its padding, its icon size and gap, and a column the chevron's width that its state dot centres in. With its own `px-3` and the dot at its edge, the icon and text started 2 px left of the tool rows' and the dot's centre sat 5 px right of the chevron's (read from the classes). Now the icons start at 31 px, the text at 56 px, and the dot's centre and the chevron's both sit at 352 px at 390 wide and 282 px at 320, with a long command still ending in an ellipsis before the dot (measured in Chromium).
 - A pane closing says nothing about whether a run failed, so a run cut off that way reads "pane
   closed" with a neutral dot rather than red.
 - The dock went on counting that run: "1 running" with its clock going, under a row reading "pane closed", since the row read the pane and the dock read only the run's own status (seen in a story, with the pane's presence reading closed). Once a pane has closed the dock counts nothing as running, shells and monitors included, because nothing can say they still run, and the thread's markers read them as last seen. What already ended keeps how it ended.
