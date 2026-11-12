@@ -30,7 +30,7 @@
     "fmt:check": "oxfmt --check --disable-nested-config",
     "frames": "bun packages/frames/src/main.ts",
     "verify:transcript-pipe": "bun .claude/skills/verify-transcript-pipe/verify.ts",
-    "prepare": "git config core.hooksPath .githooks && effect-tsgo patch --oxlint"
+    "prepare": "git config core.hooksPath .githooks && (git config core.sshCommand > /dev/null || git config core.sshCommand 'ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=60') && effect-tsgo patch --oxlint"
   },
   "devDependencies": {
     "@effect/tsgo": "0.67.4",
