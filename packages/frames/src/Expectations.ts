@@ -281,6 +281,11 @@ export const TIMELINE_EXPECTATIONS = {
     dock: inSequence('composer', 'edge-card'),
     background: inSequence('background-dock'),
   }),
+  'background/chips-under-a-growing-composer': story({
+    thread: inSequence('thread-rows'),
+    dock: inSequence('composer'),
+    background: inSequence('background-dock'),
+  }),
   'background/dock-to-summary': story({
     thread: inSequence('thread-rows'),
     background: inSequence('background-dock', 'background-summary'),

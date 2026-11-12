@@ -382,3 +382,6 @@ A decline with a message stays out of the machine, on the composer's action, whe
   short, cold or cached, and a catch-up landing after it still lifted (measured as above). A cold
   open tapped from a card did not lift with the fixed wait either, in 8 of 8 runs, so the race
   belongs to a thread that mounts holding its rows.
+
+
+- The running chips animate their position only when the set of chips changes. Each chip carried Motion's position layout, and typing re-renders the dock in the commit that grows or shrinks the composer, so Motion measured every chip as moved by the composer's change and glided it back from there, inside a row that clips: a four-line draft and its send left the chip row empty or cut for 20 frames, 12 with no chip showing at all, where keyed to the chip set it held still for all 268 frames of the same story (measured in Chromium at 390x844 and 4x CPU throttling, one run each). The row clips vertically and holds each chip's 44 px tap area inside its own padding, since an overflow the row clips also hides from hit-testing: before, the row scrolled 5 px up and down at rest (scrollHeight 37 against 32) and a tap 20 px above or below a chip's centre missed it; now it does not scroll and a tap from 21 px above to 20 px below lands on the chip, the last pixel below going to the event line under it (measured in Chromium at 390x844).

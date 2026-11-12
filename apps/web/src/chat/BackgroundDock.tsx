@@ -286,11 +286,13 @@ function JobStateIcon({ state, size = 13 }: { state: JobState; size?: number }) 
 function Capsule({
   job,
   roomy,
+  chipSet,
   now,
   onOpen,
 }: {
   job: BackgroundJob
   roomy: boolean
+  chipSet: string
   now: DateTime.Utc
   onOpen: (job: BackgroundJob) => void
 }) {
@@ -305,6 +307,7 @@ function Capsule({
       data-state={job.state}
       aria-label={`${job.title}, ${jobStateWord(job.state)}`}
       layout={chipMotion.layout}
+      layoutDependency={chipSet}
       initial={chipMotion.initial}
       animate={{
         opacity: finished && job.state !== 'failed' ? FINISHED_CHIP_OPACITY : 1,
@@ -353,17 +356,25 @@ function ChipRow({
 }) {
   const overflow = useOverflowEdges<HTMLDivElement>()
   const roomy = isRoomy(chips)
+  const chipSet = chips.map((job) => job.key).join(' ')
 
   return (
     <div
       ref={overflow.ref}
       style={overflow.style}
       data-slot="background-chips"
-      className="no-scrollbar mt-1.5 flex snap-x scroll-px-4 gap-1.5 overflow-x-auto px-4 py-0.5"
+      className="no-scrollbar -mb-1.5 flex snap-x scroll-px-4 gap-1.5 overflow-x-auto overflow-y-hidden px-4 py-2"
     >
       <AnimatePresence initial={false} mode="popLayout">
         {chips.map((job) => (
-          <Capsule key={job.key} job={job} roomy={roomy} now={now} onOpen={onOpen} />
+          <Capsule
+            key={job.key}
+            job={job}
+            roomy={roomy}
+            chipSet={chipSet}
+            now={now}
+            onOpen={onOpen}
+          />
         ))}
       </AnimatePresence>
     </div>

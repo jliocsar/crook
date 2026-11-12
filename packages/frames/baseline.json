@@ -6,6 +6,9 @@
   "ask/same-dialog-again": {
     "always": ["shift:div[chat-dock]"]
   },
+  "background/chips-under-a-growing-composer": {
+    "always": ["shift:div[chat-dock]"]
+  },
   "background/pane-closes": {
     "always": ["shift:div[chat-dock]"]
   },

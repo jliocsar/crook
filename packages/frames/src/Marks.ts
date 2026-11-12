@@ -122,6 +122,11 @@ export const MARKS: readonly MarkDefinition[] = [
   },
   { mark: 'background-dock', track: 'background', selector: '[data-slot="background-dock"]' },
   {
+    mark: 'background-chip',
+    track: 'background-chip',
+    selector: '[data-slot="background-chip"]',
+  },
+  {
     mark: 'background-summary',
     track: 'background',
     selector: '[data-slot="background-summary"]',
