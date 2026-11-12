@@ -7,6 +7,7 @@ import * as AtomRegistry from 'effect/reactivity/AtomRegistry'
 
 import type { HerdView } from '@crook/domain/HerdView'
 import { hubRuntime } from '@crook/web/atoms/Hub'
+import type { DraftCache } from '@crook/web/cache/DraftCache'
 import { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import type { TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import { remountWhenParamsChange } from '@crook/web/navigation/Pushed'
@@ -35,7 +36,9 @@ export const appRouter = (path: string) =>
     ...ROUTE_FALLBACKS,
   })
 
-export const appRegistry = (hub: Layer.Layer<HubLink | TranscriptCache | HubUploads>) =>
+export const appRegistry = (
+  hub: Layer.Layer<HubLink | TranscriptCache | HubUploads | DraftCache>,
+) =>
   AtomRegistry.make({
     initialValues: [Atom.initialValue(hubRuntime.layer, hub)],
     scheduleTask,

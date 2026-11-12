@@ -3,6 +3,7 @@ import * as Stream from 'effect/Stream'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as Atom from 'effect/reactivity/Atom'
 
+import { DraftCache } from '@crook/web/cache/DraftCache'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import { HubConnection } from '@crook/web/rpc/HubConnection'
@@ -26,6 +27,7 @@ export const hubRuntime = Atom.runtime(
   Layer.mergeAll(
     Layer.provide(Layer.mergeAll(HubLink.layer, TranscriptCache.layer), browserServices),
     hubUploads,
+    DraftCache.layer,
   ),
 )
 

@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { SentBound } from '@crook/web/atoms/SentBound'
+import { DraftCache } from '@crook/web/cache/DraftCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { TranscriptCache } from '@crook/web/cache/TranscriptCache'
 import { HubLink } from '@crook/web/rpc/HubLink'
@@ -18,7 +19,12 @@ import type { HubUploads } from '@crook/web/rpc/HubUploads'
 import { COLD_START, HubLinkState } from '@crook/web/rpc/HubLinkState'
 
 import { appRegistry, appRouter, AppTree } from '../test/AppWiring.tsx'
-import { makeFakeBrowser, makeFakeHubLink, makeMemoryTranscriptStore } from '../test/HubFakes.ts'
+import {
+  makeFakeBrowser,
+  makeFakeHubLink,
+  makeMemoryDraftStore,
+  makeMemoryTranscriptStore,
+} from '../test/HubFakes.ts'
 import type { FakeSession } from '../test/HubFakes.ts'
 
 export type StoryKind = 'state' | 'transition'
@@ -180,7 +186,9 @@ const running = <Stage extends AppHandles>(spec: StorySpec<Stage>, stage: Stage)
   steps: (spec.timeline ?? []).map(({ run }) => Effect.suspend(() => run(stage))),
 })
 
-export const acquireRegistry = (hub: Layer.Layer<HubLink | TranscriptCache | HubUploads>) =>
+export const acquireRegistry = (
+  hub: Layer.Layer<HubLink | TranscriptCache | HubUploads | DraftCache>,
+) =>
   Effect.acquireRelease(
     Effect.sync(() => appRegistry(hub)),
     (registry) =>
@@ -226,6 +234,7 @@ export const browserStory =
     start: Effect.gen(function* () {
       const browser = yield* makeFakeBrowser(spec.cached)
       const transcripts = yield* makeMemoryTranscriptStore()
+      const drafts = yield* makeMemoryDraftStore()
       const registry = yield* acquireRegistry(
         Layer.mergeAll(
           Layer.provide(
@@ -233,6 +242,7 @@ export const browserStory =
             browser.layer,
           ),
           browser.uploads.layer,
+          DraftCache.layerOver(drafts.store),
         ),
       )
 

@@ -499,7 +499,7 @@ src/
   csp/                    the Content-Security-Policy the hub sends
   rpc/                    the hub link: RpcClient over the browser WebSocket, page signals, the session check
   atoms/                  the hub runtime and the atoms over it: link state, connection, herd, needs-you, seen
-  cache/                  the last herd snapshot, and the chats opened, in IndexedDB
+  cache/                  the last herd snapshot, the chats opened and each pane's unsent draft, in IndexedDB
   connection/             what the link state means on screen: banner, logged-out screen, the gate
   herd/                   the Agents tab: layout model, machine sections, cards, empty states, pull to resync
   machines/               the Machines tab (JC-116): layout model, cards, the machine screen, forget, the Add a machine sheet

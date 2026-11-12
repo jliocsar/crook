@@ -54,6 +54,7 @@ import {
 } from '@crook/web/chat/ComposerFailureMachine'
 import { isPresent, presenceMachine, PresenceState } from '@crook/web/chat/PresenceMachine'
 import { EdgeCard } from '@crook/web/chat/EdgeCard'
+import { usePaneDraft } from '@crook/web/chat/PaneDraft'
 import type { Restart } from '@crook/web/chat/EdgeCard'
 import { ImageViewer } from '@crook/web/chat/Images'
 import {
@@ -292,8 +293,7 @@ function ChatBody({ machine, pane }: { machine: MachineId; pane: PaneId }) {
   })
   const fromMachine = useOpenedFromMachine()
   const thread = React.useRef<ThreadHandle>(null)
-  const [draft, setDraft] = React.useState('')
-  const [attachments, setAttachments] = React.useState<readonly DraftAttachment[]>([])
+  const { draft, attachments, setDraft, setAttachments } = usePaneDraft(machine, pane)
   const [attachNote, setAttachNote] = React.useState<Option.Option<string>>(Option.none())
   const cwd = cwdOf(model)
   const rosters = rostersOf(view)

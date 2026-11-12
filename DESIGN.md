@@ -510,6 +510,9 @@ screen" on the Ask.
     Send works with attachments and no words.
   - Photos shrink on the phone to 2000px on the long edge as JPEG. A screenshot stays PNG, scaled
     only when it is larger. A picture the browser can't open goes as a plain file.
+  - The draft belongs to its pane. Words and attachments not yet sent are there again on the
+    next open of that chat, after leaving it or restarting the app, and go once the hub takes the
+    prompt. A refused send keeps them for the retry. They go when the pane leaves the herd.
   - At most 10 files and 25 MB per message. Going past either says so above the composer, and
     nothing is added.
   - On a machine whose crook agent is too old to take them, the paperclip reads disabled and a tap

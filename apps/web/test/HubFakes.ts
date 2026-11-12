@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import type * as Cause from 'effect/Cause'
+import * as Context from 'effect/Context'
 import * as Deferred from 'effect/Deferred'
 import type * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -30,6 +31,12 @@ import { HubAccount } from '@crook/protocol/ClientApi'
 import type { HubStorageFailed } from '@crook/protocol/ClientApi'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'
+import { DraftCache } from '@crook/web/cache/DraftCache'
+import type {
+  DraftStore,
+  PaneDrafts,
+  StoredKey as DraftStoredKey,
+} from '@crook/web/cache/DraftCache'
 import { HerdCache } from '@crook/web/cache/HerdCache'
 import type { HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { StoredTranscript, TranscriptCache } from '@crook/web/cache/TranscriptCache'
@@ -95,6 +102,11 @@ export interface SentCommand {
   readonly machine: MachineId
   readonly key: IdempotencyKey
   readonly command: Command
+}
+
+export interface StoredDraftEntry {
+  readonly key: DraftStoredKey
+  readonly stored: unknown
 }
 
 export interface StoredEntry {
@@ -318,6 +330,51 @@ export const makeMemoryTranscriptStore = Effect.fn('makeMemoryTranscriptStore')(
   return { store, entries }
 })
 
+export const makeMemoryDraftStore = Effect.fn('makeMemoryDraftStore')(function* () {
+  const entries = yield* Ref.make<ReadonlyMap<string, StoredDraftEntry>>(new Map())
+  const written = yield* Ref.make<readonly DraftStoredKey[]>([])
+  const idOf = (key: DraftStoredKey) => JSON.stringify(key)
+
+  const store: DraftStore = {
+    keys: Effect.map(Ref.get(entries), (current) =>
+      Array.from(current.values(), (entry) => entry.key),
+    ),
+    readMany: (wanted) =>
+      Effect.map(Ref.get(entries), (current) =>
+        wanted.map((key) => current.get(idOf(key))?.stored),
+      ),
+    writeMany: (pairs) =>
+      Effect.andThen(
+        Ref.update(written, (keys) => [...keys, ...pairs.map(([key]) => key)]),
+        Ref.update(
+          entries,
+          (current) =>
+            new Map([
+              ...current,
+              ...pairs.map(([key, stored]): [string, StoredDraftEntry] => [
+                idOf(key),
+                { key, stored: structuredClone(stored) },
+              ]),
+            ]),
+        ),
+      ),
+    remove: (stale) =>
+      Ref.update(
+        entries,
+        (current) => new Map([...current].filter(([id]) => !stale.some((key) => idOf(key) === id))),
+      ),
+  }
+
+  const seed = (drafts: PaneDrafts) =>
+    Effect.scoped(
+      Effect.flatMap(Layer.build(DraftCache.layerOver(store)), (context) =>
+        Context.get(context, DraftCache).save(drafts),
+      ),
+    )
+
+  return { store, entries, written, seed }
+})
+
 export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: HubLinkState) {
   const state = yield* SubscriptionRef.make(initial)
   const stateReads = yield* Latch.make(true)
@@ -361,6 +418,7 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   const logOutRefusal = yield* Ref.make(Option.none<LogOutFailed>())
   const logOutAnswers = yield* Latch.make(true)
   const transcriptStore = yield* makeMemoryTranscriptStore()
+  const draftStore = yield* makeMemoryDraftStore()
   const pageVisible = yield* SubscriptionRef.make(true)
 
   const answerWith = <Failure>(
@@ -510,11 +568,17 @@ export const makeFakeHubLink = Effect.fn('makeFakeHubLink')(function* (initial: 
   )
 
   const uploads = yield* makeFakeUploads()
-  const layer = Layer.mergeAll(linkLayer, transcriptCacheLayer, uploads.layer)
+  const layer = Layer.mergeAll(
+    linkLayer,
+    transcriptCacheLayer,
+    uploads.layer,
+    DraftCache.layerOver(draftStore.store),
+  )
 
   return {
     layer,
     uploads,
+    draftStore,
     transcriptStore: transcriptStore.store,
     storedTranscripts: transcriptStore.entries,
     pageVisible,

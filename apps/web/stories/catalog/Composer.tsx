@@ -1,5 +1,6 @@
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 import * as Ref from 'effect/Ref'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
@@ -12,6 +13,9 @@ import {
   HerdrUnavailable,
   claudeWaitingRefusal,
 } from '@crook/protocol/Commands'
+import { ComposerDraft, DraftKey } from '@crook/web/cache/DraftCache'
+import { attachmentOf } from '@crook/web/chat/Attachments'
+import { browserImageCodec } from '@crook/web/chat/BrowserImageCodec'
 import { REDIALING, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 import { UploadUnreachable } from '@crook/web/rpc/HubUploads'
 
@@ -80,7 +84,37 @@ const pastesFiles = (files: Effect.Effect<readonly File[]>) =>
 
 const attachedThree = Effect.andThen(pastesFiles(threeFiles), seesText(LOG_NAME))
 
+const RESTORED_DRAFT = 'Before you push, rerun the build and tell me which step'
+
+const keepsDraft = (stage: LinkStage, text: string, files: Effect.Effect<readonly File[]>) =>
+  files.pipe(
+    Effect.flatMap((kept) => Effect.forEach(kept, (file) => attachmentOf(browserImageCodec, file))),
+    Effect.flatMap((attachments) =>
+      stage.link.draftStore.seed(
+        HashMap.make([
+          new DraftKey({ machine: LAPTOP, pane: PANE }),
+          new ComposerDraft({ text, attachments }),
+        ]),
+      ),
+    ),
+    Effect.orDie,
+  )
+
 export const COMPOSER_STORIES: readonly StoryMaker[] = [
+  chatStory({
+    slug: 'restored-draft',
+    title: 'Composer, a draft kept from the last visit',
+    events: CONVERSATION,
+    arrange: (stage) => keepsDraft(stage, RESTORED_DRAFT, Effect.succeed([])),
+    shows: { selector: SEND_READY },
+  }),
+  chatStory({
+    slug: 'restored-draft-attached',
+    title: 'Composer, a draft kept from the last visit, with a photo, a screenshot and a file',
+    events: CONVERSATION,
+    arrange: (stage) => keepsDraft(stage, RESTORED_DRAFT, threeFiles),
+    shows: { all: [{ selector: ATTACHMENT }, { text: LOG_NAME }, { selector: SEND_READY }] },
+  }),
   chatStory({
     slug: 'attached',
     title: 'Composer, a photo, a screenshot and a file attached',
