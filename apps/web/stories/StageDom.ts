@@ -1,6 +1,7 @@
 import { fireEvent, waitFor, within } from '@testing-library/dom'
 import type { ByRoleMatcher } from '@testing-library/dom'
 import userEvent, { PointerEventsCheckLevel } from '@testing-library/user-event'
+import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
@@ -59,7 +60,18 @@ const witnessName = (witness: Witness): string =>
     Match.exhaustive,
   )
 
-export const pause = (milliseconds: number) => Effect.sleep(Duration.millis(milliseconds))
+export const PlaybackSpeed = Context.Reference<number>('@crook/web/stories/PlaybackSpeed', {
+  defaultValue: () => 1,
+})
+
+export const pause = (milliseconds: number) =>
+  Effect.gen(function* () {
+    const speed = yield* PlaybackSpeed
+
+    yield* Effect.sleep(Duration.millis(milliseconds / speed))
+  })
+
+export const fingerPause = (milliseconds: number) => Effect.sleep(Duration.millis(milliseconds))
 
 export const seesWithin = (timeout: number, witness: Witness) =>
   attempt(witnessName(witness), () =>
@@ -174,7 +186,7 @@ export const holdsDown = (name: string | RegExp, milliseconds: number) =>
       const finger = pointerUser()
 
       yield* attempt(`presses ${String(name)}`, () => finger.pointer({ keys: '[TouchA>]', target }))
-      yield* pause(milliseconds)
+      yield* fingerPause(milliseconds)
       yield* attempt(`lifts off ${String(name)}`, () =>
         finger.pointer({ keys: '[/TouchA]', target }),
       )
@@ -213,11 +225,11 @@ export const swipes = (selector: string, path: readonly number[], stepMs = SWIPE
       dispatchPointer('pointerdown', target, first)
 
       for (const clientX of rest) {
-        yield* pause(stepMs)
+        yield* fingerPause(stepMs)
         dispatchPointer('pointermove', target, clientX)
       }
 
-      yield* pause(stepMs)
+      yield* fingerPause(stepMs)
       dispatchPointer('pointerup', target, path.at(-1) ?? 0)
     }),
   )

@@ -14,7 +14,7 @@ paths:
   toast alone passed either way, since the toast shows on the chat too: a story about arriving
   somewhere names something only that place shows.
 
-- A playback speed scales only the delays between a story's steps, and a chat's slide-out does not scale. The reopen catch-up story lost its divider at twice and four times the speed because its tap fell inside the slide-out, so the chat never left and the rows landed as live lines: its thread went from Current to Current and never held anything, 4 of 4 runs with the wait for the chat to leave taken out. With that wait it ends on its divider at 0.5, 1, 2 and 4 times the speed, 2 of 2 each, and at 8 and 16 with even the wait for the held rows taken out (all measured in Chromium, at 4x CPU throttling except the 16). How fast the rows land was never the cause.
+- A playback speed scales the delays between a story's steps and a story's own pauses inside a step, and a chat's slide-out does not scale. A finger's timing does not scale either: a hold or a swipe's step between moves is input the app reads, so a long press at no waits would be a tap. A settle runs before playback starts, so its pauses keep real time in the browser, where the far-up walk has to pace itself to leave every row measured. The smoke test plays at no waits, and a walk to the top of a thread under happy-dom, which does not clamp `scrollTop`, slept 331 times 50 ms: the two stories that walk took 18.9 s each against a 20 s limit, and 0.2 and 0.5 s at no waits (measured). The reopen catch-up story lost its divider at twice and four times the speed because its tap fell inside the slide-out, so the chat never left and the rows landed as live lines: its thread went from Current to Current and never held anything, 4 of 4 runs with the wait for the chat to leave taken out. With that wait it ends on its divider at 0.5, 1, 2 and 4 times the speed, 2 of 2 each, and at 8 and 16 with even the wait for the held rows taken out (all measured in Chromium, at 4x CPU throttling except the 16). How fast the rows land was never the cause.
 
 `bun run stories` serves a catalog of the real app at phone width, and `bun run stories:list`
 prints every story id with its URLs. `/stories/?story=<id>` opens one in the sidebar;
@@ -41,8 +41,8 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   each story: a job that ended 5 s before the fixtures' now had aged out of its 14 s window by the
   time the suite reached it (measured).
 - The smoke test's waits can lose to a loaded machine. Alternating whole gates at a load average of 9 to 12 failed 1 of 4 on main and 1 of 4 on a branch, on a story or a first render that passes alone, while the test step alone passed 4 of 4 on each (measured). Run such a failure alone before reading it as a bug.
-- The smoke test runs every story under happy-dom, in about 15 s for 350 of them, and it is
-  not enough on its own. 17 stories passed there and failed in Chromium (measured): user-event's
+- The smoke test runs every story under happy-dom, 524 of them in 98 s with two workers at a load
+  average of 4 to 11, the slowest 6.1 s (measured), and it is not enough on its own. 17 stories passed there and failed in Chromium (measured): user-event's
   `type` filled the field and left React's state empty, so the send button stayed disabled, and
   its pointer check refuses a press under a sheet that is still opening. Stories type by
   setting the value through the native setter and firing `input`. After changing stories, load
