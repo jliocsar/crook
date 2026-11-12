@@ -37,6 +37,8 @@ import { AttachmentsUnsupported, MachineOffline } from '@crook/protocol/Commands
 import {
   AGENT_PATH,
   CLIENT_PATH,
+  DIAL_REASON_PARAMETER,
+  DialReason,
   HEALTH_PATH,
   UPLOAD_MACHINE_PARAMETER,
   UPLOADS_PATH,
@@ -54,6 +56,7 @@ const NO_CONTENT = 204
 const UPLOAD_ROUTE = `${UPLOADS_PATH}/:digest`
 const OCTET_STREAM = 'application/octet-stream'
 const REQUEST_BASE = 'http://hub'
+const UNKNOWN_DIAL_REASON = 'unknown'
 
 const invalidUpload = (reason: string) => () => new UploadRequestInvalid({ reason })
 
@@ -69,6 +72,14 @@ const machineParameter = (url: string) =>
   Schema.decodeUnknownEffect(MachineId)(
     new URL(url, REQUEST_BASE).searchParams.get(UPLOAD_MACHINE_PARAMETER),
   ).pipe(Effect.mapError(invalidUpload('it names no machine')))
+
+const dialReasonOf = (url: string) =>
+  Option.getOrElse(
+    Schema.decodeUnknownOption(DialReason)(
+      new URL(url, REQUEST_BASE).searchParams.get(DIAL_REASON_PARAMETER),
+    ),
+    () => UNKNOWN_DIAL_REASON,
+  )
 
 const routes = Effect.gen(function* () {
   const herd = yield* Herd
@@ -145,10 +156,10 @@ const routes = Effect.gen(function* () {
       Effect.annotateLogs(logAnnotations),
     )
 
-  const serveClientAs = (actor: string) =>
+  const serveClientAs = (actor: string, dialReason: string) =>
     serveGroup(
       ClientApi,
-      { actor },
+      { actor, dialReason },
       ClientApi.toHandlers({
         WatchHerd: () => herdUpdates(herd.view),
         ForgetMachine: ({ machine }) =>
@@ -227,7 +238,14 @@ const routes = Effect.gen(function* () {
       Effect.flatMap(identity.admitAgent(request.headers), serveAgentAs),
     ),
     HttpRouter.route('GET', CLIENT_PATH, (request) =>
-      Effect.flatMap(identity.admitPhoneSocket(request.headers), serveClientAs),
+      Effect.flatMap(identity.admitPhoneSocket(request.headers), (actor) => {
+        const dialReason = dialReasonOf(request.url)
+
+        return Effect.andThen(
+          Effect.logInfo('A phone connected').pipe(Effect.annotateLogs({ dialReason })),
+          serveClientAs(actor, dialReason),
+        )
+      }),
     ),
     HttpRouter.route('PUT', UPLOAD_ROUTE, receiveUpload),
     HttpRouter.route('GET', UPLOAD_ROUTE, serveUpload),

@@ -5,7 +5,7 @@ import * as Scope from 'effect/Scope'
 import { beforeAll, vi } from 'vitest'
 
 import { CATALOG_STORIES } from '../../stories/Catalog.ts'
-import { sees } from '../../stories/StageDom.ts'
+import { PlaybackSpeed, sees } from '../../stories/StageDom.ts'
 import { applyStoryEnv, startClockAtFixtures } from '../../stories/StoryEnv.ts'
 import * as Option from 'effect/Option'
 
@@ -13,6 +13,7 @@ const VIEWPORT_WIDTH = 390
 const VIEWPORT_HEIGHT = 844
 const SCROLL_HEIGHT = 100_000
 const STORY_TIMEOUT_MS = 20_000
+const NO_WAITS = Number.POSITIVE_INFINITY
 
 beforeAll(() => {
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(VIEWPORT_WIDTH)
@@ -54,7 +55,10 @@ describe.each(CATALOG_STORIES.map((story) => [story.id, story] as const))('%s', 
             }
 
             yield* Option.match(story.endWitness, { onNone: () => Effect.void, onSome: sees })
-          }).pipe(Effect.provideService(Scope.Scope, scope)),
+          }).pipe(
+            Effect.provideService(Scope.Scope, scope),
+            Effect.provideService(PlaybackSpeed, NO_WAITS),
+          ),
         )
 
         yield* Scope.close(scope, Exit.void)

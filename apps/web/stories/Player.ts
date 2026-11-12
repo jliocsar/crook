@@ -10,7 +10,7 @@ import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as SubscriptionRef from 'effect/SubscriptionRef'
 
-import { sees } from './StageDom.ts'
+import { PlaybackSpeed, sees } from './StageDom.ts'
 import { StoryStepFailed } from './Story.tsx'
 import type { RunningStory, StepInfo, Story } from './Story.tsx'
 
@@ -203,7 +203,9 @@ export const makePlayer = Effect.fn('makePlayer')(function* (story: Story, root:
       }
 
       yield* Effect.sleep(Duration.millis(next.delayMs / speed))
-      yield* Effect.uninterruptible(runNext(current))
+      yield* Effect.uninterruptible(runNext(current)).pipe(
+        Effect.provideService(PlaybackSpeed, speed),
+      )
       yield* playRest(current, speed)
     })
 

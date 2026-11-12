@@ -28,7 +28,7 @@ import { LAPTOP } from '../HerdFixtures.ts'
 
 const pane = PaneId.make('w1:p1')
 
-const lost = new HubConnectionLost()
+const lost = new HubConnectionLost({ lost: 'SocketClosed' })
 
 describe('remembersOutcome', () => {
   it('holds for the failures the agent replays under the same key', () => {

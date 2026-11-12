@@ -37,7 +37,9 @@ describe('retryKey', () => {
     expect(
       retryAfter(new CommandTimedOut({ machine: LAPTOP, timeout: Duration.seconds(1) })),
     ).toEqual(Option.some(sentKey))
-    expect(retryAfter(new HubConnectionLost())).toEqual(Option.some(sentKey))
+    expect(retryAfter(new HubConnectionLost({ lost: 'SocketClosed' }))).toEqual(
+      Option.some(sentKey),
+    )
     expect(retryAfter(new FolderNotFound({ folder: CROOK }))).toEqual(Option.some(sentKey))
   })
 

@@ -1,3 +1,4 @@
+import * as Arr from 'effect/Array'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
@@ -28,6 +29,7 @@ import type {
 import { hubReconnectSchedule, RECONNECT_GRACE, stayedHealthy } from '@crook/protocol/LinkTiming'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import type { HubAccount, HubStorageFailed } from '@crook/protocol/ClientApi'
+import type { DialReason } from '@crook/protocol/HubRoutes'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'
 import { HerdCache, HerdSnapshot } from '@crook/web/cache/HerdCache'
 import { NOTICE_DELAY } from '@crook/web/machine/NoticeTiming'
@@ -67,6 +69,8 @@ import type { LogOutFailed } from '@crook/web/rpc/SessionCheck'
 type SessionFailure = HubCallFailed | HubWatchEnded
 
 type HeldCalls = SubscriptionRef.SubscriptionRef<Option.Option<HubCalls>>
+
+type PageInputs = readonly [visible: boolean, online: boolean, ended: boolean, resyncs: number]
 
 export interface TranscriptResume {
   readonly from: Option.Option<TranscriptPosition>
@@ -146,6 +150,43 @@ const whenConnected = <Success, Failure>(
     }),
   )
 
+const dialReasonAfter = (failure: SessionFailure): DialReason =>
+  Match.value(failure).pipe(
+    Match.withReturnType<DialReason>(),
+    Match.tagsExhaustive({
+      HubConnectionLost: ({ lost }) => lost,
+      HubCallDefected: () => 'LinkFailed',
+      HubWatchEnded: () => 'LinkFailed',
+    }),
+  )
+
+const dialCauses = (
+  [wasVisible, wasOnline, , resyncsBefore]: PageInputs,
+  [, , , resyncs]: PageInputs,
+): readonly (readonly [boolean, DialReason])[] => [
+  [resyncs !== resyncsBefore, 'ResyncAsked'],
+  [!wasVisible, 'PageShown'],
+  [!wasOnline, 'NetworkBack'],
+]
+
+export const dialReasonBetween = (
+  previous: Option.Option<PageInputs>,
+  current: PageInputs,
+): Option.Option<DialReason> =>
+  Option.match(previous, {
+    onNone: () => Option.some<DialReason>('PageLoaded'),
+    onSome: (before) =>
+      Arr.findFirst(dialCauses(before, current), ([changed]) => changed).pipe(
+        Option.map(([, reason]) => reason),
+      ),
+  })
+
+const dialingAs = (nextDial: Ref.Ref<DialReason>, reason: Option.Option<DialReason>) =>
+  Option.match(reason, {
+    onNone: () => Effect.void,
+    onSome: (dial) => Ref.set(nextDial, dial),
+  })
+
 const machineIsThere = (current: HubLinkState, machine: MachineId): boolean =>
   Option.exists(current.herd, ({ view }) =>
     Option.match(findMachine(view, machine), {
@@ -195,6 +236,7 @@ const make = Effect.gen(function* () {
   const connected = yield* SubscriptionRef.make(Option.none<HubCalls>())
   const dialed = yield* SubscriptionRef.make(Option.none<HubCalls>())
   const resyncRequests = yield* SubscriptionRef.make(0)
+  const nextDial = yield* Ref.make<DialReason>('PageLoaded')
   const loggedOut = yield* SubscriptionRef.make(false)
   const cacheWrites = yield* Semaphore.make(1)
 
@@ -256,7 +298,7 @@ const make = Effect.gen(function* () {
   const attempt = Effect.fn('HubLink.attempt')(function* (
     liveSince: Ref.Ref<Option.Option<number>>,
   ) {
-    const hub = yield* connection.open
+    const hub = yield* connection.open(yield* Ref.get(nextDial))
 
     yield* Effect.addFinalizer(() =>
       SubscriptionRef.set(dialed, Option.none()).pipe(
@@ -290,6 +332,7 @@ const make = Effect.gen(function* () {
 
     yield* step(ATTEMPT_BEGAN).pipe(Effect.flatMap(startCommands))
     yield* attempt(liveSince).pipe(
+      Effect.tapError((error) => Ref.set(nextDial, dialReasonAfter(error))),
       Effect.catch((error) =>
         Effect.flatMap(healthy, (stayed) =>
           stayed ? Effect.logWarning(error.message) : refuse(error),
@@ -304,7 +347,10 @@ const make = Effect.gen(function* () {
     Effect.forever,
   )
 
-  const follow = (visible: boolean, online: boolean, ended: boolean): Effect.Effect<never> => {
+  const follow = (
+    [visible, online, ended]: PageInputs,
+    reason: Option.Option<DialReason>,
+  ): Effect.Effect<never> => {
     if (ended) {
       const forget = cache.clear.pipe(
         Effect.andThen(step(LOGGED_OUT_CONFIRMED, () => Option.none())),
@@ -321,7 +367,7 @@ const make = Effect.gen(function* () {
       return Effect.andThen(step(WENT_OFFLINE), Effect.never)
     }
 
-    return stayConnected
+    return Effect.andThen(dialingAs(nextDial, reason), stayConnected)
   }
 
   const follower = yield* Stream.zipLatestAll(
@@ -330,8 +376,9 @@ const make = Effect.gen(function* () {
     SubscriptionRef.changes(loggedOut),
     SubscriptionRef.changes(resyncRequests),
   ).pipe(
-    Stream.switchMap(([visible, online, ended]) =>
-      Stream.fromEffect(follow(visible, online, ended)),
+    Stream.zipWithPrevious,
+    Stream.switchMap(([previous, inputs]) =>
+      Stream.fromEffect(follow(inputs, dialReasonBetween(previous, inputs))),
     ),
     Stream.runDrain,
     Effect.forkScoped,

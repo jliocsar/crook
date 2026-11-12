@@ -38,6 +38,7 @@ import overshootCatchUpFixture from './fixtures/overshoot-catch-up.json' with { 
 import overshootSendFixture from './fixtures/overshoot-send.json' with { type: 'json' }
 import pairFixture from './fixtures/pair.json' with { type: 'json' }
 import shiftAsCoverLeavesFixture from './fixtures/shift-as-cover-leaves.json' with { type: 'json' }
+import shiftUnderARestingTailFixture from './fixtures/shift-under-a-resting-tail.json' with { type: 'json' }
 import shiftFixture from './fixtures/shift.json' with { type: 'json' }
 import slowFramesHoldFixture from './fixtures/slow-frames-hold.json' with { type: 'json' }
 import swapFixture from './fixtures/swap.json' with { type: 'json' }
@@ -204,6 +205,34 @@ describe('detect, over logs recorded from real runs', () => {
     }
 
     expect(detect(story, inView, expectationOf(story)).map((finding) => finding.check)).toContain(
+      'shift',
+    )
+  })
+
+  it('counts no shift behind a pushed screen read under a pixel short of its place', () => {
+    const story = 'herd-order/opened-goes-first'
+    const log = decodeLog(shiftUnderARestingTailFixture)
+    const tail = Option.getOrThrow(Arr.findFirst(log.frames, (frame) => frame.frame === 74))
+
+    expect(tail.cover).toBeGreaterThan(0)
+    expect(tail.cover).toBeLessThan(ROW_MOVE_PIXELS)
+    expect(Arr.some(log.shifts, (entry) => entry.value > 0.01)).toBe(true)
+    expect(detect(story, log, expectationOf(story)).map((finding) => finding.check)).not.toContain(
+      'shift',
+    )
+  })
+
+  it('counts a shift behind a pushed screen still the guard off its place', () => {
+    const story = 'herd-order/opened-goes-first'
+    const log = decodeLog(shiftUnderARestingTailFixture)
+    const moving = {
+      ...log,
+      frames: Arr.map(log.frames, (frame) =>
+        frame.frame === 74 ? { ...frame, cover: ROW_MOVE_PIXELS } : frame,
+      ),
+    }
+
+    expect(detect(story, moving, expectationOf(story)).map((finding) => finding.check)).toContain(
       'shift',
     )
   })

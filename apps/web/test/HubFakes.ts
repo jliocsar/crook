@@ -32,6 +32,7 @@ import { HubAccount } from '@crook/protocol/ClientApi'
 import type { HubStorageFailed } from '@crook/protocol/ClientApi'
 import type { CommandFailure } from '@crook/protocol/Commands'
 import type { TestNotificationFailure } from '@crook/protocol/Hark'
+import type { DialReason } from '@crook/protocol/HubRoutes'
 import { DraftCache } from '@crook/web/cache/DraftCache'
 import type {
   DraftStore,
@@ -196,49 +197,53 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
   const whileLoggingOut = yield* Ref.make<Effect.Effect<void>>(Effect.void)
   const prefWrites = yield* Ref.make<readonly PrefWrite[]>([])
 
-  const open = Effect.gen(function* () {
-    const views = yield* Queue.unbounded<HerdView, HubCallFailed | Cause.Done>()
-    const settings = yield* Queue.unbounded<NotificationSettings, HubCallFailed | Cause.Done>()
-    const transcripts = yield* Queue.unbounded<FakeTranscript>()
-    const transcriptRequests = yield* Ref.make<readonly TranscriptRequest[]>([])
+  const dialReasons = yield* Ref.make<readonly DialReason[]>([])
 
-    yield* Ref.update(opened, (count) => count + 1)
-    yield* Effect.addFinalizer(() => Ref.update(closed, (count) => count + 1))
-    yield* Queue.offer(sessions, { views, settings, transcripts, transcriptRequests })
+  const open = (reason: DialReason) =>
+    Effect.gen(function* () {
+      const views = yield* Queue.unbounded<HerdView, HubCallFailed | Cause.Done>()
+      const settings = yield* Queue.unbounded<NotificationSettings, HubCallFailed | Cause.Done>()
+      const transcripts = yield* Queue.unbounded<FakeTranscript>()
+      const transcriptRequests = yield* Ref.make<readonly TranscriptRequest[]>([])
 
-    return {
-      watchHerd: Stream.fromQueue(views),
-      markSeen: (machine: MachineId, pane: PaneId) =>
-        Ref.update(seen, (calls) => [...calls, { machine, pane }]),
-      forgetMachine: (machine: MachineId) =>
-        Ref.update(forgotten, (machines) => [...machines, machine]),
-      setPinned: () => Effect.void,
-      watchTranscript: (request: TranscriptRequest) =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const transcript = yield* Queue.unbounded<
-              TranscriptEvent,
-              WatchTranscriptRefused | HubCallFailed | Cause.Done
-            >()
+      yield* Ref.update(opened, (count) => count + 1)
+      yield* Ref.update(dialReasons, (reasons) => [...reasons, reason])
+      yield* Effect.addFinalizer(() => Ref.update(closed, (count) => count + 1))
+      yield* Queue.offer(sessions, { views, settings, transcripts, transcriptRequests })
 
-            yield* Ref.update(transcriptRequests, (requests) => [...requests, request])
-            yield* Queue.offer(transcripts, transcript)
+      return {
+        watchHerd: Stream.fromQueue(views),
+        markSeen: (machine: MachineId, pane: PaneId) =>
+          Ref.update(seen, (calls) => [...calls, { machine, pane }]),
+        forgetMachine: (machine: MachineId) =>
+          Ref.update(forgotten, (machines) => [...machines, machine]),
+        setPinned: () => Effect.void,
+        watchTranscript: (request: TranscriptRequest) =>
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const transcript = yield* Queue.unbounded<
+                TranscriptEvent,
+                WatchTranscriptRefused | HubCallFailed | Cause.Done
+              >()
 
-            return Stream.fromQueue(transcript)
-          }),
-        ),
-      sendCommand: (machine: MachineId, key: IdempotencyKey, command: Command) =>
-        Effect.andThen(
-          Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
-          Effect.flatten(Ref.get(commandAnswer)),
-        ),
-      watchNotificationSettings: Stream.fromQueue(settings),
-      setNotificationPref: (event: NotificationEvent, enabled: boolean) =>
-        Ref.update(prefWrites, (writes) => [...writes, { event, enabled }]),
-      sendTestNotification: Effect.void,
-      account: Effect.succeed(new HubAccount({ email: OWNER_EMAIL })),
-    }
-  })
+              yield* Ref.update(transcriptRequests, (requests) => [...requests, request])
+              yield* Queue.offer(transcripts, transcript)
+
+              return Stream.fromQueue(transcript)
+            }),
+          ),
+        sendCommand: (machine: MachineId, key: IdempotencyKey, command: Command) =>
+          Effect.andThen(
+            Ref.update(sent, (commands) => [...commands, { machine, key, command }]),
+            Effect.flatten(Ref.get(commandAnswer)),
+          ),
+        watchNotificationSettings: Stream.fromQueue(settings),
+        setNotificationPref: (event: NotificationEvent, enabled: boolean) =>
+          Ref.update(prefWrites, (writes) => [...writes, { event, enabled }]),
+        sendTestNotification: Effect.void,
+        account: Effect.succeed(new HubAccount({ email: OWNER_EMAIL })),
+      }
+    })
 
   const uploads = yield* makeFakeUploads()
   const layer = Layer.mergeAll(
@@ -290,6 +295,7 @@ export const makeFakeBrowser = Effect.fn('makeFakeBrowser')(function* (
     uploads,
     sessions,
     opened,
+    dialReasons,
     closed,
     seen,
     forgotten,

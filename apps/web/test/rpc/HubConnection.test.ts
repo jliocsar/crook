@@ -3,7 +3,9 @@ import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Stream from 'effect/Stream'
+import { RpcClientError } from 'effect/rpc/RpcClientError'
 import * as RpcTest from 'effect/rpc/RpcTest'
+import * as Socket from 'effect/socket/Socket'
 
 import { AgentStarted, StartAgent } from '@crook/domain/Command'
 import { HerdReplaced } from '@crook/domain/HerdUpdate'
@@ -21,8 +23,10 @@ import { HarkReachedNoDevice } from '@crook/protocol/Hark'
 import {
   agentSocketUrl,
   callsFrom,
+  dialUrl,
   HubCallDefected,
   hubSocketUrl,
+  linkLossOf,
 } from '@crook/web/rpc/HubConnection'
 
 import { agent, DESK, herd, LAPTOP, machine } from '../HerdFixtures.ts'
@@ -98,6 +102,12 @@ describe('hubSocketUrl', () => {
     )
   })
 
+  it('names why it dials in the address', () => {
+    expect(dialUrl(hubSocketUrl(new URL('https://my-hub.exe.xyz/')), 'PageShown').href).toBe(
+      'wss://my-hub.exe.xyz/rpc/client?dial=PageShown',
+    )
+  })
+
   it('gives the agent endpoint on the same origin for a machine to dial', () => {
     expect(agentSocketUrl(new URL('https://my-hub.exe.xyz/machines')).href).toBe(
       'wss://my-hub.exe.xyz/rpc/agent',
@@ -105,10 +115,32 @@ describe('hubSocketUrl', () => {
   })
 })
 
+describe('linkLossOf', () => {
+  const lostTo = (reason: RpcClientError['reason']) => new RpcClientError({ reason })
+
+  it('names a ping timeout before what the socket said as it closed', () => {
+    expect(
+      linkLossOf(true, lostTo(new Socket.SocketReadError({ cause: new Error('ping timeout') }))),
+    ).toBe('PingTimedOut')
+  })
+
+  it('tells a closed socket from a dial that never opened and from anything else', () => {
+    expect(linkLossOf(false, lostTo(new Socket.SocketCloseError({ code: 1006 })))).toBe(
+      'SocketClosed',
+    )
+    expect(
+      linkLossOf(false, lostTo(new Socket.SocketOpenError({ kind: 'Timeout', cause: null }))),
+    ).toBe('DialFailed')
+    expect(
+      linkLossOf(false, lostTo(new Socket.SocketReadError({ cause: new Error('reset') }))),
+    ).toBe('LinkFailed')
+  })
+})
+
 layer(handlers)('callsFrom', (withHandlers) => {
   withHandlers.effect('watches the herd and passes MarkSeen refusals through', () =>
     Effect.gen(function* () {
-      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi), Effect.succeed(false))
       const views = yield* Stream.runCollect(calls.watchHerd)
 
       yield* calls.markSeen(LAPTOP, agent('w1:p1', 'done').pane)
@@ -121,7 +153,7 @@ layer(handlers)('callsFrom', (withHandlers) => {
 
   withHandlers.effect('forgets a machine and passes the refusal for a connected one through', () =>
     Effect.gen(function* () {
-      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi), Effect.succeed(false))
 
       yield* calls.forgetMachine(DESK)
       const refusal = yield* Effect.flip(calls.forgetMachine(LAPTOP))
@@ -132,7 +164,7 @@ layer(handlers)('callsFrom', (withHandlers) => {
 
   withHandlers.effect('sends a launch and passes its receipt and its refusals through', () =>
     Effect.gen(function* () {
-      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi), Effect.succeed(false))
       const launch = (folder: string) =>
         new StartAgent({ kind: 'claude', folder, task: Option.some('Fix the banner') })
       const receipt = yield* calls.sendCommand(
@@ -157,7 +189,7 @@ layer(handlers)('callsFrom for pane actions', (withHandlers) => {
     'pins a pane and passes the refusal for one the hub does not know through',
     () =>
       Effect.gen(function* () {
-        const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+        const calls = callsFrom(yield* RpcTest.makeClient(ClientApi), Effect.succeed(false))
 
         yield* calls.setPinned(LAPTOP, pane, true)
         const refusal = yield* Effect.flip(calls.setPinned(LAPTOP, missingPane, false))
@@ -170,7 +202,7 @@ layer(handlers)('callsFrom for pane actions', (withHandlers) => {
 layer(handlers)('callsFrom for the Settings screen', (withHandlers) => {
   withHandlers.effect('watches the switches, writes one and passes the refusals through', () =>
     Effect.gen(function* () {
-      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi), Effect.succeed(false))
       const watched = yield* Stream.runCollect(calls.watchNotificationSettings)
 
       yield* calls.setNotificationPref('finished', false)
@@ -185,7 +217,7 @@ layer(handlers)('callsFrom for the Settings screen', (withHandlers) => {
 
   withHandlers.effect('reads the account the connection logged in as', () =>
     Effect.gen(function* () {
-      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi), Effect.succeed(false))
 
       expect(yield* calls.account).toEqual(account)
     }),
@@ -195,7 +227,7 @@ layer(handlers)('callsFrom for the Settings screen', (withHandlers) => {
 layer(dyingHandlers)('callsFrom over a hub that dies', (withHandlers) => {
   withHandlers.effect('turns a call that died into a typed failure the link retries', () =>
     Effect.gen(function* () {
-      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi))
+      const calls = callsFrom(yield* RpcTest.makeClient(ClientApi), Effect.succeed(false))
       const watchFailure = yield* Effect.flip(Stream.runDrain(calls.watchHerd))
       const markSeenFailure = yield* Effect.flip(calls.markSeen(LAPTOP, missingPane))
       const accountFailure = yield* Effect.flip(calls.account)

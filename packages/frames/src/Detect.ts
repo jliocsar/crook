@@ -356,7 +356,7 @@ const followsARestingCover = (frames: readonly RecordedFrame[], at: number): boo
       Arr.findLastIndex(frames, (frame) => frame.at <= at),
       (painted) => Arr.get(frames, painted - 1),
     ),
-    (before) => before.cover === 0,
+    (before) => before.cover !== undefined && Math.abs(before.cover) < ROW_MOVE_PIXELS,
   )
 
 const shiftsOf = (

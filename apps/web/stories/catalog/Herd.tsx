@@ -18,7 +18,7 @@ import {
   clicks,
   dispatchPointer,
   element,
-  pause,
+  fingerPause,
   pressesEvenIfHidden,
   seesText,
   swipes,
@@ -451,7 +451,7 @@ export const HERD_STORIES: readonly StoryMaker[] = [
           dispatchPointer('pointerdown', card, 200)
 
           for (const clientX of [190, 180, 170, 160]) {
-            yield* pause(16)
+            yield* fingerPause(16)
             dispatchPointer('pointermove', card, clientX)
           }
         }),

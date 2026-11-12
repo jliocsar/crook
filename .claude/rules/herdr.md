@@ -44,9 +44,13 @@ counted from the connect. Written 5, 20, 50 and 150 ms after the connect, a ping
 96, 81, 50 and 50 ms after its write, all 60 of each within 3 ms of that (read from the outside, not in its source). So it is a race
 between the client's first write and herdr's first look. A raw client writing inside its connect callback mostly
 won it, back to back on 20 panes: a median of 0.22 to 9.51 ms, with 0 to 62 of 200 calls near 100 ms. crook's client,
-which writes once its socket has opened, mostly lost it, a median of 102 to 110 ms with 119 to 179 of 200 near 100 ms,
+when it wrote once its socket had opened, mostly lost it, a median of 102 to 110 ms with 119 to 179 of 200 near 100 ms,
 and spaced 150 ms apart a median of 4 to 13 ms with 14 to 18 of 40. A burst raises the raw client's share: 25 to 58 of
-120 at eight at once. Only reads carry the timeout. A call
+120 at eight at once. So the client writes its request in the connect callback too. Pinging the laptop's herdr 0.9.5
+through the client, three runs at a load average of 6 to 8, 200 back to back went from a median of 101.3 to 101.8 ms with
+183 to 198 near 100 ms to a median of 0.83 to 2.34 ms with 29 to 33, and 40 spaced 150 ms apart from 32 to 35 near
+100 ms to none, a median of 1.4 to 3.2 ms (measured). A fake herdr in the test's own process cannot see the race: it
+took the request at its first look as often from the old client as from the new one, 194 and 196 of 200. Only reads carry the timeout. A call
 that legitimately waits, such as a prompt, an agent start, a wait for output or a worktree, stays
 under the budget of the command around it, since timing out a call that has already acted says
 nothing about whether it landed.
