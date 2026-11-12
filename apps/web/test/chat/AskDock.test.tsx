@@ -736,6 +736,34 @@ describe('the ask dock', () => {
     }),
   )
 
+  it.effect('keeps an Always note given before the transcript named its session', () =>
+    Effect.gen(function* () {
+      const { link } = yield* renderApp(CHAT, blockedOn(editAsk))
+      const transcript = yield* link.transcriptFor(new PaneTranscript({ pane: PANE }))
+
+      yield* Ref.set(
+        link.commandAnswer,
+        Exit.succeed(inputDelivered(answered(new ApproveAlways(), EDIT_ID))),
+      )
+      yield* click(yield* findByRole('button', 'Always'))
+      yield* eventually(() => {
+        expect(sentCommands(link)).toEqual([answered(new ApproveAlways(), EDIT_ID)])
+      })
+      yield* Queue.offerAll(transcript, [
+        opened(),
+        chunk(0, 10, [
+          toolUse(0, 'toolu_edit', 'Edit', {
+            file_path: `${CWD}/packages/hub/src/Herd.ts`,
+            old_string: 'const herd = 1',
+            new_string: 'const herd = 2',
+          }),
+        ]),
+      ])
+
+      yield* Effect.promise(() => screen.findByText(EDIT_NOTE))
+    }),
+  )
+
   it.effect('drops an Always note with the session it belonged to', () =>
     Effect.gen(function* () {
       const { link } = yield* renderApp(CHAT, blockedOn(editAsk))

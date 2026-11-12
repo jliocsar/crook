@@ -49,8 +49,7 @@ import {
   isAnswerUnderway,
 } from '@crook/web/chat/AskAnswerMachine'
 import type { AskAnswerState } from '@crook/web/chat/AskAnswerMachine'
-import { alwaysNoteFor } from '@crook/web/chat/AskModel'
-import type { AlwaysNote } from '@crook/web/chat/AskModel'
+import { AlwaysNote, alwaysNoteFor } from '@crook/web/chat/AskModel'
 import { ChatItem, isOmitted, isUserPrompt } from '@crook/web/chat/ChatItems'
 import { ActivityState, activityView } from '@crook/web/chat/ActivityMachine'
 import { isPresent } from '@crook/web/chat/PresenceMachine'
@@ -538,6 +537,11 @@ const useComposerFailure = (
   }
 }
 
+const withSession = (note: AlwaysNote, session: Option.Option<ClaudeSessionId>): AlwaysNote =>
+  Option.isNone(note.session)
+    ? new AlwaysNote({ ask: note.ask, text: note.text, after: note.after, session })
+    : note
+
 const useAlwaysNotes = (
   opened: OpenedAgent,
   answer: CommandAction,
@@ -567,6 +571,12 @@ const useAlwaysNotes = (
       setAwaited(Option.none())
     }
   }, [answered, abandoned])
+
+  React.useEffect(() => {
+    if (Option.isSome(session) && Arr.some(notes, (note) => Option.isNone(note.session))) {
+      setNotes((current) => Arr.map(current, (note) => withSession(note, session)))
+    }
+  }, [session, notes])
 
   return {
     notes: sessionNotes,
