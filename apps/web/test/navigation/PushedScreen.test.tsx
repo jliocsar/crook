@@ -224,6 +224,34 @@ describe('PushedScreen', () => {
     }),
   )
 
+  it.effect('moves focus there and back without asking for a focus ring', () =>
+    Effect.gen(function* () {
+      const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+      yield* renderAt('/')
+      const opener = yield* findByRole('button', 'Open detail from a tap')
+
+      fireEvent.click(opener)
+      const title = yield* findByRole('heading', 'Detail')
+
+      yield* eventually(() => {
+        expect(document.activeElement).toBe(title)
+      })
+      yield* click(yield* findByRole('button', 'Back to agents'))
+      yield* eventually(() => {
+        expect(document.activeElement).toBe(opener)
+      })
+
+      const scripted = focus.mock.contexts.flatMap((element, index) =>
+        element === title || element === opener ? [focus.mock.calls[index]?.[0]] : [],
+      )
+
+      expect(scripted).toEqual([
+        { preventScroll: true, focusVisible: false },
+        { preventScroll: true, focusVisible: false },
+      ])
+    }),
+  )
+
   it.effect('returns focus to the opener a tap never focused, as WebKit taps do', () =>
     Effect.gen(function* () {
       yield* renderAt('/')

@@ -67,7 +67,10 @@ The herd list, the machine screens, pushed screens and the gestures between them
 - A script moving focus off a text field draws the focus ring, because Chromium reads focus coming
   from an input as keyboard focus: the card that takes over from the composer showed its Back button
   ringed in red on a phone-size screen, with nothing pressed (measured). A move no key caused passes
-  `focusVisible: false`.
+  `focusVisible: false`. A pushed screen's focus on its title and its return to the card that opened it
+  are such moves: without it the card wore the ring after every Back and every swipe back, in the last
+  frame of each herd-under-chat story (seen in the frame tool's shots, Chromium). WebKit's rule for
+  a script's focus is not measured.
 
 - The Agents page stays mounted under a pushed chat. It used to re-render whole on every herd
   update and every clock second: with fifteen cards on three machines and a chat open, each herd
