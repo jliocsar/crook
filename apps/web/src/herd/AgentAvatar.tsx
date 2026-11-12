@@ -8,22 +8,36 @@ import type { AgentStatus } from '@crook/domain/AgentStatus'
 import { AgentStatusIcon } from '@crook/web/herd/AgentStatusIcon'
 
 const AVATAR_SIZE = 40
+const LIGHT_TONES_ONLY = [0.1, 0.3, 0.5, 0.85]
 
 export const agentAvatarSeed = (row: AgentRow): string =>
   Option.getOrElse(row.label, () => row.pane)
 
 function Blob({ seed, kept }: { seed: string; kept: boolean }) {
-  const markup = useMemo(() => blobatar(seed, { size: AVATAR_SIZE, background: 'circle' }), [seed])
+  const onLight = useMemo(() => blobatar(seed, { size: AVATAR_SIZE, background: 'circle' }), [seed])
+  const onDark = useMemo(
+    () =>
+      blobatar(seed, { size: AVATAR_SIZE, background: false, traits: { tone: LIGHT_TONES_ONLY } }),
+    [seed],
+  )
+  const blobClass = cn(
+    'size-10 transition-[filter] duration-(--motion) ease-(--ease-out) [&>svg]:block',
+    kept && 'grayscale',
+  )
 
   return (
-    <span
-      data-slot="agent-blob"
-      className={cn(
-        'block size-10 transition-[filter] duration-(--motion) ease-(--ease-out) [&>svg]:block',
-        kept && 'grayscale',
-      )}
-      dangerouslySetInnerHTML={{ __html: markup }}
-    />
+    <>
+      <span
+        data-slot="agent-blob"
+        className={cn('block dark:hidden', blobClass)}
+        dangerouslySetInnerHTML={{ __html: onLight }}
+      />
+      <span
+        data-slot="agent-blob"
+        className={cn('bg-muted hidden rounded-full dark:block', blobClass)}
+        dangerouslySetInnerHTML={{ __html: onDark }}
+      />
+    </>
   )
 }
 
