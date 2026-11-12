@@ -61,7 +61,7 @@ const laterView = herd([machine(LAPTOP, [agent('w1:p1', 'idle')])])
 const redialingView = herd([
   machine(LAPTOP, [agent('w1:p1', 'done')], { connection: 'reconnecting' }),
 ])
-const refused = new HubConnectionLost()
+const refused = new HubConnectionLost({ lost: 'DialFailed' })
 
 const isDialing = LinkStatus.isAnyOf(['ColdStart', 'Redialing', 'Announced', 'Returning'])
 const isLive = LinkStatus.guards.Live
@@ -863,6 +863,85 @@ describe('HubLink', () => {
       yield* current
 
       expect(resynced.pollUnsafe()).toBeDefined()
+    }),
+  )
+
+  it.effect(
+    'tells the hub why it dials: the page loading or shown, the network back, a resync',
+    () =>
+      Effect.gen(function* () {
+        const { browser, link, current, nextSession } = yield* start()
+        const first = yield* nextSession
+
+        yield* Queue.offer(first.views, liveView)
+        yield* current
+        yield* SubscriptionRef.set(browser.visible, false)
+        yield* current
+        yield* SubscriptionRef.set(browser.visible, true)
+        const shown = yield* nextSession
+
+        yield* Queue.offer(shown.views, liveView)
+        yield* SubscriptionRef.set(browser.online, false)
+        yield* current
+        yield* SubscriptionRef.set(browser.online, true)
+        const back = yield* nextSession
+
+        yield* Queue.offer(back.views, liveView)
+        yield* current
+        yield* Effect.forkChild(link.resync)
+        yield* nextSession
+
+        expect(yield* Ref.get(browser.dialReasons)).toEqual([
+          'PageLoaded',
+          'PageShown',
+          'NetworkBack',
+          'ResyncAsked',
+        ])
+      }),
+  )
+
+  it.effect('tells the hub what ended the connection before when it redials on its own', () =>
+    Effect.gen(function* () {
+      const { browser, current, nextSession } = yield* start()
+      const first = yield* nextSession
+
+      yield* Queue.offer(first.views, liveView)
+      yield* current
+      yield* TestClock.adjust(LINK_PING_INTERVAL)
+      yield* dropSession(first, new HubConnectionLost({ lost: 'PingTimedOut' }))
+      const second = yield* nextSession
+
+      yield* Queue.offer(second.views, liveView)
+      yield* current
+      yield* TestClock.adjust(LINK_PING_INTERVAL)
+      yield* dropSession(second, new HubConnectionLost({ lost: 'SocketClosed' }))
+      const third = yield* nextSession
+
+      yield* Queue.offer(third.views, liveView)
+      yield* current
+      yield* TestClock.adjust(LINK_PING_INTERVAL)
+      yield* Queue.end(third.views)
+      yield* nextSession
+
+      expect(yield* Ref.get(browser.dialReasons)).toEqual([
+        'PageLoaded',
+        'PingTimedOut',
+        'SocketClosed',
+        'LinkFailed',
+      ])
+    }),
+  )
+
+  it.effect('says a dial failed when it tries again on the backoff', () =>
+    Effect.gen(function* () {
+      const { browser, nextSession } = yield* start()
+      const first = yield* nextSession
+
+      yield* dropSession(first, refused)
+      yield* TestClock.adjust(HUB_RECONNECT_BASE)
+      yield* nextSession
+
+      expect(yield* Ref.get(browser.dialReasons)).toEqual(['PageLoaded', 'DialFailed'])
     }),
   )
 })

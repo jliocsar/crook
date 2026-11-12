@@ -216,7 +216,7 @@ const WHOLE_FILE = [
   caughtUp(4106),
 ]
 
-const LOST = new HubConnectionLost()
+const LOST = new HubConnectionLost({ lost: 'SocketClosed' })
 const CACHED = Option.some(new HerdSnapshot({ view: TEAM, syncedAt: START }))
 
 const takeSession = ({ browser, session }: BrowserStage) =>

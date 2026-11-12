@@ -100,7 +100,7 @@ describe('commandProgress', () => {
   })
 
   it('retries under the same key unless the agent remembers how the command ended', () => {
-    expect(isRetriableFailure(refused(new HubConnectionLost()))).toBe(true)
+    expect(isRetriableFailure(refused(new HubConnectionLost({ lost: 'SocketClosed' })))).toBe(true)
     expect(isRetriableFailure(refused(new MachineOffline({ machine: LAPTOP })))).toBe(true)
     expect(isRetriableFailure(refused(new CommandDeliveryUnknown()))).toBe(false)
     expect(isRetriableFailure(acked(renamed))).toBe(false)
