@@ -70,5 +70,8 @@ export const applyStoryEnv = (env: StoryEnv): void => {
 
   if (env.keyboardUp) {
     emulateKeyboard(true)
+  } else {
+    Reflect.deleteProperty(window, 'visualViewport')
+    document.getElementById(KEYBOARD_ELEMENT_ID)?.remove()
   }
 }

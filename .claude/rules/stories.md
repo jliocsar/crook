@@ -32,6 +32,11 @@ today, warts included: a wrong-looking state is a finding about the app, not a s
   by hand. It costs little: from setting an iframe's address to its story done took a median of
   368 ms and a 90th percentile of 461 ms over the whole catalog on the dev server
   (measured).
+- The catalog's DOM test plays every story in one window, so a story with no keyboard takes the
+  stubbed `visualViewport` away again. A keyboard story's stub stayed up for the stories after it,
+  and once the pushed screen read the viewport every frame while the keyboard is up, happy-dom ran
+  that read as a `setImmediate` loop: the five catching-up stories timed out in the full catalog,
+  and passed when run alone (measured).
 - A timeline's step is an event the hub or the user would cause, moving the real screen, so a
   step never sets a component's state. A transition that depends on the link's own delays, its
   backoff or its resume runs the real link over a fake browser: the fake link keeps one transcript
