@@ -64,6 +64,18 @@ The herd list, the machine screens, pushed screens and the gestures between them
   header held at the top, the thread took the height that was left, and the dock sat on the
   keyboard's edge, also with `offsetTop` panned. What iOS reports for `scrollY` and `offsetTop`
   on focus is not measured yet.
+- The fit reads the visual viewport on every animation frame while a field has focus or the
+  keyboard is still up, and on its events otherwise. Read on events alone, switching keyboards on
+  an iPhone left the composer at the old keyboard's height now and then (reported by the user).
+  A home-screen app gets the viewport's `resize` as the keyboard starts to move, and Safari with a
+  bottom address bar only at its end (WebKit bug 265578), and nothing says a switch of keyboards
+  sends one at all, so an event can carry a height that is not the last one. Each frame costs one
+  read of three numbers, and a fit that did not change renders nothing. What the phone reports
+  frame by frame through a switch is not measured.
+  The loop compares against the last fit it set before it calls the setter. A functional update
+  that hands back the same value still queues a render once anything else is pending, and one per
+  frame kept interrupting the thread's deferred rows: the catching-up stories never showed their
+  capsule with the composer focused, 4 of 4 in the catalog test (measured).
 - A script moving focus off a text field draws the focus ring, because Chromium reads focus coming
   from an input as keyboard focus: the card that takes over from the composer showed its Back button
   ringed in red on a phone-size screen, with nothing pressed (measured). A move no key caused passes

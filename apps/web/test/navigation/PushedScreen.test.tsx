@@ -509,6 +509,63 @@ describe('PushedScreen', () => {
     }),
   )
 
+  it.effect('follows a keyboard that changes height with no event saying so', () =>
+    Effect.gen(function* () {
+      const viewport = emulateVisualViewport()
+
+      yield* renderAt('/detail')
+      yield* findByRole('heading', 'Detail')
+      moveVisualViewport(viewport, { height: window.innerHeight / 2 })
+      yield* eventually(() => {
+        expect(pushedContent()?.style.height).toBe(`${window.innerHeight / 2}px`)
+      })
+      Object.assign(viewport, { height: window.innerHeight / 3 })
+
+      yield* eventually(() => {
+        expect(pushedContent()?.style.height).toBe(`${window.innerHeight / 3}px`)
+      })
+
+      Object.assign(viewport, { height: window.innerHeight })
+
+      yield* eventually(() => {
+        expect(pushedScreen()?.dataset['keyboard']).toBeUndefined()
+      })
+    }),
+  )
+
+  it.effect('fits a keyboard that opens with no event while a field has focus', () =>
+    Effect.gen(function* () {
+      const viewport = emulateVisualViewport()
+      const field = document.body.appendChild(document.createElement('textarea'))
+
+      yield* renderAt('/detail')
+      yield* findByRole('heading', 'Detail')
+      field.focus()
+      Object.assign(viewport, { height: window.innerHeight / 2 })
+
+      yield* eventually(() => {
+        expect(pushedContent()?.style.height).toBe(`${window.innerHeight / 2}px`)
+      })
+
+      field.remove()
+    }),
+  )
+
+  it.effect(
+    'reads the viewport only on its events while no keyboard is up and nothing takes typing',
+    () =>
+      Effect.gen(function* () {
+        const viewport = emulateVisualViewport()
+
+        yield* renderAt('/detail')
+        yield* findByRole('heading', 'Detail')
+        Object.assign(viewport, { height: window.innerHeight / 2 })
+        yield* wait(50)
+
+        expect(pushedScreen()?.dataset['keyboard']).toBeUndefined()
+      }),
+  )
+
   it.effect('keeps its full height under a pinch zoom', () =>
     Effect.gen(function* () {
       const viewport = emulateVisualViewport()
