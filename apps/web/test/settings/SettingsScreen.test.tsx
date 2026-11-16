@@ -75,7 +75,9 @@ describe('SettingsScreen', () => {
 
       expect(screen.getByText('Loading your notification settings')).toBeDefined()
       expect(screen.getByText('Loading your account')).toBeDefined()
-      expect(screen.queryByRole('switch')).toBeNull()
+      expect(screen.queryAllByRole('switch')).toEqual([
+        screen.getByRole('switch', { name: 'New chat scrolling' }),
+      ])
       expect(screen.queryByText('Approvals')).toBeNull()
 
       yield* link.settingsReads.open
