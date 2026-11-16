@@ -27,7 +27,9 @@ import {
   useTranscriptThread,
 } from '@crook/web/chat/OpenedChat'
 import { PresenceState } from '@crook/web/chat/PresenceMachine'
+import { NativeThread } from '@crook/web/chat/NativeThread'
 import { Thread, threadDimOf } from '@crook/web/chat/Thread'
+import { useNativeThread } from '@crook/web/chat/ThreadTrial'
 import { useThreadContent } from '@crook/web/chat/ThreadEmpty'
 import type { ThreadRow } from '@crook/web/chat/Thread'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -174,6 +176,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
     ...failureRows(state, transcript.onRetry),
   ]
   const threadContent = useThreadContent(rows, model, state, transcript.started)
+  const ThreadView = useNativeThread() ? NativeThread : Thread
 
   return (
     <PushedScreen>
@@ -198,7 +201,7 @@ export function SubagentScreen({ machine, pane, session, subagent }: SubagentScr
           backLabel={`Back to ${parentTitle}`}
         />
         <div {...stateMark(transcriptMachine, state)} className="relative min-h-0 flex-1">
-          <Thread rows={threadContent.rows} dim={threadDim} empty={threadContent.empty} />
+          <ThreadView rows={threadContent.rows} dim={threadDim} empty={threadContent.empty} />
           <CatchingUpCapsule shown={catchingUp && !dimmed} />
         </div>
         <div

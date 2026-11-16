@@ -63,7 +63,9 @@ import {
   useOpenedChat,
   useTranscriptThread,
 } from '@crook/web/chat/OpenedChat'
+import { NativeThread } from '@crook/web/chat/NativeThread'
 import { Thread, threadDimOf } from '@crook/web/chat/Thread'
+import { useNativeThread } from '@crook/web/chat/ThreadTrial'
 import type { ThreadHandle, ThreadRow } from '@crook/web/chat/Thread'
 import { useThreadContent } from '@crook/web/chat/ThreadEmpty'
 import type { ThreadEnvironment } from '@crook/web/chat/ThreadItem'
@@ -320,6 +322,7 @@ function ChatBody({
     staleRows: isWatching(model) && showsStaleRows(state),
   })
   const thread = React.useRef<ThreadHandle>(null)
+  const ThreadView = useNativeThread() ? NativeThread : Thread
   const { draft, attachments, setDraft, setAttachments } = usePaneDraft(machine, pane)
   const [attachNote, setAttachNote] = React.useState<Option.Option<string>>(Option.none())
   const cwd = cwdOf(model)
@@ -465,7 +468,7 @@ function ChatBody({
       />
       <BackgroundContext.Provider value={backgroundContext}>
         <div {...stateMark(transcriptMachine, state)} className="relative min-h-0 flex-1">
-          <Thread
+          <ThreadView
             key={threadEpoch}
             handle={thread}
             rows={threadContent.rows}
