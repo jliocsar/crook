@@ -8,7 +8,6 @@ import { AccountSection } from '@crook/web/settings/AccountSection'
 import { HubSection } from '@crook/web/settings/HubSection'
 import { NotificationsSection } from '@crook/web/settings/NotificationsSection'
 import { hubStatus } from '@crook/web/settings/SettingsLayout'
-import { TrialSection } from '@crook/web/settings/TrialSection'
 
 export function SettingsScreen() {
   const connection = useAtomValue(connectionAtom)
@@ -31,7 +30,6 @@ export function SettingsScreen() {
           version={version}
           unavailable={dimsContent(connection)}
         />
-        <TrialSection />
       </div>
     </TabScreen>
   )
