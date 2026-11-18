@@ -11,6 +11,7 @@ import { CommandTimedOut } from '@crook/protocol/Commands'
 import { TranscriptReadFailed } from '@crook/protocol/Transcripts'
 import * as Duration from 'effect/Duration'
 import { UNCONFIRMED_NOTE } from '@crook/web/atoms/ActionProgress'
+import { PaneTranscriptKey, transcriptAtom } from '@crook/web/atoms/Transcript'
 import { COLD_START, RECOVERED, UNREACHABLE } from '@crook/web/rpc/HubLinkState'
 
 import { liveWith, stateWith } from '../../test/AppWiring.tsx'
@@ -31,7 +32,7 @@ import {
 } from '../../test/TranscriptFixtures.ts'
 import { chatHerd, chatStory, shellOnlyHerd } from '../ChatFixtures.ts'
 import { CHAT_SOURCE, chatAgent, CONVERSATION, AGENTS_PATH, PANE } from '../Fixtures.ts'
-import { clicks, element, pause, role, seesSelector, seesText } from '../StageDom.ts'
+import { clicks, element, pause, role, seesSelector, seesText, until } from '../StageDom.ts'
 import { step } from '../Story.tsx'
 import type { LinkStage, StoryMaker } from '../Story.tsx'
 
@@ -50,10 +51,15 @@ const failWatch = ({ link }: LinkStage) => link.endTranscript(CHAT_SOURCE, READ_
 
 const failsOnce = (stage: LinkStage) => Effect.andThen(failWatch(stage), role(RETRY_LABEL))
 
-const leaveAndReopen = ({ router }: LinkStage) =>
+const CHAT_TRANSCRIPT = transcriptAtom(new PaneTranscriptKey({ machine: LAPTOP, pane: PANE }))
+
+const leaveAndReopen = ({ router, registry }: LinkStage) =>
   Effect.gen(function* () {
     yield* Effect.promise(() => router.navigate({ to: AGENTS_PATH }))
-    yield* pause(50)
+    yield* until(
+      'the chat to let go of its transcript',
+      () => !registry.getNodes().has(CHAT_TRANSCRIPT),
+    )
     yield* Effect.promise(() =>
       router.navigate({
         to: '/m/$machine/p/$pane',

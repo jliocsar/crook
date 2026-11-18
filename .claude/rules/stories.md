@@ -148,3 +148,6 @@ it.
   rendered 32 (measured).
 - A generated skeleton works from what is in the DOM: skullet drew `opacity: 0` elements as bones,
   skipping only `display: none`, its own elements and those marked `skullet-ignore` (measured).
+
+- A story that leaves a chat and reopens it waits for the registry to let go of the chat's transcript atom, not for a pause or for the chat's element to go. The registry drops an unmounted atom in a scheduled task, and a reopen that lands first reuses the live watch, which is current and has nothing to catch up on. The catching-up stories reopened after 50 ms: one failed in CI twice in a row and about 1 run in 9 locally, and under load every failing run ended with the transcript Current and the fake hub asked for one watch, every passing run asked for two and reached CatchingUp (measured). The app was right there; the story raced it.
+- Never reproduce a load flake by burning the laptop's CPU. Busy loops beside a run took its load average past 20, which the user does not allow on that machine. Probe the state the failing run ends in instead: the run itself names it.
